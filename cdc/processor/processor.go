@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -657,17 +658,9 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	p.ddlHandler.changefeedID = p.changefeedID
 	p.ddlHandler.spawn(ctx)
 
-	// Build schema router from config
-	schemaRouter, err := config.BuildSchemaRouter(
-		p.latestInfo.Config.SchemaRoutes,
-		p.latestInfo.Config.SchemaRouteRules)
-	if err != nil {
-		return errors.Trace(err)
-	}
-
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
 		cfConfig.Mounter.WorkerNum,
-		p.filter, tz, p.changefeedID, cfConfig.Integrity, schemaRouter)
+		p.filter, tz, p.changefeedID, cfConfig.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(ctx)
@@ -791,16 +784,14 @@ func (p *processor) initDDLHandler() error {
 		ddlStartTs = checkpointTs - 1
 	}
 
-	// Build schema router from config
-	schemaRouter, err := config.BuildSchemaRouter(
-		p.latestInfo.Config.SchemaRoutes,
-		p.latestInfo.Config.SchemaRouteRules)
+	// Build sink router from config
+	sinkRouter, err := dispatcher.NewSinkRouter(p.latestInfo.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter, schemaRouter)
+		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter, sinkRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}

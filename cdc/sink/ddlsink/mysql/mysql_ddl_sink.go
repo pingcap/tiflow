@@ -230,7 +230,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		// Use TargetSchema if set (for schema routing), otherwise use original Schema
+		// Use TargetSchema if set (for sink routing), otherwise use original Schema
 		schema := ddl.TableInfo.TableName.Schema
 		if ddl.TableInfo.TableName.TargetSchema != "" {
 			schema = ddl.TableInfo.TableName.TargetSchema

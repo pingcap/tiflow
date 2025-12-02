@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -1029,7 +1030,7 @@ func TestGetPrimaryKey(t *testing.T) {
 	require.Equal(t, names, []string{"a"})
 }
 
-func TestSchemaStorageWithSchemaRouting(t *testing.T) {
+func TestSchemaStorageWithSinkRouting(t *testing.T) {
 	ctx := context.Background()
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -1059,22 +1060,29 @@ func TestSchemaStorageWithSchemaRouting(t *testing.T) {
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
 
-	// Create schema router: source_db1 -> target_db1, source_db2 -> target_db2
+	// Create sink router: source_db1 -> target_db1, source_db2 -> target_db2
 	// unmapped_db is not mapped
-	schemaRouter := config.NewSchemaRouter([]*config.SchemaRoute{
-		{
-			SourceSchema: "source_db1",
-			TargetSchema: "target_db1",
-		},
-		{
-			SourceSchema: "source_db2",
-			TargetSchema: "target_db2",
+	sinkRouter, err := dispatcher.NewSinkRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:    []string{"source_db1.*"},
+					SchemaRule: "target_db1",
+					TableRule:  "{table}",
+				},
+				{
+					Matcher:    []string{"source_db2.*"},
+					SchemaRule: "target_db2",
+					TableRule:  "{table}",
+				},
+			},
 		},
 	})
+	require.NoError(t, err)
 
-	// Create SchemaStorage with schema router
-	// This should apply routing to all pre-existing tables via applySchemaRoutingToSnapshot
-	schemaStorage, err := NewSchemaStorage(store, ver.Ver, false, model.DefaultChangeFeedID("test"), util.RoleTester, f, schemaRouter)
+	// Create SchemaStorage with sink router
+	// This should apply routing to all pre-existing tables via applySinkRoutingToSnapshot
+	schemaStorage, err := NewSchemaStorage(store, ver.Ver, false, model.DefaultChangeFeedID("test"), util.RoleTester, f, sinkRouter)
 	require.NoError(t, err)
 
 	snap, err := schemaStorage.GetSnapshot(ctx, ver.Ver)
@@ -1115,7 +1123,7 @@ func TestSchemaStorageWithSchemaRouting(t *testing.T) {
 	require.NotNil(t, createT4Job)
 
 	// Process the DDL job through SchemaStorage
-	// This should apply routing via applySchemaRoutingToTable
+	// This should apply routing via applySinkRoutingToTable
 	err = schemaStorage.HandleDDLJob(createT4Job)
 	require.NoError(t, err)
 

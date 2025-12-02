@@ -299,3 +299,112 @@ func TestSchemaRoutingMultiRow(t *testing.T) {
 	require.Equal(t, "INSERT INTO `source_db`.`test_table` (`id`,`name`) VALUES (?,?),(?,?)", sql)
 	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
 }
+
+func TestTableRoutingMultiRow(t *testing.T) {
+	t.Parallel()
+
+	// Test that multi-row SQL generation uses TargetTable when set.
+	// Schema stays the same, only table name changes.
+	source := &cdcmodel.TableName{
+		Schema:       "mydb",
+		Table:        "source_table",
+		TargetSchema: "mydb",         // Schema stays the same
+		TargetTable:  "target_table", // Table routing: source_table -> target_table
+	}
+
+	sourceTI := mockTableInfo(t, "CREATE TABLE source_table (id INT PRIMARY KEY, name VARCHAR(50))")
+
+	// Test DELETE - should use target_table
+	change1 := NewRowChange(source, nil, []interface{}{1, "alice"}, nil, sourceTI, nil, nil)
+	change2 := NewRowChange(source, nil, []interface{}{2, "bob"}, nil, sourceTI, nil, nil)
+	sql, args := GenDeleteSQL(change1, change2)
+	require.Equal(t, "DELETE FROM `mydb`.`target_table` WHERE (`id` = ?) OR (`id` = ?)", sql)
+	require.Equal(t, []interface{}{1, 2}, args)
+
+	// Test UPDATE - should use target_table
+	change1 = NewRowChange(source, nil, []interface{}{1, "alice"}, []interface{}{1, "alice2"}, sourceTI, nil, nil)
+	change2 = NewRowChange(source, nil, []interface{}{2, "bob"}, []interface{}{2, "bob2"}, sourceTI, nil, nil)
+	sql, args = GenUpdateSQL(change1, change2)
+	expectedSQL := "UPDATE `mydb`.`target_table` SET " +
+		"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, " +
+		"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END " +
+		"WHERE (`id` = ?) OR (`id` = ?)"
+	expectedArgs := []interface{}{
+		1, 1, 2, 2,
+		1, "alice2", 2, "bob2",
+		1, 2,
+	}
+	require.Equal(t, expectedSQL, sql)
+	require.Equal(t, expectedArgs, args)
+
+	// Test INSERT - should use target_table
+	change1 = NewRowChange(source, nil, nil, []interface{}{1, "alice"}, sourceTI, nil, nil)
+	change2 = NewRowChange(source, nil, nil, []interface{}{2, "bob"}, sourceTI, nil, nil)
+	sql, args = GenInsertSQL(DMLInsert, change1, change2)
+	require.Equal(t, "INSERT INTO `mydb`.`target_table` (`id`,`name`) VALUES (?,?),(?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
+
+	// Test REPLACE - should use target_table
+	sql, args = GenInsertSQL(DMLReplace, change1, change2)
+	require.Equal(t, "REPLACE INTO `mydb`.`target_table` (`id`,`name`) VALUES (?,?),(?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
+
+	// Test INSERT ON DUPLICATE KEY UPDATE - should use target_table
+	sql, args = GenInsertSQL(DMLInsertOnDuplicateUpdate, change1, change2)
+	require.Equal(t, "INSERT INTO `mydb`.`target_table` (`id`,`name`) VALUES (?,?),(?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)", sql)
+	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
+}
+
+func TestSchemaAndTableRoutingMultiRow(t *testing.T) {
+	t.Parallel()
+
+	// Test that multi-row SQL generation uses both TargetSchema and TargetTable when set.
+	source := &cdcmodel.TableName{
+		Schema:       "source_db",
+		Table:        "source_table",
+		TargetSchema: "target_db",    // Schema routing: source_db -> target_db
+		TargetTable:  "target_table", // Table routing: source_table -> target_table
+	}
+
+	sourceTI := mockTableInfo(t, "CREATE TABLE source_table (id INT PRIMARY KEY, name VARCHAR(50))")
+
+	// Test DELETE - should use target_db.target_table
+	change1 := NewRowChange(source, nil, []interface{}{1, "alice"}, nil, sourceTI, nil, nil)
+	change2 := NewRowChange(source, nil, []interface{}{2, "bob"}, nil, sourceTI, nil, nil)
+	sql, args := GenDeleteSQL(change1, change2)
+	require.Equal(t, "DELETE FROM `target_db`.`target_table` WHERE (`id` = ?) OR (`id` = ?)", sql)
+	require.Equal(t, []interface{}{1, 2}, args)
+
+	// Test UPDATE - should use target_db.target_table
+	change1 = NewRowChange(source, nil, []interface{}{1, "alice"}, []interface{}{1, "alice2"}, sourceTI, nil, nil)
+	change2 = NewRowChange(source, nil, []interface{}{2, "bob"}, []interface{}{2, "bob2"}, sourceTI, nil, nil)
+	sql, args = GenUpdateSQL(change1, change2)
+	expectedSQL := "UPDATE `target_db`.`target_table` SET " +
+		"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, " +
+		"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END " +
+		"WHERE (`id` = ?) OR (`id` = ?)"
+	expectedArgs := []interface{}{
+		1, 1, 2, 2,
+		1, "alice2", 2, "bob2",
+		1, 2,
+	}
+	require.Equal(t, expectedSQL, sql)
+	require.Equal(t, expectedArgs, args)
+
+	// Test INSERT - should use target_db.target_table
+	change1 = NewRowChange(source, nil, nil, []interface{}{1, "alice"}, sourceTI, nil, nil)
+	change2 = NewRowChange(source, nil, nil, []interface{}{2, "bob"}, sourceTI, nil, nil)
+	sql, args = GenInsertSQL(DMLInsert, change1, change2)
+	require.Equal(t, "INSERT INTO `target_db`.`target_table` (`id`,`name`) VALUES (?,?),(?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
+
+	// Test REPLACE - should use target_db.target_table
+	sql, args = GenInsertSQL(DMLReplace, change1, change2)
+	require.Equal(t, "REPLACE INTO `target_db`.`target_table` (`id`,`name`) VALUES (?,?),(?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
+
+	// Test INSERT ON DUPLICATE KEY UPDATE - should use target_db.target_table
+	sql, args = GenInsertSQL(DMLInsertOnDuplicateUpdate, change1, change2)
+	require.Equal(t, "INSERT INTO `target_db`.`target_table` (`id`,`name`) VALUES (?,?),(?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)", sql)
+	require.Equal(t, []interface{}{1, "alice", 2, "bob"}, args)
+}

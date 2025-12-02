@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -651,15 +652,15 @@ LOOP2:
 		return errors.Trace(err)
 	}
 
-	// Build schema router from config
-	schemaRouter, err := config.BuildSchemaRouter(cfInfo.Config.SchemaRoutes, cfInfo.Config.SchemaRouteRules)
+	// Build sink router from config
+	sinkRouter, err := dispatcher.NewSinkRouter(cfInfo.Config)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
 	c.schema, err = entry.NewSchemaStorage(
 		c.upstream.KVStorage, ddlStartTs,
-		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter, schemaRouter)
+		cfInfo.Config.ForceReplicate, c.id, util.RoleOwner, filter, sinkRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}

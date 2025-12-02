@@ -418,3 +418,88 @@ func TestSchemaRouting(t *testing.T) {
 	require.Equal(t, "INSERT INTO `source_db`.`test_table` (`id`,`name`) VALUES (?,?)", sql)
 	require.Equal(t, []interface{}{1, "alice"}, args)
 }
+
+func TestTableRouting(t *testing.T) {
+	t.Parallel()
+
+	// Test that SQL generation uses TargetTable when set.
+	// Schema stays the same, only table name changes.
+	source := &cdcmodel.TableName{
+		Schema:       "mydb",
+		Table:        "source_table",
+		TargetSchema: "mydb",         // Schema stays the same
+		TargetTable:  "target_table", // Table routing: source_table -> target_table
+	}
+
+	sourceTI := mockTableInfo(t, "CREATE TABLE source_table (id INT PRIMARY KEY, name VARCHAR(50))")
+
+	// Test INSERT - should use target_table
+	change := NewRowChange(source, nil, nil, []interface{}{1, "alice"}, sourceTI, nil, nil)
+	sql, args := change.GenSQL(DMLInsert)
+	require.Equal(t, "INSERT INTO `mydb`.`target_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test REPLACE - should use target_table
+	sql, args = change.GenSQL(DMLReplace)
+	require.Equal(t, "REPLACE INTO `mydb`.`target_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test INSERT ON DUPLICATE KEY UPDATE - should use target_table
+	sql, args = change.GenSQL(DMLInsertOnDuplicateUpdate)
+	require.Equal(t, "INSERT INTO `mydb`.`target_table` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test UPDATE - should use target_table
+	change = NewRowChange(source, nil, []interface{}{1, "alice"}, []interface{}{1, "bob"}, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLUpdate)
+	require.Equal(t, "UPDATE `mydb`.`target_table` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{1, "bob", 1}, args)
+
+	// Test DELETE - should use target_table
+	change = NewRowChange(source, nil, []interface{}{1, "alice"}, nil, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLDelete)
+	require.Equal(t, "DELETE FROM `mydb`.`target_table` WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{1}, args)
+}
+
+func TestSchemaAndTableRouting(t *testing.T) {
+	t.Parallel()
+
+	// Test that SQL generation uses both TargetSchema and TargetTable when set.
+	source := &cdcmodel.TableName{
+		Schema:       "source_db",
+		Table:        "source_table",
+		TargetSchema: "target_db",    // Schema routing: source_db -> target_db
+		TargetTable:  "target_table", // Table routing: source_table -> target_table
+	}
+
+	sourceTI := mockTableInfo(t, "CREATE TABLE source_table (id INT PRIMARY KEY, name VARCHAR(50))")
+
+	// Test INSERT - should use target_db.target_table
+	change := NewRowChange(source, nil, nil, []interface{}{1, "alice"}, sourceTI, nil, nil)
+	sql, args := change.GenSQL(DMLInsert)
+	require.Equal(t, "INSERT INTO `target_db`.`target_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test REPLACE - should use target_db.target_table
+	sql, args = change.GenSQL(DMLReplace)
+	require.Equal(t, "REPLACE INTO `target_db`.`target_table` (`id`,`name`) VALUES (?,?)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test INSERT ON DUPLICATE KEY UPDATE - should use target_db.target_table
+	sql, args = change.GenSQL(DMLInsertOnDuplicateUpdate)
+	require.Equal(t, "INSERT INTO `target_db`.`target_table` (`id`,`name`) VALUES (?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`)", sql)
+	require.Equal(t, []interface{}{1, "alice"}, args)
+
+	// Test UPDATE - should use target_db.target_table
+	change = NewRowChange(source, nil, []interface{}{1, "alice"}, []interface{}{1, "bob"}, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLUpdate)
+	require.Equal(t, "UPDATE `target_db`.`target_table` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{1, "bob", 1}, args)
+
+	// Test DELETE - should use target_db.target_table
+	change = NewRowChange(source, nil, []interface{}{1, "alice"}, nil, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLDelete)
+	require.Equal(t, "DELETE FROM `target_db`.`target_table` WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{1}, args)
+}

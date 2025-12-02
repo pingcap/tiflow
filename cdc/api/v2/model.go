@@ -205,11 +205,6 @@ type ReplicaConfig struct {
 	ChangefeedErrorStuckDuration *JSONDuration              `json:"changefeed_error_stuck_duration,omitempty"`
 	SyncedStatus                 *SyncedStatusConfig        `json:"synced_status,omitempty"`
 
-	// SchemaRoutes defines named schema routing rules that map source schemas to target schemas.
-	SchemaRoutes map[string]*SchemaRoute `json:"schema_routes,omitempty"`
-	// SchemaRouteRules lists which route rules to apply (references keys in SchemaRoutes).
-	SchemaRouteRules []string `json:"schema_route_rules,omitempty"`
-
 	// Deprecated: we don't use this field since v8.0.0.
 	SQLMode string `json:"sql_mode,omitempty"`
 }
@@ -281,6 +276,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				IndexName:      rule.IndexName,
 				Columns:        rule.Columns,
 				TopicRule:      rule.TopicRule,
+				SchemaRule:     rule.SchemaRule,
+				TableRule:      rule.TableRule,
 			})
 		}
 		var columnSelectors []*config.ColumnSelector
@@ -536,21 +533,6 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		}
 	}
 
-	// Copy schema routing configuration
-	if len(c.SchemaRoutes) > 0 {
-		res.SchemaRoutes = make(map[string]*config.SchemaRoute, len(c.SchemaRoutes))
-		for name, route := range c.SchemaRoutes {
-			res.SchemaRoutes[name] = &config.SchemaRoute{
-				SourceSchema: route.SourceSchema,
-				TargetSchema: route.TargetSchema,
-			}
-		}
-	}
-	if len(c.SchemaRouteRules) > 0 {
-		res.SchemaRouteRules = make([]string, len(c.SchemaRouteRules))
-		copy(res.SchemaRouteRules, c.SchemaRouteRules)
-	}
-
 	return res
 }
 
@@ -601,6 +583,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				IndexName:     rule.IndexName,
 				Columns:       rule.Columns,
 				TopicRule:     rule.TopicRule,
+				SchemaRule:    rule.SchemaRule,
+				TableRule:     rule.TableRule,
 			})
 		}
 		var columnSelectors []*ColumnSelector
@@ -876,21 +860,6 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		}
 	}
 
-	// Copy schema routing configuration
-	if len(cloned.SchemaRoutes) > 0 {
-		res.SchemaRoutes = make(map[string]*SchemaRoute, len(cloned.SchemaRoutes))
-		for name, route := range cloned.SchemaRoutes {
-			res.SchemaRoutes[name] = &SchemaRoute{
-				SourceSchema: route.SourceSchema,
-				TargetSchema: route.TargetSchema,
-			}
-		}
-	}
-	if len(cloned.SchemaRouteRules) > 0 {
-		res.SchemaRouteRules = make([]string, len(cloned.SchemaRouteRules))
-		copy(res.SchemaRouteRules, cloned.SchemaRouteRules)
-	}
-
 	return res
 }
 
@@ -910,16 +879,6 @@ type FilterConfig struct {
 // MounterConfig represents mounter config for a changefeed
 type MounterConfig struct {
 	WorkerNum int `json:"worker_num"`
-}
-
-// SchemaRoute defines a schema name routing rule that maps a source schema
-// to a target schema. This is used to replicate data from one schema to a
-// different schema name in the downstream.
-type SchemaRoute struct {
-	// SourceSchema is the upstream schema name to match
-	SourceSchema string `json:"source_schema"`
-	// TargetSchema is the downstream schema name to use
-	TargetSchema string `json:"target_schema"`
 }
 
 // EventFilterRule is used by sql event filter and expression filter
@@ -1049,6 +1008,8 @@ type DispatchRule struct {
 	IndexName     string   `json:"index,omitempty"`
 	Columns       []string `json:"columns,omitempty"`
 	TopicRule     string   `json:"topic,omitempty"`
+	SchemaRule    string   `json:"schema,omitempty"`
+	TableRule     string   `json:"table,omitempty"`
 }
 
 // ColumnSelector represents a column selector for a table.

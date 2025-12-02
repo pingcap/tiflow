@@ -21,6 +21,7 @@ import (
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/assert"
@@ -77,7 +78,7 @@ func TestFlagValue(t *testing.T) {
 func TestTableNameFuncs(t *testing.T) {
 	t.Parallel()
 
-	// Test without schema routing (TargetSchema not set)
+	// Test without sink routing (TargetSchema not set)
 	tbl := &TableName{
 		Schema:  "test",
 		Table:   "t1",
@@ -90,7 +91,7 @@ func TestTableNameFuncs(t *testing.T) {
 	require.Equal(t, "t1", tbl.GetTable())
 	require.Equal(t, int64(1071), tbl.GetTableID())
 
-	// Test with schema routing (TargetSchema set)
+	// Test with sink routing (TargetSchema set)
 	tblWithRouting := &TableName{
 		Schema:       "uds_000",
 		Table:        "TidbReplicationObject",
@@ -105,6 +106,23 @@ func TestTableNameFuncs(t *testing.T) {
 	require.Equal(t, "uds_000", tblWithRouting.GetSchema())
 	require.Equal(t, "TidbReplicationObject", tblWithRouting.GetTable())
 	require.Equal(t, int64(1072), tblWithRouting.GetTableID())
+
+	// Test with both schema and table routing (TargetSchema and TargetTable set)
+	tblWithFullRouting := &TableName{
+		Schema:       "uds_000",
+		Table:        "TidbReplicationObject",
+		TableID:      1073,
+		TargetSchema: "tidb_failover_test",
+		TargetTable:  "TidbReplicationObject_routed",
+	}
+	require.Equal(t, "uds_000.TidbReplicationObject", tblWithFullRouting.String())
+	// QuoteString should return source schema/table for logging
+	require.Equal(t, "`uds_000`.`TidbReplicationObject`", tblWithFullRouting.QuoteString())
+	// QuoteSinkString should return target schema/table for SQL generation
+	require.Equal(t, "`tidb_failover_test`.`TidbReplicationObject_routed`", tblWithFullRouting.QuoteSinkString())
+	require.Equal(t, "uds_000", tblWithFullRouting.GetSchema())
+	require.Equal(t, "TidbReplicationObject", tblWithFullRouting.GetTable())
+	require.Equal(t, int64(1073), tblWithFullRouting.GetTableID())
 }
 
 func TestRowChangedEventFuncs(t *testing.T) {
@@ -421,35 +439,189 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
 }
 
-// mockSchemaRouter is a simple implementation of SchemaRouter for testing
-// Helper function to create a SchemaRouter for tests
-func newTestSchemaRouter(routes map[string]string) *config.SchemaRouter {
+// Helper function to create a SinkRouter for tests using dispatcher approach
+func newTestSinkRouter(routes map[string]string) *dispatcher.SinkRouter {
 	if len(routes) == 0 {
 		return nil
 	}
-	schemaRoutes := make(map[string]*config.SchemaRoute)
-	schemaRouteRules := make([]string, 0, len(routes))
 
+	// Create dispatch rules for sink routing
+	dispatchRules := make([]*config.DispatchRule, 0, len(routes))
 	for source, target := range routes {
-		ruleName := source + "_rule"
-		schemaRoutes[ruleName] = &config.SchemaRoute{
-			SourceSchema: source,
-			TargetSchema: target,
-		}
-		schemaRouteRules = append(schemaRouteRules, ruleName)
+		dispatchRules = append(dispatchRules, &config.DispatchRule{
+			Matcher:    []string{source + ".*"},
+			SchemaRule: target,
+			TableRule:  "{table}",
+		})
 	}
 
-	router, _ := config.BuildSchemaRouter(schemaRoutes, schemaRouteRules)
+	replicaConfig := &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: dispatchRules,
+		},
+	}
+
+	router, _ := dispatcher.NewSinkRouter(replicaConfig)
 	return router
 }
 
-func TestDDLSchemaRouting(t *testing.T) {
+// tableRoute represents a full table routing configuration
+type tableRoute struct {
+	sourceSchema string
+	sourceTable  string
+	targetSchema string
+	targetTable  string
+}
+
+// newTestSinkRouterWithTableOnlyRouting creates a SinkRouter that only routes the table name
+// (schema stays the same via "{schema}" pattern, table changes to explicit name)
+func newTestSinkRouterWithTableOnlyRouting(routes []tableRoute) *dispatcher.SinkRouter {
+	if len(routes) == 0 {
+		return nil
+	}
+
+	dispatchRules := make([]*config.DispatchRule, 0, len(routes))
+	for _, route := range routes {
+		dispatchRules = append(dispatchRules, &config.DispatchRule{
+			Matcher:    []string{route.sourceSchema + "." + route.sourceTable},
+			SchemaRule: "{schema}", // Keep schema the same
+			TableRule:  route.targetTable,
+		})
+	}
+
+	replicaConfig := &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: dispatchRules,
+		},
+	}
+
+	router, _ := dispatcher.NewSinkRouter(replicaConfig)
+	return router
+}
+
+// newTestSinkRouterWithSchemaAndTableRouting creates a SinkRouter with full routing (schema + table)
+func newTestSinkRouterWithSchemaAndTableRouting(routes []tableRoute) *dispatcher.SinkRouter {
+	if len(routes) == 0 {
+		return nil
+	}
+
+	dispatchRules := make([]*config.DispatchRule, 0, len(routes))
+	for _, route := range routes {
+		dispatchRules = append(dispatchRules, &config.DispatchRule{
+			Matcher:    []string{route.sourceSchema + "." + route.sourceTable},
+			SchemaRule: route.targetSchema,
+			TableRule:  route.targetTable,
+		})
+	}
+
+	replicaConfig := &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: dispatchRules,
+		},
+	}
+
+	router, _ := dispatcher.NewSinkRouter(replicaConfig)
+	return router
+}
+
+// TestDDLSinkRoutingSchemaAndTable tests routing where BOTH schema AND table change.
+// Example: source_db.test_table -> target_db.test_table_routed
+func TestDDLSinkRoutingSchemaAndTable(t *testing.T) {
 	t.Parallel()
 
 	ft := types.NewFieldType(mysql.TypeUnspecified)
 	ft.SetFlag(mysql.PriKeyFlag)
 
-	router := newTestSchemaRouter(map[string]string{
+	// Create a router with full routing: source_db.test_table -> target_db.test_table_routed
+	router := newTestSinkRouterWithSchemaAndTableRouting([]tableRoute{
+		{
+			sourceSchema: "source_db",
+			sourceTable:  "test_table",
+			targetSchema: "target_db",
+			targetTable:  "test_table_routed",
+		},
+	})
+
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "source_db",
+			Table:   "test_table",
+			TableID: 1,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   1,
+			Name: pmodel.CIStr{O: "test_table"},
+			Columns: []*timodel.ColumnInfo{
+				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		jobType       timodel.ActionType
+		query         string
+		expectedQuery string
+	}{
+		{
+			name:          "CREATE TABLE",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `source_db`.`test_table` (id INT PRIMARY KEY)",
+			expectedQuery: "CREATE TABLE `target_db`.`test_table_routed` (`id` INT PRIMARY KEY)",
+		},
+		{
+			name:          "DROP TABLE",
+			jobType:       timodel.ActionDropTable,
+			query:         "DROP TABLE `source_db`.`test_table`",
+			expectedQuery: "DROP TABLE `target_db`.`test_table_routed`",
+		},
+		{
+			name:          "TRUNCATE TABLE",
+			jobType:       timodel.ActionTruncateTable,
+			query:         "TRUNCATE TABLE `source_db`.`test_table`",
+			expectedQuery: "TRUNCATE TABLE `target_db`.`test_table_routed`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &timodel.Job{
+				ID:         1,
+				TableID:    1,
+				SchemaName: "source_db",
+				Type:       tt.jobType,
+				StartTS:    1,
+				Query:      tt.query,
+				BinlogInfo: &timodel.HistoryInfo{
+					TableInfo:  tableInfo.TableInfo,
+					FinishedTS: 2,
+				},
+			}
+
+			event := &DDLEvent{}
+			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
+			// Verify source schema/table are NOT mutated
+			require.Equal(t, "source_db", event.TableInfo.TableName.Schema)
+			require.Equal(t, "test_table", event.TableInfo.TableName.Table)
+			// Verify target schema/table are set correctly
+			require.Equal(t, "target_db", event.TableInfo.TableName.TargetSchema)
+			require.Equal(t, "test_table_routed", event.TableInfo.TableName.TargetTable)
+		})
+	}
+}
+
+// TestDDLSinkRoutingSchemaOnly tests routing where ONLY the schema changes.
+// The table name stays the same via TableRule="{table}".
+// Example: source_db.test_table -> target_db.test_table
+func TestDDLSinkRoutingSchemaOnly(t *testing.T) {
+	t.Parallel()
+
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag)
+
+	// newTestSinkRouter creates rules with TableRule="{table}" which preserves the table name
+	router := newTestSinkRouter(map[string]string{
 		"source_db": "target_db",
 	})
 
@@ -518,20 +690,110 @@ func TestDDLSchemaRouting(t *testing.T) {
 			event := &DDLEvent{}
 			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
 			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
-			// Verify that the original Schema is NOT mutated (pullers need to read from original)
+			// Verify that the original Schema/Table are NOT mutated (pullers need to read from original)
 			require.Equal(t, "source_db", event.TableInfo.TableName.Schema, "Schema should not be mutated for %s", tt.name)
+			require.Equal(t, "test_table", event.TableInfo.TableName.Table, "Table should not be mutated for %s", tt.name)
 			// Verify that TargetSchema is set correctly (sinks need to write to target)
 			require.Equal(t, "target_db", event.TableInfo.TableName.TargetSchema, "TargetSchema should be set for %s", tt.name)
+			// When TableRule is "{table}", TargetTable should be the same as the source table name
+			require.Equal(t, "test_table", event.TableInfo.TableName.TargetTable, "TargetTable should be same as source table when using {table} pattern for %s", tt.name)
 		})
 	}
 }
 
-func TestDDLSchemaRoutingOrdering(t *testing.T) {
+// TestDDLSinkRoutingTableOnly tests routing where ONLY the table name changes.
+// The schema stays the same via SchemaRule="{schema}".
+// Example: source_db.test_table -> source_db.test_table_routed
+func TestDDLSinkRoutingTableOnly(t *testing.T) {
 	t.Parallel()
 
-	// Create a schema router where one schema is mapped and one is not
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag)
+
+	// Create a router with table-only routing: source_db.test_table -> source_db.test_table_routed
+	router := newTestSinkRouterWithTableOnlyRouting([]tableRoute{
+		{
+			sourceSchema: "source_db",
+			sourceTable:  "test_table",
+			targetTable:  "test_table_routed",
+		},
+	})
+
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "source_db",
+			Table:   "test_table",
+			TableID: 1,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   1,
+			Name: pmodel.CIStr{O: "test_table"},
+			Columns: []*timodel.ColumnInfo{
+				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		jobType       timodel.ActionType
+		query         string
+		expectedQuery string
+	}{
+		{
+			name:          "CREATE TABLE",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `source_db`.`test_table` (id INT PRIMARY KEY)",
+			expectedQuery: "CREATE TABLE `source_db`.`test_table_routed` (`id` INT PRIMARY KEY)",
+		},
+		{
+			name:          "DROP TABLE",
+			jobType:       timodel.ActionDropTable,
+			query:         "DROP TABLE `source_db`.`test_table`",
+			expectedQuery: "DROP TABLE `source_db`.`test_table_routed`",
+		},
+		{
+			name:          "TRUNCATE TABLE",
+			jobType:       timodel.ActionTruncateTable,
+			query:         "TRUNCATE TABLE `source_db`.`test_table`",
+			expectedQuery: "TRUNCATE TABLE `source_db`.`test_table_routed`",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &timodel.Job{
+				ID:         1,
+				TableID:    1,
+				SchemaName: "source_db",
+				Type:       tt.jobType,
+				StartTS:    1,
+				Query:      tt.query,
+				BinlogInfo: &timodel.HistoryInfo{
+					TableInfo:  tableInfo.TableInfo,
+					FinishedTS: 2,
+				},
+			}
+
+			event := &DDLEvent{}
+			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
+			// Verify source schema/table are NOT mutated
+			require.Equal(t, "source_db", event.TableInfo.TableName.Schema)
+			require.Equal(t, "test_table", event.TableInfo.TableName.Table)
+			// Verify target: schema stays the same, table changes
+			require.Equal(t, "source_db", event.TableInfo.TableName.TargetSchema)
+			require.Equal(t, "test_table_routed", event.TableInfo.TableName.TargetTable)
+		})
+	}
+}
+
+func TestDDLSinkRoutingOrdering(t *testing.T) {
+	t.Parallel()
+
+	// Create a sink router where one schema is mapped and one is not
 	// This tests that FetchDDLTables and RenameDDLTable maintain the correct ordering
-	router := newTestSchemaRouter(map[string]string{
+	router := newTestSinkRouter(map[string]string{
 		"mapped_source_db": "mapped_target_db",
 	})
 
@@ -688,6 +950,133 @@ func TestDDLSchemaRoutingOrdering(t *testing.T) {
 
 			require.Equal(t, tt.expectedQuery, event.Query,
 				"ORDERING TEST FAILED for %s\n%s\nExpected: %s\nActual:   %s",
+				tt.name, tt.description, tt.expectedQuery, event.Query)
+		})
+	}
+
+	// Test with full routing (schema + table name changes)
+	tableRouter := newTestSinkRouterWithSchemaAndTableRouting([]tableRoute{
+		{
+			sourceSchema: "source_db",
+			sourceTable:  "source_table",
+			targetSchema: "target_db",
+			targetTable:  "target_table_routed",
+		},
+		{
+			sourceSchema: "source_db",
+			sourceTable:  "old_table",
+			targetSchema: "target_db",
+			targetTable:  "old_table_routed",
+		},
+		{
+			sourceSchema: "source_db",
+			sourceTable:  "new_table",
+			targetSchema: "target_db",
+			targetTable:  "new_table_routed",
+		},
+		{
+			sourceSchema: "source_db",
+			sourceTable:  "template_table",
+			targetSchema: "target_db",
+			targetTable:  "template_table_routed",
+		},
+	})
+
+	tableInfoWithRouting := WrapTableInfo(1, "source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("source_table"),
+		Columns: columns,
+	})
+
+	// For RENAME TABLE tests with table routing
+	preTableInfoOldRouted := WrapTableInfo(1, "source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("old_table"),
+		Columns: columns,
+	})
+	tableInfoNewRouted := WrapTableInfo(1, "source_db", 100, &timodel.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("new_table"),
+		Columns: columns,
+	})
+
+	tableRoutingTests := []struct {
+		name          string
+		jobType       timodel.ActionType
+		query         string
+		oldSchemaName string
+		newSchemaName string
+		preTableInfo  *TableInfo
+		tableInfo     *TableInfo
+		expectedQuery string
+		description   string
+	}{
+		{
+			name:          "DROP TABLE - with table routing",
+			jobType:       timodel.ActionDropTable,
+			query:         "DROP TABLE `source_db`.`source_table`",
+			tableInfo:     tableInfoWithRouting,
+			expectedQuery: "DROP TABLE `target_db`.`target_table_routed`",
+			description:   "Tests DROP TABLE with both schema and table routing",
+		},
+		{
+			name:          "TRUNCATE TABLE - with table routing",
+			jobType:       timodel.ActionTruncateTable,
+			query:         "TRUNCATE TABLE `source_db`.`source_table`",
+			tableInfo:     tableInfoWithRouting,
+			expectedQuery: "TRUNCATE TABLE `target_db`.`target_table_routed`",
+			description:   "Tests TRUNCATE TABLE with both schema and table routing",
+		},
+		{
+			name:          "CREATE TABLE - with table routing",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `source_db`.`source_table` (id INT PRIMARY KEY)",
+			tableInfo:     tableInfoWithRouting,
+			expectedQuery: "CREATE TABLE `target_db`.`target_table_routed` (`id` INT PRIMARY KEY)",
+			description:   "Tests CREATE TABLE with both schema and table routing",
+		},
+		{
+			name:          "RENAME TABLE - with table routing",
+			jobType:       timodel.ActionRenameTables,
+			query:         "RENAME TABLE `source_db`.`old_table` TO `source_db`.`new_table`",
+			oldSchemaName: "source_db",
+			newSchemaName: "source_db",
+			preTableInfo:  preTableInfoOldRouted,
+			tableInfo:     tableInfoNewRouted,
+			expectedQuery: "RENAME TABLE `target_db`.`old_table_routed` TO `target_db`.`new_table_routed`",
+			description:   "Tests RENAME TABLE with both schema and table routing on both old and new tables",
+		},
+		{
+			name:          "CREATE TABLE LIKE - with table routing",
+			jobType:       timodel.ActionCreateTable,
+			query:         "CREATE TABLE `source_db`.`new_table` LIKE `source_db`.`template_table`",
+			tableInfo:     tableInfoNewRouted,
+			expectedQuery: "CREATE TABLE `target_db`.`new_table_routed` LIKE `target_db`.`template_table_routed`",
+			description:   "Tests CREATE TABLE LIKE with both schema and table routing on both new and template tables",
+		},
+	}
+
+	for _, tt := range tableRoutingTests {
+		t.Run(tt.name, func(t *testing.T) {
+			job := &timodel.Job{
+				ID:         1,
+				TableID:    1,
+				SchemaName: "source_db",
+				Type:       tt.jobType,
+				StartTS:    1,
+				Query:      tt.query,
+				BinlogInfo: &timodel.HistoryInfo{
+					TableInfo:  tt.tableInfo.TableInfo,
+					FinishedTS: 2,
+				},
+			}
+
+			event := &DDLEvent{}
+			event.FromJobWithArgs(job, tt.preTableInfo, tt.tableInfo,
+				tt.oldSchemaName, tt.newSchemaName, tableRouter)
+
+			require.Equal(t, tt.expectedQuery, event.Query,
+				"TABLE ROUTING TEST FAILED for %s\n%s\nExpected: %s\nActual:   %s",
 				tt.name, tt.description, tt.expectedQuery, event.Query)
 		})
 	}

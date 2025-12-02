@@ -27,7 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -84,7 +84,7 @@ type schemaStorage struct {
 	id   model.ChangeFeedID
 	role util.Role
 
-	schemaRouter *config.SchemaRouter
+	sinkRouter *dispatcher.SinkRouter
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -92,7 +92,7 @@ func NewSchemaStorage(
 	storage tidbkv.Storage, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
-	schemaRouter *config.SchemaRouter,
+	sinkRouter *dispatcher.SinkRouter,
 ) (SchemaStorage, error) {
 	var (
 		snap *schema.Snapshot
@@ -112,11 +112,11 @@ func NewSchemaStorage(
 		}
 	}
 
-	// Apply schema routing to all tables in the initial snapshot
+	// Apply sink routing to all tables in the initial snapshot
 	// This ensures DML events for pre-existing tables (tables that existed before start-ts)
-	// also get the routed schema for SQL generation
-	if schemaRouter != nil {
-		applySchemaRoutingToSnapshot(snap, schemaRouter)
+	// also get the routed schema/table for SQL generation
+	if sinkRouter != nil {
+		applySinkRoutingToSnapshot(snap, sinkRouter)
 	}
 
 	return &schemaStorage{
@@ -126,7 +126,7 @@ func NewSchemaStorage(
 		filter:         filter,
 		id:             id,
 		role:           role,
-		schemaRouter:   schemaRouter,
+		sinkRouter:     sinkRouter,
 	}, nil
 }
 
@@ -241,10 +241,10 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		return errors.Trace(err)
 	}
 
-	// Apply schema routing to the TableInfo if schemaRouter is configured
-	// This ensures DML events get the routed schema for SQL generation
-	if s.schemaRouter != nil && job.TableID > 0 {
-		applySchemaRoutingToTable(snap, job.TableID, s.schemaRouter)
+	// Apply sink routing to the TableInfo if sinkRouter is configured
+	// This ensures DML events get the routed schema/table for SQL generation
+	if s.sinkRouter != nil && job.TableID > 0 {
+		applySinkRoutingToTable(snap, job.TableID, s.sinkRouter)
 	}
 
 	s.snaps = append(s.snaps, snap)
@@ -430,7 +430,7 @@ func (s *schemaStorage) BuildDDLEvents(
 				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 				job.Query = querys[index]
 				event := new(model.DDLEvent)
-				event.FromJob(job, nil, newTableInfo, s.schemaRouter)
+				event.FromJob(job, nil, newTableInfo, s.sinkRouter)
 				ddlEvents = append(ddlEvents, event)
 			}
 		} else {
@@ -479,7 +479,7 @@ func (s *schemaStorage) BuildDDLEvents(
 			}
 		}
 		event := new(model.DDLEvent)
-		event.FromJob(job, preTableInfo, tableInfo, s.schemaRouter)
+		event.FromJob(job, preTableInfo, tableInfo, s.sinkRouter)
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
@@ -538,7 +538,7 @@ func (s *schemaStorage) buildRenameEvents(
 
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
-		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.schemaRouter)
+		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.sinkRouter)
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
@@ -601,24 +601,26 @@ func (s *MockSchemaStorage) DoGC(ts uint64) uint64 {
 	return atomic.LoadUint64(&s.Resolved)
 }
 
-// applySchemaRoutingToTable applies schema routing to a single table in a snapshot.
-// This ensures the TableInfo has TargetSchema set for SQL generation in sinks.
-func applySchemaRoutingToTable(snap *schema.Snapshot, tableID int64, schemaRouter *config.SchemaRouter) {
+// applySinkRoutingToTable applies sink routing to a single table in a snapshot.
+// This ensures the TableInfo has TargetSchema and TargetTable set for SQL generation in sinks.
+func applySinkRoutingToTable(snap *schema.Snapshot, tableID int64, sinkRouter *dispatcher.SinkRouter) {
 	if tableInfo, ok := snap.PhysicalTableByID(tableID); ok {
-		routedSchema := schemaRouter.Route(tableInfo.TableName.Schema)
-		if routedSchema != tableInfo.TableName.Schema {
+		routedSchema, routedTable := sinkRouter.Route(tableInfo.TableName.Schema, tableInfo.TableName.Table)
+		if routedSchema != tableInfo.TableName.Schema || routedTable != tableInfo.TableName.Table {
 			tableInfo.TableName.TargetSchema = routedSchema
+			tableInfo.TableName.TargetTable = routedTable
 		}
 	}
 }
 
-// applySchemaRoutingToSnapshot applies schema routing to all tables in a snapshot.
-// This ensures pre-existing tables (loaded from initial snapshot) also get routed schemas.
-func applySchemaRoutingToSnapshot(snap *schema.Snapshot, schemaRouter *config.SchemaRouter) {
+// applySinkRoutingToSnapshot applies sink routing to all tables in a snapshot.
+// This ensures pre-existing tables (loaded from initial snapshot) also get routed schemas and tables.
+func applySinkRoutingToSnapshot(snap *schema.Snapshot, sinkRouter *dispatcher.SinkRouter) {
 	snap.IterTables(true, func(tblInfo *model.TableInfo) {
-		routedSchema := schemaRouter.Route(tblInfo.TableName.Schema)
-		if routedSchema != tblInfo.TableName.Schema {
+		routedSchema, routedTable := sinkRouter.Route(tblInfo.TableName.Schema, tblInfo.TableName.Table)
+		if routedSchema != tblInfo.TableName.Schema || routedTable != tblInfo.TableName.Table {
 			tblInfo.TableName.TargetSchema = routedSchema
+			tblInfo.TableName.TargetTable = routedTable
 		}
 	})
 }

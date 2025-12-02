@@ -35,14 +35,12 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
-
 
 type baseKVEntry struct {
 	StartTs uint64
@@ -90,8 +88,6 @@ type mounter struct {
 	preDecoder *rowcodec.DatumMapDecoder
 
 	lastSkipOldValueTime time.Time
-
-	schemaRouter *config.SchemaRouter
 }
 
 // NewMounter creates a mounter
@@ -100,7 +96,6 @@ func NewMounter(schemaStorage SchemaStorage,
 	tz *time.Location,
 	filter pfilter.Filter,
 	integrity *integrity.Config,
-	schemaRouter *config.SchemaRouter,
 ) Mounter {
 	return &mounter{
 		schemaStorage: schemaStorage,
@@ -110,9 +105,8 @@ func NewMounter(schemaStorage SchemaStorage,
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricIgnoredDMLEventCounter: ignoredDMLEventCounter.
 			WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		tz:           tz,
-		integrity:    integrity,
-		schemaRouter: schemaRouter,
+		tz:        tz,
+		integrity: integrity,
 	}
 }
 
@@ -149,7 +143,6 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 	if err != nil {
 		return nil, err
 	}
-
 	if len(raw.OldValue) == 0 && len(raw.Value) == 0 {
 		log.Warn("empty value and old value",
 			zap.String("namespace", m.changefeedID.Namespace),
@@ -734,14 +727,6 @@ func (m *mounter) mountRowKVEntry(
 			Corrupted: corrupted,
 			Version:   checksumVersion,
 		}
-	}
-
-	// Apply schema routing if configured
-	if m.schemaRouter != nil {
-		// Create a shallow copy of tableInfo and set TargetSchema
-		routedTableInfo := *tableInfo
-		routedTableInfo.TableName.TargetSchema = m.schemaRouter.Route(tableInfo.TableName.Schema)
-		tableInfo = &routedTableInfo
 	}
 
 	return &model.RowChangedEvent{

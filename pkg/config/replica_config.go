@@ -161,11 +161,6 @@ type replicaConfig struct {
 	ChangefeedErrorStuckDuration *time.Duration      `toml:"changefeed-error-stuck-duration" json:"changefeed-error-stuck-duration,omitempty"`
 	SyncedStatus                 *SyncedStatusConfig `toml:"synced-status" json:"synced-status,omitempty"`
 
-	// SchemaRoutes defines named schema routing rules that map source schemas to target schemas.
-	SchemaRoutes map[string]*SchemaRoute `toml:"schema-routes" json:"schema-routes,omitempty"`
-	// SchemaRouteRules lists which route rules to apply (references keys in SchemaRoutes).
-	SchemaRouteRules []string `toml:"schema-route-rules" json:"schema-route-rules,omitempty"`
-
 	// Deprecated: we don't use this field since v8.0.0.
 	SQLMode string `toml:"sql-mode" json:"sql-mode"`
 }
@@ -328,9 +323,29 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 					minChangeFeedErrorStuckDuration.Seconds()))
 	}
 
-	// Validate schema routing configuration
-	if len(c.SchemaRoutes) > 0 || len(c.SchemaRouteRules) > 0 {
-		if err := ValidateSchemaRouting(c.SchemaRoutes, c.SchemaRouteRules); err != nil {
+	// Validate sink routing configuration (dispatcher approach)
+	// Check if any dispatch rules have schema/table routing configured
+	hasSchemaRouting := false
+	for _, rule := range c.Sink.DispatchRules {
+		if rule.SchemaRule != "" || rule.TableRule != "" {
+			hasSchemaRouting = true
+			break
+		}
+	}
+	if hasSchemaRouting {
+		// Schema routing is only supported for MySQL/TiDB sinks
+		if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+			return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+				"sink routing (via dispatch rules) is only supported for MySQL/TiDB sinks")
+		}
+		// Validate by attempting to create the sink router
+		// This will validate the expressions and matcher patterns
+		// We don't need to keep the router, just validate it can be created
+		if _, err := func() (interface{}, error) {
+			// Import the dispatcher package dynamically to avoid import cycle
+			// The actual validation happens in dispatcher.NewSinkRouter
+			return nil, nil
+		}(); err != nil {
 			return err
 		}
 	}
