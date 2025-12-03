@@ -24,6 +24,7 @@ import (
 
 // BatchEncoder encodes the events into the byte of a batch into.
 type BatchEncoder struct {
+	header    []byte
 	valueBuf  *bytes.Buffer
 	callback  func()
 	batchSize int
@@ -36,6 +37,9 @@ func (b *BatchEncoder) AppendTxnEvent(
 	callback func(),
 ) error {
 	for _, rowEvent := range e.Rows {
+		if b.config.CSVOutputFieldHeader && b.batchSize == 0 {
+			b.setHeader(rowEvent)
+		}
 		row, err := rowChangedEvent2CSVMsg(b.config, rowEvent)
 		if err != nil {
 			return err
@@ -53,7 +57,7 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 		return nil
 	}
 
-	ret := common.NewMsg(config.ProtocolCsv, nil,
+	ret := common.NewMsg(config.ProtocolCsv, b.header,
 		b.valueBuf.Bytes(), 0, model.MessageTypeRow, nil, nil)
 	ret.SetRowsCount(b.batchSize)
 	ret.Callback = b.callback
@@ -64,8 +68,27 @@ func (b *BatchEncoder) Build() (messages []*common.Message) {
 	}
 	b.callback = nil
 	b.batchSize = 0
+	b.header = nil
 
 	return []*common.Message{ret}
+}
+
+func (b *BatchEncoder) setHeader(rowEvent *model.RowChangedEvent) {
+	buf := &bytes.Buffer{}
+	columns := rowEvent.Columns
+	if rowEvent.IsDelete() {
+		columns = rowEvent.PreColumns
+	}
+	colNames := make([]string, 0, len(columns))
+	for _, col := range columns {
+		if col == nil {
+			continue
+		}
+		info := rowEvent.TableInfo.ForceGetColumnInfo(col.ColumnID)
+		colNames = append(colNames, info.Name.O)
+	}
+	buf.Write(encodeHeader(b.config, colNames))
+	b.header = buf.Bytes()
 }
 
 // newBatchEncoder creates a new csv BatchEncoder.
