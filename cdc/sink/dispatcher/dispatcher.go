@@ -16,6 +16,8 @@ package dispatcher
 import (
 	"fmt"
 	"regexp"
+
+	"github.com/pingcap/tiflow/pkg/config"
 )
 
 var (
@@ -23,11 +25,13 @@ var (
 	schemaRE = regexp.MustCompile(`\{schema\}`)
 	// tableRE is used to match substring '{table}' in expressions
 	tableRE = regexp.MustCompile(`\{table\}`)
-	// validExprRE validates schema/table routing expressions
-	// Expression can contain {schema}, {table}, or both, with valid separators
-	// Valid characters: A-Za-z0-9\._\-
-	validExprRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*(\{schema\})?[A-Za-z0-9\._\-]*(\{table\})?[A-Za-z0-9\._\-]*$`)
 )
+
+// ValidateExpression validates a schema or table routing expression.
+// This is a convenience wrapper around config.ValidateRoutingExpression.
+func ValidateExpression(expr string) error {
+	return config.ValidateRoutingExpression(expr)
+}
 
 // Dispatcher is an abstraction for routing schema and table names.
 // It determines the target schema and table name for a given source schema/table.
@@ -86,21 +90,4 @@ func (d *DynamicSchemaDispatcher) substituteExpression(expr, sourceSchema, sourc
 
 func (d *DynamicSchemaDispatcher) String() string {
 	return fmt.Sprintf("dynamic(schema:%s,table:%s)", d.schemaExpr, d.tableExpr)
-}
-
-// ValidateExpression validates a schema or table routing expression.
-// Expression format: [prefix][{schema}][middle][{table}][suffix]
-// prefix/middle/suffix are optional and should match [A-Za-z0-9\._\-]*
-func ValidateExpression(expr string) error {
-	if expr == "" {
-		// Empty is valid - means use source schema/table
-		return nil
-	}
-
-	if !validExprRE.MatchString(expr) {
-		return fmt.Errorf("invalid schema/table routing expression: %s. "+
-			"Expression must match pattern: [prefix][{schema}][middle][{table}][suffix]", expr)
-	}
-
-	return nil
 }

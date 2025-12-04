@@ -325,28 +325,21 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 
 	// Validate sink routing configuration (dispatcher approach)
 	// Check if any dispatch rules have schema/table routing configured
-	hasSchemaRouting := false
 	for _, rule := range c.Sink.DispatchRules {
-		if rule.SchemaRule != "" || rule.TableRule != "" {
-			hasSchemaRouting = true
-			break
+		if rule.SchemaRule == "" && rule.TableRule == "" {
+			continue
 		}
-	}
-	if hasSchemaRouting {
 		// Schema routing is only supported for MySQL/TiDB sinks
 		if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
 			return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
 				"sink routing (via dispatch rules) is only supported for MySQL/TiDB sinks")
 		}
-		// Validate by attempting to create the sink router
-		// This will validate the expressions and matcher patterns
-		// We don't need to keep the router, just validate it can be created
-		if _, err := func() (interface{}, error) {
-			// Import the dispatcher package dynamically to avoid import cycle
-			// The actual validation happens in dispatcher.NewSinkRouter
-			return nil, nil
-		}(); err != nil {
-			return err
+		// Validate the schema and table expressions
+		if err := ValidateRoutingExpression(rule.SchemaRule); err != nil {
+			return cerror.WrapError(cerror.ErrInvalidReplicaConfig, err)
+		}
+		if err := ValidateRoutingExpression(rule.TableRule); err != nil {
+			return cerror.WrapError(cerror.ErrInvalidReplicaConfig, err)
 		}
 	}
 

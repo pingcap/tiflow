@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -406,6 +407,28 @@ type DispatchRule struct {
 	// Example: "{table}_v2", "archive_{table}", "{schema}_{table}"
 	// Only available for MySQL/TiDB sinks.
 	TableRule string `toml:"table" json:"table"`
+}
+
+// validRoutingExprRE validates schema/table routing expressions.
+// Expression can contain {schema}, {table}, or both, with valid separators.
+// Valid characters: A-Za-z0-9\._\-
+var validRoutingExprRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*(\{schema\})?[A-Za-z0-9\._\-]*(\{table\})?[A-Za-z0-9\._\-]*$`)
+
+// ValidateRoutingExpression validates a schema or table routing expression.
+// Expression format: [prefix][{schema}][middle][{table}][suffix]
+// prefix/middle/suffix are optional and should match [A-Za-z0-9\._\-]*
+func ValidateRoutingExpression(expr string) error {
+	if expr == "" {
+		// Empty is valid - means use source schema/table
+		return nil
+	}
+
+	if !validRoutingExprRE.MatchString(expr) {
+		return fmt.Errorf("invalid schema/table routing expression: %s. "+
+			"Expression must match pattern: [prefix][{schema}][middle][{table}][suffix]", expr)
+	}
+
+	return nil
 }
 
 // ColumnSelector represents a column selector for a table.
