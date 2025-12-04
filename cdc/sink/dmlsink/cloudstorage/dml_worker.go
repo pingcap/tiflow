@@ -275,20 +275,15 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 			return 0, 0, inErr
 		}
 
-		defer func() {
-			closeErr := writer.Close(ctx)
-			if inErr != nil {
-				log.Error("failed to close writer", zap.Error(closeErr),
-					zap.Int("workerID", d.id),
-					zap.Any("table", task.tableInfo.TableName),
-					zap.String("namespace", d.changeFeedID.Namespace),
-					zap.String("changefeed", d.changeFeedID.ID))
-				if inErr == nil {
-					inErr = closeErr
-				}
-			}
-		}()
 		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
+			return 0, 0, inErr
+		}
+		if inErr = writer.Close(ctx); inErr != nil {
+			log.Error("failed to close writer", zap.Error(inErr),
+				zap.Int("workerID", d.id),
+				zap.Any("table", task.tableInfo.TableName),
+				zap.String("namespace", d.changeFeedID.Namespace),
+				zap.String("changefeed", d.changeFeedID.ID))
 			return 0, 0, inErr
 		}
 
