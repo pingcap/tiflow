@@ -323,6 +323,26 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 					minChangeFeedErrorStuckDuration.Seconds()))
 	}
 
+	// Validate sink routing configuration (dispatcher approach)
+	// Check if any dispatch rules have schema/table routing configured
+	for _, rule := range c.Sink.DispatchRules {
+		if rule.SchemaRule == "" && rule.TableRule == "" {
+			continue
+		}
+		// Schema routing is only supported for MySQL/TiDB sinks
+		if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+			return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+				"sink routing (via dispatch rules) is only supported for MySQL/TiDB sinks")
+		}
+		// Validate the schema and table expressions
+		if err := ValidateRoutingExpression(rule.SchemaRule); err != nil {
+			return cerror.WrapError(cerror.ErrInvalidReplicaConfig, err)
+		}
+		if err := ValidateRoutingExpression(rule.TableRule); err != nil {
+			return cerror.WrapError(cerror.ErrInvalidReplicaConfig, err)
+		}
+	}
+
 	return nil
 }
 

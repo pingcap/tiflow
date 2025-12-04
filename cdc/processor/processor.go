@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller"
@@ -782,8 +783,15 @@ func (p *processor) initDDLHandler() error {
 	} else {
 		ddlStartTs = checkpointTs - 1
 	}
+
+	// Build sink router from config
+	sinkRouter, err := dispatcher.NewSinkRouter(p.latestInfo.Config)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
 	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
-		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter)
+		forceReplicate, p.changefeedID, util.RoleProcessor, p.filter, sinkRouter)
 	if err != nil {
 		return errors.Trace(err)
 	}
