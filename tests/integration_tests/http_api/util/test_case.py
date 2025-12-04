@@ -74,6 +74,51 @@ def create_changefeed(sink_uri):
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.bad_request
 
+<<<<<<< HEAD
+=======
+    # create changefeed fail because dispatcher is invalid
+    url = BASE_URL1_V2+"/changefeeds"
+    data = json.dumps({
+        "changefeed_id": "changefeed-test-v2",
+        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=simple",
+        "replica_config": {
+            "sink": {
+                "dispatchers": [
+                    {
+                        "matcher": ["*.*"],
+                        "partition": "columns",
+                        "columns": ["a.b"]
+                    }
+                ]
+            }
+        }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
+
+    # create changefeed fail because glue schema config is invalid
+    url = BASE_URL1_V2+"/changefeeds"
+    data = json.dumps({
+        "changefeed_id": "changefeed-test-v2",
+        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=avro",
+        "replica_config": {
+            "sink": {
+                "kafka_config": {
+                    "glue_schema_registry_config": {
+                        "region": "us-west-1",
+                        "registry_name": "ticdc-test"
+                    }
+                }
+            }
+        }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert "CDC:ErrKafkaNewProducer" in resp.text, f"{resp.text}"
+    assert "not found, ResolveEndpointV2" not in resp.text, f"{resp.text}"
+
+>>>>>>> 1568150aa6 (deps: upgrade aws-sdk-go-v2 dependency (#12425))
     print("pass test: create changefeed")
 
 
