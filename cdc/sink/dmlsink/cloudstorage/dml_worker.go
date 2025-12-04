@@ -278,6 +278,8 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
 			return 0, 0, inErr
 		}
+		// We have to wait the writer to close to complete the upload
+		// If failed to close writer, some DMLs may not be upload successfully
 		if inErr = writer.Close(ctx); inErr != nil {
 			log.Error("failed to close writer", zap.Error(inErr),
 				zap.Int("workerID", d.id),
