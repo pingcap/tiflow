@@ -94,7 +94,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 		markCheckError(result, err)
 		return result
 	}
-	err2 := verifyPrivilegesWithResult(result, grants, neededPriv)
+	err2 := verifyPrivilegesWithResult(result, grants, neededPriv, c.toCheckDB.Version)
 	if err2 != nil {
 		// no enough privilege to check the user's connection number
 		result.State = StateWarning
