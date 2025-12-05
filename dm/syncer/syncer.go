@@ -386,7 +386,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBAList.Delegate(err)
 	}
 
-	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone, s.baList)
+	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone, s.baList, s.cfg.SyncerConfig.EventCacheCount)
 	if err != nil {
 		return err
 	}
