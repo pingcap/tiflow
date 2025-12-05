@@ -253,8 +253,7 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 		if _, inErr = writer.Write(ctx, buf.Bytes()); inErr != nil {
 			return 0, 0, inErr
 		}
-<<<<<<< HEAD
-=======
+
 		// We have to wait the writer to close to complete the upload
 		// If failed to close writer, some DMLs may not be upload successfully
 		if inErr = writer.Close(ctx); inErr != nil {
@@ -266,8 +265,6 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 			return 0, 0, inErr
 		}
 
-		d.metricFlushDuration.Observe(time.Since(start).Seconds())
->>>>>>> 1ea739d924 (sink(ticdc): fix a bug that may cause data loss while closing Writer failed (#12437))
 		return rowsCnt, bytesCnt, nil
 	}); err != nil {
 		return err
