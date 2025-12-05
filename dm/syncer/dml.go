@@ -176,6 +176,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -253,6 +254,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -307,6 +309,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
