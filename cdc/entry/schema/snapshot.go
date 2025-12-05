@@ -793,7 +793,7 @@ func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 	if old.TableName.IsPartition {
 		newPi := tbInfo.GetPartitionInfo()
 		oldPi := old.GetPartitionInfo()
-		newPartitionIDMap := make(map[int64]struct{}, len(newPi.NewPartitionIDs))
+		newPartitionIDMap := make(map[int64]struct{}, len(newPi.Definitions))
 		for _, partition := range newPi.Definitions {
 			newPartitionIDMap[partition.ID] = struct{}{}
 		}
