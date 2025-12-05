@@ -172,7 +172,7 @@ func TestTable(t *testing.T) {
 		require.False(t, ok)
 		_, ok = snap.PhysicalTableByID(11 + 65536)
 		require.False(t, ok)
-		require.True(t, snap.IsTruncateTableID(11))
+		require.True(t, snap.IsTruncateTableID(11+65536))
 		_, ok = snap.PhysicalTableByID(12)
 		require.True(t, ok)
 		_, ok = snap.PhysicalTableByID(12 + 65536)
@@ -348,7 +348,7 @@ func TestDrop(t *testing.T) {
 	require.Equal(t, 1, snap.inner.schemaNameToID.Len())
 	require.Equal(t, 1, snap.inner.tableNameToID.Len())
 	require.Equal(t, 1, snap.inner.partitions.Len())
-	require.Equal(t, 0, snap.inner.truncatedTables.Len())
+	require.Equal(t, 1, snap.inner.truncatedTables.Len())
 	require.Equal(t, 2, snap.inner.ineligibleTables.Len())
 }
 
