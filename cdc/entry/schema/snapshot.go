@@ -816,7 +816,7 @@ func (s *snapshot) doDropTable(tbInfo *model.TableInfo, currentTs uint64) {
 // truncateTable truncate the table with the given ID, and replace it with a new `tbInfo`.
 // NOTE: after a table is truncated:
 //   - physicalTableByID(id) will return nil;
-//   - IsTruncateTableID(id) should return true.
+//   - IsTruncateTableID(physicalTableID) should return true.
 func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs uint64) (err error) {
 	old, ok := s.physicalTableByID(id)
 	if !ok {
@@ -824,7 +824,23 @@ func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 	}
 	s.doDropTable(old, currentTs)
 	s.doCreateTable(tbInfo, currentTs)
-	s.truncatedTables.ReplaceOrInsert(newVersionedID(id, negative(currentTs)))
+	tag := negative(currentTs)
+	// when the table is a partition table, we have to record all partition ids
+	if old.IsPartitionTable() {
+		newPi := tbInfo.GetPartitionInfo()
+		oldPi := old.GetPartitionInfo()
+		newPartitionIDMap := make(map[int64]struct{}, len(newPi.NewPartitionIDs))
+		for _, partition := range newPi.Definitions {
+			newPartitionIDMap[partition.ID] = struct{}{}
+		}
+		for _, partition := range oldPi.Definitions {
+			if _, ok := newPartitionIDMap[partition.ID]; !ok {
+				s.truncatedTables.ReplaceOrInsert(newVersionedID(partition.ID, tag))
+			}
+		}
+	} else {
+		s.truncatedTables.ReplaceOrInsert(newVersionedID(id, tag))
+	}
 	s.currentTs = currentTs
 	log.Debug("truncate table success",
 		zap.String("schema", tbInfo.TableName.Schema),
