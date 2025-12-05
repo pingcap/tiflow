@@ -1822,6 +1822,42 @@ func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
 	return cfg
 }
 
+func TestHandleRotateEventUpdatesGlobalCheckpoint(t *testing.T) {
+	tctx := tcontext.Background()
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := &Syncer{cfg: cfg}
+	syncer.checkpoint = NewRemoteCheckPoint(tctx, cfg, nil, "test")
+	oldLocation := binlog.Location{
+		Position: mysql.Position{
+			Name: "mysql-bin.000001",
+			Pos:  123,
+		},
+	}
+	syncer.checkpoint.SaveGlobalPoint(oldLocation)
+	newLocation := binlog.Location{
+		Position: mysql.Position{
+			Name: "mysql-bin.000003",
+			Pos:  binlog.FileHeaderLen,
+		},
+	}
+	eventHeader := &replication.EventHeader{
+		Timestamp: 1,
+		LogPos:    uint32(newLocation.Position.Pos),
+		EventType: replication.ROTATE_EVENT,
+	}
+	rotateEvent := &replication.RotateEvent{
+		NextLogName: []byte(newLocation.Position.Name),
+		Position:    uint64(newLocation.Position.Pos),
+	}
+	ec := eventContext{
+		tctx:        tctx,
+		header:      eventHeader,
+		endLocation: newLocation,
+	}
+	require.NoError(t, syncer.handleRotateEvent(rotateEvent, ec))
+	require.Equal(t, newLocation, syncer.checkpoint.GlobalPoint())
+}
+
 func TestWaitBeforeRunExit(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := genDefaultSubTaskConfig4Test()
