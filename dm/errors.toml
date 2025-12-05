@@ -2161,7 +2161,7 @@ tags = ["internal", "high"]
 [error.DM-sync-unit-36067]
 message = "parse DDL: %s"
 description = ""
-workaround = "Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
+workaround = "Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl-operations. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
 tags = ["internal", "high"]
 
 [error.DM-sync-unit-36068]
