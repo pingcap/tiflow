@@ -134,14 +134,14 @@ func (c *PrimaryKeyChecker) Check(ctx context.Context) *Result {
 				if r.State != StateFailure {
 					r.State = StateWarning
 				}
-				e := NewWarn(tableMsg + opt.errMessage)
+				e := NewWarn("%s", tableMsg+opt.errMessage)
 				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
 					resultInstructions[opt.instruction] = struct{}{}
 				}
 				r.Errors = append(r.Errors, e)
 			case StateFailure:
 				r.State = StateFailure
-				e := NewError(tableMsg + opt.errMessage)
+				e := NewError("%s", tableMsg+opt.errMessage)
 				if _, ok := resultInstructions[opt.instruction]; !ok && opt.instruction != "" {
 					resultInstructions[opt.instruction] = struct{}{}
 				}
