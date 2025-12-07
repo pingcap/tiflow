@@ -519,6 +519,7 @@ func (s *schemaStorage) buildRenameEvents(
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
 		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
+		event.Seq = uint64(i)
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
