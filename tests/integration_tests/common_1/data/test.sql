@@ -175,3 +175,10 @@ VALUES (1),
 UPDATE `column_is_null`
 SET t = NULL
 WHERE id = 1;
+
+-- rename tables DDL should keep the order of events
+
+create table rename_t3 (id int primary key, val int);
+create table rename_t1 (id int primary key, val int);
+create table rename_t2 (id int primary key, val int);
+rename table rename_t1 to rename_t4, rename_t2 to rename_t1, rename_t3 to rename_t2;
