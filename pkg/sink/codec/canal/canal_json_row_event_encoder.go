@@ -410,13 +410,13 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 				zap.Int("length", originLength),
 				zap.Any("table", e.TableInfo.TableName))
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs(m.GetTable(), originLength, c.config.MaxMessageBytes)
 		}
 
 		if c.config.LargeMessageHandle.HandleKeyOnly() {
 			value, err = newJSONMessageForDML(c.builder, e, c.config, true, "")
 			if err != nil {
-				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+				return errors.Trace(err)
 			}
 			value, err = common.Compress(
 				c.config.ChangefeedID, c.config.LargeMessageHandle.LargeMessageHandleCompression, value,
@@ -433,7 +433,7 @@ func (c *JSONRowEventEncoder) AppendRowChangedEvent(
 					zap.Int("originLength", originLength),
 					zap.Int("length", length),
 					zap.Any("table", e.TableInfo.TableName))
-				return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+				return cerror.ErrMessageTooLarge.GenWithStackByArgs(m.GetTable(), length, c.config.MaxMessageBytes)
 			}
 			log.Warn("Single message is too large for canal-json, only encode handle-key columns",
 				zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
@@ -485,7 +485,7 @@ func (c *JSONRowEventEncoder) newClaimCheckLocationMessage(
 			zap.Int("maxMessageBytes", c.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", event.TableInfo.TableName))
-		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(length)
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(result.GetTable(), length, c.config.MaxMessageBytes)
 	}
 	return result, nil
 }
