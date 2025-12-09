@@ -26,7 +26,6 @@ SINK_URI = "mysql://normal:%s@127.0.0.1:3306/" % ENPASSWORD
 
 physicalShiftBits = 18
 
-
 def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
     """
     requests get with retry
@@ -47,8 +46,6 @@ def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
     return None
 
 # we should write some SQLs in the run.sh after call create_changefeed
-
-
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
     # create changefeed
@@ -269,8 +266,7 @@ def remove_changefeed():
     # test remove changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists"
     resp = rq.delete(url)
-    assert (resp.status_code == rq.codes.bad_request or resp.status_code ==
-            rq.codes.internal_server_error)
+    assert (resp.status_code == rq.codes.bad_request or resp.status_code == rq.codes.internal_server_error)
     data = resp.json()
     assert data["error_code"] == "CDC:ErrChangeFeedNotExists"
 
@@ -410,8 +406,6 @@ def get_tso():
 # util functions define belows
 
 # compose physical time and logical time into tso
-
-
 def compose_tso(ps, ls):
     return (ps << physicalShiftBits) + ls
 
