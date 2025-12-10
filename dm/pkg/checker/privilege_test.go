@@ -233,7 +233,7 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 		{
 			grants:           nil, // non grants
 			replicationState: StateFailure,
-			errStr:           "there is no such grant defined for current user on host '%'",
+			errStr:           "there is no such grant defined for current user on host '%%'",
 		},
 		{
 			grants:           []string{"invalid SQL statement"},
