@@ -178,13 +178,30 @@ WHERE id = 1;
 
 -- rename tables DDL should keep the order of events
 
-create table rename_t3 (id int primary key, val int);
-create table rename_t1 (id int primary key, val int);
-create table rename_t2 (id int primary key, val int);
-insert into rename_t1 values(1,1);
-insert into rename_t2 values(1,2);
-insert into rename_t3 values(1,3);
-rename table rename_t1 to rename_t4, rename_t2 to rename_t1, rename_t3 to rename_t2;
-insert into rename_t1 values(2,1);
-insert into rename_t2 values(2,2);
-insert into rename_t3 values(3,3);
+CREATE TABLE `rename_t3` (
+    `id`  INT PRIMARY KEY,
+    `val` INT
+);
+
+CREATE TABLE `rename_t1` (
+    `id`  INT PRIMARY KEY,
+    `val` INT
+);
+
+CREATE TABLE `rename_t2` (
+    `id`  INT PRIMARY KEY,
+    `val` INT
+);
+
+INSERT INTO `rename_t1` VALUES (1, 1);
+INSERT INTO `rename_t2` VALUES (1, 2);
+INSERT INTO `rename_t3` VALUES (1, 3);
+
+RENAME TABLE
+    `rename_t1` TO `rename_t4`,
+    `rename_t2` TO `rename_t1`,
+    `rename_t3` TO `rename_t2`;
+
+INSERT INTO `rename_t4` VALUES (2, 4);
+INSERT INTO `rename_t1` VALUES (2, 1);
+INSERT INTO `rename_t2` VALUES (2, 2);
