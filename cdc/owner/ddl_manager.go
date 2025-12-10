@@ -411,7 +411,7 @@ func (m *ddlManager) getNextDDL() *model.DDLEvent {
 			delete(m.pendingDDLs, tb)
 			continue
 		}
-		if res == nil || res.CommitTs > ddls[0].CommitTs {
+		if res == nil || res.CommitTs > ddls[0].CommitTs || (res.CommitTs == ddls[0].CommitTs && res.Seq > ddls[0].Seq) {
 			res = ddls[0]
 		}
 	}
