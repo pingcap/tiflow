@@ -68,7 +68,7 @@ func TestNewSinkRouterWithSchemaRouting(t *testing.T) {
 				{
 					Matcher:    []string{"source_db.*"},
 					SchemaRule: "target_db",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -86,7 +86,7 @@ func TestNewSinkRouterWithTableRouting(t *testing.T) {
 			DispatchRules: []*config.DispatchRule{
 				{
 					Matcher:    []string{"db.source_table"},
-					SchemaRule: "{schema}",
+					SchemaRule: SchemaPlaceholder,
 					TableRule:  "target_table",
 				},
 			},
@@ -106,7 +106,7 @@ func TestNewSinkRouterInvalidSchemaExpression(t *testing.T) {
 				{
 					Matcher:    []string{"db.*"},
 					SchemaRule: "{invalid}",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -124,7 +124,7 @@ func TestNewSinkRouterInvalidTableExpression(t *testing.T) {
 			DispatchRules: []*config.DispatchRule{
 				{
 					Matcher:    []string{"db.*"},
-					SchemaRule: "{schema}",
+					SchemaRule: SchemaPlaceholder,
 					TableRule:  "invalid space",
 				},
 			},
@@ -144,7 +144,7 @@ func TestNewSinkRouterInvalidMatcher(t *testing.T) {
 				{
 					Matcher:    []string{"[invalid"},
 					SchemaRule: "target",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -172,7 +172,7 @@ func TestSinkRouterRouteSchemaOnly(t *testing.T) {
 				{
 					Matcher:    []string{"source_db.*"},
 					SchemaRule: "target_db",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -228,7 +228,7 @@ func TestSinkRouterRouteTableOnly(t *testing.T) {
 			DispatchRules: []*config.DispatchRule{
 				{
 					Matcher:    []string{"mydb.source_table"},
-					SchemaRule: "{schema}",
+					SchemaRule: SchemaPlaceholder,
 					TableRule:  "target_table",
 				},
 			},
@@ -338,12 +338,12 @@ func TestSinkRouterMultipleRules(t *testing.T) {
 				{
 					Matcher:    []string{"db1.*"},
 					SchemaRule: "target1",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 				{
 					Matcher:    []string{"db2.*"},
 					SchemaRule: "target2",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 				{
 					Matcher:    []string{"db3.specific_table"},
@@ -388,12 +388,12 @@ func TestSinkRouterFirstMatchWins(t *testing.T) {
 				{
 					Matcher:    []string{"db.*"},
 					SchemaRule: "first_target",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 				{
 					Matcher:    []string{"db.specific"},
 					SchemaRule: "second_target",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -418,7 +418,7 @@ func TestSinkRouterCaseInsensitiveSchema(t *testing.T) {
 				{
 					Matcher:    []string{"MyDB.*"},
 					SchemaRule: "target_db",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -534,7 +534,7 @@ func TestSinkRouterCaseSensitiveSchema(t *testing.T) {
 				{
 					Matcher:    []string{"MyDB.*"},
 					SchemaRule: "target_db",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -636,6 +636,25 @@ func TestSinkRouterCaseSensitiveBoth(t *testing.T) {
 	}
 }
 
+func TestSinkRouterCaseInsensitiveWithSchemaPlaceholder(t *testing.T) {
+	cfg := &config.ReplicaConfig{
+		CaseSensitive: false,
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{{
+				Matcher:    []string{"MyDB.*"},
+				SchemaRule: "backup_{schema}",
+				TableRule:  TablePlaceholder,
+			}},
+		},
+	}
+	router, _ := NewSinkRouter(cfg)
+
+	// "mydb" matches "MyDB.*" case-insensitively, but output preserves actual source case
+	schema, table := router.Route("mydb", "t1")
+	require.Equal(t, "backup_mydb", schema) // NOT "backup_MyDB"
+	require.Equal(t, "t1", table)
+}
+
 func TestSinkRouterWildcardMatchers(t *testing.T) {
 	t.Parallel()
 
@@ -645,7 +664,7 @@ func TestSinkRouterWildcardMatchers(t *testing.T) {
 				{
 					Matcher:    []string{"*.*"},
 					SchemaRule: "all_to_one",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 			},
 		},
@@ -679,7 +698,7 @@ func TestSinkRouterMixedRulesWithAndWithoutRouting(t *testing.T) {
 				{
 					Matcher:    []string{"db2.*"},
 					SchemaRule: "routed_db",
-					TableRule:  "{table}",
+					TableRule:  TablePlaceholder,
 				},
 				{
 					Matcher:        []string{"db3.*"},

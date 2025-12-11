@@ -1092,8 +1092,8 @@ type DDLEvent struct {
 }
 
 // FromJob fills the values with DDLEvent from DDL job
-func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo, sinkRouter *dispatcher.SinkRouter) {
-	d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "", sinkRouter)
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo, sinkRouter *dispatcher.SinkRouter) error {
+	return d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "", sinkRouter)
 }
 
 // FromJobWithArgs fills the values with DDLEvent from DDL job
@@ -1102,7 +1102,7 @@ func (d *DDLEvent) FromJobWithArgs(
 	preTableInfo, tableInfo *TableInfo,
 	oldSchemaName, newSchemaName string,
 	sinkRouter *dispatcher.SinkRouter,
-) {
+) error {
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Type = job.Type
@@ -1153,23 +1153,23 @@ func (d *DDLEvent) FromJobWithArgs(
 
 	// Apply sink routing to ALL DDLs if sink router is configured
 	if sinkRouter != nil {
-		d.applySinkRouting(sinkRouter)
+		if err := d.applySinkRouting(sinkRouter); err != nil {
+			return errors.Trace(err)
+		}
 	}
+	return nil
 }
 
 // applySinkRouting uses RenameDDLTable to rewrite the DDL query with routed schema and table names
-func (d *DDLEvent) applySinkRouting(sinkRouter *dispatcher.SinkRouter) {
+func (d *DDLEvent) applySinkRouting(sinkRouter *dispatcher.SinkRouter) error {
 	// Parse the DDL query into an AST
 	p := parser.New()
 	stmts, _, err := p.Parse(d.Query, d.Charset, d.Collate)
 	if err != nil {
-		// If parsing fails, keep the original query
-		log.Warn("failed to parse DDL for sink routing, keeping original query",
-			zap.String("query", d.Query), zap.Error(err))
-		return
+		return errors.Annotate(err, "failed to parse DDL for sink routing")
 	}
 	if len(stmts) == 0 {
-		return
+		return nil
 	}
 
 	// Fetch source tables in the order they appear in the DDL AST
@@ -1183,9 +1183,7 @@ func (d *DDLEvent) applySinkRouting(sinkRouter *dispatcher.SinkRouter) {
 
 	sourceTables, err := dmparser.FetchDDLTables(defaultSchema, stmts[0], conn.LCTableNamesSensitive)
 	if err != nil {
-		log.Warn("failed to fetch source tables for sink routing, keeping original query",
-			zap.String("query", d.Query), zap.Error(err))
-		return
+		return errors.Annotate(err, "failed to fetch source tables for sink routing")
 	}
 
 	// Route each source table to get target schema and table in the same order
@@ -1213,13 +1211,11 @@ func (d *DDLEvent) applySinkRouting(sinkRouter *dispatcher.SinkRouter) {
 	// Use RenameDDLTable to rewrite the query
 	routedQuery, err := dmparser.RenameDDLTable(stmts[0], targetTables)
 	if err != nil {
-		// If rewriting fails, keep the original query
-		log.Warn("failed to rewrite DDL for sink routing, keeping original query",
-			zap.String("query", d.Query), zap.Error(err))
-		return
+		return errors.Annotate(err, "failed to rewrite DDL for sink routing")
 	}
 
 	d.Query = routedQuery
+	return nil
 }
 
 // NewBootstrapDDLEvent returns a bootstrap DDL event.

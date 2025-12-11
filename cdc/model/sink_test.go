@@ -216,13 +216,15 @@ func TestDDLEventFromJob(t *testing.T) {
 	}
 	tableInfo := WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 	event := &DDLEvent{}
-	event.FromJob(job, preTableInfo, tableInfo, nil)
+	err := event.FromJob(job, preTableInfo, tableInfo, nil)
+	require.NoError(t, err)
 	require.Equal(t, uint64(420536581131337731), event.StartTs)
 	require.Equal(t, int64(49), event.TableInfo.TableName.TableID)
 	require.Equal(t, 1, len(event.PreTableInfo.TableInfo.Columns))
 
 	event = &DDLEvent{}
-	event.FromJob(job, nil, nil, nil)
+	err = event.FromJob(job, nil, nil, nil)
+	require.NoError(t, err)
 	require.Nil(t, event.PreTableInfo)
 }
 
@@ -308,7 +310,8 @@ func TestRenameTables(t *testing.T) {
 	}
 
 	event := &DDLEvent{}
-	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1", nil)
+	err := event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1", nil)
+	require.NoError(t, err)
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t1")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -359,7 +362,8 @@ func TestRenameTables(t *testing.T) {
 	}
 
 	event = &DDLEvent{}
-	event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1", nil)
+	err = event.FromJobWithArgs(job, preTableInfo, tableInfo, "test1", "test1", nil)
+	require.NoError(t, err)
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(69))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -428,7 +432,8 @@ func TestExchangeTablePartition(t *testing.T) {
 	}
 
 	event := &DDLEvent{}
-	event.FromJob(job, preTableInfo, tableInfo, nil)
+	err := event.FromJob(job, preTableInfo, tableInfo, nil)
+	require.NoError(t, err)
 	require.Equal(t, event.PreTableInfo.TableName.TableID, int64(67))
 	require.Equal(t, event.PreTableInfo.TableName.Table, "t2")
 	require.Len(t, event.PreTableInfo.TableInfo.Columns, 1)
@@ -451,7 +456,7 @@ func newTestSinkRouter(routes map[string]string) *dispatcher.SinkRouter {
 		dispatchRules = append(dispatchRules, &config.DispatchRule{
 			Matcher:    []string{source + ".*"},
 			SchemaRule: target,
-			TableRule:  "{table}",
+			TableRule:  dispatcher.TablePlaceholder,
 		})
 	}
 
@@ -484,7 +489,7 @@ func newTestSinkRouterWithTableOnlyRouting(routes []tableRoute) *dispatcher.Sink
 	for _, route := range routes {
 		dispatchRules = append(dispatchRules, &config.DispatchRule{
 			Matcher:    []string{route.sourceSchema + "." + route.sourceTable},
-			SchemaRule: "{schema}", // Keep schema the same
+			SchemaRule: dispatcher.SchemaPlaceholder, // Keep schema the same
 			TableRule:  route.targetTable,
 		})
 	}
@@ -599,7 +604,8 @@ func TestDDLSinkRoutingSchemaAndTable(t *testing.T) {
 			}
 
 			event := &DDLEvent{}
-			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			require.NoError(t, err)
 			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
 			// Verify source schema/table are NOT mutated
 			require.Equal(t, "source_db", event.TableInfo.TableName.Schema)
@@ -688,7 +694,8 @@ func TestDDLSinkRoutingSchemaOnly(t *testing.T) {
 			}
 
 			event := &DDLEvent{}
-			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			require.NoError(t, err)
 			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
 			// Verify that the original Schema/Table are NOT mutated (pullers need to read from original)
 			require.Equal(t, "source_db", event.TableInfo.TableName.Schema, "Schema should not be mutated for %s", tt.name)
@@ -776,7 +783,8 @@ func TestDDLSinkRoutingTableOnly(t *testing.T) {
 			}
 
 			event := &DDLEvent{}
-			event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+			require.NoError(t, err)
 			require.Equal(t, tt.expectedQuery, event.Query, "Query mismatch for %s", tt.name)
 			// Verify source schema/table are NOT mutated
 			require.Equal(t, "source_db", event.TableInfo.TableName.Schema)
@@ -945,8 +953,9 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			}
 
 			event := &DDLEvent{}
-			event.FromJobWithArgs(job, tt.preTableInfo, testTableInfo,
+			err := event.FromJobWithArgs(job, tt.preTableInfo, testTableInfo,
 				tt.oldSchemaName, tt.newSchemaName, router)
+			require.NoError(t, err)
 
 			require.Equal(t, tt.expectedQuery, event.Query,
 				"ORDERING TEST FAILED for %s\n%s\nExpected: %s\nActual:   %s",
@@ -1072,14 +1081,189 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			}
 
 			event := &DDLEvent{}
-			event.FromJobWithArgs(job, tt.preTableInfo, tt.tableInfo,
+			err := event.FromJobWithArgs(job, tt.preTableInfo, tt.tableInfo,
 				tt.oldSchemaName, tt.newSchemaName, tableRouter)
+			require.NoError(t, err)
 
 			require.Equal(t, tt.expectedQuery, event.Query,
 				"TABLE ROUTING TEST FAILED for %s\n%s\nExpected: %s\nActual:   %s",
 				tt.name, tt.description, tt.expectedQuery, event.Query)
 		})
 	}
+
+	// Test scenarios with multiple schemas mapped to different targets
+	// Scenario: db1.* -> target1, db2.* -> target2
+	multiSchemaRouter := newTestSinkRouter(map[string]string{
+		"db1": "target1",
+		"db2": "target2",
+	})
+
+	t.Run("CREATE TABLE LIKE - same table name different schemas routed differently", func(t *testing.T) {
+		// CREATE TABLE db1.users LIKE db2.users
+		// Both schemas are mapped but to different targets
+		tableInfoDb1Users := WrapTableInfo(1, "db1", 100, &timodel.TableInfo{
+			ID:      1,
+			Name:    pmodel.NewCIStr("users"),
+			Columns: columns,
+		})
+
+		job := &timodel.Job{
+			ID:         1,
+			TableID:    1,
+			SchemaName: "db1",
+			Type:       timodel.ActionCreateTable,
+			StartTS:    1,
+			Query:      "CREATE TABLE `db1`.`users` LIKE `db2`.`users`",
+			BinlogInfo: &timodel.HistoryInfo{
+				TableInfo:  tableInfoDb1Users.TableInfo,
+				FinishedTS: 2,
+			},
+		}
+
+		event := &DDLEvent{}
+		err := event.FromJobWithArgs(job, nil, tableInfoDb1Users, "", "", multiSchemaRouter)
+		require.NoError(t, err)
+
+		expectedQuery := "CREATE TABLE `target1`.`users` LIKE `target2`.`users`"
+		require.Equal(t, expectedQuery, event.Query,
+			"Same table name in different schemas should route to their respective targets")
+	})
+
+	// Test scenario with multiple schemas consolidated to a single target
+	// Scenario: db1.* -> consolidated, db2.* -> consolidated
+	consolidatedRouter := newTestSinkRouter(map[string]string{
+		"db1": "consolidated",
+		"db2": "consolidated",
+	})
+
+	t.Run("CREATE TABLE LIKE - multiple schemas consolidated to single target", func(t *testing.T) {
+		// CREATE TABLE db1.t1 LIKE db2.t2
+		// Both schemas map to the same target
+		tableInfoDb1T1 := WrapTableInfo(1, "db1", 100, &timodel.TableInfo{
+			ID:      1,
+			Name:    pmodel.NewCIStr("t1"),
+			Columns: columns,
+		})
+
+		job := &timodel.Job{
+			ID:         1,
+			TableID:    1,
+			SchemaName: "db1",
+			Type:       timodel.ActionCreateTable,
+			StartTS:    1,
+			Query:      "CREATE TABLE `db1`.`t1` LIKE `db2`.`t2`",
+			BinlogInfo: &timodel.HistoryInfo{
+				TableInfo:  tableInfoDb1T1.TableInfo,
+				FinishedTS: 2,
+			},
+		}
+
+		event := &DDLEvent{}
+		err := event.FromJobWithArgs(job, nil, tableInfoDb1T1, "", "", consolidatedRouter)
+		require.NoError(t, err)
+
+		expectedQuery := "CREATE TABLE `consolidated`.`t1` LIKE `consolidated`.`t2`"
+		require.Equal(t, expectedQuery, event.Query,
+			"Multiple schemas consolidated to single target should route both tables to same target")
+	})
+}
+
+func TestSinkRoutingError(t *testing.T) {
+	t.Parallel()
+
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+
+	// Create a router that routes source_db.* -> target_db.*
+	cfg := &config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:    []string{"source_db.*"},
+					SchemaRule: "target_db",
+				},
+			},
+		},
+	}
+	router, err := dispatcher.NewSinkRouter(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, router)
+
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "source_db",
+			Table:   "test_table",
+			TableID: 1,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   1,
+			Name: pmodel.CIStr{O: "test_table"},
+			Columns: []*timodel.ColumnInfo{
+				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+			},
+		},
+	}
+
+	t.Run("invalid DDL query returns error", func(t *testing.T) {
+		job := &timodel.Job{
+			ID:         1,
+			TableID:    1,
+			SchemaName: "source_db",
+			Type:       timodel.ActionCreateTable,
+			StartTS:    1,
+			Query:      "THIS IS NOT VALID SQL AT ALL!!!",
+			BinlogInfo: &timodel.HistoryInfo{
+				TableInfo:  tableInfo.TableInfo,
+				FinishedTS: 2,
+			},
+		}
+
+		event := &DDLEvent{}
+		err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse DDL for sink routing")
+	})
+
+	t.Run("incomplete DDL query returns error", func(t *testing.T) {
+		job := &timodel.Job{
+			ID:         1,
+			TableID:    1,
+			SchemaName: "source_db",
+			Type:       timodel.ActionCreateTable,
+			StartTS:    1,
+			Query:      "CREATE TABLE", // incomplete DDL
+			BinlogInfo: &timodel.HistoryInfo{
+				TableInfo:  tableInfo.TableInfo,
+				FinishedTS: 2,
+			},
+		}
+
+		event := &DDLEvent{}
+		err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse DDL for sink routing")
+	})
+
+	t.Run("no error when router is nil", func(t *testing.T) {
+		job := &timodel.Job{
+			ID:         1,
+			TableID:    1,
+			SchemaName: "source_db",
+			Type:       timodel.ActionCreateTable,
+			StartTS:    1,
+			Query:      "THIS IS NOT VALID SQL AT ALL!!!",
+			BinlogInfo: &timodel.HistoryInfo{
+				TableInfo:  tableInfo.TableInfo,
+				FinishedTS: 2,
+			},
+		}
+
+		event := &DDLEvent{}
+		// When router is nil, applySinkRouting is not called, so no error
+		err := event.FromJobWithArgs(job, nil, tableInfo, "", "", nil)
+		require.NoError(t, err)
+		// The query should remain unchanged (invalid but not routed)
+		require.Equal(t, "THIS IS NOT VALID SQL AT ALL!!!", event.Query)
+	})
 }
 
 func TestSortRowChangedEvent(t *testing.T) {

@@ -20,6 +20,15 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 )
 
+const (
+	// SchemaPlaceholder is the placeholder string for schema names in routing expressions.
+	// When used in a SchemaRule or TableRule, it will be replaced with the source schema name.
+	SchemaPlaceholder = "{schema}"
+	// TablePlaceholder is the placeholder string for table names in routing expressions.
+	// When used in a SchemaRule or TableRule, it will be replaced with the source table name.
+	TablePlaceholder = "{table}"
+)
+
 var (
 	// schemaRE is used to match substring '{schema}' in expressions
 	schemaRE = regexp.MustCompile(`\{schema\}`)

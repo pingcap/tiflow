@@ -1718,7 +1718,7 @@ func TestMounterWithSinkRouting(t *testing.T) {
 				{
 					Matcher:    []string{"test.*"},
 					SchemaRule: "test_target",
-					TableRule:  "{table}",
+					TableRule:  dispatcher.TablePlaceholder,
 				},
 			},
 		},
@@ -1854,4 +1854,3 @@ func TestMounterWithSinkRoutingTableRouting(t *testing.T) {
 		require.Equal(t, "student_routed", row.TableInfo.TableName.TargetTable)
 	})
 }
-

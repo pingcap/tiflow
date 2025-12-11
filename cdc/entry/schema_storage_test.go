@@ -1068,12 +1068,12 @@ func TestSchemaStorageWithSinkRouting(t *testing.T) {
 				{
 					Matcher:    []string{"source_db1.*"},
 					SchemaRule: "target_db1",
-					TableRule:  "{table}",
+					TableRule:  dispatcher.TablePlaceholder,
 				},
 				{
 					Matcher:    []string{"source_db2.*"},
 					SchemaRule: "target_db2",
-					TableRule:  "{table}",
+					TableRule:  dispatcher.TablePlaceholder,
 				},
 			},
 		},

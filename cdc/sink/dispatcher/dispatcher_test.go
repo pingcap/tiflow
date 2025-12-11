@@ -33,8 +33,8 @@ func TestDynamicSchemaDispatcher(t *testing.T) {
 	}{
 		{
 			name:         "passthrough with placeholders",
-			schemaExpr:   "{schema}",
-			tableExpr:    "{table}",
+			schemaExpr:   SchemaPlaceholder,
+			tableExpr:    TablePlaceholder,
 			sourceSchema: "source_db",
 			sourceTable:  "source_table",
 			wantSchema:   "source_db",
@@ -43,7 +43,7 @@ func TestDynamicSchemaDispatcher(t *testing.T) {
 		{
 			name:         "static schema routing",
 			schemaExpr:   "target_db",
-			tableExpr:    "{table}",
+			tableExpr:    TablePlaceholder,
 			sourceSchema: "source_db",
 			sourceTable:  "my_table",
 			wantSchema:   "target_db",
@@ -51,7 +51,7 @@ func TestDynamicSchemaDispatcher(t *testing.T) {
 		},
 		{
 			name:         "static table routing",
-			schemaExpr:   "{schema}",
+			schemaExpr:   SchemaPlaceholder,
 			tableExpr:    "routed_table",
 			sourceSchema: "source_db",
 			sourceTable:  "my_table",
@@ -141,7 +141,7 @@ func TestDynamicSchemaDispatcher(t *testing.T) {
 		},
 		{
 			name:         "schema placeholder in table expr",
-			schemaExpr:   "{schema}",
+			schemaExpr:   SchemaPlaceholder,
 			tableExpr:    "{schema}_{table}",
 			sourceSchema: "mydb",
 			sourceTable:  "mytable",
@@ -151,7 +151,7 @@ func TestDynamicSchemaDispatcher(t *testing.T) {
 		{
 			name:         "table placeholder in schema expr",
 			schemaExpr:   "{schema}_{table}",
-			tableExpr:    "{table}",
+			tableExpr:    TablePlaceholder,
 			sourceSchema: "db",
 			sourceTable:  "tbl",
 			wantSchema:   "db_tbl",
