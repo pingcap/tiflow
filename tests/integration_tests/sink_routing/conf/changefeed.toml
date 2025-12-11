@@ -7,7 +7,7 @@ rules = ['source_db.*']
 [sink]
 # Dispatch rules with schema and table routing
 # Route source_db.* to target_db.* with table suffix "_routed"
-[[sink.dispatch-rules]]
+[[sink.dispatchers]]
 matcher = ['source_db.*']
 schema = 'target_db'
 table = '{table}_routed'
