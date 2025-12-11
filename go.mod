@@ -1,8 +1,12 @@
 module github.com/pingcap/tiflow
 
+<<<<<<< HEAD
 go 1.23.6
 
 toolchain go1.23.8
+=======
+go 1.25.5
+>>>>>>> 89b5e0458c (*: upgrade golang to 1.25 (#12384))
 
 require (
 	cloud.google.com/go/storage v1.39.1

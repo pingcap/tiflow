@@ -1,6 +1,10 @@
 module github.com/breezewish/checker
 
+<<<<<<< HEAD
 go 1.23.0
+=======
+go 1.25.5
+>>>>>>> 89b5e0458c (*: upgrade golang to 1.25 (#12384))
 
 require (
 	github.com/go-sql-driver/mysql v1.7.1
