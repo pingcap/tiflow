@@ -546,6 +546,7 @@ func (s *schemaStorage) buildRenameEvents(
 		if err := event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.sinkRouter); err != nil {
 			return nil, errors.Trace(err)
 		}
+		event.Seq = uint64(i)
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
