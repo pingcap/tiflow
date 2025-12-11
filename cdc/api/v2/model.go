@@ -1000,7 +1000,9 @@ type LargeMessageHandleConfig struct {
 	ClaimCheckRawValue            bool   `json:"claim_check_raw_value"`
 }
 
-// DispatchRule represents partition rule for a table
+// DispatchRule represents dispatch and routing rules for a table.
+// For MQ sinks (Kafka, Pulsar): controls topic and partition assignment.
+// For MySQL/TiDB sinks: controls schema and table name routing.
 // This is a duplicate of config.DispatchRule
 type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`

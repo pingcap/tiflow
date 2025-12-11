@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
@@ -216,7 +217,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			log.Info("schemaStorage: ignore foregone DDL",
 				zap.String("namespace", s.id.Namespace),
 				zap.String("changefeed", s.id.ID),
-				zap.String("DDL", job.Query),
+				logutil.ZapRedactString("DDL", job.Query),
 				zap.String("state", job.State.String()),
 				zap.Int64("jobID", job.ID),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
@@ -234,7 +235,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			zap.String("changefeed", s.id.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
+			logutil.ZapRedactString("query", job.Query),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 			zap.String("role", s.role.String()),
 			zap.Error(err))
@@ -254,7 +255,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		zap.String("changefeed", s.id.ID),
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
+		logutil.ZapRedactString("query", job.Query),
 		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 		zap.String("role", s.role.String()))
 	return nil
@@ -401,7 +402,7 @@ func (s *schemaStorage) DoGC(ts uint64) (lastSchemaTs uint64) {
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorage) skipJob(job *timodel.Job) bool {
 	log.Debug("handle DDL new commit",
-		zap.String("DDL", job.Query), zap.Stringer("job", job),
+		logutil.ZapRedactString("DDL", job.Query), zap.Stringer("job", job),
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
 		zap.String("role", s.role.String()))
@@ -430,7 +431,9 @@ func (s *schemaStorage) BuildDDLEvents(
 				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 				job.Query = querys[index]
 				event := new(model.DDLEvent)
-				event.FromJob(job, nil, newTableInfo, s.sinkRouter)
+				if err := event.FromJob(job, nil, newTableInfo, s.sinkRouter); err != nil {
+					return nil, errors.Trace(err)
+				}
 				ddlEvents = append(ddlEvents, event)
 			}
 		} else {
@@ -479,7 +482,9 @@ func (s *schemaStorage) BuildDDLEvents(
 			}
 		}
 		event := new(model.DDLEvent)
-		event.FromJob(job, preTableInfo, tableInfo, s.sinkRouter)
+		if err := event.FromJob(job, preTableInfo, tableInfo, s.sinkRouter); err != nil {
+			return nil, errors.Trace(err)
+		}
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
@@ -538,7 +543,9 @@ func (s *schemaStorage) buildRenameEvents(
 
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
-		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.sinkRouter)
+		if err := event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.sinkRouter); err != nil {
+			return nil, errors.Trace(err)
+		}
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil

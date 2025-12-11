@@ -104,7 +104,8 @@ func TestCreate(t *testing.T) {
 	}
 	tableInfo2 := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, job.BinlogInfo.TableInfo)
 	ddlEvent := &model.DDLEvent{}
-	ddlEvent.FromJob(job, preTableInfo, tableInfo2, nil)
+	err := ddlEvent.FromJob(job, preTableInfo, tableInfo2, nil)
+	require.NoError(t, err)
 
 	msg = NewDDLMsg(config.ProtocolMaxwell, nil, []byte("value1"), ddlEvent)
 	require.Nil(t, msg.Key)
