@@ -6,7 +6,7 @@
 
 for i in {1..20}; do
 	# run mysqladmin ping and capture both stdout/stderr
-	ping_out=$(mysqladmin ping -h "$1" -P "$2" -u root 2>&1)
+	ping_out=$(mysqladmin ping -h "$1" -P "$2" -u root --ssl-mode=DISABLED 2>&1)
 	ping_rc=$?
 
 	# print the ping output so callers can see details
