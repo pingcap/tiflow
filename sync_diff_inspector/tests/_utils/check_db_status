@@ -5,7 +5,14 @@
 # argument 3 is the database service's name
 
 for i in {1..20}; do
-	if mysqladmin ping -h0.0.0.0 -P "$2"  -u root --silent; then
+	# run mysqladmin ping and capture both stdout/stderr
+	ping_out=$(mysqladmin ping -h "$1" -P "$2" -u root 2>&1)
+	ping_rc=$?
+
+	# print the ping output so callers can see details
+	echo "[mysqladmin ping] attempt=$i host=$1 port=$2 -> $ping_out"
+
+	if [ $ping_rc -eq 0 ]; then
 		echo "$3 is alive"
 		exit 0
 	fi
@@ -15,5 +22,8 @@ for i in {1..20}; do
 done
 
 echo "$3 is not alive"
-cat "$4"
+if [ -n "$4" ] && [ -f "$4" ]; then
+	echo "--- Contents of $4 ---"
+	cat "$4"
+fi
 exit 2
