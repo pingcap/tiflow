@@ -161,6 +161,7 @@ func TestDynamicSchemaDispatcher(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			d := NewDynamicSchemaDispatcher(tt.schemaExpr, tt.tableExpr)
 			gotSchema, gotTable := d.Substitute(tt.sourceSchema, tt.sourceTable)
 			require.Equal(t, tt.wantSchema, gotSchema, "schema mismatch")
@@ -239,6 +240,7 @@ func TestValidateExpression(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			err := ValidateExpression(tt.expr)
 			if tt.wantErr {
 				require.Error(t, err, "expected error for expr: %s", tt.expr)

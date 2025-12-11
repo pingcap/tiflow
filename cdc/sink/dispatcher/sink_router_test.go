@@ -213,6 +213,7 @@ func TestSinkRouterRouteSchemaOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			gotSchema, gotTable := router.Route(tt.sourceSchema, tt.sourceTable)
 			require.Equal(t, tt.wantSchema, gotSchema)
 			require.Equal(t, tt.wantTable, gotTable)
@@ -270,6 +271,7 @@ func TestSinkRouterRouteTableOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			gotSchema, gotTable := router.Route(tt.sourceSchema, tt.sourceTable)
 			require.Equal(t, tt.wantSchema, gotSchema)
 			require.Equal(t, tt.wantTable, gotTable)

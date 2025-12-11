@@ -590,6 +590,7 @@ func TestDDLSinkRoutingSchemaAndTable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -680,6 +681,7 @@ func TestDDLSinkRoutingSchemaOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -769,6 +771,7 @@ func TestDDLSinkRoutingTableOnly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -933,6 +936,7 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			// Use the tableInfo from the test case, or default to the mapped one
 			testTableInfo := tt.tableInfo
 			if testTableInfo == nil {
@@ -1067,6 +1071,7 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 
 	for _, tt := range tableRoutingTests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -1099,6 +1104,7 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 	})
 
 	t.Run("CREATE TABLE LIKE - same table name different schemas routed differently", func(t *testing.T) {
+		t.Parallel()
 		// CREATE TABLE db1.users LIKE db2.users
 		// Both schemas are mapped but to different targets
 		tableInfoDb1Users := WrapTableInfo(1, "db1", 100, &timodel.TableInfo{
@@ -1137,6 +1143,7 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 	})
 
 	t.Run("CREATE TABLE LIKE - multiple schemas consolidated to single target", func(t *testing.T) {
+		t.Parallel()
 		// CREATE TABLE db1.t1 LIKE db2.t2
 		// Both schemas map to the same target
 		tableInfoDb1T1 := WrapTableInfo(1, "db1", 100, &timodel.TableInfo{
@@ -1204,6 +1211,7 @@ func TestSinkRoutingError(t *testing.T) {
 	}
 
 	t.Run("invalid DDL query returns error", func(t *testing.T) {
+		t.Parallel()
 		job := &timodel.Job{
 			ID:         1,
 			TableID:    1,
@@ -1224,6 +1232,7 @@ func TestSinkRoutingError(t *testing.T) {
 	})
 
 	t.Run("incomplete DDL query returns error", func(t *testing.T) {
+		t.Parallel()
 		job := &timodel.Job{
 			ID:         1,
 			TableID:    1,
@@ -1244,6 +1253,7 @@ func TestSinkRoutingError(t *testing.T) {
 	})
 
 	t.Run("no error when router is nil", func(t *testing.T) {
+		t.Parallel()
 		job := &timodel.Job{
 			ID:         1,
 			TableID:    1,
