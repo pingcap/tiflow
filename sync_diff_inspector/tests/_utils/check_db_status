@@ -14,6 +14,22 @@ for i in {1..20}; do
 
 	if [ $ping_rc -eq 0 ]; then
 		echo "$3 is alive"
+
+		# If mysql client exists, print SSL-related variables and a status with SSL required
+		if command -v mysql >/dev/null 2>&1; then
+			# SHOW VARIABLES LIKE '%ssl%'; against the target host/port
+			ssl_vars=$(mysql --ssl-mode=DISABLED -h "$1" -P "$2" -u root -e "SHOW VARIABLES LIKE '%ssl%';" 2>&1 || true)
+			echo "--- SHOW VARIABLES LIKE '%ssl%' (host=$1 port=$2) ---"
+			echo "$ssl_vars"
+
+			# Run mysql with ssl-mode=REQUIRED against the target host/port
+			status_ssl=$(mysql --ssl-mode=REQUIRED -h "$1" -P "$2" -u root -e "status;" 2>&1 || true)
+			echo "--- mysql --ssl-mode=REQUIRED -h $1 -P $2 -e 'status;' ---"
+			echo "$status_ssl"
+		else
+			echo "mysql client not found; skipping SSL/status checks"
+		fi
+
 		exit 0
 	fi
 
