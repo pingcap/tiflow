@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-FROM golang:1.23-alpine as builder
-=======
 FROM golang:1.25-alpine AS builder
->>>>>>> 89b5e0458c (*: upgrade golang to 1.25 (#12384))
 RUN apk add --no-cache make bash git build-base
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .
