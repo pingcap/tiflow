@@ -424,7 +424,7 @@ var (
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
 	)
 	ErrMessageTooLarge = errors.Normalize(
-		"message is too large",
+		"message is too large. table:%s, length:%d, maxMessageBytes:%d",
 		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
