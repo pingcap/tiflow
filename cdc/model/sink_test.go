@@ -547,21 +547,6 @@ func TestDDLSinkRoutingSchemaAndTable(t *testing.T) {
 		},
 	})
 
-	tableInfo := &TableInfo{
-		TableName: TableName{
-			Schema:  "source_db",
-			Table:   "test_table",
-			TableID: 1,
-		},
-		TableInfo: &timodel.TableInfo{
-			ID:   1,
-			Name: pmodel.CIStr{O: "test_table"},
-			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
-			},
-		},
-	}
-
 	tests := []struct {
 		name          string
 		jobType       timodel.ActionType
@@ -591,6 +576,22 @@ func TestDDLSinkRoutingSchemaAndTable(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Create a fresh TableInfo for each subtest to avoid data races
+			tableInfo := &TableInfo{
+				TableName: TableName{
+					Schema:  "source_db",
+					Table:   "test_table",
+					TableID: 1,
+				},
+				TableInfo: &timodel.TableInfo{
+					ID:   1,
+					Name: pmodel.CIStr{O: "test_table"},
+					Columns: []*timodel.ColumnInfo{
+						{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+					},
+				},
+			}
+
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -632,21 +633,6 @@ func TestDDLSinkRoutingSchemaOnly(t *testing.T) {
 		"source_db": "target_db",
 	})
 
-	tableInfo := &TableInfo{
-		TableName: TableName{
-			Schema:  "source_db",
-			Table:   "test_table",
-			TableID: 1,
-		},
-		TableInfo: &timodel.TableInfo{
-			ID:   1,
-			Name: pmodel.CIStr{O: "test_table"},
-			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
-			},
-		},
-	}
-
 	tests := []struct {
 		name          string
 		jobType       timodel.ActionType
@@ -682,6 +668,22 @@ func TestDDLSinkRoutingSchemaOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Create a fresh TableInfo for each subtest to avoid data races
+			tableInfo := &TableInfo{
+				TableName: TableName{
+					Schema:  "source_db",
+					Table:   "test_table",
+					TableID: 1,
+				},
+				TableInfo: &timodel.TableInfo{
+					ID:   1,
+					Name: pmodel.CIStr{O: "test_table"},
+					Columns: []*timodel.ColumnInfo{
+						{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+					},
+				},
+			}
+
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -728,21 +730,6 @@ func TestDDLSinkRoutingTableOnly(t *testing.T) {
 		},
 	})
 
-	tableInfo := &TableInfo{
-		TableName: TableName{
-			Schema:  "source_db",
-			Table:   "test_table",
-			TableID: 1,
-		},
-		TableInfo: &timodel.TableInfo{
-			ID:   1,
-			Name: pmodel.CIStr{O: "test_table"},
-			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
-			},
-		},
-	}
-
 	tests := []struct {
 		name          string
 		jobType       timodel.ActionType
@@ -772,6 +759,22 @@ func TestDDLSinkRoutingTableOnly(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Create a fresh TableInfo for each subtest to avoid data races
+			tableInfo := &TableInfo{
+				TableName: TableName{
+					Schema:  "source_db",
+					Table:   "test_table",
+					TableID: 1,
+				},
+				TableInfo: &timodel.TableInfo{
+					ID:   1,
+					Name: pmodel.CIStr{O: "test_table"},
+					Columns: []*timodel.ColumnInfo{
+						{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+					},
+				},
+			}
+
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -808,78 +811,47 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 		"mapped_source_db": "mapped_target_db",
 	})
 
-	// Create TableInfo objects for different test scenarios
+	// Create TableInfo objects for different test scenarios - defined as factory data
 	columns := []*timodel.ColumnInfo{
 		{ID: 1, Name: pmodel.NewCIStr("id"), FieldType: *types.NewFieldType(mysql.TypeLong)},
 	}
 
-	// For DROP TABLE tests
-	tableInfoMappedT1 := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("t1"),
-		Columns: columns,
-	})
-	tableInfoUnmappedT1 := WrapTableInfo(1, "unmapped_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("t1"),
-		Columns: columns,
-	})
-
-	// For RENAME TABLE tests - PreTableInfo (old table)
-	preTableInfoMappedOld := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("old_table"),
-		Columns: columns,
-	})
-	preTableInfoUnmappedOld := WrapTableInfo(1, "unmapped_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("old_table"),
-		Columns: columns,
-	})
-
-	// For RENAME TABLE tests - TableInfo (new table)
-	tableInfoMappedNew := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("new_table"),
-		Columns: columns,
-	})
-	tableInfoUnmappedNew := WrapTableInfo(1, "unmapped_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("new_table"),
-		Columns: columns,
-	})
-
-	// For CREATE TABLE LIKE tests
-	tableInfoMapped := WrapTableInfo(1, "mapped_source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("new_table"),
-		Columns: columns,
-	})
+	// Define test case specifications (which TableInfo to create for each test)
+	type tableInfoSpec struct {
+		schema string
+		table  string
+	}
 
 	tests := []struct {
 		name          string
 		jobType       timodel.ActionType
 		query         string
-		oldSchemaName string // for RENAME TABLE
-		newSchemaName string // for RENAME TABLE
-		preTableInfo  *TableInfo
-		tableInfo     *TableInfo
+		oldSchemaName string         // for RENAME TABLE
+		newSchemaName string         // for RENAME TABLE
+		preTableSpec  *tableInfoSpec // spec for creating preTableInfo
+		tableSpec     *tableInfoSpec // spec for creating tableInfo
 		expectedQuery string
 		description   string
 	}{
 		{
-			name:          "DROP TABLE - mapped schema",
-			jobType:       timodel.ActionDropTable,
-			query:         "DROP TABLE `mapped_source_db`.`t1`",
-			tableInfo:     tableInfoMappedT1,
+			name:    "DROP TABLE - mapped schema",
+			jobType: timodel.ActionDropTable,
+			query:   "DROP TABLE `mapped_source_db`.`t1`",
+			tableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "t1",
+			},
 			expectedQuery: "DROP TABLE `mapped_target_db`.`t1`",
 			description:   "Tests DROP TABLE with mapped schema",
 		},
 		{
-			name:          "DROP TABLE - unmapped schema",
-			jobType:       timodel.ActionDropTable,
-			query:         "DROP TABLE `unmapped_db`.`t1`",
-			tableInfo:     tableInfoUnmappedT1,
+			name:    "DROP TABLE - unmapped schema",
+			jobType: timodel.ActionDropTable,
+			query:   "DROP TABLE `unmapped_db`.`t1`",
+			tableSpec: &tableInfoSpec{
+				schema: "unmapped_db",
+				table:  "t1",
+			},
 			expectedQuery: "DROP TABLE `unmapped_db`.`t1`",
 			description:   "Tests DROP TABLE with unmapped schema (identity mapping)",
 		},
@@ -889,8 +861,14 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			query:         "RENAME TABLE `mapped_source_db`.`old_table` TO `mapped_source_db`.`new_table`",
 			oldSchemaName: "mapped_source_db",
 			newSchemaName: "mapped_source_db",
-			preTableInfo:  preTableInfoMappedOld,
-			tableInfo:     tableInfoMappedNew,
+			preTableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "old_table",
+			},
+			tableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "new_table",
+			},
 			expectedQuery: "RENAME TABLE `mapped_target_db`.`old_table` TO `mapped_target_db`.`new_table`",
 			description:   "Tests RENAME TABLE where both old and new schemas are mapped (same schema)",
 		},
@@ -900,8 +878,14 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			query:         "RENAME TABLE `mapped_source_db`.`old_table` TO `unmapped_db`.`new_table`",
 			oldSchemaName: "mapped_source_db",
 			newSchemaName: "unmapped_db",
-			preTableInfo:  preTableInfoMappedOld,
-			tableInfo:     tableInfoUnmappedNew,
+			preTableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "old_table",
+			},
+			tableSpec: &tableInfoSpec{
+				schema: "unmapped_db",
+				table:  "new_table",
+			},
 			expectedQuery: "RENAME TABLE `mapped_target_db`.`old_table` TO `unmapped_db`.`new_table`",
 			description:   "Tests RENAME TABLE ordering: old table is mapped, new table is unmapped",
 		},
@@ -911,24 +895,36 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			query:         "RENAME TABLE `unmapped_db`.`old_table` TO `mapped_source_db`.`new_table`",
 			oldSchemaName: "unmapped_db",
 			newSchemaName: "mapped_source_db",
-			preTableInfo:  preTableInfoUnmappedOld,
-			tableInfo:     tableInfoMappedNew,
+			preTableSpec: &tableInfoSpec{
+				schema: "unmapped_db",
+				table:  "old_table",
+			},
+			tableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "new_table",
+			},
 			expectedQuery: "RENAME TABLE `unmapped_db`.`old_table` TO `mapped_target_db`.`new_table`",
 			description:   "Tests RENAME TABLE ordering: old table is unmapped, new table is mapped",
 		},
 		{
-			name:          "CREATE TABLE LIKE - mapped source, unmapped template",
-			jobType:       timodel.ActionCreateTable,
-			query:         "CREATE TABLE `mapped_source_db`.`new_table` LIKE `unmapped_db`.`template_table`",
-			tableInfo:     tableInfoMapped,
+			name:    "CREATE TABLE LIKE - mapped source, unmapped template",
+			jobType: timodel.ActionCreateTable,
+			query:   "CREATE TABLE `mapped_source_db`.`new_table` LIKE `unmapped_db`.`template_table`",
+			tableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "new_table",
+			},
 			expectedQuery: "CREATE TABLE `mapped_target_db`.`new_table` LIKE `unmapped_db`.`template_table`",
 			description:   "Tests CREATE LIKE ordering: new table is mapped, template is unmapped",
 		},
 		{
-			name:          "CREATE TABLE LIKE - unmapped source, mapped template",
-			jobType:       timodel.ActionCreateTable,
-			query:         "CREATE TABLE `unmapped_db`.`new_table` LIKE `mapped_source_db`.`template_table`",
-			tableInfo:     tableInfoMapped,
+			name:    "CREATE TABLE LIKE - unmapped source, mapped template",
+			jobType: timodel.ActionCreateTable,
+			query:   "CREATE TABLE `unmapped_db`.`new_table` LIKE `mapped_source_db`.`template_table`",
+			tableSpec: &tableInfoSpec{
+				schema: "mapped_source_db",
+				table:  "new_table",
+			},
 			expectedQuery: "CREATE TABLE `unmapped_db`.`new_table` LIKE `mapped_target_db`.`template_table`",
 			description:   "Tests CREATE LIKE ordering: new table is unmapped, template is mapped",
 		},
@@ -937,10 +933,24 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			// Use the tableInfo from the test case, or default to the mapped one
-			testTableInfo := tt.tableInfo
-			if testTableInfo == nil {
-				testTableInfo = tableInfoMapped
+			// Create fresh TableInfo objects for this subtest to avoid data races
+			var testTableInfo *TableInfo
+			var testPreTableInfo *TableInfo
+
+			if tt.tableSpec != nil {
+				testTableInfo = WrapTableInfo(1, tt.tableSpec.schema, 100, &timodel.TableInfo{
+					ID:      1,
+					Name:    pmodel.NewCIStr(tt.tableSpec.table),
+					Columns: columns,
+				})
+			}
+
+			if tt.preTableSpec != nil {
+				testPreTableInfo = WrapTableInfo(1, tt.preTableSpec.schema, 100, &timodel.TableInfo{
+					ID:      1,
+					Name:    pmodel.NewCIStr(tt.preTableSpec.table),
+					Columns: columns,
+				})
 			}
 
 			job := &timodel.Job{
@@ -957,7 +967,7 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			}
 
 			event := &DDLEvent{}
-			err := event.FromJobWithArgs(job, tt.preTableInfo, testTableInfo,
+			err := event.FromJobWithArgs(job, testPreTableInfo, testTableInfo,
 				tt.oldSchemaName, tt.newSchemaName, router)
 			require.NoError(t, err)
 
@@ -995,56 +1005,47 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 		},
 	})
 
-	tableInfoWithRouting := WrapTableInfo(1, "source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("source_table"),
-		Columns: columns,
-	})
-
-	// For RENAME TABLE tests with table routing
-	preTableInfoOldRouted := WrapTableInfo(1, "source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("old_table"),
-		Columns: columns,
-	})
-	tableInfoNewRouted := WrapTableInfo(1, "source_db", 100, &timodel.TableInfo{
-		ID:      1,
-		Name:    pmodel.NewCIStr("new_table"),
-		Columns: columns,
-	})
-
 	tableRoutingTests := []struct {
 		name          string
 		jobType       timodel.ActionType
 		query         string
 		oldSchemaName string
 		newSchemaName string
-		preTableInfo  *TableInfo
-		tableInfo     *TableInfo
+		preTableSpec  *tableInfoSpec // spec for creating preTableInfo
+		tableSpec     *tableInfoSpec // spec for creating tableInfo
 		expectedQuery string
 		description   string
 	}{
 		{
-			name:          "DROP TABLE - with table routing",
-			jobType:       timodel.ActionDropTable,
-			query:         "DROP TABLE `source_db`.`source_table`",
-			tableInfo:     tableInfoWithRouting,
+			name:    "DROP TABLE - with table routing",
+			jobType: timodel.ActionDropTable,
+			query:   "DROP TABLE `source_db`.`source_table`",
+			tableSpec: &tableInfoSpec{
+				schema: "source_db",
+				table:  "source_table",
+			},
 			expectedQuery: "DROP TABLE `target_db`.`target_table_routed`",
 			description:   "Tests DROP TABLE with both schema and table routing",
 		},
 		{
-			name:          "TRUNCATE TABLE - with table routing",
-			jobType:       timodel.ActionTruncateTable,
-			query:         "TRUNCATE TABLE `source_db`.`source_table`",
-			tableInfo:     tableInfoWithRouting,
+			name:    "TRUNCATE TABLE - with table routing",
+			jobType: timodel.ActionTruncateTable,
+			query:   "TRUNCATE TABLE `source_db`.`source_table`",
+			tableSpec: &tableInfoSpec{
+				schema: "source_db",
+				table:  "source_table",
+			},
 			expectedQuery: "TRUNCATE TABLE `target_db`.`target_table_routed`",
 			description:   "Tests TRUNCATE TABLE with both schema and table routing",
 		},
 		{
-			name:          "CREATE TABLE - with table routing",
-			jobType:       timodel.ActionCreateTable,
-			query:         "CREATE TABLE `source_db`.`source_table` (id INT PRIMARY KEY)",
-			tableInfo:     tableInfoWithRouting,
+			name:    "CREATE TABLE - with table routing",
+			jobType: timodel.ActionCreateTable,
+			query:   "CREATE TABLE `source_db`.`source_table` (id INT PRIMARY KEY)",
+			tableSpec: &tableInfoSpec{
+				schema: "source_db",
+				table:  "source_table",
+			},
 			expectedQuery: "CREATE TABLE `target_db`.`target_table_routed` (`id` INT PRIMARY KEY)",
 			description:   "Tests CREATE TABLE with both schema and table routing",
 		},
@@ -1054,16 +1055,25 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 			query:         "RENAME TABLE `source_db`.`old_table` TO `source_db`.`new_table`",
 			oldSchemaName: "source_db",
 			newSchemaName: "source_db",
-			preTableInfo:  preTableInfoOldRouted,
-			tableInfo:     tableInfoNewRouted,
+			preTableSpec: &tableInfoSpec{
+				schema: "source_db",
+				table:  "old_table",
+			},
+			tableSpec: &tableInfoSpec{
+				schema: "source_db",
+				table:  "new_table",
+			},
 			expectedQuery: "RENAME TABLE `target_db`.`old_table_routed` TO `target_db`.`new_table_routed`",
 			description:   "Tests RENAME TABLE with both schema and table routing on both old and new tables",
 		},
 		{
-			name:          "CREATE TABLE LIKE - with table routing",
-			jobType:       timodel.ActionCreateTable,
-			query:         "CREATE TABLE `source_db`.`new_table` LIKE `source_db`.`template_table`",
-			tableInfo:     tableInfoNewRouted,
+			name:    "CREATE TABLE LIKE - with table routing",
+			jobType: timodel.ActionCreateTable,
+			query:   "CREATE TABLE `source_db`.`new_table` LIKE `source_db`.`template_table`",
+			tableSpec: &tableInfoSpec{
+				schema: "source_db",
+				table:  "new_table",
+			},
 			expectedQuery: "CREATE TABLE `target_db`.`new_table_routed` LIKE `target_db`.`template_table_routed`",
 			description:   "Tests CREATE TABLE LIKE with both schema and table routing on both new and template tables",
 		},
@@ -1072,6 +1082,26 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 	for _, tt := range tableRoutingTests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
+			// Create fresh TableInfo objects for this subtest to avoid data races
+			var testTableInfo *TableInfo
+			var testPreTableInfo *TableInfo
+
+			if tt.tableSpec != nil {
+				testTableInfo = WrapTableInfo(1, tt.tableSpec.schema, 100, &timodel.TableInfo{
+					ID:      1,
+					Name:    pmodel.NewCIStr(tt.tableSpec.table),
+					Columns: columns,
+				})
+			}
+
+			if tt.preTableSpec != nil {
+				testPreTableInfo = WrapTableInfo(1, tt.preTableSpec.schema, 100, &timodel.TableInfo{
+					ID:      1,
+					Name:    pmodel.NewCIStr(tt.preTableSpec.table),
+					Columns: columns,
+				})
+			}
+
 			job := &timodel.Job{
 				ID:         1,
 				TableID:    1,
@@ -1080,13 +1110,13 @@ func TestDDLSinkRoutingOrdering(t *testing.T) {
 				StartTS:    1,
 				Query:      tt.query,
 				BinlogInfo: &timodel.HistoryInfo{
-					TableInfo:  tt.tableInfo.TableInfo,
+					TableInfo:  testTableInfo.TableInfo,
 					FinishedTS: 2,
 				},
 			}
 
 			event := &DDLEvent{}
-			err := event.FromJobWithArgs(job, tt.preTableInfo, tt.tableInfo,
+			err := event.FromJobWithArgs(job, testPreTableInfo, testTableInfo,
 				tt.oldSchemaName, tt.newSchemaName, tableRouter)
 			require.NoError(t, err)
 
@@ -1195,23 +1225,24 @@ func TestSinkRoutingError(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, router)
 
-	tableInfo := &TableInfo{
-		TableName: TableName{
-			Schema:  "source_db",
-			Table:   "test_table",
-			TableID: 1,
-		},
-		TableInfo: &timodel.TableInfo{
-			ID:   1,
-			Name: pmodel.CIStr{O: "test_table"},
-			Columns: []*timodel.ColumnInfo{
-				{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
-			},
-		},
-	}
-
 	t.Run("invalid DDL query returns error", func(t *testing.T) {
 		t.Parallel()
+		// Create a fresh TableInfo for each subtest to avoid data races
+		tableInfo := &TableInfo{
+			TableName: TableName{
+				Schema:  "source_db",
+				Table:   "test_table",
+				TableID: 1,
+			},
+			TableInfo: &timodel.TableInfo{
+				ID:   1,
+				Name: pmodel.CIStr{O: "test_table"},
+				Columns: []*timodel.ColumnInfo{
+					{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+				},
+			},
+		}
+
 		job := &timodel.Job{
 			ID:         1,
 			TableID:    1,
@@ -1233,6 +1264,22 @@ func TestSinkRoutingError(t *testing.T) {
 
 	t.Run("incomplete DDL query returns error", func(t *testing.T) {
 		t.Parallel()
+		// Create a fresh TableInfo for each subtest to avoid data races
+		tableInfo := &TableInfo{
+			TableName: TableName{
+				Schema:  "source_db",
+				Table:   "test_table",
+				TableID: 1,
+			},
+			TableInfo: &timodel.TableInfo{
+				ID:   1,
+				Name: pmodel.CIStr{O: "test_table"},
+				Columns: []*timodel.ColumnInfo{
+					{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+				},
+			},
+		}
+
 		job := &timodel.Job{
 			ID:         1,
 			TableID:    1,
@@ -1254,6 +1301,22 @@ func TestSinkRoutingError(t *testing.T) {
 
 	t.Run("no error when router is nil", func(t *testing.T) {
 		t.Parallel()
+		// Create a fresh TableInfo for each subtest to avoid data races
+		tableInfo := &TableInfo{
+			TableName: TableName{
+				Schema:  "source_db",
+				Table:   "test_table",
+				TableID: 1,
+			},
+			TableInfo: &timodel.TableInfo{
+				ID:   1,
+				Name: pmodel.CIStr{O: "test_table"},
+				Columns: []*timodel.ColumnInfo{
+					{ID: 1, Name: pmodel.CIStr{O: "id"}, FieldType: *ft, State: timodel.StatePublic},
+				},
+			},
+		}
+
 		job := &timodel.Job{
 			ID:         1,
 			TableID:    1,
