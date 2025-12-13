@@ -78,6 +78,28 @@ def create_changefeed(sink_uri):
     assert resp.status_code == rq.codes.bad_request
 
     # create changefeed fail because dispatcher is invalid
+    url = BASE_URL1_V2+"/changefeeds?keyspace=keyspace1"
+    data = json.dumps({
+        "changefeed_id": "changefeed-test-v2",
+        "sink_uri": "pulsar://127.0.0.1:6650/http_api_?protocol=canal-json",
+        "replica_config": {
+            "sink": {
+                "dispatchers": [
+                    {
+                        "matcher": ["*.*"],
+                        "partition": "columns",
+                        "columns": ["a.b"],
+                        "topic": "persistent://public/default/http_api_{schema}_{table}",
+                    }
+                ]
+            }
+        }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
+
+    # create changefeed fail because dispatcher is invalid
     url = BASE_URL1_V2+"/changefeeds"
     data = json.dumps({
         "changefeed_id": "changefeed-test-v2",
