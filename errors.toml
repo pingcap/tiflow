@@ -533,7 +533,7 @@ maxwell invalid data
 
 ["CDC:ErrMessageTooLarge"]
 error = '''
-message is too large
+message is too large. table:%s, length:%d, maxMessageBytes:%d
 '''
 
 ["CDC:ErrMetaListDatabases"]
