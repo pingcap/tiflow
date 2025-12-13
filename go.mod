@@ -1,8 +1,12 @@
 module github.com/pingcap/tiflow
 
+<<<<<<< HEAD
 go 1.23.6
 
 toolchain go1.23.8
+=======
+go 1.23.4
+>>>>>>> f79c7ce184 (ddl(ticdc): support restoring add index statements with pre-split option (#11926))
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -19,7 +23,7 @@ require (
 	github.com/benbjohnson/clock v1.3.5
 	github.com/bradleyjkemp/grpc-tools v0.2.5
 	github.com/cenkalti/backoff/v4 v4.2.1
-	github.com/chaos-mesh/go-sqlsmith v0.0.0-20220905074648-403033efad45
+	github.com/chaos-mesh/go-sqlsmith v0.0.0-20241224111350-ad2e4f976c7c
 	github.com/chzyer/readline v1.5.1
 	github.com/cockroachdb/pebble v1.1.4-0.20250120151818-5dd133a1e6fb
 	github.com/confluentinc/confluent-kafka-go/v2 v2.3.0
@@ -72,9 +76,15 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20241120022153-92b0414aeed8
 	github.com/pingcap/log v1.1.1-0.20241212030209-7e3ff8601a2a
+<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20250415080739-a02630cc24cf
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20241120103608-82376c7732c1
+=======
+	github.com/pingcap/tidb v1.1.0-beta.0.20241223052309-3735ed55a394
+	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20241223052309-3735ed55a394
+>>>>>>> f79c7ce184 (ddl(ticdc): support restoring add index statements with pre-split option (#11926))
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/client_model v0.6.1
 	github.com/r3labs/diff v1.1.0
@@ -86,13 +96,17 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/swaggo/files v0.0.0-20210815190702-a29dd2bc99b2
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20250304121540-cc8b9491145b
+=======
+	github.com/tikv/client-go/v2 v2.0.8-0.20241209094930-06d7f4b9233b
+>>>>>>> f79c7ce184 (ddl(ticdc): support restoring add index statements with pre-split option (#11926))
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20250213080903-727c2086a763
 	github.com/tinylib/msgp v1.1.6
@@ -114,16 +128,24 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
+<<<<<<< HEAD
 	golang.org/x/net v0.39.0
 	golang.org/x/oauth2 v0.24.0
 	golang.org/x/sync v0.13.0
 	golang.org/x/sys v0.32.0
 	golang.org/x/text v0.24.0
+=======
+	golang.org/x/net v0.33.0
+	golang.org/x/oauth2 v0.24.0
+	golang.org/x/sync v0.10.0
+	golang.org/x/sys v0.28.0
+	golang.org/x/text v0.21.0
+>>>>>>> f79c7ce184 (ddl(ticdc): support restoring add index statements with pre-split option (#11926))
 	golang.org/x/time v0.7.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240515191416-fc5f0ca64291
 	google.golang.org/grpc v1.64.0
-	google.golang.org/protobuf v1.34.2
+	google.golang.org/protobuf v1.35.2
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.11
@@ -342,7 +364,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
-	github.com/prometheus/common v0.57.0 // indirect
+	github.com/prometheus/common v0.61.0 // indirect
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -387,9 +409,15 @@ require (
 	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
+<<<<<<< HEAD
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/term v0.31.0
+=======
+	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/term v0.27.0
+>>>>>>> f79c7ce184 (ddl(ticdc): support restoring add index statements with pre-split option (#11926))
 	golang.org/x/tools v0.28.0 // indirect
 	google.golang.org/api v0.170.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
@@ -417,7 +445,7 @@ replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
-replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20231213065948-336e064b488d
+replace github.com/chaos-mesh/go-sqlsmith => github.com/PingCAP-QE/go-sqlsmith v0.0.0-20241224111350-ad2e4f976c7c
 
 // TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
 // Please remove these dependencies.

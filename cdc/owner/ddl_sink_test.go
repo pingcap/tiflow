@@ -549,6 +549,12 @@ func TestAddSpecialComment(t *testing.T) {
 			result: "ALTER TABLE `t` ADD INDEX `j`((CAST(JSON_EXTRACT(`j`, _UTF8MB4'$.number[*]') " +
 				"AS SIGNED ARRAY)))",
 		},
+		{
+			event: &model.DDLEvent{
+				Query: "alter table t add index idx (b) pre_split_regions(between (1) and (100) regions 4);",
+			},
+			result: "ALTER TABLE `t` ADD INDEX `idx`(`b`) /*T![pre_split] PRE_SPLIT_REGIONS = (BETWEEN (1) AND (100) REGIONS 4) */",
+		},
 	}
 
 	s := &ddlSinkImpl{}
