@@ -187,13 +187,13 @@ func (o *createChangefeedOptions) completeReplicaCfg() error {
 // validate checks that the provided attach options are specified.
 func (o *createChangefeedOptions) validate(cmd *cobra.Command) error {
 	if o.timezone != "SYSTEM" {
-		cmd.Printf(color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
+		cmd.Printf("%s", color.HiYellowString("[WARN] --tz is deprecated in changefeed settings.\n"))
 	}
 
 	// user is not allowed to set sort-dir at changefeed level
 	if o.commonChangefeedOptions.sortDir != "" {
-		cmd.Printf(color.HiYellowString("[WARN] --sort-dir is deprecated in changefeed settings. " +
-			"Please use `cdc server --data-dir` to start the cdc server if possible, sort-dir will be set automatically. " +
+		cmd.Printf("%s", color.HiYellowString("[WARN] --sort-dir is deprecated in changefeed settings. "+
+			"Please use `cdc server --data-dir` to start the cdc server if possible, sort-dir will be set automatically. "+
 			"The --sort-dir here will be no-op\n"))
 		return errors.New("creating changefeed with `--sort-dir`, it's invalid")
 	}
