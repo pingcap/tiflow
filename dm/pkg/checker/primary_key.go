@@ -91,6 +91,7 @@ func (w *primaryKeyWorker) handle(ctx context.Context, item *checkItem) ([]*inco
 			errMessage: err.Error(),
 		}
 		ret = append(ret, opt)
+		//nolint:nilerr
 		return ret, nil
 	}
 
