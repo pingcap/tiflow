@@ -26,6 +26,7 @@ SINK_URI = "mysql://normal:%s@127.0.0.1:3306/" % ENPASSWORD
 
 physicalShiftBits = 18
 
+
 def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
     """
     requests get with retry
@@ -46,6 +47,8 @@ def requests_get_with_retry(url, max_retries=RETRY_TIME, delay_seconds=1):
     return None
 
 # we should write some SQLs in the run.sh after call create_changefeed
+
+
 def create_changefeed(sink_uri):
     url = BASE_URL1+"/changefeeds"
     # create changefeed
@@ -73,6 +76,28 @@ def create_changefeed(sink_uri):
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.bad_request
+
+    # create changefeed fail because dispatcher is invalid
+    url = BASE_URL1_V2+"/changefeeds?keyspace=keyspace1"
+    data = json.dumps({
+        "changefeed_id": "changefeed-test-v2",
+        "sink_uri": "pulsar://127.0.0.1:6650/http_api_?protocol=canal-json",
+        "replica_config": {
+            "sink": {
+                "dispatchers": [
+                    {
+                        "matcher": ["*.*"],
+                        "partition": "columns",
+                        "columns": ["a.b"],
+                        "topic": "persistent://public/default/http_api_{schema}_{table}",
+                    }
+                ]
+            }
+        }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.post(url, data=data, headers=headers)
+    assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
 
     # create changefeed fail because dispatcher is invalid
     url = BASE_URL1_V2+"/changefeeds"
@@ -115,7 +140,6 @@ def create_changefeed(sink_uri):
     resp = rq.post(url, data=data, headers=headers)
     assert "CDC:ErrKafkaNewProducer" in resp.text, f"{resp.text}"
     assert "not found, ResolveEndpointV2" not in resp.text, f"{resp.text}"
-
     print("pass test: create changefeed")
 
 
@@ -217,6 +241,26 @@ def update_changefeed():
     resp = rq.put(url, data=data, headers=headers)
     assert resp.status_code == rq.codes.bad_request
 
+    # can't update dispatchers
+    url = BASE_URL0_V2+"/changefeeds/changefeed-test2"
+    data = json.dumps({
+        "sink_uri": "kafka://127.0.0.1:9092/http_api?protocol=simple",
+        "replica_config": {
+            "sink": {
+                "dispatchers": [
+                    {
+                        "matcher": ["*.*"],
+                        "partition": "columns",
+                        "columns": ["a.b"]
+                    }
+                ]
+            }
+        }
+    })
+    headers = {"Content-Type": "application/json"}
+    resp = rq.put(url, data=data, headers=headers)
+    assert "ErrDispatcherFailed" in resp.text, f"{resp.text}"
+
     print("pass test: update changefeed")
 
 
@@ -266,7 +310,8 @@ def remove_changefeed():
     # test remove changefeed failed
     url = BASE_URL0+"/changefeeds/changefeed-not-exists"
     resp = rq.delete(url)
-    assert (resp.status_code == rq.codes.bad_request or resp.status_code == rq.codes.internal_server_error)
+    assert (resp.status_code == rq.codes.bad_request or resp.status_code ==
+            rq.codes.internal_server_error)
     data = resp.json()
     assert data["error_code"] == "CDC:ErrChangeFeedNotExists"
 
@@ -406,6 +451,8 @@ def get_tso():
 # util functions define belows
 
 # compose physical time and logical time into tso
+
+
 def compose_tso(ps, ls):
     return (ps << physicalShiftBits) + ls
 

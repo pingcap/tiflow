@@ -533,7 +533,7 @@ maxwell invalid data
 
 ["CDC:ErrMessageTooLarge"]
 error = '''
-message is too large
+message is too large. table:%s, length:%d, maxMessageBytes:%d
 '''
 
 ["CDC:ErrMetaListDatabases"]
@@ -609,11 +609,6 @@ error = '''
 ["CDC:ErrNotOwner"]
 error = '''
 this capture is not a owner
-'''
-
-["CDC:ErrOldValueNotEnabled"]
-error = '''
-old value is not enabled
 '''
 
 ["CDC:ErrOpenProtocolCodecInvalidData"]
