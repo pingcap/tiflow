@@ -134,7 +134,6 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 	for i := 0; i < defaultMultiClientCount; i++ {
 		wg.Add(1)
 		ackWg.Add(1)
-		i := i
 		go func() {
 			defer wg.Done()
 			client, closeClient := newClient()
