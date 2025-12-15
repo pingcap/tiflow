@@ -122,12 +122,11 @@ func completeSASLConfig(o *pkafka.Options) (sasl.Mechanism, error) {
 				mechanism, err := scram.Mechanism(scram.SHA512,
 					o.SASL.SASLUser, o.SASL.SASLPassword)
 				return mechanism, errors.Trace(err)
-			} else {
-				return plain.Mechanism{
-					Username: o.SASL.SASLUser,
-					Password: o.SASL.SASLPassword,
-				}, nil
 			}
+			return plain.Mechanism{
+				Username: o.SASL.SASLUser,
+				Password: o.SASL.SASLPassword,
+			}, nil
 		case pkafka.SASLTypeGSSAPI:
 			cfg, err := config.Load(o.SASL.GSSAPI.KerberosConfigPath)
 			if err != nil {

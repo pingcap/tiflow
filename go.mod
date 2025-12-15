@@ -1,8 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.23.6
-
-toolchain go1.23.8
+go 1.25.5
 
 require (
 	cloud.google.com/go/storage v1.39.1
