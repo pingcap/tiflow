@@ -311,6 +311,7 @@ const (
 	QSqlRequirePrimaryKey
 	QDefaultTableEncryption
 	QHrnow = 128
+	QXid   = 129
 )
 
 // https://dev.mysql.com/doc/internals/en/query-event.html
@@ -335,6 +336,8 @@ var statusVarsFixedLength = map[byte]int{
 	QDefaultTableEncryption:       1,
 	// https://github.com/MariaDB/server/blob/94b45787045677c106a25ebb5aaf1273040b2ff6/sql/log_event.cc#L1619
 	QHrnow: 3,
+	// https://mariadb.com/docs/server/reference/clientserver-protocol/replication-protocol/query_event#q_xid-0x81
+	QXid: 8,
 }
 
 // getSQLMode gets SQL mode from binlog statusVars, still could return a reasonable value if found error.

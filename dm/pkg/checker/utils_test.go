@@ -14,6 +14,7 @@
 package checker
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -35,7 +36,10 @@ func TestVersionComparison(t *testing.T) {
 		{"5.7.0", true, true, true, true},
 		{"5.8.0", true, true, true, true}, // although it does not exist
 		{"8.0.1", true, true, true, true},
-		{"8.1.0", true, true, false, true},
+		{"8.1.0", true, true, true, true},
+		{"8.4.0", true, true, true, true},
+		{"8.5.0", true, true, false, true},
+		{"9.5.0", true, true, false, false},
 		{"255.255.255", true, true, false, false}, // max version
 	}
 
@@ -46,10 +50,18 @@ func TestVersionComparison(t *testing.T) {
 	for _, cs := range cases {
 		version, err = toMySQLVersion(cs.rawVersion)
 		require.NoError(t, err)
-		require.Equal(t, cs.ge, version.Ge(SupportedVersion["mysql"].Min))
-		require.Equal(t, cs.gt, version.Gt(SupportedVersion["mysql"].Min))
-		require.Equal(t, cs.lt, version.Lt(SupportedVersion["mysql"].Max))
-		require.Equal(t, cs.le, version.Le(SupportedVersion["mysql"].Max))
+		require.Equal(t, cs.ge, version.Ge(SupportedVersion["mysql"].Min),
+			fmt.Sprintf("%s >= min supported version (%s) should be %v", version, SupportedVersion["mysql"].Min, cs.ge),
+		)
+		require.Equal(t, cs.gt, version.Gt(SupportedVersion["mysql"].Min),
+			fmt.Sprintf("%s > min supported version (%s) should be %v", version, SupportedVersion["mysql"].Min, cs.gt),
+		)
+		require.Equal(t, cs.lt, version.Lt(SupportedVersion["mysql"].Max),
+			fmt.Sprintf("%s < max supported version (%s) should be %v", version, SupportedVersion["mysql"].Max, cs.lt),
+		)
+		require.Equal(t, cs.le, version.Le(SupportedVersion["mysql"].Max),
+			fmt.Sprintf("%s <= max suported vesion (%s) should be %v", version, SupportedVersion["mysql"].Max, cs.le),
+		)
 	}
 }
 

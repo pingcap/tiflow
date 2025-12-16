@@ -16,6 +16,10 @@
 * DM enables full data migration and incremental data replication from MySQL or MariaDB to TiDB.
 * TiCDC replicates change data to various downstream systems, such as MySQL protocol-compatible databases and [Kafka](https://kafka.apache.org/).
 
+> **Note**:
+>
+> The TiCDC in this repository is only used for versions v8.5.x and lower (old architecture). A TiCDC with new architecture is hosted in [github.com/pingcap/ticdc](https://github.com/pingcap/ticdc), starting from v8.5.4.
+
 For more details, see [DM README](./README_DM.md) and [TiCDC README](./README_TiCDC.md).
 
 You can also check out the [DeepWiki documentation](https://deepwiki.com/pingcap/tiflow) for more information.

@@ -15,6 +15,7 @@ package checker
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -36,7 +37,10 @@ func TestMysqlVersion(t *testing.T) {
 		{"8.0.1-log", true},
 		{"8.0.20", true},
 		{"8.0.35", true},
-		{"8.1.0", false},
+		{"8.1.0", true}, // Innovation release
+		{"8.4.7", true}, // LTS
+		{"8.5.0", false},
+		{"9.5.0", false}, // Innovation release
 		{"5.5.50-MariaDB-1~wheezy", false},
 		{"10.1.1-MariaDB-1~wheezy", false},
 		{"10.1.2-MariaDB-1~wheezy", false},
@@ -48,7 +52,9 @@ func TestMysqlVersion(t *testing.T) {
 			State: StateWarning,
 		}
 		versionChecker.checkVersion(cs.rawVersion, result)
-		require.Equal(t, result.State == StateSuccess, cs.pass)
+		require.Equal(t, result.State == StateSuccess, cs.pass,
+			fmt.Sprintf("version %s, expected pass=%v, but got pass=%v", cs.rawVersion, cs.pass, result.State == StateSuccess),
+		)
 	}
 }
 
@@ -59,8 +65,14 @@ func TestVersionInstruction(t *testing.T) {
 		db:     db,
 		dbinfo: &dbutil.DBConfig{},
 	}
-	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version';").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("version", "8.1.0"))
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version';").WillReturnRows(
+		sqlmock.NewRows(
+			[]string{"Variable_name", "Value"},
+		).AddRow(
+			"version", "9.5.0"), // This should be an unsupported version
+	)
 	result := versionChecker.Check(context.Background())
 	require.Equal(t, result.State, StateWarning)
-	require.Equal(t, result.Instruction, "It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur.")
+	require.Equal(t, result.Instruction,
+		"It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur.")
 }
