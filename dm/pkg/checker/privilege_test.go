@@ -41,7 +41,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		{
 			grants:    nil, // non grants
 			dumpState: StateFailure,
-			errStr:    "there is no such grant defined for current user on host '%'",
+			errStr:    "there is no such grant defined for current user on host '%%'",
 		},
 		{
 			grants:    []string{"invalid SQL statement"},
@@ -233,7 +233,7 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 		{
 			grants:           nil, // non grants
 			replicationState: StateFailure,
-			errStr:           "there is no such grant defined for current user on host '%'",
+			errStr:           "there is no such grant defined for current user on host '%%'",
 		},
 		{
 			grants:           []string{"invalid SQL statement"},
@@ -424,7 +424,7 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 		{
 			grants:     nil, // non grants
 			checkState: StateWarning,
-			errStr:     "there is no such grant defined for current user on host '%'",
+			errStr:     "there is no such grant defined for current user on host '%%'",
 		},
 		{
 			grants:     []string{"invalid SQL statement"},
