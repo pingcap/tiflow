@@ -1259,7 +1259,7 @@ func TestSinkRoutingError(t *testing.T) {
 		event := &DDLEvent{}
 		err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to parse DDL for sink routing")
+		require.Contains(t, err.Error(), "ErrDispatcherFailed")
 	})
 
 	t.Run("incomplete DDL query returns error", func(t *testing.T) {
@@ -1296,7 +1296,7 @@ func TestSinkRoutingError(t *testing.T) {
 		event := &DDLEvent{}
 		err := event.FromJobWithArgs(job, nil, tableInfo, "", "", router)
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to parse DDL for sink routing")
+		require.Contains(t, err.Error(), "ErrDispatcherFailed")
 	})
 
 	t.Run("no error when router is nil", func(t *testing.T) {
