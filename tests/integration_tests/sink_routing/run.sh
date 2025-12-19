@@ -45,7 +45,9 @@ function run() {
 	echo "Waiting for routing to complete..."
 	check_table_exists target_db.finish_mark_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+	# ============================================
 	# Verify schema routing: tables should be in target_db, not source_db
+	# ============================================
 	echo "Verifying schema routing..."
 	check_table_exists target_db.users_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_exists target_db.orders_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
@@ -55,29 +57,112 @@ function run() {
 	check_table_not_exists source_db.users ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_table_not_exists source_db.orders ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	# Verify data was replicated correctly
-	echo "Verifying data replication..."
+	# ============================================
+	# Verify DDL: CREATE TABLE
+	# ============================================
+	echo "Verifying CREATE TABLE routing..."
+	check_table_exists target_db.products_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-	# Check users table data
+	# ============================================
+	# Verify DDL: CREATE TABLE LIKE
+	# ============================================
+	echo "Verifying CREATE TABLE LIKE routing..."
+	check_table_exists target_db.products_backup_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	run_sql "SELECT COUNT(*) as cnt FROM target_db.products_backup_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "cnt: 1"
+
+	# ============================================
+	# Verify DDL: RENAME TABLE
+	# ============================================
+	echo "Verifying RENAME TABLE routing..."
+	# temp_table was renamed to renamed_table, so only renamed_table_routed should exist
+	check_table_not_exists target_db.temp_table_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_table_exists target_db.renamed_table_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	# Verify DML on renamed table worked
+	run_sql "SELECT COUNT(*) as cnt FROM target_db.renamed_table_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "cnt: 2"
+	run_sql "SELECT value FROM target_db.renamed_table_routed WHERE id = 1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "updated"
+
+	# ============================================
+	# Verify DDL: TRUNCATE TABLE
+	# ============================================
+	echo "Verifying TRUNCATE TABLE routing..."
+	check_table_exists target_db.truncate_test_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	# After truncate, only 1 row should exist (inserted after truncate)
+	run_sql "SELECT COUNT(*) as cnt FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "cnt: 1"
+	run_sql "SELECT id FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "id: 10"
+
+	# ============================================
+	# Verify DDL: ALTER TABLE ADD/DROP COLUMN
+	# ============================================
+	echo "Verifying ALTER TABLE routing..."
+	# created_at column was added then dropped, so it should NOT exist
+	run_sql "SHOW COLUMNS FROM target_db.users_routed LIKE 'created_at'" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_not_contains "created_at"
+
+	# ============================================
+	# Verify DDL: ALTER TABLE ADD INDEX
+	# ============================================
+	echo "Verifying ADD INDEX routing..."
+	run_sql "SHOW INDEX FROM target_db.orders_routed WHERE Key_name = 'idx_user_id'" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "idx_user_id"
+
+	# ============================================
+	# Verify DDL: DROP TABLE
+	# ============================================
+	echo "Verifying DROP TABLE routing..."
+	check_table_not_exists target_db.to_be_dropped_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+
+	# ============================================
+	# Verify DML: INSERT, UPDATE, DELETE on users
+	# ============================================
+	echo "Verifying DML operations on users table..."
+	# After all operations:
+	# - Started with id 1,2 from prepare.sql
+	# - Added id 3,4,5 in test.sql
+	# - Deleted id 5
+	# Final count should be 4 (ids: 1, 2, 3, 4)
 	run_sql "SELECT COUNT(*) as cnt FROM target_db.users_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_contains "cnt: 3"
+	check_contains "cnt: 4"
 
-	# Check the updated email
+	# Check UPDATE worked (email updated for id=1)
 	run_sql "SELECT email FROM target_db.users_routed WHERE id = 1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "alice_updated@example.com"
 
-	# Check orders table data
-	run_sql "SELECT COUNT(*) as cnt FROM target_db.orders_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_contains "cnt: 3"
+	# Check batch UPDATE worked (names updated for ids 3,4)
+	run_sql "SELECT name FROM target_db.users_routed WHERE id = 3" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "Charlie_v2"
+	run_sql "SELECT name FROM target_db.users_routed WHERE id = 4" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "Diana_v2"
 
-	# Check products table data
-	run_sql "SELECT COUNT(*) as cnt FROM target_db.products_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	# ============================================
+	# Verify DML: INSERT, UPDATE, DELETE on orders
+	# ============================================
+	echo "Verifying DML operations on orders table..."
+	# Started with id 1,2, added id 3, deleted id 2
+	# Final count should be 2 (ids: 1, 3)
+	run_sql "SELECT COUNT(*) as cnt FROM target_db.orders_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "cnt: 2"
 
-	# Verify DDL was applied correctly (the ALTER TABLE ADD COLUMN)
-	echo "Verifying DDL routing..."
-	run_sql "SHOW COLUMNS FROM target_db.users_routed LIKE 'created_at'" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	check_contains "created_at"
+	# Check UPDATE worked (amount updated for id=1)
+	run_sql "SELECT amount FROM target_db.orders_routed WHERE id = 1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "150.00"
+
+	# ============================================
+	# Verify DML: INSERT, UPDATE, DELETE on products
+	# ============================================
+	echo "Verifying DML operations on products table..."
+	# Started with ids 1,2 (prices 9.99 and 19.99)
+	# Updated id 1 (price to 12.99)
+	# Deleted where price < 15.00 (deletes id=1 with 12.99, keeps id=2 with 19.99)
+	# Final count should be 1
+	run_sql "SELECT COUNT(*) as cnt FROM target_db.products_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+	check_contains "cnt: 1"
+
+	echo "All routing verifications passed!"
 
 	cleanup_process $CDC_BINARY
 }
