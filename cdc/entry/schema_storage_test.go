@@ -1162,4 +1162,41 @@ func TestSchemaStorageWithSinkRouting(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "unmapped_db", t5.TableName.Schema)
 	require.Equal(t, "", t5.TableName.TargetSchema)
+
+	// Test TRUNCATE TABLE - this creates a new table with a new ID
+	// The new table should also have routing applied
+	tk.MustExec("truncate table source_db1.t4")
+
+	jobs, err = getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	var truncateT4Job *timodel.Job
+	for i := len(jobs) - 1; i >= 0; i-- {
+		if jobs[i].Type == timodel.ActionTruncateTable && jobs[i].SchemaName == "source_db1" && jobs[i].TableName == "t4" {
+			truncateT4Job = jobs[i]
+			break
+		}
+	}
+	require.NotNil(t, truncateT4Job)
+
+	// Note: For TRUNCATE, job.TableID is the OLD table ID, and job.BinlogInfo.TableInfo.ID is the NEW table ID
+	oldTableID := truncateT4Job.TableID
+	newTableID := truncateT4Job.BinlogInfo.TableInfo.ID
+	require.NotEqual(t, oldTableID, newTableID, "TRUNCATE should create a new table ID")
+
+	err = schemaStorage.HandleDDLJob(truncateT4Job)
+	require.NoError(t, err)
+
+	newSnap3, err := schemaStorage.GetSnapshot(ctx, truncateT4Job.BinlogInfo.FinishedTS)
+	require.NoError(t, err)
+
+	// The old table ID should not exist anymore
+	_, ok = newSnap3.PhysicalTableByID(oldTableID)
+	require.False(t, ok, "old table ID should not exist after truncate")
+
+	// The new table should exist and have routing applied
+	t4New, ok := newSnap3.PhysicalTableByID(newTableID)
+	require.True(t, ok, "new table ID should exist after truncate")
+	require.Equal(t, "source_db1", t4New.TableName.Schema)
+	require.Equal(t, "target_db1", t4New.TableName.TargetSchema, "new table after truncate should have routing applied")
 }

@@ -79,8 +79,9 @@ INSERT INTO truncate_test VALUES (2, 'also truncated');
 
 TRUNCATE TABLE truncate_test;
 
--- Insert new data after truncate
-INSERT INTO truncate_test VALUES (10, 'after truncate');
+-- NOTE: INSERT after truncate is done separately in run.sh to ensure
+-- the TRUNCATE DDL is fully processed before the INSERT arrives.
+-- This is necessary to properly test DML routing after TRUNCATE.
 
 -- ============================================
 -- DDL: DROP TABLE

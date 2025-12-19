@@ -244,7 +244,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	// Apply sink routing to the TableInfo if sinkRouter is configured
 	// This ensures DML events get the routed schema/table for SQL generation
 	if s.sinkRouter != nil && job.TableID > 0 {
-		applySinkRoutingToTable(snap, job.TableID, s.sinkRouter)
+		tableIDForRouting := job.TableID
+		// For TRUNCATE TABLE, job.TableID is the OLD table ID which no longer exists
+		// in the snapshot. We need to use the NEW table ID from BinlogInfo.TableInfo.
+		if job.Type == timodel.ActionTruncateTable && job.BinlogInfo.TableInfo != nil {
+			tableIDForRouting = job.BinlogInfo.TableInfo.ID
+		}
+		applySinkRoutingToTable(snap, tableIDForRouting, s.sinkRouter)
 	}
 
 	s.snaps = append(s.snaps, snap)

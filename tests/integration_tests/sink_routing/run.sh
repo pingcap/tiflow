@@ -89,7 +89,54 @@ function run() {
 	# ============================================
 	echo "Verifying TRUNCATE TABLE routing..."
 	check_table_exists target_db.truncate_test_routed ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-	# After truncate, only 1 row should exist (inserted after truncate)
+	# Wait for TRUNCATE to complete by checking the table is empty
+	# (the pre-truncate rows should be gone)
+	echo "Waiting for TRUNCATE to complete..."
+	i=0
+	while [ $i -lt 60 ]; do
+		run_sql "SELECT COUNT(*) as cnt FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		if [ "$(cat $OUT_DIR/sql_res.$TEST_NAME.txt | grep -c 'cnt: 0')" -eq 1 ]; then
+			echo "TRUNCATE completed, table is empty"
+			break
+		fi
+		echo "Table not empty yet, current state:"
+		cat $OUT_DIR/sql_res.$TEST_NAME.txt
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ $i -ge 60 ]; then
+		echo "Timeout waiting for TRUNCATE to complete"
+		echo "Final table state:"
+		run_sql "SELECT * FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		exit 1
+	fi
+
+	# Now insert data AFTER truncate is confirmed complete
+	# This ensures the INSERT uses the NEW table ID and tests DML routing after TRUNCATE
+	echo "Inserting data after TRUNCATE..."
+	run_sql "INSERT INTO source_db.truncate_test VALUES (10, 'after truncate')" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+	# Wait for the INSERT to be replicated and verify it arrived at the routed destination
+	echo "Waiting for INSERT after TRUNCATE to be replicated..."
+	i=0
+	while [ $i -lt 60 ]; do
+		run_sql "SELECT COUNT(*) as cnt FROM target_db.truncate_test_routed WHERE id = 10" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		if [ "$(cat $OUT_DIR/sql_res.$TEST_NAME.txt | grep -c 'cnt: 1')" -eq 1 ]; then
+			echo "INSERT after TRUNCATE successfully routed"
+			break
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	if [ $i -ge 60 ]; then
+		echo "ERROR: INSERT after TRUNCATE was not routed to target_db.truncate_test_routed"
+		echo "This indicates DML routing is broken after TRUNCATE TABLE"
+		run_sql "SELECT COUNT(*) as cnt FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
+		cat $OUT_DIR/sql_res.$TEST_NAME.txt
+		exit 1
+	fi
+
+	# Final verification
 	run_sql "SELECT COUNT(*) as cnt FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	check_contains "cnt: 1"
 	run_sql "SELECT id FROM target_db.truncate_test_routed" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
