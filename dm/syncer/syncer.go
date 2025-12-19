@@ -2558,11 +2558,15 @@ func (s *Syncer) handleRotateEvent(ev *replication.RotateEvent, ec eventContext)
 		} else {
 			ec.tctx.L().Debug("re-replicate shard group", zap.String("event", "rotate"), log.WrapStringerField("location", ec.endLocation), zap.Reflect("re-shard", ec.shardingReSync))
 		}
-		s.saveGlobalPoint(ec.endLocation)
+		if !utils.IsFakeRotateEvent(ec.header) {
+			s.saveGlobalPoint(ec.endLocation)
+		}
 		return nil
 	}
 
-	s.saveGlobalPoint(ec.endLocation)
+	if !utils.IsFakeRotateEvent(ec.header) {
+		s.saveGlobalPoint(ec.endLocation)
+	}
 	ec.tctx.L().Info("", zap.String("event", "rotate"), log.WrapStringerField("location", ec.endLocation))
 	return nil
 }
