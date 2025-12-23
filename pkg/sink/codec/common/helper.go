@@ -345,7 +345,7 @@ func SanitizeName(name string) string {
 
 	sanitizedName := sb.String()
 	if changed {
-		log.Warn(
+		log.Debug(
 			"Name is potentially not safe for serialization, replace it",
 			zap.String("name", name),
 			zap.String("replacedName", sanitizedName),
