@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -462,6 +463,61 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	if value == nil {
 		value = col.GetDefaultValue()
 	}
+	if true {
+		val := col.GetDefaultValue()
+		if val != nil {
+			switch col.GetType() {
+			case mysql.TypeBit:
+				switch val.(type) {
+				case uint64, string:
+				default:
+					log.Error("TypeBit", zap.Any("v", reflect.TypeOf(val)))
+				}
+			case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
+				mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
+				switch val.(type) {
+				case []byte, string:
+				default:
+					log.Error("TypeVarchar", zap.Any("v", reflect.TypeOf(val)))
+				}
+			case mysql.TypeEnum:
+				// v, ok := val.(string)
+				// if !ok {
+				// 	return cerror.ErrDebeziumEncodeFailed.GenWithStack(
+				// 		"unexpected column value type %T for enum column %s",
+				// 		val,
+				// 		col.GetName())
+				// }
+				// types.ParseEnumName(ft.GetElems(), v, ft.GetCollate())
+			case mysql.TypeSet:
+				switch val.(type) {
+				case uint64:
+				default:
+					log.Error("set", zap.Any("v", reflect.TypeOf(val)))
+				}
+			case mysql.TypeNewDecimal, mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime,
+				mysql.TypeTimestamp, mysql.TypeDuration:
+				switch val.(type) {
+				case string:
+				default:
+					log.Error("TypeNewDecimal", zap.Any("v", reflect.TypeOf(val)))
+				}
+			case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
+				switch val.(type) {
+				case string, uint64, int64:
+				default:
+					log.Error("TypeLonglong", zap.Any("v", reflect.TypeOf(val)))
+				}
+			case mysql.TypeDouble, mysql.TypeFloat:
+			case mysql.TypeTiDBVectorFloat32:
+				switch val.(type) {
+				case types.VectorFloat32:
+				default:
+					log.Error("TypeTiDBVectorFloat32", zap.Any("v", reflect.TypeOf(val)))
+				}
+			}
+		}
+	}
 	if value == nil {
 		writer.WriteNullField(col.GetName())
 		return nil
@@ -518,37 +574,43 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeEnum:
-		v, ok := value.(uint64)
-		if !ok {
+		switch v := value.(type) {
+		case uint64:
+			enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
+			if err != nil {
+				// Invalid enum value inserted in non-strict mode.
+				writer.WriteStringField(col.GetName(), "")
+				return nil
+			}
+			writer.WriteStringField(col.GetName(), enumVar.Name)
+		case string:
+			writer.WriteStringField(col.GetName(), v)
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for enum column %s",
 				value,
 				col.GetName())
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
-		if err != nil {
-			// Invalid enum value inserted in non-strict mode.
-			writer.WriteStringField(col.GetName(), "")
-			return nil
-		}
-		writer.WriteStringField(col.GetName(), enumVar.Name)
 		return nil
 
 	case mysql.TypeSet:
-		v, ok := value.(uint64)
-		if !ok {
+		switch v := value.(type) {
+		case uint64:
+			setVar, err := types.ParseSetValue(ft.GetElems(), v)
+			if err != nil {
+				// Invalid enum value inserted in non-strict mode.
+				writer.WriteStringField(col.GetName(), "")
+				return nil
+			}
+			writer.WriteStringField(col.GetName(), setVar.Name)
+		case string:
+			writer.WriteStringField(col.GetName(), v)
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for set column %s",
 				value,
 				col.GetName())
 		}
-		setVar, err := types.ParseSetValue(ft.GetElems(), v)
-		if err != nil {
-			// Invalid enum value inserted in non-strict mode.
-			writer.WriteStringField(col.GetName(), "")
-			return nil
-		}
-		writer.WriteStringField(col.GetName(), setVar.Name)
 		return nil
 
 	case mysql.TypeNewDecimal:

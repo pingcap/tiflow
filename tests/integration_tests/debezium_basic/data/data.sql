@@ -207,8 +207,8 @@ update tp_char_binary set c_varchar = '89504E470D0A1A0B' where c_binary = x'8950
 create table tp_other
 (
     id     int auto_increment,
-    c_enum enum ('a','b','c') null,
-    c_set  set ('a','b','c')  null,
+    c_enum enum ('a','b','c') default 'a',
+    c_set  set ('a','b','c')  default 'a,b',
     c_bit  bit(64)            null,
     c_json json               null,
     constraint pk
@@ -217,6 +217,12 @@ create table tp_other
 
 insert into tp_other()
 values ();
+
+insert into tp_other(c_enum, c_set, c_bit, c_json)
+values (null, null, b'1000001', '{
+  "key1": "value1",
+  "key2": "value2"
+}');
 
 insert into tp_other(c_enum, c_set, c_bit, c_json)
 values ('a', 'a,b', b'1000001', '{
