@@ -615,14 +615,30 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeEnum:
-		v, ok := value.(uint64)
-		if !ok {
+		var (
+			enumVar types.Enum
+			err     error
+		)
+		switch v := value.(type) {
+		case uint64:
+			enumVar, err = types.ParseEnumValue(ft.GetElems(), v)
+		case string:
+			log.Info("debezium enum column value is string",
+				zap.String("column", col.GetName()),
+				zap.String("value", v))
+			enumVar, err = types.ParseEnumName(ft.GetElems(), v, ft.GetCollate())
+		case []byte:
+			stringVal := string(v)
+			log.Info("debezium enum column value is string bytes",
+				zap.String("column", col.GetName()),
+				zap.String("value", stringVal))
+			enumVar, err = types.ParseEnumName(ft.GetElems(), stringVal, ft.GetCollate())
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for enum column %s",
 				value,
 				col.GetName())
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
 		if err != nil {
 			// Invalid enum value inserted in non-strict mode.
 			writer.WriteStringField(col.GetName(), "")
@@ -632,14 +648,30 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeSet:
-		v, ok := value.(uint64)
-		if !ok {
+		var (
+			setVar types.Set
+			err    error
+		)
+		switch v := value.(type) {
+		case uint64:
+			setVar, err = types.ParseSetValue(ft.GetElems(), v)
+		case string:
+			log.Info("debezium set column value is string",
+				zap.String("column", col.GetName()),
+				zap.String("value", v))
+			setVar, err = types.ParseSetName(ft.GetElems(), v, ft.GetCollate())
+		case []byte:
+			stringVal := string(v)
+			log.Info("debezium set column value is string bytes",
+				zap.String("column", col.GetName()),
+				zap.String("value", stringVal))
+			setVar, err = types.ParseSetName(ft.GetElems(), stringVal, ft.GetCollate())
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for set column %s",
 				value,
 				col.GetName())
 		}
-		setVar, err := types.ParseSetValue(ft.GetElems(), v)
 		if err != nil {
 			// Invalid enum value inserted in non-strict mode.
 			writer.WriteStringField(col.GetName(), "")
