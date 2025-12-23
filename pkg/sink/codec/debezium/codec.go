@@ -621,6 +621,9 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		)
 		switch v := value.(type) {
 		case uint64:
+			log.Info("debezium enum column value is uint64",
+				zap.String("column", col.GetName()),
+				zap.Uint64("value", v))
 			enumVar, err = types.ParseEnumValue(ft.GetElems(), v)
 		case string:
 			log.Info("debezium enum column value is string",
