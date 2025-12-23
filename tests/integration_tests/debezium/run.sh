@@ -55,6 +55,7 @@ run_cdc_cli changefeed create -c test --sink-uri="kafka://127.0.0.1:9092/output_
 cd $CUR
 go run ./src
 
+exit 1
 if [ $? -ne 0 ]; then
 	exit 1
 fi
