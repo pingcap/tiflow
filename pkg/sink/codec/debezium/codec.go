@@ -17,7 +17,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -462,48 +461,6 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 	value := col.Value
 	if value == nil {
 		value = col.GetDefaultValue()
-	}
-	if true {
-		val := col.GetDefaultValue()
-		if val != nil {
-			switch col.GetType() {
-			case mysql.TypeBit:
-				switch val.(type) {
-				case uint64, string:
-				default:
-					log.Error("TypeBit", zap.Any("v", reflect.TypeOf(val)))
-				}
-			case mysql.TypeVarchar, mysql.TypeString, mysql.TypeVarString, mysql.TypeTinyBlob,
-				mysql.TypeMediumBlob, mysql.TypeLongBlob, mysql.TypeBlob:
-				switch val.(type) {
-				case []byte, string:
-				default:
-					log.Error("TypeVarchar", zap.Any("v", reflect.TypeOf(val)))
-				}
-			case mysql.TypeEnum:
-			case mysql.TypeSet:
-			case mysql.TypeNewDecimal, mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime,
-				mysql.TypeTimestamp, mysql.TypeDuration:
-				switch val.(type) {
-				case string:
-				default:
-					log.Error("TypeNewDecimal", zap.Any("v", reflect.TypeOf(val)))
-				}
-			case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
-				switch val.(type) {
-				case string, uint64, int64:
-				default:
-					log.Error("TypeLonglong", zap.Any("v", reflect.TypeOf(val)))
-				}
-			case mysql.TypeDouble, mysql.TypeFloat:
-			case mysql.TypeTiDBVectorFloat32:
-				switch val.(type) {
-				case types.VectorFloat32:
-				default:
-					log.Error("TypeTiDBVectorFloat32", zap.Any("v", reflect.TypeOf(val)))
-				}
-			}
-		}
 	}
 	if value == nil {
 		writer.WriteNullField(col.GetName())
