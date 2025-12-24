@@ -481,20 +481,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 					log.Error("TypeVarchar", zap.Any("v", reflect.TypeOf(val)))
 				}
 			case mysql.TypeEnum:
-				// v, ok := val.(string)
-				// if !ok {
-				// 	return cerror.ErrDebeziumEncodeFailed.GenWithStack(
-				// 		"unexpected column value type %T for enum column %s",
-				// 		val,
-				// 		col.GetName())
-				// }
-				// types.ParseEnumName(ft.GetElems(), v, ft.GetCollate())
 			case mysql.TypeSet:
-				switch val.(type) {
-				case uint64:
-				default:
-					log.Error("set", zap.Any("v", reflect.TypeOf(val)))
-				}
 			case mysql.TypeNewDecimal, mysql.TypeDate, mysql.TypeNewDate, mysql.TypeDatetime,
 				mysql.TypeTimestamp, mysql.TypeDuration:
 				switch val.(type) {
