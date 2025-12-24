@@ -59,12 +59,18 @@ func IsInitialized() bool {
 // we use a notInitializedCipher to always return error.
 type notInitializedCipher struct{}
 
+const secretKeyNotInitializedError = `secret key not initialized. To enable encryption:
+1. Create a file containing a 32-byte (64-character) hexadecimal AES-256 secret key.
+2. Set 'secret-key-path' in DM-master's configuration file to point to this key file.
+3. Restart DM-master to apply the configuration.
+For details, see: https://docs.pingcap.com/tidb/stable/dm-customized-secret-key`
+
 func (n *notInitializedCipher) Encrypt([]byte) ([]byte, error) {
-	return nil, errors.New("secret key is not initialized")
+	return nil, errors.New(secretKeyNotInitializedError)
 }
 
 func (n *notInitializedCipher) Decrypt([]byte) ([]byte, error) {
-	return nil, errors.New("secret key is not initialized")
+	return nil, errors.New(secretKeyNotInitializedError)
 }
 
 type aesCipher struct {
