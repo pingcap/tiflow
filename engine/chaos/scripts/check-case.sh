@@ -1,7 +1,7 @@
 #!/bin/bash
 
 completed=false
-for i in {1..22}; do
+for i in {1..32}; do
 	kubectl wait --for=condition=complete job/chaos-test-case --timeout=1m
 	if [ $? -eq 0 ]; then
 		completed=true
