@@ -518,37 +518,43 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		return nil
 
 	case mysql.TypeEnum:
-		v, ok := value.(uint64)
-		if !ok {
+		switch v := value.(type) {
+		case uint64:
+			enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
+			if err != nil {
+				// Invalid enum value inserted in non-strict mode.
+				writer.WriteStringField(col.GetName(), "")
+				return nil
+			}
+			writer.WriteStringField(col.GetName(), enumVar.Name)
+		case string:
+			writer.WriteStringField(col.GetName(), v)
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for enum column %s",
 				value,
 				col.GetName())
 		}
-		enumVar, err := types.ParseEnumValue(ft.GetElems(), v)
-		if err != nil {
-			// Invalid enum value inserted in non-strict mode.
-			writer.WriteStringField(col.GetName(), "")
-			return nil
-		}
-		writer.WriteStringField(col.GetName(), enumVar.Name)
 		return nil
 
 	case mysql.TypeSet:
-		v, ok := value.(uint64)
-		if !ok {
+		switch v := value.(type) {
+		case uint64:
+			setVar, err := types.ParseSetValue(ft.GetElems(), v)
+			if err != nil {
+				// Invalid enum value inserted in non-strict mode.
+				writer.WriteStringField(col.GetName(), "")
+				return nil
+			}
+			writer.WriteStringField(col.GetName(), setVar.Name)
+		case string:
+			writer.WriteStringField(col.GetName(), v)
+		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
 				"unexpected column value type %T for set column %s",
 				value,
 				col.GetName())
 		}
-		setVar, err := types.ParseSetValue(ft.GetElems(), v)
-		if err != nil {
-			// Invalid enum value inserted in non-strict mode.
-			writer.WriteStringField(col.GetName(), "")
-			return nil
-		}
-		writer.WriteStringField(col.GetName(), setVar.Name)
 		return nil
 
 	case mysql.TypeNewDecimal:

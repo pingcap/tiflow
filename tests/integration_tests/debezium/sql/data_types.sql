@@ -390,8 +390,8 @@ INSERT INTO t_json VALUES ('["foo"]', 1);
 */
 
 CREATE TABLE t_enum(
-  col_e   ENUM('a', 'b', 'c'),
-  col_s   SET('a', 'b', 'c'),
+  col_e   ENUM('a', 'b', 'c') DEFAULT 'a',
+  col_s   SET('a', 'b', 'c') DEFAULT 'a',
   pk      INT PRIMARY KEY
 );
 
@@ -400,3 +400,5 @@ INSERT INTO t_enum VALUES ('a', 'c', 1);
 SET sql_mode='';
 INSERT INTO t_enum VALUES ('d', 'e', 2);
 SET sql_mode='strict_trans_tables';
+
+INSERT INTO t_enum VALUES (null, null, 3);
