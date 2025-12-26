@@ -2340,6 +2340,18 @@ func (z *TableName) DecodeMsg(dc *msgp.Reader) (err error) {
 				err = msgp.WrapError(err, "IsPartition")
 				return
 			}
+		case "target-db-name":
+			z.TargetSchema, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "TargetSchema")
+				return
+			}
+		case "target-tbl-name":
+			z.TargetTable, err = dc.ReadString()
+			if err != nil {
+				err = msgp.WrapError(err, "TargetTable")
+				return
+			}
 		default:
 			err = dc.Skip()
 			if err != nil {
@@ -2353,9 +2365,27 @@ func (z *TableName) DecodeMsg(dc *msgp.Reader) (err error) {
 
 // EncodeMsg implements msgp.Encodable
 func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
-	// map header, size 4
+	// omitempty: check for empty values
+	zb0001Len := uint32(6)
+	var zb0001Mask uint8 /* 6 bits */
+	if z.TargetSchema == "" {
+		zb0001Len--
+		zb0001Mask |= 0x10
+	}
+	if z.TargetTable == "" {
+		zb0001Len--
+		zb0001Mask |= 0x20
+	}
+	// variable map header, size zb0001Len
+	err = en.Append(0x80 | uint8(zb0001Len))
+	if err != nil {
+		return
+	}
+	if zb0001Len == 0 {
+		return
+	}
 	// write "db-name"
-	err = en.Append(0x84, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	err = en.Append(0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	if err != nil {
 		return
 	}
@@ -2394,15 +2424,54 @@ func (z *TableName) EncodeMsg(en *msgp.Writer) (err error) {
 		err = msgp.WrapError(err, "IsPartition")
 		return
 	}
+	if (zb0001Mask & 0x10) == 0 { // if not empty
+		// write "target-db-name"
+		err = en.Append(0xae, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x2d, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(z.TargetSchema)
+		if err != nil {
+			err = msgp.WrapError(err, "TargetSchema")
+			return
+		}
+	}
+	if (zb0001Mask & 0x20) == 0 { // if not empty
+		// write "target-tbl-name"
+		err = en.Append(0xaf, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x2d, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+		if err != nil {
+			return
+		}
+		err = en.WriteString(z.TargetTable)
+		if err != nil {
+			err = msgp.WrapError(err, "TargetTable")
+			return
+		}
+	}
 	return
 }
 
 // MarshalMsg implements msgp.Marshaler
 func (z *TableName) MarshalMsg(b []byte) (o []byte, err error) {
 	o = msgp.Require(b, z.Msgsize())
-	// map header, size 4
+	// omitempty: check for empty values
+	zb0001Len := uint32(6)
+	var zb0001Mask uint8 /* 6 bits */
+	if z.TargetSchema == "" {
+		zb0001Len--
+		zb0001Mask |= 0x10
+	}
+	if z.TargetTable == "" {
+		zb0001Len--
+		zb0001Mask |= 0x20
+	}
+	// variable map header, size zb0001Len
+	o = append(o, 0x80|uint8(zb0001Len))
+	if zb0001Len == 0 {
+		return
+	}
 	// string "db-name"
-	o = append(o, 0x84, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+	o = append(o, 0xa7, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
 	o = msgp.AppendString(o, z.Schema)
 	// string "tbl-name"
 	o = append(o, 0xa8, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
@@ -2413,6 +2482,16 @@ func (z *TableName) MarshalMsg(b []byte) (o []byte, err error) {
 	// string "is-partition"
 	o = append(o, 0xac, 0x69, 0x73, 0x2d, 0x70, 0x61, 0x72, 0x74, 0x69, 0x74, 0x69, 0x6f, 0x6e)
 	o = msgp.AppendBool(o, z.IsPartition)
+	if (zb0001Mask & 0x10) == 0 { // if not empty
+		// string "target-db-name"
+		o = append(o, 0xae, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x2d, 0x64, 0x62, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+		o = msgp.AppendString(o, z.TargetSchema)
+	}
+	if (zb0001Mask & 0x20) == 0 { // if not empty
+		// string "target-tbl-name"
+		o = append(o, 0xaf, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x2d, 0x74, 0x62, 0x6c, 0x2d, 0x6e, 0x61, 0x6d, 0x65)
+		o = msgp.AppendString(o, z.TargetTable)
+	}
 	return
 }
 
@@ -2458,6 +2537,18 @@ func (z *TableName) UnmarshalMsg(bts []byte) (o []byte, err error) {
 				err = msgp.WrapError(err, "IsPartition")
 				return
 			}
+		case "target-db-name":
+			z.TargetSchema, bts, err = msgp.ReadStringBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "TargetSchema")
+				return
+			}
+		case "target-tbl-name":
+			z.TargetTable, bts, err = msgp.ReadStringBytes(bts)
+			if err != nil {
+				err = msgp.WrapError(err, "TargetTable")
+				return
+			}
 		default:
 			bts, err = msgp.Skip(bts)
 			if err != nil {
@@ -2472,7 +2563,7 @@ func (z *TableName) UnmarshalMsg(bts []byte) (o []byte, err error) {
 
 // Msgsize returns an upper bound estimate of the number of bytes occupied by the serialized message
 func (z *TableName) Msgsize() (s int) {
-	s = 1 + 8 + msgp.StringPrefixSize + len(z.Schema) + 9 + msgp.StringPrefixSize + len(z.Table) + 7 + msgp.Int64Size + 13 + msgp.BoolSize
+	s = 1 + 8 + msgp.StringPrefixSize + len(z.Schema) + 9 + msgp.StringPrefixSize + len(z.Table) + 7 + msgp.Int64Size + 13 + msgp.BoolSize + 15 + msgp.StringPrefixSize + len(z.TargetSchema) + 16 + msgp.StringPrefixSize + len(z.TargetTable)
 	return
 }
 

@@ -276,6 +276,8 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				IndexName:      rule.IndexName,
 				Columns:        rule.Columns,
 				TopicRule:      rule.TopicRule,
+				SchemaRule:     rule.SchemaRule,
+				TableRule:      rule.TableRule,
 			})
 		}
 		var columnSelectors []*config.ColumnSelector
@@ -530,6 +532,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 			CheckpointInterval:  c.SyncedStatus.CheckpointInterval,
 		}
 	}
+
 	return res
 }
 
@@ -580,6 +583,8 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				IndexName:     rule.IndexName,
 				Columns:       rule.Columns,
 				TopicRule:     rule.TopicRule,
+				SchemaRule:    rule.SchemaRule,
+				TableRule:     rule.TableRule,
 			})
 		}
 		var columnSelectors []*ColumnSelector
@@ -854,6 +859,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 			CheckpointInterval:  cloned.SyncedStatus.CheckpointInterval,
 		}
 	}
+
 	return res
 }
 
@@ -994,7 +1000,9 @@ type LargeMessageHandleConfig struct {
 	ClaimCheckRawValue            bool   `json:"claim_check_raw_value"`
 }
 
-// DispatchRule represents partition rule for a table
+// DispatchRule represents dispatch and routing rules for a table.
+// For MQ sinks (Kafka, Pulsar): controls topic and partition assignment.
+// For MySQL/TiDB sinks: controls schema and table name routing.
 // This is a duplicate of config.DispatchRule
 type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
@@ -1002,6 +1010,8 @@ type DispatchRule struct {
 	IndexName     string   `json:"index,omitempty"`
 	Columns       []string `json:"columns,omitempty"`
 	TopicRule     string   `json:"topic,omitempty"`
+	SchemaRule    string   `json:"schema,omitempty"`
+	TableRule     string   `json:"table,omitempty"`
 }
 
 // ColumnSelector represents a column selector for a table.

@@ -17,6 +17,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -142,6 +143,8 @@ func TestMemQuotaRefund(t *testing.T) {
 		err := m.BlockAcquire(50)
 		require.NoError(t, err)
 	}()
+	// Give goroutine time to reach Wait() state
+	time.Sleep(100 * time.Millisecond)
 	m.Refund(50)
 	wg.Wait()
 }

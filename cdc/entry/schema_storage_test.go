@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -550,7 +551,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	jobs = append(jobs, job)
 	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
 	require.Nil(t, err)
-	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f, nil)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := storage.HandleDDLJob(job)
@@ -881,7 +882,7 @@ func TestSchemaStorage(t *testing.T) {
 		jobs, err := getAllHistoryDDLJob(store, f)
 		require.Nil(t, err)
 
-		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
+		schemaStorage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f, nil)
 		require.NoError(t, err)
 		for _, job := range jobs {
 			err := schemaStorage.HandleDDLJob(job)
@@ -1027,4 +1028,175 @@ func TestGetPrimaryKey(t *testing.T) {
 	event = helper.DDL2Event(sql)
 	names = event.TableInfo.GetPrimaryKeyColumnNames()
 	require.Equal(t, names, []string{"a"})
+}
+
+func TestSchemaStorageWithSinkRouting(t *testing.T) {
+	ctx := context.Background()
+	store, err := mockstore.NewMockStore()
+	require.Nil(t, err)
+	defer store.Close() //nolint:errcheck
+
+	session.SetSchemaLease(time.Second)
+	session.DisableStats4Test()
+	domain, err := session.BootstrapSession(store)
+	require.Nil(t, err)
+	defer domain.Close()
+	domain.SetStatsUpdating(true)
+
+	tk := testkit.NewTestKit(t, store)
+
+	// Create pre-existing tables in both routed and unrouted schemas
+	tk.MustExec("create database source_db1")
+	tk.MustExec("create table source_db1.t1(id int primary key)")
+	tk.MustExec("create database source_db2")
+	tk.MustExec("create table source_db2.t2(id int primary key)")
+	tk.MustExec("create database unmapped_db")
+	tk.MustExec("create table unmapped_db.t3(id int primary key)")
+
+	// Get current version for SchemaStorage start-ts
+	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.Nil(t, err)
+
+	// Create sink router: source_db1 -> target_db1, source_db2 -> target_db2
+	// unmapped_db is not mapped
+	sinkRouter, err := dispatcher.NewSinkRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:    []string{"source_db1.*"},
+					SchemaRule: "target_db1",
+					TableRule:  dispatcher.TablePlaceholder,
+				},
+				{
+					Matcher:    []string{"source_db2.*"},
+					SchemaRule: "target_db2",
+					TableRule:  dispatcher.TablePlaceholder,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Create SchemaStorage with sink router
+	// This should apply routing to all pre-existing tables via applySinkRoutingToSnapshot
+	schemaStorage, err := NewSchemaStorage(store, ver.Ver, false, model.DefaultChangeFeedID("test"), util.RoleTester, f, sinkRouter)
+	require.NoError(t, err)
+
+	snap, err := schemaStorage.GetSnapshot(ctx, ver.Ver)
+	require.NoError(t, err)
+
+	// Verify pre-existing routed tables have correct TargetSchema
+	t1, ok := snap.TableByName("source_db1", "t1")
+	require.True(t, ok)
+	require.Equal(t, "source_db1", t1.TableName.Schema)
+	require.Equal(t, "target_db1", t1.TableName.TargetSchema)
+
+	t2, ok := snap.TableByName("source_db2", "t2")
+	require.True(t, ok)
+	require.Equal(t, "source_db2", t2.TableName.Schema)
+	require.Equal(t, "target_db2", t2.TableName.TargetSchema)
+
+	// Verify unmapped table has empty TargetSchema (optimization)
+	t3, ok := snap.TableByName("unmapped_db", "t3")
+	require.True(t, ok)
+	require.Equal(t, "unmapped_db", t3.TableName.Schema)
+	require.Equal(t, "", t3.TableName.TargetSchema)
+
+	// Now create a new table via DDL to test HandleDDLJob path
+	tk.MustExec("create table source_db1.t4(id int primary key)")
+
+	// Get the DDL job and process it
+	jobs, err := getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	// Find the CREATE TABLE job for t4
+	var createT4Job *timodel.Job
+	for i := len(jobs) - 1; i >= 0; i-- {
+		if jobs[i].Type == timodel.ActionCreateTable && jobs[i].SchemaName == "source_db1" && jobs[i].TableName == "t4" {
+			createT4Job = jobs[i]
+			break
+		}
+	}
+	require.NotNil(t, createT4Job)
+
+	// Process the DDL job through SchemaStorage
+	// This should apply routing via applySinkRoutingToTable
+	err = schemaStorage.HandleDDLJob(createT4Job)
+	require.NoError(t, err)
+
+	// Verify the new table has correct TargetSchema
+	newSnap, err := schemaStorage.GetSnapshot(ctx, createT4Job.BinlogInfo.FinishedTS)
+	require.NoError(t, err)
+
+	t4, ok := newSnap.TableByName("source_db1", "t4")
+	require.True(t, ok)
+	require.Equal(t, "source_db1", t4.TableName.Schema)
+	require.Equal(t, "target_db1", t4.TableName.TargetSchema)
+
+	// Create a new table in unmapped schema
+	tk.MustExec("create table unmapped_db.t5(id int primary key)")
+
+	jobs, err = getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	var createT5Job *timodel.Job
+	for i := len(jobs) - 1; i >= 0; i-- {
+		if jobs[i].Type == timodel.ActionCreateTable && jobs[i].SchemaName == "unmapped_db" && jobs[i].TableName == "t5" {
+			createT5Job = jobs[i]
+			break
+		}
+	}
+	require.NotNil(t, createT5Job)
+
+	err = schemaStorage.HandleDDLJob(createT5Job)
+	require.NoError(t, err)
+
+	newSnap2, err := schemaStorage.GetSnapshot(ctx, createT5Job.BinlogInfo.FinishedTS)
+	require.NoError(t, err)
+
+	// Verify unmapped new table has empty TargetSchema
+	t5, ok := newSnap2.TableByName("unmapped_db", "t5")
+	require.True(t, ok)
+	require.Equal(t, "unmapped_db", t5.TableName.Schema)
+	require.Equal(t, "", t5.TableName.TargetSchema)
+
+	// Test TRUNCATE TABLE - this creates a new table with a new ID
+	// The new table should also have routing applied
+	tk.MustExec("truncate table source_db1.t4")
+
+	jobs, err = getAllHistoryDDLJob(store, f)
+	require.Nil(t, err)
+
+	var truncateT4Job *timodel.Job
+	for i := len(jobs) - 1; i >= 0; i-- {
+		if jobs[i].Type == timodel.ActionTruncateTable && jobs[i].SchemaName == "source_db1" && jobs[i].TableName == "t4" {
+			truncateT4Job = jobs[i]
+			break
+		}
+	}
+	require.NotNil(t, truncateT4Job)
+
+	// Note: For TRUNCATE, job.TableID is the OLD table ID, and job.BinlogInfo.TableInfo.ID is the NEW table ID
+	oldTableID := truncateT4Job.TableID
+	newTableID := truncateT4Job.BinlogInfo.TableInfo.ID
+	require.NotEqual(t, oldTableID, newTableID, "TRUNCATE should create a new table ID")
+
+	err = schemaStorage.HandleDDLJob(truncateT4Job)
+	require.NoError(t, err)
+
+	newSnap3, err := schemaStorage.GetSnapshot(ctx, truncateT4Job.BinlogInfo.FinishedTS)
+	require.NoError(t, err)
+
+	// The old table ID should not exist anymore
+	_, ok = newSnap3.PhysicalTableByID(oldTableID)
+	require.False(t, ok, "old table ID should not exist after truncate")
+
+	// The new table should exist and have routing applied
+	t4New, ok := newSnap3.PhysicalTableByID(newTableID)
+	require.True(t, ok, "new table ID should exist after truncate")
+	require.Equal(t, "source_db1", t4New.TableName.Schema)
+	require.Equal(t, "target_db1", t4New.TableName.TargetSchema, "new table after truncate should have routing applied")
 }

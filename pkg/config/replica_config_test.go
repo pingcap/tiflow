@@ -383,6 +383,62 @@ func TestValidateAndAdjustLargeMessageHandle(t *testing.T) {
 	require.Equal(t, compression.None, cfg.Sink.KafkaConfig.LargeMessageHandle.LargeMessageHandleCompression)
 }
 
+func TestValidateAndAdjustSinkRouting(t *testing.T) {
+	t.Parallel()
+
+	// Test valid routing rules on MySQL sink
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"db1.*"}, SchemaRule: "target_db", TableRule: "{table}"},
+	}
+	mysqlURL, err := url.Parse("mysql://root:123@localhost:3306/")
+	require.NoError(t, err)
+	require.NoError(t, cfg.ValidateAndAdjust(mysqlURL))
+
+	// Test valid routing rules with transformations
+	cfg = GetDefaultReplicaConfig()
+	cfg.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"db1.*"}, SchemaRule: "backup_{schema}", TableRule: "{table}_archive"},
+	}
+	require.NoError(t, cfg.ValidateAndAdjust(mysqlURL))
+
+	// Test invalid SchemaRule expression
+	cfg = GetDefaultReplicaConfig()
+	cfg.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"db1.*"}, SchemaRule: "{invalid}", TableRule: "{table}"},
+	}
+	err = cfg.ValidateAndAdjust(mysqlURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid schema/table routing expression")
+
+	// Test invalid TableRule expression with space
+	cfg = GetDefaultReplicaConfig()
+	cfg.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"db1.*"}, SchemaRule: "{schema}", TableRule: "invalid space"},
+	}
+	err = cfg.ValidateAndAdjust(mysqlURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid schema/table routing expression")
+
+	// Test routing rules on non-MySQL sink (should fail)
+	cfg = GetDefaultReplicaConfig()
+	cfg.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"db1.*"}, SchemaRule: "target_db", TableRule: "{table}"},
+	}
+	kafkaURL, err := url.Parse("kafka://localhost:9092/topic?protocol=open-protocol")
+	require.NoError(t, err)
+	err = cfg.ValidateAndAdjust(kafkaURL)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "sink routing (via dispatch rules) is only supported for MySQL/TiDB sinks")
+
+	// Test dispatch rules without routing (TopicRule only) on Kafka - should pass
+	cfg = GetDefaultReplicaConfig()
+	cfg.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"db1.*"}, TopicRule: "topic_{schema}_{table}"},
+	}
+	require.NoError(t, cfg.ValidateAndAdjust(kafkaURL))
+}
+
 func TestMaskSensitiveData(t *testing.T) {
 	config := ReplicaConfig{
 		Sink:       nil,

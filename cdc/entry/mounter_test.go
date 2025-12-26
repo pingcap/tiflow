@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
@@ -287,7 +288,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	jobs, err := getAllHistoryDDLJob(store, f)
 	require.Nil(t, err)
 
-	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f)
+	scheamStorage, err := NewSchemaStorage(nil, 0, false, dummyChangeFeedID, util.RoleTester, f, nil)
 	require.Nil(t, err)
 	for _, job := range jobs {
 		err := scheamStorage.HandleDDLJob(job)
@@ -1254,7 +1255,7 @@ func TestDecodeRow(t *testing.T) {
 	require.NoError(t, err)
 
 	schemaStorage, err := NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, changefeed, util.RoleTester, filter)
+		ver.Ver, false, changefeed, util.RoleTester, filter, nil)
 	require.NoError(t, err)
 
 	// apply ddl to schemaStorage
@@ -1335,7 +1336,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	require.Nil(t, err)
 
 	schemaStorage, err := NewSchemaStorage(helper.Storage(),
-		ver.Ver, false, cfID, util.RoleTester, f)
+		ver.Ver, false, cfID, util.RoleTester, f, nil)
 	require.Nil(t, err)
 	// apply ddl to schemaStorage
 	for _, ddl := range ddls {
@@ -1692,4 +1693,164 @@ func TestFormatColVal(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, vector, value)
 	require.Zero(t, warn)
+}
+
+func TestMounterWithSinkRouting(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test;")
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-schema-routing")
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	cfg := config.GetDefaultReplicaConfig()
+
+	filter, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+
+	// Create sink router: test -> test_target
+	sinkRouter, err := dispatcher.NewSinkRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:    []string{"test.*"},
+					SchemaRule: "test_target",
+					TableRule:  dispatcher.TablePlaceholder,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
+		ver.Ver, false, changefeed, util.RoleTester, filter, sinkRouter)
+	require.NoError(t, err)
+
+	// Create table in test schema
+	ddl := "create table test.student(id int primary key, name varchar(50), age int)"
+	job := helper.DDL2Job(ddl)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	// Create mounter (routing is applied via schemaStorage)
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
+
+	// Insert a row
+	helper.Tk().MustExec(`insert into test.student values(1, "alice", 20)`)
+
+	ctx := context.Background()
+
+	// Mount the insert event and verify TargetSchema is set
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
+	require.True(t, ok)
+
+	walkTableSpanInStore(t, helper.Storage(), tableInfo.ID, func(key []byte, value []byte) {
+		rawKV := &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+
+		row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+		require.NoError(t, err)
+		require.NotNil(t, row)
+
+		// Verify that the source schema is "test"
+		require.Equal(t, "test", row.TableInfo.TableName.Schema)
+		// Verify that the source table is "student"
+		require.Equal(t, "student", row.TableInfo.TableName.Table)
+
+		// Verify that the target schema is routed to "test_target"
+		require.Equal(t, "test_target", row.TableInfo.TableName.TargetSchema)
+		// Verify that the target table is unchanged (TableRule is "{table}")
+		require.Equal(t, "student", row.TableInfo.TableName.TargetTable)
+	})
+}
+
+func TestMounterWithSinkRoutingTableRouting(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	helper.Tk().MustExec("use test;")
+
+	changefeed := model.DefaultChangeFeedID("changefeed-test-table-routing")
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	cfg := config.GetDefaultReplicaConfig()
+
+	filter, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+
+	// Create sink router with table routing: test.student -> test_target.student_routed
+	sinkRouter, err := dispatcher.NewSinkRouter(&config.ReplicaConfig{
+		Sink: &config.SinkConfig{
+			DispatchRules: []*config.DispatchRule{
+				{
+					Matcher:    []string{"test.student"},
+					SchemaRule: "test_target",
+					TableRule:  "student_routed",
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	schemaStorage, err := NewSchemaStorage(helper.Storage(),
+		ver.Ver, false, changefeed, util.RoleTester, filter, sinkRouter)
+	require.NoError(t, err)
+
+	// Create table in test schema
+	ddl := "create table test.student(id int primary key, name varchar(50), age int)"
+	job := helper.DDL2Job(ddl)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+
+	ts := schemaStorage.GetLastSnapshot().CurrentTs()
+	schemaStorage.AdvanceResolvedTs(ver.Ver)
+
+	// Create mounter (routing is applied via schemaStorage)
+	mounter := NewMounter(schemaStorage, changefeed, time.Local, filter, cfg.Integrity).(*mounter)
+
+	// Insert a row
+	helper.Tk().MustExec(`insert into test.student values(1, "alice", 20)`)
+
+	ctx := context.Background()
+
+	// Mount the insert event and verify both TargetSchema and TargetTable are set
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "student")
+	require.True(t, ok)
+
+	walkTableSpanInStore(t, helper.Storage(), tableInfo.ID, func(key []byte, value []byte) {
+		rawKV := &model.RawKVEntry{
+			OpType:  model.OpTypePut,
+			Key:     key,
+			Value:   value,
+			StartTs: ts - 1,
+			CRTs:    ts + 1,
+		}
+
+		row, err := mounter.unmarshalAndMountRowChanged(ctx, rawKV)
+		require.NoError(t, err)
+		require.NotNil(t, row)
+
+		// Verify that the source schema is "test"
+		require.Equal(t, "test", row.TableInfo.TableName.Schema)
+		// Verify that the source table is "student"
+		require.Equal(t, "student", row.TableInfo.TableName.Table)
+
+		// Verify that the target schema is routed to "test_target"
+		require.Equal(t, "test_target", row.TableInfo.TableName.TargetSchema)
+		// Verify that the target table is routed to "student_routed"
+		require.Equal(t, "student_routed", row.TableInfo.TableName.TargetTable)
+	})
 }
