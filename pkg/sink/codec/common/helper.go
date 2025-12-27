@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"unsafe"
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/log"
@@ -377,4 +378,14 @@ func SanitizeTopicName(name string) string {
 		)
 	}
 	return sanitizedName
+}
+
+// UnsafeBytesToString create string from byte slice without copying
+func UnsafeBytesToString(b []byte) string {
+	return *(*string)(unsafe.Pointer(&b))
+}
+
+// UnsafeStringToBytes create byte slice from string without copying
+func UnsafeStringToBytes(s string) []byte {
+	return *(*[]byte)(unsafe.Pointer(&s))
 }
