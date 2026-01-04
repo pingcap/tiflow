@@ -325,6 +325,7 @@ SELECT b, b IN ('20161213'), b in ('20161213', 0) FROM t7;
 --sorted_result
 SELECT b, b = '121314',
        CASE b WHEN '121314' then 'found' ELSE 'not found' END FROM t8;
+--sorted_result
 SELECT b, b in ('121314'), b in ('121314', 0) FROM t8;
 
 #DROP TABLE t1, t2, t3;
