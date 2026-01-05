@@ -193,6 +193,10 @@ type SubTaskConfig struct {
 	// e.g., pulling binlog
 	DumpUUID         string         `toml:"dump-uuid" json:"-"`
 	DumpIOTotalBytes *atomic.Uint64 `toml:"dump-io-total-bytes" json:"dump-io-total-bytes"`
+
+	// ImportIntoFailover is a flag to indicate whether to keep jobs when context is cancelled.
+	// This field is injected by SourceWorker.
+	ImportIntoFailover *atomic.Bool `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -312,6 +316,16 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	}
 	if c.StrictOptimisticShardMode && c.ShardMode != ShardOptimistic {
 		return terror.ErrConfigStrictOptimisticShardMode.Generate()
+	}
+
+	// import-into mode does not support sharding (multi-source) scenario
+	if (c.ShardMode != "" || c.IsSharding) && c.LoaderConfig.ImportMode == LoadModeImportInto {
+		return terror.ErrConfigImportIntoShardingNotSupport.Generate()
+	}
+
+	// import-into mode requires shared storage (s3, gcs, azure, etc.)
+	if c.LoaderConfig.ImportMode == LoadModeImportInto && storage.IsLocalDiskPath(c.LoaderConfig.Dir) {
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
 	}
 
 	if len(c.ColumnMappingRules) > 0 {
@@ -522,5 +536,6 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 	if c.DumpIOTotalBytes != nil {
 		clone.DumpIOTotalBytes = atomic.NewUint64(c.DumpIOTotalBytes.Load())
 	}
+	clone.ImportIntoFailover = c.ImportIntoFailover
 	return clone, nil
 }

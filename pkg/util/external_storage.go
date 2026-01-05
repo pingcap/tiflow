@@ -24,9 +24,8 @@ import (
 
 	gcsStorage "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/client"
-	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
@@ -65,7 +64,7 @@ func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (stor
 func GetExternalStorage(
 	ctx context.Context, uri string,
 	opts *storage.BackendOptions,
-	retryer request.Retryer,
+	retryer retry.Standard,
 ) (storage.ExternalStorage, error) {
 	backEnd, err := storage.ParseBackend(uri, opts)
 	if err != nil {
@@ -106,53 +105,21 @@ func GetTestExtStorage(
 	return ret, uri, nil
 }
 
-// retryerWithLog wraps the client.DefaultRetryer, and logs when retrying.
-type retryerWithLog struct {
-	client.DefaultRetryer
-}
-
-func isDeadlineExceedError(err error) bool {
-	return strings.Contains(err.Error(), "context deadline exceeded")
-}
-
-func (rl retryerWithLog) ShouldRetry(r *request.Request) bool {
-	if isDeadlineExceedError(r.Error) {
-		return false
-	}
-	return rl.DefaultRetryer.ShouldRetry(r)
-}
-
-func (rl retryerWithLog) RetryRules(r *request.Request) time.Duration {
-	backoffTime := rl.DefaultRetryer.RetryRules(r)
-	if backoffTime > 0 {
-		log.Warn("failed to request s3, retrying",
-			zap.Error(r.Error),
-			zap.Duration("backoff", backoffTime))
-	}
-	return backoffTime
-}
-
 // DefaultS3Retryer is the default s3 retryer, maybe this function
 // should be extracted to another place.
-func DefaultS3Retryer() request.Retryer {
-	return retryerWithLog{
-		DefaultRetryer: client.DefaultRetryer{
-			NumMaxRetries:    3,
-			MinRetryDelay:    1 * time.Second,
-			MinThrottleDelay: 2 * time.Second,
-		},
-	}
+func DefaultS3Retryer() retry.Standard {
+	return *retry.NewStandard(func(o *retry.StandardOptions) {
+		o.MaxAttempts = 3
+		o.MaxBackoff = 30 * time.Second
+	})
 }
 
 // NewS3Retryer creates a new s3 retryer.
-func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration) request.Retryer {
-	return retryerWithLog{
-		DefaultRetryer: client.DefaultRetryer{
-			NumMaxRetries:    maxRetries,
-			MinRetryDelay:    minRetryDelay,
-			MinThrottleDelay: minThrottleDelay,
-		},
-	}
+func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration) retry.Standard {
+	return *retry.NewStandard(func(o *retry.StandardOptions) {
+		o.MaxAttempts = maxRetries
+		o.MaxBackoff = minRetryDelay * 30 // Use a reasonable max backoff
+	})
 }
 
 type extStorageWithTimeout struct {

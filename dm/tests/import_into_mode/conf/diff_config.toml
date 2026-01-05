@@ -1,0 +1,39 @@
+# diff Configuration.
+######################### Global config #########################
+
+# how many goroutines are created to check the data
+check-thread-count = 4
+
+# set false if just want compare data by checksum, will skip select diff
+export-fix-sql = true
+
+# ignore check table's data
+check-struct-only = false
+
+######################### datasource config #########################
+[data-sources]
+[data-sources.mysql1]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = "123456"
+    route-rules = ["rule1"]
+
+[data-sources.tidb0]
+    host = "127.0.0.1"
+    port = 4000
+    user = "root"
+    password = ""
+
+######################### routes #########################
+[routes]
+[routes.rule1]
+schema-pattern = "import_into_mode"
+target-schema = "import_into_mode"
+
+######################### task config #########################
+[task]
+    output-dir = "/tmp/cksum_output"
+    source-instances = ["mysql1"]
+    target-instance = "tidb0"
+    target-check-tables = ["import_into_mode.t*"]

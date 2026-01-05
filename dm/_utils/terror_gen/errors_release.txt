@@ -186,7 +186,7 @@ ErrConfigOnlineDDLMistakeRegex,[code=20049:class=config:scope=internal:level=hig
 ErrOpenAPITaskConfigExist,[code=20050:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' already exist, Workaround: If you want to override it, please use the overwrite flag."
 ErrOpenAPITaskConfigNotExist,[code=20051:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' does not exist"
 ErrConfigCollationCompatibleNotSupport,[code=20052:class=config:scope=internal:level=medium], "Message: collation compatible %s not supported, Workaround: Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
-ErrConfigInvalidLoadMode,[code=20053:class=config:scope=internal:level=medium], "Message: invalid load mode '%s', Workaround: Please choose a valid value in ['logical', 'physical']"
+ErrConfigInvalidLoadMode,[code=20053:class=config:scope=internal:level=medium], "Message: invalid load mode '%s', Workaround: Please choose a valid value in ['logical', 'physical', 'import-into']"
 ErrConfigInvalidDuplicateResolution,[code=20054:class=config:scope=internal:level=medium], "Message: invalid load on-duplicate-logical or on-duplicate option '%s', Workaround: Please choose a valid value in ['replace', 'error', 'ignore'] or leave it empty."
 ErrConfigValidationMode,[code=20055:class=config:scope=internal:level=high], "Message: invalid validation mode, Workaround: Please check `validation-mode` config in task configuration file."
 ErrContinuousValidatorCfgNotFound,[code=20056:class=config:scope=internal:level=medium], "Message: mysql-instance(%d)'s continuous validator config %s not exist, Workaround: Please check the `validator-config-name` config in task configuration file."
@@ -201,6 +201,8 @@ ErrConfigColumnMappingDeprecated,[code=20064:class=config:scope=internal:level=h
 ErrConfigInvalidLoadAnalyze,[code=20065:class=config:scope=internal:level=medium], "Message: invalid load analyze option '%s', Workaround: Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
 ErrConfigStrictOptimisticShardMode,[code=20066:class=config:scope=internal:level=medium], "Message: cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`, Workaround: Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`."
 ErrConfigSecretKeyPath,[code=20067:class=config:scope=internal:level=high], "Message: invalid secret key path or content: %v, Workaround: Please check whether the path is valid, and has required permission to read the file, and the key is correct."
+ErrConfigImportIntoShardingNotSupport,[code=20068:class=config:scope=internal:level=high], "Message: import-into mode does not support sharding (multi-source) scenario, Workaround: Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'."
+ErrConfigImportIntoRequiresSharedStorage,[code=20069:class=config:scope=internal:level=high], "Message: import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s', Workaround: Please use a shared storage URI like s3://bucket/path"
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
