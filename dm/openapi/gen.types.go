@@ -654,6 +654,9 @@ type TaskFullMigrateConfOnDuplicatePhysical string
 
 // configuration of incremental tasks
 type TaskIncrMigrateConf struct {
+	// AUTO_ID_CACHE size to use for incremental replication of new tables
+	AutoIdCacheSize *uint64 `json:"auto_id_cache_size,omitempty"`
+
 	// incremental synchronization of batch execution sql quantities
 	ReplBatch *int `json:"repl_batch,omitempty"`
 
