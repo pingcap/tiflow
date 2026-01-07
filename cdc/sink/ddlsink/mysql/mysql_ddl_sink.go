@@ -256,7 +256,7 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 				return nil
 			}
 		default:
-			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
+			log.Warn("Unexpected DDL state, may not be found downstream, retry later", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.WrapError(errors.ErrDDLStateNotFound, mysql.ErrInvalidConn, state)
 		}
 
