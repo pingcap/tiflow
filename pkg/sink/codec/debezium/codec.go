@@ -549,6 +549,7 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 			}
 			writer.WriteStringField(col.GetName(), enumVar.Name)
 		case string:
+			// When column has DEFAULT value and NULL is inserted, value comes as string
 			writer.WriteStringField(col.GetName(), v)
 		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(
@@ -563,12 +564,13 @@ func (c *dbzCodec) writeDebeziumFieldValue(
 		case uint64:
 			setVar, err := types.ParseSetValue(ft.GetElems(), v)
 			if err != nil {
-				// Invalid enum value inserted in non-strict mode.
+				// Invalid set value inserted in non-strict mode.
 				writer.WriteStringField(col.GetName(), "")
 				return nil
 			}
 			writer.WriteStringField(col.GetName(), setVar.Name)
 		case string:
+			// When column has DEFAULT value and NULL is inserted, value comes as string
 			writer.WriteStringField(col.GetName(), v)
 		default:
 			return cerror.ErrDebeziumEncodeFailed.GenWithStack(

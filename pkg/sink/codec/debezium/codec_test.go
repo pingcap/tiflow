@@ -28,6 +28,120 @@ import (
 	"github.com/thanhpk/randstr"
 )
 
+// TestEncodeEnumWithStringValue tests encoding enum columns when the value is a string
+// This happens when the column has a DEFAULT value and NULL is inserted
+// See issue: https://github.com/pingcap/tiflow/issues/12474
+func TestEncodeEnumWithStringValue(t *testing.T) {
+	codec := &dbzCodec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test_cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+	codec.config.DebeziumDisableSchema = true
+
+	// Create table info with enum column that has DEFAULT value
+	tableInfo := model.BuildTableInfo("test", "t_enum", []*model.Column{
+		{
+			Name: "id",
+			Type: mysql.TypeLong,
+			Flag: model.PrimaryKeyFlag | model.HandleKeyFlag,
+		},
+		{
+			Name: "status",
+			Type: mysql.TypeEnum,
+			Flag: model.NullableFlag,
+		},
+	}, [][]int{{0}})
+
+	// Simulate the case where enum value comes as a string (happens with DEFAULT value)
+	// When NULL is inserted into a column with DEFAULT, TiDB sends the default value as string
+	e := &model.RowChangedEvent{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "id",
+				Value: int64(1),
+			},
+			{
+				Name:  "status",
+				Value: "active", // String type value (this is what triggers the bug)
+			},
+		}, tableInfo),
+	}
+
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeValue(e, buf)
+
+	// With the reverted code, this should return an error because it only handles uint64
+	// With the fixed code (PR #12475), this should succeed
+	if err != nil {
+		// Verify the error message contains useful information
+		t.Logf("Error occurred as expected with reverted code: %v", err)
+		require.ErrorIs(t, err, cerror.ErrDebeziumEncodeFailed)
+		require.Contains(t, err.Error(), "enum")
+		require.Contains(t, err.Error(), "status")
+	} else {
+		t.Logf("Encoding succeeded (fixed code path)")
+		// If it succeeds, verify the output contains the enum value
+		require.Contains(t, buf.String(), "active")
+	}
+}
+
+// TestEncodeSetWithStringValue tests encoding set columns when the value is a string
+func TestEncodeSetWithStringValue(t *testing.T) {
+	codec := &dbzCodec{
+		config:    common.NewConfig(config.ProtocolDebezium),
+		clusterID: "test_cluster",
+		nowFunc:   func() time.Time { return time.Unix(1701326309, 0) },
+	}
+	codec.config.DebeziumDisableSchema = true
+
+	// Create table info with set column
+	tableInfo := model.BuildTableInfo("test", "t_set", []*model.Column{
+		{
+			Name: "id",
+			Type: mysql.TypeLong,
+			Flag: model.PrimaryKeyFlag | model.HandleKeyFlag,
+		},
+		{
+			Name: "tags",
+			Type: mysql.TypeSet,
+			Flag: model.NullableFlag,
+		},
+	}, [][]int{{0}})
+
+	// Simulate the case where set value comes as a string
+	e := &model.RowChangedEvent{
+		CommitTs:  1,
+		TableInfo: tableInfo,
+		Columns: model.Columns2ColumnDatas([]*model.Column{
+			{
+				Name:  "id",
+				Value: int64(1),
+			},
+			{
+				Name:  "tags",
+				Value: "tag1,tag2", // String type value
+			},
+		}, tableInfo),
+	}
+
+	buf := bytes.NewBuffer(nil)
+	err := codec.EncodeValue(e, buf)
+
+	// With the reverted code, this should return an error because it only handles uint64
+	if err != nil {
+		t.Logf("Error occurred as expected with reverted code: %v", err)
+		require.ErrorIs(t, err, cerror.ErrDebeziumEncodeFailed)
+		require.Contains(t, err.Error(), "set")
+		require.Contains(t, err.Error(), "tags")
+	} else {
+		t.Logf("Encoding succeeded (fixed code path)")
+		require.Contains(t, buf.String(), "tag1,tag2")
+	}
+}
+
 func TestDDLEvent(t *testing.T) {
 	codec := &dbzCodec{
 		config:    common.NewConfig(config.ProtocolDebezium),
