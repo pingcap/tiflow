@@ -663,11 +663,6 @@ func (l *LightningLoader) Pause() {
 		l.logger.Warn("try to pause, but already closed")
 		return
 	}
-	// disable pause for import-into backend: pause/resume is not supported
-	if l.lightningGlobalConfig != nil && l.lightningGlobalConfig.TikvImporter.Backend == lcfg.BackendImportInto {
-		l.logger.Warn("pause/resume not supported for import-into backend; skipping pause")
-		return
-	}
 	if l.cancel != nil {
 		l.cancel()
 	}
@@ -678,11 +673,6 @@ func (l *LightningLoader) Pause() {
 func (l *LightningLoader) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 	if l.isClosed() {
 		l.logger.Warn("try to resume, but already closed")
-		return
-	}
-	// disable resume for import-into backend: pause/resume is not supported
-	if l.lightningGlobalConfig != nil && l.lightningGlobalConfig.TikvImporter.Backend == lcfg.BackendImportInto {
-		l.logger.Warn("pause/resume not supported for import-into backend; skipping resume")
 		return
 	}
 	l.core = lserver.New(l.lightningGlobalConfig)
