@@ -447,9 +447,9 @@ replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appda
 replace golang.org/x/text => golang.org/x/text v0.28.0
 
 // Use local TiDB for development with import-into support
-replace github.com/pingcap/tidb => github.com/gmhdbjd/tidb v1.1.0-beta.0.20260107072350-80531240206c
+replace github.com/pingcap/tidb => github.com/gmhdbjd/tidb v1.1.0-beta.0.20260108041256-50046b671b1e
 
-replace github.com/pingcap/tidb/pkg/parser => github.com/gmhdbjd/tidb/pkg/parser v0.0.0-20260107072350-80531240206c
+replace github.com/pingcap/tidb/pkg/parser => github.com/gmhdbjd/tidb/pkg/parser v0.0.0-20260108041256-50046b671b1e
 
 // Use forked arrow-go with parquet fixes (same as tidb)
 replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.0.0-20250911101656-62c34c9a3b82
