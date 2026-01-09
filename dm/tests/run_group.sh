@@ -29,7 +29,7 @@ groups=(
 	# G05
 	"load_interrupt many_tables online_ddl foreign_key full_mode gbk gtid ha_cases http_proxies"
 	# G06
-	"relay_interrupt safe_mode safe_mode_foreign_key sequence_safe_mode lightning_load_task lightning_mode metrics"
+	"relay_interrupt safe_mode safe_mode_foreign_key foreign_key_multi_worker sequence_safe_mode lightning_load_task lightning_mode metrics"
 	# G07
 	"shardddl1 shardddl1_1 shardddl2 shardddl2_1"
 	# G08
