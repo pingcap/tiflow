@@ -372,10 +372,10 @@ github.com/glebarez/sqlite v1.7.0 h1:A7Xj/KN2Lvie4Z4rrgQHY8MsbebX3NyWsL3n2i82MVI
 github.com/glebarez/sqlite v1.7.0/go.mod h1:PkeevrRlF/1BhQBCnzcMWzgrIk7IOop+qS2jUYLfHhk=
 github.com/gmhdbjd/client-go/v2 v2.0.0-20260105133400-76aa37474717 h1:ZP4FtnhFKa08Pbu92HQIybohGpSjfTF/S0lQoZ25Xec=
 github.com/gmhdbjd/client-go/v2 v2.0.0-20260105133400-76aa37474717/go.mod h1:1SkIuA5iWDW2q+il46IuOYB8DLNQ9ZUYsS11zZzPXOU=
-github.com/gmhdbjd/tidb v1.1.0-beta.0.20260109062130-f4463b9e648e h1:nx1Vgo8sgZ9zA5EDaCc8Rx7B1LxE6SZluBYs8pVvwg4=
-github.com/gmhdbjd/tidb v1.1.0-beta.0.20260109062130-f4463b9e648e/go.mod h1:Vm6WbThrtaLt5J5xy2L875q63BeTzn8a2Pn2QpIYFZE=
-github.com/gmhdbjd/tidb/pkg/parser v0.0.0-20260109062130-f4463b9e648e h1:7BFu/tLpoqc+CoLpUngI3NIeiRPLTM362K0kmau2cEk=
-github.com/gmhdbjd/tidb/pkg/parser v0.0.0-20260109062130-f4463b9e648e/go.mod h1:oHE+ub2QaDERd+UNHe4z2BhFV2jZrm7VNOe6atR9AF4=
+github.com/gmhdbjd/tidb v1.1.0-beta.0.20260109123058-ea14596d48cb h1:6UWkT1Yk7REqJv90NcEAkKEYC2FLvm74w8P5WQiKW7Y=
+github.com/gmhdbjd/tidb v1.1.0-beta.0.20260109123058-ea14596d48cb/go.mod h1:Vm6WbThrtaLt5J5xy2L875q63BeTzn8a2Pn2QpIYFZE=
+github.com/gmhdbjd/tidb/pkg/parser v0.0.0-20260109123058-ea14596d48cb h1:EpqHNlVx7QTgoS8Hu8NgfxzUgM4InGUcDAiL7CenF4I=
+github.com/gmhdbjd/tidb/pkg/parser v0.0.0-20260109123058-ea14596d48cb/go.mod h1:oHE+ub2QaDERd+UNHe4z2BhFV2jZrm7VNOe6atR9AF4=
 github.com/go-asn1-ber/asn1-ber v1.5.4 h1:vXT6d/FNDiELJnLb6hGNa309LMsrCoYFvpwHDF0+Y1A=
 github.com/go-asn1-ber/asn1-ber v1.5.4/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=
 github.com/go-chi/chi/v5 v5.0.0/go.mod h1:BBug9lr0cqtdAhsu6R4AAdvufI0/XBzAQSsUqJpoZOs=
