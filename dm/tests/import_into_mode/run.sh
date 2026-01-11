@@ -181,6 +181,65 @@ function run_ha_failover_test() {
 	echo "=== import-into mode HA failover test passed ==="
 }
 
+function run_target_table_not_empty_resume_test() {
+	echo "=== Running import-into mode downstream not empty table resume test ==="
+
+	run_sql_tidb "drop database if exists ${db};"
+
+	cleanup_s3
+	start_s3
+
+	echo "prepare source data"
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	echo "prepare downstream not empty table"
+	run_sql_tidb "create database if not exists ${db};"
+	run_sql_tidb "create table ${db}.t1 (id int NOT NULL AUTO_INCREMENT, name varchar(20), PRIMARY KEY (id));"
+	run_sql_tidb "insert into ${db}.t1 (id, name) values (1, 'alice');"
+
+	echo "start task with import-into mode (expect downstream table not empty error)"
+	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-not-empty.yaml
+	sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task-not-empty.yaml
+	dmctl_start_task_standalone $WORK_DIR/dm-task-not-empty.yaml "--remove-meta"
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"stage": "Paused"' 1 \
+		"target table is not empty" 1
+
+	echo "truncate downstream table and resume task"
+	run_sql_tidb "truncate table ${db}.t1;"
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"resume-task test" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+
+	# wait for load to complete and sync to start
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		'"unit": "Sync"' 1
+
+	echo "check full dump data"
+	run_sql_tidb_with_retry "select count(1) from ${db}.t1;" "count(1): 4"
+	run_sql_tidb_with_retry "select count(1) from ${db}.t2;" "count(1): 3"
+
+	echo "insert incremental data"
+	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	# use sync_diff_inspector to check data
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	echo "verify final data counts"
+	run_sql_tidb_with_retry "select count(1) from ${db}.t1;" "count(1): 6"
+	run_sql_tidb_with_retry "select count(1) from ${db}.t2;" "count(1): 5"
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 2
+
+	echo "=== import-into mode downstream not empty table resume test passed ==="
+}
+
 function run() {
 	# start full TiDB cluster (PD + TiKV + TiDB) for import-into mode
 	run_downstream_cluster $WORK_DIR
@@ -196,6 +255,7 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	run_basic_test
+	run_target_table_not_empty_resume_test
 	run_local_dir_reject_test
 	run_sharding_reject_test
 	run_ha_failover_test
