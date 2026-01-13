@@ -255,6 +255,10 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		}
 	}
 
+	if err = tx.Commit(); err != nil {
+		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
+	}
+
 	if useSessionTimestamp {
 		// log successful DDL execution with timestamp information for debugging
 		log.Debug("DDL executed with timestamp",
@@ -262,21 +266,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 			zap.Float64("sessionTimestamp", ddlTimestamp))
 	}
 
-	if err = tx.Commit(); err != nil {
-		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
-	}
-
-	logFields := []zap.Field{
-		zap.String("namespace", m.id.Namespace),
-		zap.String("changefeed", m.id.ID),
-		zap.Duration("duration", time.Since(start)),
-		zap.Uint64("startTs", ddl.StartTs),
-		zap.String("sql", ddl.Query),
-	}
-	if useSessionTimestamp {
-		logFields = append(logFields, zap.Float64("sessionTimestamp", ddlTimestamp))
-	}
-	log.Info("Exec DDL succeeded", logFields...)
 	return nil
 }
 
