@@ -1,3 +1,6 @@
+//go:build intest
+// +build intest
+
 // Copyright 2025 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,28 +30,29 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
-func ddlSessionTimestampForTest(ddl *model.DDLEvent, timezone string) string {
+func ddlSessionTimestampForTest(ddl *model.DDLEvent, timezone string) (string, bool) {
 	if ddl == nil {
-		return formatUnixTimestamp(0)
+		return "", false
 	}
 	ts, ok := ddlSessionTimestampFromOriginDefault(ddl, timezone)
 	if !ok {
-		tsToUse := ddl.StartTs
-		if tsToUse == 0 {
-			tsToUse = ddl.CommitTs
-		}
-		ts = float64(oracle.GetTimeFromTS(tsToUse).Unix())
+		return "", false
 	}
-	return formatUnixTimestamp(ts)
+	return formatUnixTimestamp(ts), true
 }
 
 func expectDDLExec(mock sqlmock.Sqlmock, ddl *model.DDLEvent, timezone string) {
-	mock.ExpectExec("SET TIMESTAMP = " + ddlSessionTimestampForTest(ddl, timezone)).
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	ddlTimestamp, ok := ddlSessionTimestampForTest(ddl, timezone)
+	if ok {
+		mock.ExpectExec("SET TIMESTAMP = " + ddlTimestamp).
+			WillReturnResult(sqlmock.NewResult(1, 1))
+	}
 	mock.ExpectExec(ddl.Query).
 		WillReturnResult(sqlmock.NewResult(1, 1))
-	mock.ExpectExec("SET TIMESTAMP = DEFAULT").
-		WillReturnResult(sqlmock.NewResult(1, 1))
+	if ok {
+		mock.ExpectExec("SET TIMESTAMP = DEFAULT").
+			WillReturnResult(sqlmock.NewResult(1, 1))
+	}
 }
 
 func newTestDDLSink(t *testing.T) (*DDLSink, *sql.DB, sqlmock.Sqlmock) {
@@ -84,8 +88,9 @@ func TestExecDDL_UsesOriginDefaultTimestampForCurrentTimestampDefault(t *testing
 
 	originTs, ok := ddlSessionTimestampFromOriginDefault(ddlEvent, sink.cfg.Timezone)
 	require.True(t, ok)
-	startTs := float64(oracle.GetTimeFromTS(ddlEvent.StartTs).Unix())
-	require.NotEqual(t, formatUnixTimestamp(startTs), formatUnixTimestamp(originTs))
+	ddlTimestamp, ok := ddlSessionTimestampForTest(ddlEvent, sink.cfg.Timezone)
+	require.True(t, ok)
+	require.Equal(t, formatUnixTimestamp(originTs), ddlTimestamp)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))
@@ -97,7 +102,7 @@ func TestExecDDL_UsesOriginDefaultTimestampForCurrentTimestampDefault(t *testing
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestExecDDL_UsesStartTsWhenNoCurrentTimestampDefault(t *testing.T) {
+func TestExecDDL_DoesNotSetTimestampWhenNoCurrentTimestampDefault(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 
@@ -105,14 +110,12 @@ func TestExecDDL_UsesStartTsWhenNoCurrentTimestampDefault(t *testing.T) {
 	helper.DDL2Event("create table t (id int primary key)")
 
 	ddlEvent := helper.DDL2Event("alter table t add column age int default 1")
-	fixedTime := time.Date(2025, 9, 25, 16, 10, 36, 0, time.UTC)
-	ddlEvent.StartTs = oracle.GoTimeToTS(fixedTime)
 
 	sink, db, mock := newTestDDLSink(t)
 	defer db.Close()
 
-	expected := formatUnixTimestamp(float64(oracle.GetTimeFromTS(ddlEvent.StartTs).Unix()))
-	require.Equal(t, expected, ddlSessionTimestampForTest(ddlEvent, sink.cfg.Timezone))
+	_, ok := ddlSessionTimestampForTest(ddlEvent, sink.cfg.Timezone)
+	require.False(t, ok)
 
 	mock.ExpectBegin()
 	mock.ExpectExec("USE `test`;").WillReturnResult(sqlmock.NewResult(1, 1))

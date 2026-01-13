@@ -42,7 +42,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
-	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -197,9 +196,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	if shouldSwitchDB {
 		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
 		if err != nil {
-			if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
-				log.Warn("Failed to reset session timestamp after USE failure", zap.Error(tsErr))
-			}
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID), zap.Error(err))
@@ -220,43 +216,35 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 
-	// Each DDL statement should use its own StartTs timestamp from upstream
-	// This ensures that timestamp functions like NOW(), CURRENT_TIMESTAMP(), LOCALTIME()
-	// are evaluated with the exact same temporal context as upstream
 	tsToUse := ddl.StartTs
 	if tsToUse == 0 {
-		// If StartTs is not available, fall back to CommitTs
-		// This preserves timestamp consistency for DDL statements executed in the same transaction
 		tsToUse = ddl.CommitTs
 	}
-	ddlTime := oracle.GetTimeFromTS(tsToUse)
-	// Use second-level precision to match upstream default value evaluation.
-	ddlTimestamp := float64(ddlTime.Unix())
+	ddlTimestamp, useSessionTimestamp := ddlSessionTimestampFromOriginDefault(ddl, m.cfg.Timezone)
 
-	if ts, ok := ddlSessionTimestampFromOriginDefault(ddl, m.cfg.Timezone); ok {
-		ddlTimestamp = ts
-	}
-
-	// Set the session timestamp to match upstream DDL execution time
-	// This is critical for preserving timestamp function behavior
-	if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
-		log.Error("Fail to set session timestamp for DDL",
-			zap.Float64("timestamp", ddlTimestamp),
-			zap.Uint64("startTs", tsToUse),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("query", ddl.Query),
-			zap.Error(err))
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID), zap.Error(err))
+	// Set session timestamp only when current-time defaults need to be preserved.
+	if useSessionTimestamp {
+		if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
+			log.Error("Fail to set session timestamp for DDL",
+				zap.Float64("timestamp", ddlTimestamp),
+				zap.Uint64("startTs", tsToUse),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID), zap.Error(err))
+			}
+			return err
 		}
-		return err
 	}
 
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 		log.Error("Failed to execute DDL", zap.Any("err", err), zap.Any("query", ddl.Query))
-		if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
-			log.Warn("Failed to reset session timestamp after DDL execution failure", zap.Error(tsErr))
+		if useSessionTimestamp {
+			if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
+				log.Warn("Failed to reset session timestamp after DDL execution failure", zap.Error(tsErr))
+			}
 		}
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback",
@@ -269,29 +257,40 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	// Reset session timestamp after DDL execution to avoid affecting subsequent operations
-	if err := resetSessionTimestamp(ctx, tx); err != nil {
-		log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID), zap.Error(err))
+	if useSessionTimestamp {
+		if err := resetSessionTimestamp(ctx, tx); err != nil {
+			log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID), zap.Error(err))
+			}
+			return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 		}
-		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
 	// Log successful DDL execution with timestamp information for debugging
-	log.Debug("DDL executed with timestamp",
-		zap.String("query", ddl.Query),
-		zap.Uint64("startTs", tsToUse),
-		zap.Float64("sessionTimestamp", ddlTimestamp))
+	if useSessionTimestamp {
+		log.Debug("DDL executed with timestamp",
+			zap.String("query", ddl.Query),
+			zap.Uint64("startTs", tsToUse),
+			zap.Float64("sessionTimestamp", ddlTimestamp))
+	}
 
 	if err = tx.Commit(); err != nil {
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
-	log.Info("Exec DDL succeeded",
-		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
-		zap.Duration("duration", time.Since(start)), zap.Uint64("startTs", tsToUse),
-		zap.Float64("sessionTimestamp", ddlTimestamp), zap.String("sql", ddl.Query))
+	logFields := []zap.Field{
+		zap.String("namespace", m.id.Namespace),
+		zap.String("changefeed", m.id.ID),
+		zap.Duration("duration", time.Since(start)),
+		zap.Uint64("startTs", tsToUse),
+		zap.String("sql", ddl.Query),
+	}
+	if useSessionTimestamp {
+		logFields = append(logFields, zap.Float64("sessionTimestamp", ddlTimestamp))
+	}
+	log.Info("Exec DDL succeeded", logFields...)
 	return nil
 }
 
