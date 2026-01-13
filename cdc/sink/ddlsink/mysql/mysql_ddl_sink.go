@@ -229,17 +229,22 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		}
 	}
 
-	query := ddl.Query
-	_, err = tx.ExecContext(ctx, query)
-	if err != nil {
-		log.Error("Failed to ExecContext", zap.Any("err", err), zap.Any("query", query))
+	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+		log.Error("Failed to ExecContext", zap.Any("err", err), zap.Any("query", ddl.Query))
 		if useSessionTimestamp {
 			if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
-				log.Warn("Failed to reset session timestamp after DDL execution failure", zap.Error(tsErr))
+				log.Warn("Failed to reset session timestamp after DDL execution failure",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Error(tsErr))
 			}
 		}
 		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(err))
+			log.Error("Failed to rollback",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.String("sql", ddl.Query),
+				zap.Error(err))
 		}
 		return err
 	}
@@ -259,12 +264,18 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
-	if useSessionTimestamp {
-		// log successful DDL execution with timestamp information for debugging
-		log.Debug("DDL executed with timestamp",
-			zap.String("query", ddl.Query),
-			zap.Float64("sessionTimestamp", ddlTimestamp))
+	logFields := []zap.Field{
+		zap.String("namespace", m.id.Namespace),
+		zap.String("changefeed", m.id.ID),
+		zap.Duration("duration", time.Since(start)),
+		zap.String("sql", ddl.Query),
 	}
+
+	if useSessionTimestamp {
+		logFields = append(logFields, zap.Float64("sessionTimestamp", ddlTimestamp))
+	}
+
+	log.Info("Exec DDL succeeded", logFields...)
 
 	return nil
 }
