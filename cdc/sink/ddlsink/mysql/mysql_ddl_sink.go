@@ -182,7 +182,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 	start := time.Now()
 	log.Info("Start exec DDL", zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.Uint64("startTs", ddl.StartTs), zap.String("DDL", ddl.Query))
+		zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -397,7 +397,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 // getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
-	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs 
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs
 	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
 	//nolint:rowserrcheck
 	jobsRows, err := db.QueryContext(ctx, showJobs)
