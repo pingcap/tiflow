@@ -20,14 +20,12 @@ import (
 	"context"
 	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/stretchr/testify/require"
-	"github.com/tikv/client-go/v2/oracle"
 )
 
 func ddlSessionTimestampForTest(ddl *model.DDLEvent, timezone string) (string, bool) {
@@ -81,7 +79,6 @@ func TestExecDDL_UsesOriginDefaultTimestampForCurrentTimestampDefault(t *testing
 	helper.DDL2Event("create table t (id int primary key)")
 
 	ddlEvent := helper.DDL2Event("alter table t add column updatetime datetime(6) default current_timestamp(6)")
-	ddlEvent.StartTs = oracle.GoTimeToTS(time.Unix(100, 0))
 
 	sink, db, mock := newTestDDLSink(t)
 	defer db.Close()
