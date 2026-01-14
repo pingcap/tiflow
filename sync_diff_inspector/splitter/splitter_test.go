@@ -703,6 +703,12 @@ func TestBucketSpliter(t *testing.T) {
 	for i, bound := range chunk.Bounds {
 		require.Equal(t, bounds1[i].Upper, bound.Lower)
 	}
+
+	// Mock column a is ignored.
+	tableDiff.Info, _ = utils.ResetColumns(tableInfo, []string{"a"})
+	createFakeResultForBucketSplit(mock, testCases[0].aRandomValues, testCases[0].bRandomValues)
+	_, err = NewBucketIterator(ctx, "", tableDiff, db)
+	require.Error(t, err)
 }
 
 func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []interface{}) {
