@@ -24,9 +24,14 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dmparser "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -210,6 +215,14 @@ type TableName struct {
 	Table       string `toml:"tbl-name" msg:"tbl-name"`
 	TableID     int64  `toml:"tbl-id" msg:"tbl-id"`
 	IsPartition bool   `toml:"is-partition" msg:"is-partition"`
+	// TargetSchema is the routed schema name for sinks.
+	// If set, SQL generation will use this instead of Schema.
+	// Schema is kept as the original for pullers to read from correct location.
+	TargetSchema string `toml:"target-db-name,omitempty" msg:"target-db-name,omitempty"`
+	// TargetTable is the routed table name for sinks.
+	// If set, SQL generation will use this instead of Table.
+	// Table is kept as the original for pullers to read from correct location.
+	TargetTable string `toml:"target-tbl-name,omitempty" msg:"target-tbl-name,omitempty"`
 }
 
 // String implements fmt.Stringer interface.
@@ -217,9 +230,25 @@ func (t TableName) String() string {
 	return fmt.Sprintf("%s.%s", t.Schema, t.Table)
 }
 
-// QuoteString returns quoted full table name
+// QuoteString returns quoted full table name using the source schema.
+// This is used for logging and debugging to show the original table name.
 func (t TableName) QuoteString() string {
 	return quotes.QuoteSchema(t.Schema, t.Table)
+}
+
+// QuoteSinkString returns quoted full table name for SQL generation.
+// Uses TargetSchema if set (for sink routing), otherwise uses Schema.
+// This should be used when generating SQL statements for the downstream sink.
+func (t TableName) QuoteSinkString() string {
+	schema := t.Schema
+	if t.TargetSchema != "" {
+		schema = t.TargetSchema
+	}
+	table := t.Table
+	if t.TargetTable != "" {
+		table = t.TargetTable
+	}
+	return quotes.QuoteSchema(schema, table)
 }
 
 // GetSchema returns schema name.
@@ -297,10 +326,12 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 		StartTs:  r.StartTs,
 		CommitTs: r.CommitTs,
 		Table: &TableName{
-			Schema:      r.TableInfo.GetSchemaName(),
-			Table:       r.TableInfo.GetTableName(),
-			TableID:     r.GetTableID(),
-			IsPartition: r.TableInfo.IsPartitionTable(),
+			Schema:       r.TableInfo.GetSchemaName(), // Redo logs preserve source schema from TiDB
+			Table:        r.TableInfo.GetTableName(),
+			TableID:      r.GetTableID(),
+			IsPartition:  r.TableInfo.IsPartitionTable(),
+			TargetSchema: r.TableInfo.TableName.TargetSchema,
+			TargetTable:  r.TableInfo.TableName.TargetTable,
 		},
 		Columns:      r.GetColumns(),
 		PreColumns:   r.GetPreColumns(),
@@ -396,6 +427,8 @@ func (r *RowChangedEventInRedoLog) ToRowChangedEvent() *RowChangedEvent {
 		r.IndexColumns)
 	tableInfo.TableName.TableID = r.Table.TableID
 	tableInfo.TableName.IsPartition = r.Table.IsPartition
+	tableInfo.TableName.TargetSchema = r.Table.TargetSchema
+	tableInfo.TableName.TargetTable = r.Table.TargetTable
 	row := &RowChangedEvent{
 		StartTs:         r.StartTs,
 		CommitTs:        r.CommitTs,
@@ -1063,8 +1096,8 @@ type DDLEvent struct {
 }
 
 // FromJob fills the values with DDLEvent from DDL job
-func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo) {
-	d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "")
+func (d *DDLEvent) FromJob(job *model.Job, preTableInfo *TableInfo, tableInfo *TableInfo, sinkRouter *dispatcher.SinkRouter) error {
+	return d.FromJobWithArgs(job, preTableInfo, tableInfo, "", "", sinkRouter)
 }
 
 // FromJobWithArgs fills the values with DDLEvent from DDL job
@@ -1072,7 +1105,8 @@ func (d *DDLEvent) FromJobWithArgs(
 	job *model.Job,
 	preTableInfo, tableInfo *TableInfo,
 	oldSchemaName, newSchemaName string,
-) {
+	sinkRouter *dispatcher.SinkRouter,
+) error {
 	d.StartTs = job.StartTS
 	d.CommitTs = job.BinlogInfo.FinishedTS
 	d.Type = job.Type
@@ -1120,6 +1154,83 @@ func (d *DDLEvent) FromJobWithArgs(
 	default:
 		d.Query = job.Query
 	}
+
+	// Apply sink routing to ALL DDLs if sink router is configured
+	if sinkRouter != nil {
+		if err := d.applySinkRouting(sinkRouter); err != nil {
+			return errors.Trace(err)
+		}
+	}
+	return nil
+}
+
+// applySinkRouting uses RenameDDLTable to rewrite the DDL query with routed schema and table names
+func (d *DDLEvent) applySinkRouting(sinkRouter *dispatcher.SinkRouter) error {
+	// Parse the DDL query into an AST
+	p := parser.New()
+	stmts, _, err := p.Parse(d.Query, d.Charset, d.Collate)
+	if err != nil {
+		log.Error("failed to parse DDL for sink routing",
+			zap.String("query", d.Query),
+			zap.Error(err))
+		return errors.WrapError(errors.ErrDispatcherFailed, err)
+	}
+	if len(stmts) == 0 {
+		return nil
+	}
+
+	// Fetch source tables in the order they appear in the DDL AST
+	// This is critical - the order must match the AST visit order
+	var defaultSchema string
+	if d.TableInfo != nil {
+		defaultSchema = d.TableInfo.TableName.Schema
+	} else if d.PreTableInfo != nil {
+		defaultSchema = d.PreTableInfo.TableName.Schema
+	}
+
+	sourceTables, err := dmparser.FetchDDLTables(defaultSchema, stmts[0], conn.LCTableNamesSensitive)
+	if err != nil {
+		log.Error("failed to fetch source tables for sink routing",
+			zap.String("query", d.Query),
+			zap.String("defaultSchema", defaultSchema),
+			zap.Error(err))
+		return errors.WrapError(errors.ErrDispatcherFailed, err)
+	}
+
+	// Route each source table to get target schema and table in the same order
+	targetTables := make([]*filter.Table, 0, len(sourceTables))
+	for _, sourceTable := range sourceTables {
+		routedSchema, routedTable := sinkRouter.Route(sourceTable.Schema, sourceTable.Name)
+		targetTables = append(targetTables, &filter.Table{
+			Schema: routedSchema,
+			Name:   routedTable,
+		})
+	}
+
+	// Set TargetSchema and TargetTable on TableInfo/PreTableInfo for consistency
+	if d.TableInfo != nil {
+		routedSchema, routedTable := sinkRouter.Route(d.TableInfo.TableName.Schema, d.TableInfo.TableName.Table)
+		d.TableInfo.TableName.TargetSchema = routedSchema
+		d.TableInfo.TableName.TargetTable = routedTable
+	}
+	if d.PreTableInfo != nil {
+		routedSchema, routedTable := sinkRouter.Route(d.PreTableInfo.TableName.Schema, d.PreTableInfo.TableName.Table)
+		d.PreTableInfo.TableName.TargetSchema = routedSchema
+		d.PreTableInfo.TableName.TargetTable = routedTable
+	}
+
+	// Use RenameDDLTable to rewrite the query
+	routedQuery, err := dmparser.RenameDDLTable(stmts[0], targetTables)
+	if err != nil {
+		log.Error("failed to rewrite DDL for sink routing",
+			zap.String("query", d.Query),
+			zap.Any("targetTables", targetTables),
+			zap.Error(err))
+		return errors.WrapError(errors.ErrDispatcherFailed, err)
+	}
+
+	d.Query = routedQuery
+	return nil
 }
 
 // NewBootstrapDDLEvent returns a bootstrap DDL event.

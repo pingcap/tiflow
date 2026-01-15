@@ -230,7 +230,12 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if shouldSwitchDB {
-		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(ddl.TableInfo.TableName.Schema)+";")
+		// Use TargetSchema if set (for sink routing), otherwise use original Schema
+		schema := ddl.TableInfo.TableName.Schema
+		if ddl.TableInfo.TableName.TargetSchema != "" {
+			schema = ddl.TableInfo.TableName.TargetSchema
+		}
+		_, err = tx.ExecContext(ctx, "USE "+quotes.QuoteName(schema)+";")
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("namespace", m.id.Namespace),

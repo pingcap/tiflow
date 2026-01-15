@@ -1,0 +1,16 @@
+# Changefeed config with redo log enabled for schema routing test
+# Tests that TargetSchema/TargetTable are preserved in redo logs
+
+[consistent]
+level = "eventual"
+storage = "file:///tmp/tidb_cdc_test/redo_apply_schema_routing/redo"
+flush-interval = 2000
+meta-flush-interval = 200
+
+[sink]
+# Schema routing rules: route source_db.* to target_db.*
+# This tests that TargetSchema/TargetTable are preserved in redo logs
+[[sink.dispatchers]]
+matcher = ["source_db.*"]
+schema = "target_db"
+table = "{table}"
