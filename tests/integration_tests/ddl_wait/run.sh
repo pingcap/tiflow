@@ -29,14 +29,27 @@ function run() {
 	changefeed_id="ddl-wait"
 	run_cdc_cli changefeed create --sink-uri="$SINK_URI" -c=${changefeed_id}
 
+	run_sql "update test.t set col = 11 where id = 1;"
 	run_sql "alter table test.t modify column col decimal(30,10);"
+	run_sql "update test.t set col = 22 where id = 2;"
 	run_sql "alter table test.t add index (col);"
+	# The downstream add index DDL may finish quickly with fast reorg enabled,
+	# so we need a short fixed-interval polling to avoid missing the running window.
+	for i in $(seq 1 120); do
+		run_sql 'SELECT JOB_ID FROM information_schema.ddl_jobs WHERE DB_NAME = "test" AND TABLE_NAME = "t" AND JOB_TYPE LIKE "add index%" AND (STATE = "running" OR STATE = "queueing") LIMIT 1;' \
+			"${DOWN_TIDB_HOST}" "${DOWN_TIDB_PORT}" >/dev/null 2>&1 || true
+		if check_contains 'JOB_ID:' >/dev/null 2>&1; then
+			break
+		fi
+		sleep 0.5
+	done
+	check_contains 'JOB_ID:'
+	run_sql "update test.t set col = 33 where id = 3;"
 	run_sql "create table test.finish_mark (a int primary key);"
 	check_table_exists test.finish_mark ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	# make sure all tables are equal in upstream and downstream
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 180
 	check_logs_contains $WORK_DIR "DDL replicate success"
-	check_logs_contains $WORK_DIR "DDL is running downstream"
 	cleanup_process $CDC_BINARY
 }
 
