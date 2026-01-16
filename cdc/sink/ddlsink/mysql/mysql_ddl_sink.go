@@ -163,7 +163,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	ctx := pctx
 	shouldSwitchDB := needSwitchDB(ddl)
 
-	// Convert vector type to string type for unsupport database
+	// Convert vector type to string type for unsupported database
 	if m.needFormat {
 		if newQuery := formatQuery(ddl.Query); newQuery != ddl.Query {
 			log.Warn("format ddl query", zap.String("newQuery", newQuery), zap.String("query", ddl.Query), zap.String("collate", ddl.Collate), zap.String("charset", ddl.Charset))
@@ -344,7 +344,7 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 // getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
-	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs 
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs
 	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
 	//nolint:rowserrcheck
 	jobsRows, err := db.QueryContext(ctx, showJobs)
