@@ -22,8 +22,15 @@ function run() {
 	run_sql "CREATE DATABASE ${DB_NAME};" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE TABLE ${DB_NAME}.t (id int primary key, v int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO ${DB_NAME}.t VALUES (1, 10), (2, 20), (3, 30);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "UPDATE ${DB_NAME}.t SET v = v + 1 WHERE id = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO ${DB_NAME}.t VALUES (4, 40);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "SET @@timestamp = 1000000000.123456; ALTER TABLE ${DB_NAME}.t ADD COLUMN c DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET @@timestamp = 1000000001.654321; INSERT INTO ${DB_NAME}.t (id, v) VALUES (5, 50);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO ${DB_NAME}.t (id, v, c) VALUES (6, 60, '2001-09-09 01:46:40.123456');" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET @@timestamp = 1000000002.789012; UPDATE ${DB_NAME}.t SET v = v + 1, c = CURRENT_TIMESTAMP(6) WHERE id = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET @@timestamp = 1000000003.111111; UPDATE ${DB_NAME}.t SET c = DEFAULT WHERE id = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "DELETE FROM ${DB_NAME}.t WHERE id = 4;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 120
 	cleanup_process $CDC_BINARY
