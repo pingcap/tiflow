@@ -244,7 +244,7 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 		if err = s.makeSinkReady(ctx); err == nil {
 			err = s.sink.WriteDDLEvent(ctx, ddl)
 			failpoint.Inject("InjectChangefeedDDLError", func() {
-				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
+				err = cerror.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
 			})
 		}
 		if err != nil {
