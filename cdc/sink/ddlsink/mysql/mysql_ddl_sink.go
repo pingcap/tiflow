@@ -238,6 +238,14 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 	defer ticker.Stop()
 	defer ticker1.Stop()
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		case <-ticker1.C:
+			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
+		}
+
 		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
 		if err != nil {
 			log.Error("Error when getting DDL state from TiDB", zap.Error(err))
@@ -258,14 +266,6 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 		default:
 			log.Warn("Unexpected DDL state, may not be found downstream, retry later", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		case <-ticker1.C:
-			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
 		}
 	}
 }
@@ -346,17 +346,27 @@ func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
 	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs 
 	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
-	//nolint:rowserrcheck
-	jobsRows, err := db.QueryContext(ctx, showJobs)
+	var jobsResults [][]string
+	err := retry.Do(ctx, func() error {
+		//nolint:rowserrcheck
+		jobsRows, err := db.QueryContext(ctx, showJobs)
+		if err != nil {
+			log.Warn("failed to query from downstream to get ddl state", zap.Error(err))
+			return err
+		}
+		jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
+		if err != nil {
+			log.Warn("get jobs results failed", zap.Error(err))
+			return err
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(pmysql.BackoffMaxDelay.Milliseconds()),
+		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
+		retry.WithMaxTries(defaultDDLMaxRetry))
 	if err != nil {
 		return timodel.JobStateNone, err
 	}
 
-	var jobsResults [][]string
-	jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
-	if err != nil {
-		return timodel.JobStateNone, err
-	}
 	if len(jobsResults) > 0 {
 		result := jobsResults[0]
 		state, jobID, jobType, schemaState := result[1], result[2], result[3], result[4]
