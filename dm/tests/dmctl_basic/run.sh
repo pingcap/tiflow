@@ -503,7 +503,7 @@ function run() {
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 	run_dm_ctl_cmd_mode $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"encrypt a" \
-		"secret key is not initialized" 1
+		"secret key not initialized" 1
 }
 
 cleanup_data dmctl
