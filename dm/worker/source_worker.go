@@ -87,6 +87,8 @@ type SourceWorker struct {
 	etcdClient *clientv3.Client
 
 	name string
+
+	importIntoFailover atomic.Bool
 }
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
@@ -218,6 +220,8 @@ func (w *SourceWorker) Stop(graceful bool) {
 	w.Lock()
 	defer w.Unlock()
 
+	// mark failover cancel so import-into treats this stop as failover
+	w.importIntoFailover.Store(true)
 	// close or kill all subtasks
 	if graceful {
 		w.subTaskHolder.closeAllSubTasks()
@@ -546,6 +550,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, vali
 
 	// directly put cfg into subTaskHolder
 	// the uniqueness of subtask should be assured by etcd
+	cfg.ImportIntoFailover = &w.importIntoFailover
 	st := NewSubTask(cfg, w.etcdClient, w.name)
 	w.subTaskHolder.recordSubTask(st)
 	if w.closed.Load() {

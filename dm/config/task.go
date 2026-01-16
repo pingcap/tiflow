@@ -252,6 +252,8 @@ const (
 	LoadModeLogical LoadMode = "logical"
 	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
 	LoadModePhysical LoadMode = "physical"
+	// LoadModeImportInto means use import-into backend of lightning to load data, which uses IMPORT INTO SQL statement.
+	LoadModeImportInto LoadMode = "import-into"
 )
 
 // LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
@@ -340,7 +342,7 @@ func (m *LoaderConfig) adjust() error {
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
 	switch m.ImportMode {
-	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical:
+	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical, LoadModeImportInto:
 	default:
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
