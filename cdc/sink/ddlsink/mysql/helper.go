@@ -21,7 +21,10 @@ import (
 	"strings"
 	"time"
 
+	dmysql "github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/errno"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -38,6 +41,24 @@ func setSessionTimestamp(ctx context.Context, tx *sql.Tx, unixTimestamp float64)
 func resetSessionTimestamp(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, "SET TIMESTAMP = DEFAULT")
 	return err
+}
+
+func isIgnorableSessionTimestampErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError)
+	if !ok {
+		return false
+	}
+	switch mysqlErr.Number {
+	case uint16(errno.ErrWrongValueForVar),
+		uint16(errno.ErrTruncatedWrongValue),
+		uint16(errno.ErrUnknownSystemVariable):
+		return true
+	default:
+		return false
+	}
 }
 
 func formatUnixTimestamp(unixTimestamp float64) string {

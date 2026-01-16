@@ -216,16 +216,26 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	if useSessionTimestamp {
 		// set the session timestamp to match upstream DDL execution time
 		if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
-			log.Error("Fail to set session timestamp for DDL",
-				zap.Float64("timestamp", ddlTimestamp),
-				zap.Uint64("startTs", ddl.StartTs),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("query", ddl.Query),
-				zap.Error(err))
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+			if isIgnorableSessionTimestampErr(err) {
+				log.Warn("Fail to set session timestamp for DDL, continue without session timestamp",
+					zap.Float64("timestamp", ddlTimestamp),
+					zap.Uint64("startTs", ddl.StartTs),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("query", ddl.Query),
+					zap.Error(err))
+				useSessionTimestamp = false
+			} else {
+				log.Error("Fail to set session timestamp for DDL",
+					zap.Float64("timestamp", ddlTimestamp),
+					zap.Uint64("startTs", ddl.StartTs),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("query", ddl.Query),
+					zap.Error(err))
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+				}
+				return err
 			}
-			return err
 		}
 	}
 
@@ -252,11 +262,18 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	if useSessionTimestamp {
 		// reset session timestamp after DDL execution to avoid affecting subsequent operations
 		if err := resetSessionTimestamp(ctx, tx); err != nil {
-			log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
-			if rbErr := tx.Rollback(); rbErr != nil {
-				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(rbErr))
+			if isIgnorableSessionTimestampErr(err) {
+				log.Warn("Failed to reset session timestamp after DDL execution, continue",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Error(err))
+			} else {
+				log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
+				if rbErr := tx.Rollback(); rbErr != nil {
+					log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(rbErr))
+				}
+				return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 			}
-			return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 		}
 	}
 
