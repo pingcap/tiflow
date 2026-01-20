@@ -17,7 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tiflow/dm/config"
@@ -59,7 +59,7 @@ func TestGetLightiningConfig(t *testing.T) {
 	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{
 			Name:       "job123",
-			ExtStorage: &storage.LocalStorage{},
+			ExtStorage: &objstore.LocalStorage{},
 			LoaderConfig: config.LoaderConfig{
 				RangeConcurrency: 32,
 				CompressKVPairs:  "gzip",

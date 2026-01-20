@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -44,7 +44,7 @@ type DDLSink struct {
 	id model.ChangeFeedID
 	// statistic is used to record the DDL metrics
 	statistics *metrics.Statistics
-	storage    storage.ExternalStorage
+	storage    storeapi.Storage
 	cfg        *cloudstorage.Config
 	cron       *cron.Cron
 

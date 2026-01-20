@@ -22,13 +22,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/request"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	"github.com/pingcap/tidb/br/pkg/mock"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/s3like"
+	"github.com/pingcap/tidb/pkg/objstore/s3store"
+	"github.com/pingcap/tidb/pkg/objstore/s3store/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -179,14 +179,14 @@ func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 type s3Suite struct {
 	controller *gomock.Controller
 	s3         *mock.MockS3API
-	storage    *storage.S3Storage
+	storage    *s3like.Storage
 }
 
 func createS3Suite(c gomock.TestReporter) (s *s3Suite, clean func()) {
 	s = new(s3Suite)
 	s.controller = gomock.NewController(c)
 	s.s3 = mock.NewMockS3API(s.controller)
-	s.storage = storage.NewS3StorageForTest(
+	s.storage = s3store.NewS3StorageForTest(
 		s.s3,
 		&backuppb.S3{
 			Region:       "us-west-2",
@@ -245,11 +245,11 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	// test s3
 	s, clean := createS3Suite(t)
 	defer clean()
-	ctx := aws.BackgroundContext()
+	ctx := context.Background()
 
-	objects := make([]*s3.Object, 0, len(fileNames))
+	objects := make([]types.Object, 0, len(fileNames))
 	for _, fileName := range fileNames {
-		object := &s3.Object{
+		object := types.Object{
 			Key:  aws.String(path.Join("prefix", fileName)),
 			Size: aws.Int64(100),
 		}
@@ -257,13 +257,13 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	}
 
 	s.s3.EXPECT().
-		ListObjectsWithContext(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...request.Option) (*s3.ListObjectsOutput, error) {
-			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
-			require.Equal(t, "prefix/", aws.StringValue(input.Prefix))
-			require.Equal(t, "", aws.StringValue(input.Marker))
-			require.Equal(t, int64(1000), aws.Int64Value(input.MaxKeys))
-			require.Equal(t, "", aws.StringValue(input.Delimiter))
+		ListObjects(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...func(*s3.Options)) (*s3.ListObjectsOutput, error) {
+			require.Equal(t, "bucket", aws.ToString(input.Bucket))
+			require.Equal(t, "prefix/", aws.ToString(input.Prefix))
+			require.Equal(t, "", aws.ToString(input.Marker))
+			require.Equal(t, int32(1000), aws.ToInt32(input.MaxKeys))
+			require.Equal(t, "", aws.ToString(input.Delimiter))
 			return &s3.ListObjectsOutput{
 				IsTruncated: aws.Bool(false),
 				Contents:    objects,
@@ -298,11 +298,11 @@ func TestRemoveAll(t *testing.T) {
 	// test s3
 	s, clean := createS3Suite(t)
 	defer clean()
-	ctx := aws.BackgroundContext()
+	ctx := context.Background()
 
-	objects := make([]*s3.Object, 0, len(fileNames))
+	objects := make([]types.Object, 0, len(fileNames))
 	for _, fileName := range fileNames {
-		object := &s3.Object{
+		object := types.Object{
 			Key:  aws.String(path.Join("prefix", fileName)),
 			Size: aws.Int64(100),
 		}
@@ -310,43 +310,43 @@ func TestRemoveAll(t *testing.T) {
 	}
 
 	firstCall := s.s3.EXPECT().
-		ListObjectsWithContext(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...request.Option) (*s3.ListObjectsOutput, error) {
-			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
-			require.Equal(t, "prefix/", aws.StringValue(input.Prefix))
-			require.Equal(t, "", aws.StringValue(input.Marker))
-			require.Equal(t, int64(1000), aws.Int64Value(input.MaxKeys))
-			require.Equal(t, "", aws.StringValue(input.Delimiter))
+		ListObjects(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...func(*s3.Options)) (*s3.ListObjectsOutput, error) {
+			require.Equal(t, "bucket", aws.ToString(input.Bucket))
+			require.Equal(t, "prefix/", aws.ToString(input.Prefix))
+			require.Equal(t, "", aws.ToString(input.Marker))
+			require.Equal(t, int32(1000), aws.ToInt32(input.MaxKeys))
+			require.Equal(t, "", aws.ToString(input.Delimiter))
 			return &s3.ListObjectsOutput{
 				IsTruncated: aws.Bool(false),
 				Contents:    objects,
 			}, nil
 		})
 	secondCall := s.s3.EXPECT().
-		DeleteObjectWithContext(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...request.Option) (*s3.DeleteObjectInput, error) {
-			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
-			require.True(t, aws.StringValue(input.Key) == "prefix/schema.sql" || aws.StringValue(input.Key) == "prefix/table.sql")
-			return &s3.DeleteObjectInput{}, nil
+		DeleteObject(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+			require.Equal(t, "bucket", aws.ToString(input.Bucket))
+			require.True(t, aws.ToString(input.Key) == "prefix/schema.sql" || aws.ToString(input.Key) == "prefix/table.sql")
+			return &s3.DeleteObjectOutput{}, nil
 		}).After(firstCall)
 	thirdCall := s.s3.EXPECT().
-		DeleteObjectWithContext(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...request.Option) (*s3.DeleteObjectInput, error) {
-			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
-			require.True(t, aws.StringValue(input.Key) == "prefix/schema.sql" || aws.StringValue(input.Key) == "prefix/table.sql")
-			return &s3.DeleteObjectInput{}, nil
+		DeleteObject(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+			require.Equal(t, "bucket", aws.ToString(input.Bucket))
+			require.True(t, aws.ToString(input.Key) == "prefix/schema.sql" || aws.ToString(input.Key) == "prefix/table.sql")
+			return &s3.DeleteObjectOutput{}, nil
 		}).After(secondCall)
 	fourthCall := s.s3.EXPECT().
-		DeleteObjectWithContext(ctx, gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...request.Option) (*s3.DeleteObjectInput, error) {
-			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
-			require.Equal(t, "prefix/", aws.StringValue(input.Key))
-			return &s3.DeleteObjectInput{}, nil
+		DeleteObject(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...func(*s3.Options)) (*s3.DeleteObjectOutput, error) {
+			require.Equal(t, "bucket", aws.ToString(input.Bucket))
+			require.Equal(t, "prefix/", aws.ToString(input.Key))
+			return &s3.DeleteObjectOutput{}, nil
 		}).After(thirdCall)
 
 	s.s3.EXPECT().
-		HeadObjectWithContext(ctx, gomock.Any()).
-		Return(nil, awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)).After(fourthCall)
+		HeadObject(gomock.Any(), gomock.Any()).
+		Return(nil, &types.NoSuchKey{}).After(fourthCall)
 
 	err = RemoveAll(context.Background(), "", s.storage)
 	require.NoError(t, err)
@@ -368,11 +368,11 @@ func TestIsNotExistError(t *testing.T) {
 	// test s3
 	s, clean := createS3Suite(t)
 	defer clean()
-	ctx := aws.BackgroundContext()
+	ctx := context.Background()
 
 	s.s3.EXPECT().
-		GetObjectWithContext(ctx, gomock.Any()).
-		Return(nil, awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil))
+		GetObject(gomock.Any(), gomock.Any()).
+		Return(nil, &types.NoSuchKey{})
 
 	_, err = s.storage.ReadFile(ctx, "test.log")
 	require.Error(t, err)
@@ -387,7 +387,7 @@ func TestIsNotExistError(t *testing.T) {
 
 	// test other s3 error
 	s.s3.EXPECT().
-		GetObjectWithContext(ctx, gomock.Any()).
+		GetObject(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("just some unrelated error"))
 
 	_, err = s.storage.ReadFile(ctx, "test.log")
