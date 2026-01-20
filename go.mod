@@ -436,6 +436,9 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 // copy from TiDB
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
 
+// copy from TiDB
+replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.0.0-20250911101656-62c34c9a3b82
+
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
 // TODO: `sourcegraph.com/sourcegraph/appdash` has been archived, and the original host has been removed.
@@ -445,6 +448,9 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
 replace golang.org/x/text => golang.org/x/text v0.28.0
+
+// client-go uses WithRecvBufferPool/NewSharedBufferPool removed in newer gRPC.
+replace google.golang.org/grpc => google.golang.org/grpc v1.64.0
 
 // tls10server=1
 godebug tlsrsakex=1

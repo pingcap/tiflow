@@ -21,8 +21,8 @@ import (
 	"testing"
 
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	mockobjstore "github.com/pingcap/tidb/pkg/objstore/mockobjstore"
 	"github.com/pingcap/tidb/pkg/objstore"
+	mockobjstore "github.com/pingcap/tidb/pkg/objstore/mockobjstore"
 	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
