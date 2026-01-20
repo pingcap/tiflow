@@ -218,16 +218,16 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	// Reset session timestamp before DDL to avoid leaking from pooled connections.
-	if err := resetSessionTimestamp(ctx, tx); err != nil {
-		log.Error("Failed to reset session timestamp before DDL execution",
-			zap.String("namespace", m.id.Namespace),
-			zap.String("changefeed", m.id.ID),
-			zap.Error(err))
-		if rbErr := tx.Rollback(); rbErr != nil {
-			log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
-		}
-		return err
-	}
+	// if err := resetSessionTimestamp(ctx, tx); err != nil {
+	// 	log.Error("Failed to reset session timestamp before DDL execution",
+	// 		zap.String("namespace", m.id.Namespace),
+	// 		zap.String("changefeed", m.id.ID),
+	// 		zap.Error(err))
+	// 	if rbErr := tx.Rollback(); rbErr != nil {
+	// 		log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+	// 	}
+	// 	return err
+	// }
 
 	ddlTimestamp, useSessionTimestamp := ddlSessionTimestampFromOriginDefault(ddl, m.cfg.Timezone)
 	skipSetTimestamp := false
