@@ -52,7 +52,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 			log.L().Warn("TestRemoveMetaFile Error", log.ShortError(err))
 		}
 	})
-	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.ExtStorage)
+	loc, _, err := dumpling.ParseMetaData(ctx, cfg.LoaderConfig.Dir, metafile, cfg.ExtStorage, cfg.Flavor)
 	if err == nil {
 		return loc.Position.String(), loc.GTIDSetStr(), nil
 	}
