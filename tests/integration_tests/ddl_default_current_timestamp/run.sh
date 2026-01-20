@@ -8,6 +8,7 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 DB_NAME=ddl_default_current_timestamp
+TIME_ZONE=UTC
 
 function run() {
 	rm -rf $WORK_DIR && mkdir -p $WORK_DIR
@@ -26,11 +27,11 @@ function run() {
 	run_sql "UPDATE ${DB_NAME}.t SET v = v + 1 WHERE id = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO ${DB_NAME}.t VALUES (4, 40);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	run_sql "SET @@timestamp = 1000000000.123456; ALTER TABLE ${DB_NAME}.t ADD COLUMN c DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "SET @@timestamp = 1000000001.654321; INSERT INTO ${DB_NAME}.t (id, v) VALUES (5, 50);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET time_zone = '${TIME_ZONE}'; SET @@timestamp = 1000000000.123456; ALTER TABLE ${DB_NAME}.t ADD COLUMN c DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET time_zone = '${TIME_ZONE}'; SET @@timestamp = 1000000001.654321; INSERT INTO ${DB_NAME}.t (id, v) VALUES (5, 50);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO ${DB_NAME}.t (id, v, c) VALUES (6, 60, '2001-09-09 01:46:40.123456');" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "SET @@timestamp = 1000000002.789012; UPDATE ${DB_NAME}.t SET v = v + 1, c = CURRENT_TIMESTAMP(6) WHERE id = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	run_sql "SET @@timestamp = 1000000003.111111; UPDATE ${DB_NAME}.t SET c = DEFAULT WHERE id = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET time_zone = '${TIME_ZONE}'; SET @@timestamp = 1000000002.789012; UPDATE ${DB_NAME}.t SET v = v + 1, c = CURRENT_TIMESTAMP(6) WHERE id = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET time_zone = '${TIME_ZONE}'; SET @@timestamp = 1000000003.111111; UPDATE ${DB_NAME}.t SET c = DEFAULT WHERE id = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "DELETE FROM ${DB_NAME}.t WHERE id = 4;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml 120
@@ -39,11 +40,11 @@ function run() {
 	run_sql "CREATE TABLE ${DB_NAME}.t_fp (id int primary key, v int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO ${DB_NAME}.t_fp VALUES (1, 10), (2, 20);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
-	run_sql "SET @@timestamp = 1000000000.123456; ALTER TABLE ${DB_NAME}.t_fp ADD COLUMN c2 DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET time_zone = '${TIME_ZONE}'; SET @@timestamp = 1000000000.123456; ALTER TABLE ${DB_NAME}.t_fp ADD COLUMN c2 DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	expected_ts="2001-09-09 01:46:40.123456"
 	down_c2=""
 	for i in $(seq 1 30); do
-		down_c2=$(mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -Nse "SELECT c2 FROM ${DB_NAME}.t_fp WHERE id=1;" 2>/dev/null || true)
+		down_c2=$(mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 --init-command="set time_zone='${TIME_ZONE}'" -Nse "SELECT c2 FROM ${DB_NAME}.t_fp WHERE id=1;" 2>/dev/null || true)
 		if [ "$down_c2" = "$expected_ts" ]; then
 			break
 		fi
@@ -54,10 +55,10 @@ function run() {
 		exit 1
 	fi
 
-	run_sql "SET @@timestamp = 1000000001.654321; ALTER TABLE ${DB_NAME}.t_fp ADD COLUMN d2 DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "SET time_zone = '${TIME_ZONE}'; SET @@timestamp = 1000000001.654321; ALTER TABLE ${DB_NAME}.t_fp ADD COLUMN d2 DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	down_d2=""
 	for i in $(seq 1 30); do
-		down_d2=$(mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -Nse "SELECT d2 FROM ${DB_NAME}.t_fp WHERE id=1;" 2>/dev/null || true)
+		down_d2=$(mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 --init-command="set time_zone='${TIME_ZONE}'" -Nse "SELECT d2 FROM ${DB_NAME}.t_fp WHERE id=1;" 2>/dev/null || true)
 		if [ -n "$down_d2" ] && [ "$down_d2" != "$expected_ts" ]; then
 			break
 		fi
