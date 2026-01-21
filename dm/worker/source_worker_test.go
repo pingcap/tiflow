@@ -839,17 +839,62 @@ func TestMasterBinlogOff(t *testing.T) {
 	w, err := NewSourceWorker(cfg, nil, "", "")
 	require.NoError(t, err)
 	w.closed.Store(false)
+	defer w.Stop(true)
 
 	// start task
 	var subtaskCfg config.SubTaskConfig
 	require.NoError(t, subtaskCfg.Decode(config.SampleSubtaskConfig, true))
 	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true))
 
-	_, mockDB, err := conn.InitMockDBFull()
+	db, mockDB, err := sqlmock.New()
 	require.NoError(t, err)
+	w.sourceDBMu.Lock()
+	w.sourceDB = conn.NewBaseDB(db, terror.ScopeUpstream, "5.7")
+	w.sourceDBMu.Unlock()
 	mockShowMasterStatusNoRows(mockDB)
 	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
 	require.NoError(t, err)
 	require.Len(t, status, 1)
 	require.Equal(t, subtaskCfg.Name, status[0].Name)
+}
+
+func TestQueryStatusSourceStatusTimeout(t *testing.T) {
+	ctx := context.Background()
+	cfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	cfg.From.Password = "no need to connect"
+
+	w, err := NewSourceWorker(cfg, nil, "", "")
+	require.NoError(t, err)
+	w.closed.Store(false)
+	defer w.Stop(true)
+
+	// start task
+	var subtaskCfg config.SubTaskConfig
+	require.NoError(t, subtaskCfg.Decode(config.SampleSubtaskConfig, true))
+	require.NoError(t, w.StartSubTask(&subtaskCfg, pb.Stage_Running, pb.Stage_Stopped, true))
+
+	// make sure sourceDB is not nil so QueryStatus goes into GetSourceStatus path
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	w.sourceDBMu.Lock()
+	w.sourceDB = conn.NewBaseDB(db, terror.ScopeUpstream, "5.7")
+	w.sourceDBMu.Unlock()
+
+	// make this test fast and deterministic.
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout", `return(50)`))
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout")
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus", `return()`))
+	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus")
+
+	start := time.Now()
+	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	require.Less(t, elapsed, 2*time.Second)
+
+	// should still return subtask status and record upstream error for query.
+	require.Len(t, status, 1)
+	require.Equal(t, subtaskCfg.Name, status[0].Name)
+	require.NotNil(t, w.getSourceStatusErr())
 }
