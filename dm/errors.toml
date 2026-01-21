@@ -1135,7 +1135,7 @@ tags = ["internal", "medium"]
 [error.DM-config-20053]
 message = "invalid load mode '%s'"
 description = ""
-workaround = "Please choose a valid value in ['logical', 'physical']"
+workaround = "Please choose a valid value in ['logical', 'physical', 'import-into']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20054]
@@ -1220,6 +1220,18 @@ tags = ["internal", "medium"]
 message = "invalid secret key path or content: %v"
 description = ""
 workaround = "Please check whether the path is valid, and has required permission to read the file, and the key is correct."
+tags = ["internal", "high"]
+
+[error.DM-config-20068]
+message = "import-into mode does not support sharding (multi-source) scenario"
+description = ""
+workaround = "Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'."
+tags = ["internal", "high"]
+
+[error.DM-config-20069]
+message = "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'"
+description = ""
+workaround = "Please use a shared storage URI like s3://bucket/path"
 tags = ["internal", "high"]
 
 [error.DM-binlog-op-22001]

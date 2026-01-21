@@ -161,6 +161,7 @@ type MiddlewareFunc func(c *gin.Context)
 
 // DMAPIGetClusterInfo operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterInfo(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -170,6 +171,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetClusterInfo(c *gin.Context) {
 
 // DMAPIUpdateClusterInfo operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateClusterInfo(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -179,6 +181,7 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateClusterInfo(c *gin.Context) {
 
 // DMAPIGetClusterMasterList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterMasterList(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -188,6 +191,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetClusterMasterList(c *gin.Context) {
 
 // DMAPIOfflineMasterNode operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOfflineMasterNode(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "master-name" -------------
@@ -208,6 +212,7 @@ func (siw *ServerInterfaceWrapper) DMAPIOfflineMasterNode(c *gin.Context) {
 
 // DMAPIGetClusterWorkerList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetClusterWorkerList(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -217,6 +222,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetClusterWorkerList(c *gin.Context) {
 
 // DMAPIOfflineWorkerNode operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOfflineWorkerNode(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "worker-name" -------------
@@ -237,6 +243,7 @@ func (siw *ServerInterfaceWrapper) DMAPIOfflineWorkerNode(c *gin.Context) {
 
 // GetDocJSON operation middleware
 func (siw *ServerInterfaceWrapper) GetDocJSON(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -246,6 +253,7 @@ func (siw *ServerInterfaceWrapper) GetDocJSON(c *gin.Context) {
 
 // GetDocHTML operation middleware
 func (siw *ServerInterfaceWrapper) GetDocHTML(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -255,6 +263,7 @@ func (siw *ServerInterfaceWrapper) GetDocHTML(c *gin.Context) {
 
 // DMAPIGetSourceList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
+
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -262,6 +271,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -272,6 +282,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 
 	// ------------- Optional query parameter "enable_relay" -------------
 	if paramValue := c.Query("enable_relay"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "enable_relay", c.Request.URL.Query(), &params.EnableRelay)
@@ -289,6 +300,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceList(c *gin.Context) {
 
 // DMAPICreateSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPICreateSource(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -298,6 +310,7 @@ func (siw *ServerInterfaceWrapper) DMAPICreateSource(c *gin.Context) {
 
 // DMAPIDeleteSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -314,6 +327,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
 
 	// ------------- Optional query parameter "force" -------------
 	if paramValue := c.Query("force"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "force", c.Request.URL.Query(), &params.Force)
@@ -331,6 +345,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteSource(c *gin.Context) {
 
 // DMAPIGetSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -347,6 +362,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -364,6 +380,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSource(c *gin.Context) {
 
 // DMAPIUpdateSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -384,6 +401,7 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateSource(c *gin.Context) {
 
 // DMAPIDisableSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDisableSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -404,6 +422,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDisableSource(c *gin.Context) {
 
 // DMAPIEnableSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIEnableSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -424,6 +443,7 @@ func (siw *ServerInterfaceWrapper) DMAPIEnableSource(c *gin.Context) {
 
 // DMAPIDisableRelay operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDisableRelay(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -444,6 +464,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDisableRelay(c *gin.Context) {
 
 // DMAPIEnableRelay operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIEnableRelay(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -464,6 +485,7 @@ func (siw *ServerInterfaceWrapper) DMAPIEnableRelay(c *gin.Context) {
 
 // DMAPIPurgeRelay operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIPurgeRelay(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -484,6 +506,7 @@ func (siw *ServerInterfaceWrapper) DMAPIPurgeRelay(c *gin.Context) {
 
 // DMAPIGetSourceSchemaList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceSchemaList(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -504,6 +527,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceSchemaList(c *gin.Context) {
 
 // DMAPIGetSourceTableList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceTableList(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -533,6 +557,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceTableList(c *gin.Context) {
 
 // DMAPIGetSourceStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSourceStatus(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -553,6 +578,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSourceStatus(c *gin.Context) {
 
 // DMAPITransferSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPITransferSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "source-name" -------------
@@ -573,6 +599,7 @@ func (siw *ServerInterfaceWrapper) DMAPITransferSource(c *gin.Context) {
 
 // DMAPIGetTaskList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
+
 	var err error
 
 	// Parameter object where we will unmarshal all parameters from the context
@@ -580,6 +607,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -590,6 +618,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 	// ------------- Optional query parameter "stage" -------------
 	if paramValue := c.Query("stage"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "stage", c.Request.URL.Query(), &params.Stage)
@@ -600,6 +629,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 	// ------------- Optional query parameter "source_name_list" -------------
 	if paramValue := c.Query("source_name_list"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "source_name_list", c.Request.URL.Query(), &params.SourceNameList)
@@ -617,6 +647,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskList(c *gin.Context) {
 
 // DMAPICreateTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPICreateTask(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -626,6 +657,7 @@ func (siw *ServerInterfaceWrapper) DMAPICreateTask(c *gin.Context) {
 
 // DMAPIConvertTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIConvertTask(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -635,6 +667,7 @@ func (siw *ServerInterfaceWrapper) DMAPIConvertTask(c *gin.Context) {
 
 // DMAPIGetTaskTemplateList operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplateList(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -644,6 +677,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplateList(c *gin.Context) {
 
 // DMAPICreateTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPICreateTaskTemplate(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -653,6 +687,7 @@ func (siw *ServerInterfaceWrapper) DMAPICreateTaskTemplate(c *gin.Context) {
 
 // DMAPIImportTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIImportTaskTemplate(c *gin.Context) {
+
 	for _, middleware := range siw.HandlerMiddlewares {
 		middleware(c)
 	}
@@ -662,6 +697,7 @@ func (siw *ServerInterfaceWrapper) DMAPIImportTaskTemplate(c *gin.Context) {
 
 // DMAPIDeleteTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteTaskTemplate(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -682,6 +718,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTaskTemplate(c *gin.Context) {
 
 // DMAPIGetTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplate(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -702,6 +739,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskTemplate(c *gin.Context) {
 
 // DMAPUpdateTaskTemplate operation middleware
 func (siw *ServerInterfaceWrapper) DMAPUpdateTaskTemplate(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -722,6 +760,7 @@ func (siw *ServerInterfaceWrapper) DMAPUpdateTaskTemplate(c *gin.Context) {
 
 // DMAPIDeleteTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -738,6 +777,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
 
 	// ------------- Optional query parameter "force" -------------
 	if paramValue := c.Query("force"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "force", c.Request.URL.Query(), &params.Force)
@@ -755,6 +795,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTask(c *gin.Context) {
 
 // DMAPIGetTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -771,6 +812,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
 
 	// ------------- Optional query parameter "with_status" -------------
 	if paramValue := c.Query("with_status"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "with_status", c.Request.URL.Query(), &params.WithStatus)
@@ -788,6 +830,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTask(c *gin.Context) {
 
 // DMAPIUpdateTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIUpdateTask(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -808,6 +851,7 @@ func (siw *ServerInterfaceWrapper) DMAPIUpdateTask(c *gin.Context) {
 
 // DMAPIGetTaskMigrateTargets operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -833,6 +877,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
 
 	// ------------- Optional query parameter "schema_pattern" -------------
 	if paramValue := c.Query("schema_pattern"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "schema_pattern", c.Request.URL.Query(), &params.SchemaPattern)
@@ -843,6 +888,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
 
 	// ------------- Optional query parameter "table_pattern" -------------
 	if paramValue := c.Query("table_pattern"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "table_pattern", c.Request.URL.Query(), &params.TablePattern)
@@ -860,6 +906,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskMigrateTargets(c *gin.Context) {
 
 // DMAPIGetSchemaListByTaskAndSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetSchemaListByTaskAndSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -889,6 +936,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetSchemaListByTaskAndSource(c *gin.Cont
 
 // DMAPIGetTableListByTaskAndSource operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTableListByTaskAndSource(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -927,6 +975,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTableListByTaskAndSource(c *gin.Conte
 
 // DMAPIDeleteTableStructure operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIDeleteTableStructure(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -974,6 +1023,7 @@ func (siw *ServerInterfaceWrapper) DMAPIDeleteTableStructure(c *gin.Context) {
 
 // DMAPIGetTableStructure operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTableStructure(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1021,6 +1071,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTableStructure(c *gin.Context) {
 
 // DMAPIOperateTableStructure operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIOperateTableStructure(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1068,6 +1119,7 @@ func (siw *ServerInterfaceWrapper) DMAPIOperateTableStructure(c *gin.Context) {
 
 // DMAPIStartTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1088,6 +1140,7 @@ func (siw *ServerInterfaceWrapper) DMAPIStartTask(c *gin.Context) {
 
 // DMAPIGetTaskStatus operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1104,6 +1157,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 
 	// ------------- Optional query parameter "source_name_list" -------------
 	if paramValue := c.Query("source_name_list"); paramValue != "" {
+
 	}
 
 	err = runtime.BindQueryParameter("form", true, false, "source_name_list", c.Request.URL.Query(), &params.SourceNameList)
@@ -1121,6 +1175,7 @@ func (siw *ServerInterfaceWrapper) DMAPIGetTaskStatus(c *gin.Context) {
 
 // DMAPIStopTask operation middleware
 func (siw *ServerInterfaceWrapper) DMAPIStopTask(c *gin.Context) {
+
 	var err error
 
 	// ------------- Path parameter "task-name" -------------
@@ -1248,6 +1303,7 @@ func RegisterHandlersWithOptions(router *gin.Engine, si ServerInterface, options
 
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
+
 	"H4sIAAAAAAAC/+x9bXPbOJLwX8Gj5z7sTEmWZDtO4qv9kMSerO+cl4o9tbe1lWMgEpSwJgEGAO3Rpvzf",
 	"r/BCEiQBkrItx5pkP+w4Igh0N/odjea3UUjTjBJEBB8dfxvxcIVSqP58lSAm3kECl4hd0owmdLmWv2eM",
 	"ZogJjNSoFeVC/hf9AdMsQaPj0Xz/+d5sb7Y3H41HYp3Jn7hgmCxHt+NRRll9+MvZy4NyHCYCLREb3d6O",
@@ -1312,51 +1368,51 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
@@ -1391,7 +1447,7 @@ func decodeSpecCached() func() ([]byte, error) {
 
 // Constructs a synthetic filesystem for resolving external references when loading openapi specifications.
 func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
-	res := make(map[string]func() ([]byte, error))
+	var res = make(map[string]func() ([]byte, error))
 	if len(pathToFile) > 0 {
 		res[pathToFile] = rawSpec
 	}
@@ -1405,12 +1461,12 @@ func PathToRawSpec(pathToFile string) map[string]func() ([]byte, error) {
 // Externally referenced files must be embedded in the corresponding golang packages.
 // Urls can be supported but this task was out of the scope.
 func GetSwagger() (swagger *openapi3.T, err error) {
-	resolvePath := PathToRawSpec("")
+	var resolvePath = PathToRawSpec("")
 
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = true
 	loader.ReadFromURIFunc = func(loader *openapi3.Loader, url *url.URL) ([]byte, error) {
-		pathToFile := url.String()
+		var pathToFile = url.String()
 		pathToFile = path.Clean(pathToFile)
 		getSpec, ok := resolvePath[pathToFile]
 		if !ok {

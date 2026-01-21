@@ -1715,6 +1715,7 @@ components:
           enum:
             - "logical"
             - "physical"
+            - "import-into"
         sorting_dir:
           type: string
           example: "./sort_dir"
