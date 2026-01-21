@@ -26,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
+	"github.com/pingcap/tidb/pkg/objstore/recording"
 	"github.com/pingcap/tidb/pkg/objstore/s3like"
 	"github.com/pingcap/tidb/pkg/objstore/s3store"
 	"github.com/pingcap/tidb/pkg/objstore/s3store/mock"
@@ -196,6 +197,7 @@ func createS3Suite(c gomock.TestReporter) (s *s3Suite, clean func()) {
 			Sse:          "sse",
 			StorageClass: "sc",
 		},
+		&recording.AccessStats{},
 	)
 
 	clean = func() {
@@ -207,6 +209,7 @@ func createS3Suite(c gomock.TestReporter) (s *s3Suite, clean func()) {
 
 func TestCollectDirFilesAndRemove(t *testing.T) {
 	fileNames := []string{"schema.sql", "table.sql"}
+	ctx := context.Background()
 
 	// test local
 	localDir := t.TempDir()
@@ -216,7 +219,7 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 		err = f.Close()
 		require.NoError(t, err)
 	}
-	localRes, err := CollectDirFiles(context.Background(), localDir, nil)
+	localRes, err := CollectDirFiles(ctx, localDir, nil)
 	require.NoError(t, err)
 	for _, fileName := range fileNames {
 		_, ok := localRes[fileName]
@@ -235,7 +238,7 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 		err1 = f.Close()
 		require.NoError(t, err1)
 	}
-	localRes, err = CollectDirFiles(context.Background(), "./"+path.Base(tempDir), nil)
+	localRes, err = CollectDirFiles(ctx, "./"+path.Base(tempDir), nil)
 	require.NoError(t, err)
 	for _, fileName := range fileNames {
 		_, ok := localRes[fileName]
@@ -245,7 +248,6 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	// test s3
 	s, clean := createS3Suite(t)
 	defer clean()
-	ctx := context.Background()
 
 	objects := make([]types.Object, 0, len(fileNames))
 	for _, fileName := range fileNames {
@@ -270,7 +272,7 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 			}, nil
 		})
 
-	localRes, err = CollectDirFiles(context.Background(), "", s.storage)
+	localRes, err = CollectDirFiles(ctx, "", s.storage)
 	require.NoError(t, err)
 	for _, fileName := range fileNames {
 		_, ok := localRes[fileName]
