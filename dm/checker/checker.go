@@ -372,6 +372,12 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			if _, ok := c.checkingItems[config.BinlogDBChecking]; ok {
 				c.checkList = append(c.checkList, checker.NewBinlogDBChecker(instance.sourceDB, instance.sourceDBinfo, info.sourceID2InterestedDB[i], instance.cfg.CaseSensitive))
 			}
+
+			if strings.Contains(instance.sourceDB.Version, "MariaDB") {
+				if _, ok := c.checkingItems[config.BinlogLegacyEventPosChecking]; ok {
+					c.checkList = append(c.checkList, checker.NewMariaDBBinlogLegacyEventPosChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+				}
+			}
 		}
 	}
 
