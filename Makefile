@@ -602,14 +602,12 @@ define run_engine_unit_test
 	$(FAILPOINT_DISABLE)
 endef
 
-engine_unit_test_in_verify_ci: check_failpoint_ctl tools/bin/gotestsum tools/bin/gocov tools/bin/gocov-xml
+engine_unit_test_in_verify_ci: check_failpoint_ctl
 	mkdir -p $(ENGINE_TEST_DIR)
 	$(FAILPOINT_ENABLE)
 	@export log_level=error; \
-	CGO_ENABLED=1 tools/bin/gotestsum --junitfile engine-junit-report.xml -- -v -timeout 5m -p $(P) --race \
-	-covermode=atomic -coverprofile="$(ENGINE_TEST_DIR)/cov.unit_test.out" $(ENGINE_PACKAGES) \
+	$(GOTEST) -v -timeout 5m $(ENGINE_PACKAGES) \
 	|| { $(FAILPOINT_DISABLE); exit 1; }
-	tools/bin/gocov convert "$(ENGINE_TEST_DIR)/cov.unit_test.out" | tools/bin/gocov-xml > engine-coverage.xml
 	$(FAILPOINT_DISABLE)
 
 prepare_test_binaries:
