@@ -1201,10 +1201,16 @@ func (s *Server) getStatusFromWorkers(
 					workerStatus = &pb.QueryStatusResponse{
 						Result:       false,
 						Msg:          err.Error(),
-						SourceStatus: &pb.SourceStatus{},
+						SourceStatus: &pb.SourceStatus{Worker: w.BaseInfo().Name},
 					}
 				} else {
 					workerStatus = resp.QueryStatus
+					if workerStatus.SourceStatus == nil {
+						workerStatus.SourceStatus = &pb.SourceStatus{}
+					}
+					if workerStatus.SourceStatus.Worker == "" {
+						workerStatus.SourceStatus.Worker = w.BaseInfo().Name
+					}
 				}
 				workerStatus.SourceStatus.Source = sourceID
 				setWorkerResp(workerStatus)
