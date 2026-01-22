@@ -90,6 +90,11 @@ func NewDDLSink(
 		return nil, err
 	}
 
+	failpoint.Inject("MySQLSinkForceSingleConnection", func() {
+		db.SetMaxIdleConns(1)
+		db.SetMaxOpenConns(1)
+	})
+
 	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, db)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
@@ -224,8 +229,22 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	ddlTimestamp, useSessionTimestamp := ddlSessionTimestampFromOriginDefault(ddl, m.cfg.Timezone)
+	skipSetTimestamp := false
+	failpoint.Inject("MySQLSinkSkipSetSessionTimestamp", func(val failpoint.Value) {
+		skipSetTimestamp = matchFailpointValue(val, ddl.Query)
+	})
+	skipResetAfterDDL := false
+	failpoint.Inject("MySQLSinkSkipResetSessionTimestampAfterDDL", func(val failpoint.Value) {
+		skipResetAfterDDL = matchFailpointValue(val, ddl.Query)
+	})
 
-	if useSessionTimestamp {
+	if useSessionTimestamp && skipSetTimestamp {
+		log.Warn("Skip setting session timestamp due to failpoint",
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID),
+			zap.String("query", ddl.Query))
+	}
+	if useSessionTimestamp && !skipSetTimestamp {
 		// set the session timestamp to match upstream DDL execution time
 		if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
 			log.Error("Fail to set session timestamp for DDL",
@@ -244,7 +263,12 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
 		log.Error("Failed to ExecContext", zap.Any("err", err), zap.Any("query", ddl.Query))
 		if useSessionTimestamp {
-			if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
+			if skipResetAfterDDL {
+				log.Warn("Skip resetting session timestamp after DDL execution failure due to failpoint",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.String("query", ddl.Query))
+			} else if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
 				log.Warn("Failed to reset session timestamp after DDL execution failure",
 					zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID),
@@ -263,7 +287,12 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 
 	if useSessionTimestamp {
 		// reset session timestamp after DDL execution to avoid affecting subsequent operations
-		if err := resetSessionTimestamp(ctx, tx); err != nil {
+		if skipResetAfterDDL {
+			log.Warn("Skip resetting session timestamp after DDL execution due to failpoint",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.String("query", ddl.Query))
+		} else if err := resetSessionTimestamp(ctx, tx); err != nil {
 			log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
 			if rbErr := tx.Rollback(); rbErr != nil {
 				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(rbErr))
