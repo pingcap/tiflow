@@ -25,10 +25,10 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
@@ -90,7 +90,7 @@ type batchDecoder struct {
 
 	config *common.Config
 
-	storage storage.ExternalStorage
+	storage storeapi.Storage
 
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
@@ -106,7 +106,7 @@ func NewBatchDecoder(
 	ctx context.Context, codecConfig *common.Config, db *sql.DB,
 ) (codec.RowEventDecoder, error) {
 	var (
-		externalStorage storage.ExternalStorage
+		externalStorage storeapi.Storage
 		err             error
 	)
 	if codecConfig.LargeMessageHandle.EnableClaimCheck() {
