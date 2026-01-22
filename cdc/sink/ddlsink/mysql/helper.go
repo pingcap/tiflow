@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
@@ -35,6 +36,9 @@ func setSessionTimestamp(ctx context.Context, tx *sql.Tx, unixTimestamp float64)
 	return err
 }
 
+// resetSessionTimestamp clears session @@timestamp to prevent stale values from
+// leaking across DDLs using the same session; it's a cheap safety net before
+// and after DDL execution.
 func resetSessionTimestamp(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, "SET TIMESTAMP = DEFAULT")
 	return err
@@ -181,4 +185,21 @@ func parseTimestampInLocation(val string, loc *time.Location) (float64, error) {
 		}
 	}
 	return 0, fmt.Errorf("failed to parse timestamp: %s", val)
+}
+
+func matchFailpointValue(val failpoint.Value, ddlQuery string) bool {
+	if val == nil {
+		return true
+	}
+	switch v := val.(type) {
+	case bool:
+		return v
+	case string:
+		if v == "" {
+			return true
+		}
+		return strings.Contains(strings.ToLower(ddlQuery), strings.ToLower(v))
+	default:
+		return true
+	}
 }

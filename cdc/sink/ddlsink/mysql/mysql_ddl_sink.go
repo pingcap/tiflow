@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/coreos/go-semver/semver"
@@ -320,23 +319,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	log.Info("Exec DDL succeeded", logFields...)
 
 	return nil
-}
-
-func matchFailpointValue(val failpoint.Value, ddlQuery string) bool {
-	if val == nil {
-		return true
-	}
-	switch v := val.(type) {
-	case bool:
-		return v
-	case string:
-		if v == "" {
-			return true
-		}
-		return strings.Contains(strings.ToLower(ddlQuery), strings.ToLower(v))
-	default:
-		return true
-	}
 }
 
 func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime string) error {
