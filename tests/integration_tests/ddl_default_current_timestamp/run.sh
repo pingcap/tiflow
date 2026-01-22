@@ -20,7 +20,6 @@ function run() {
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql/MySQLSinkForceSingleConnection=return(true);github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql/MySQLSinkSkipResetSessionTimestampAfterDDL=return("c2");github.com/pingcap/tiflow/cdc/sink/ddlsink/mysql/MySQLSinkSkipSetSessionTimestamp=return("d2")'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
-	export GO_FAILPOINTS=''
 
 	run_sql "DROP DATABASE IF EXISTS ${DB_NAME};" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE DATABASE ${DB_NAME};" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -71,6 +70,7 @@ function run() {
 		exit 1
 	fi
 
+	export GO_FAILPOINTS=''
 	cleanup_process $CDC_BINARY
 }
 
