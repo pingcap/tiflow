@@ -41,6 +41,8 @@ func TestChangefeedResumeCli(t *testing.T) {
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
+		Config:         &v2.ReplicaConfig{},
+		CheckpointTs:   2,
 		CheckpointTime: model.JSONTime{},
 		Error:          nil,
 	}, nil)
@@ -113,9 +115,11 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
+		Config:         &v2.ReplicaConfig{},
+		CheckpointTs:   2,
 		CheckpointTime: model.JSONTime{},
 		Error:          nil,
-	}, nil)
+	}, nil).Times(2)
 	tso := &v2.Tso{
 		Timestamp: time.Now().Unix() * 1000,
 	}
@@ -135,6 +139,8 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
+		Config:         &v2.ReplicaConfig{},
+		CheckpointTs:   2,
 		CheckpointTime: model.JSONTime{},
 		Error:          nil,
 	}, nil)
@@ -149,6 +155,8 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
+		Config:         &v2.ReplicaConfig{},
+		CheckpointTs:   2,
 		CheckpointTime: model.JSONTime{},
 		Error:          nil,
 	}, nil)
@@ -161,9 +169,11 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		UpstreamID:     1,
 		Namespace:      "default",
 		ID:             "abc",
+		Config:         &v2.ReplicaConfig{},
+		CheckpointTs:   2,
 		CheckpointTime: model.JSONTime{},
 		Error:          nil,
-	}, nil)
+	}, nil).Times(2)
 	tso = &v2.Tso{
 		Timestamp: 1,
 	}

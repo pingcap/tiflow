@@ -119,6 +119,7 @@ func TestChangefeedUpdateCli(t *testing.T) {
 			Config: &v2.ReplicaConfig{
 				Sink: &v2.SinkConfig{},
 			},
+			CheckpointTs: 2,
 		}, nil)
 	f.changefeeds.EXPECT().GetAllTables(gomock.Any(), gomock.Any()).
 		Return(&v2.Tables{}, nil)
