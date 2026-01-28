@@ -120,6 +120,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		Timestamp: time.Now().Unix() * 1000,
 	}
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
+	f.changefeeds.EXPECT().GetAllTables(gomock.Any(), gomock.Any()).Return(&v2.Tables{}, nil)
 	f.changefeeds.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: oracle.ComposeTS(tso.Timestamp, tso.LogicTime),
 	}, gomock.Any(), "abc").Return(nil)
@@ -167,6 +168,7 @@ func TestChangefeedResumeWithNewCheckpointTs(t *testing.T) {
 		Timestamp: 1,
 	}
 	f.tso.EXPECT().Query(gomock.Any(), gomock.Any()).Return(tso, nil).AnyTimes()
+	f.changefeeds.EXPECT().GetAllTables(gomock.Any(), gomock.Any()).Return(&v2.Tables{}, nil)
 	f.changefeeds.EXPECT().Resume(gomock.Any(), &v2.ResumeChangefeedConfig{
 		OverwriteCheckpointTs: 262144,
 	}, gomock.Any(), "abc").
