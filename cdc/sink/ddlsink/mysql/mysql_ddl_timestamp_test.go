@@ -122,3 +122,16 @@ func TestExecDDL_DoesNotSetTimestampWhenNoCurrentTimestampDefault(t *testing.T) 
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestDDLSessionTimestampFromOriginDefaultWithNilTableInfo(t *testing.T) {
+	ddlEvent := &model.DDLEvent{
+		Query:     "create table t (id int primary key auto_increment, t datetime default current_timestamp)",
+		TableInfo: &model.TableInfo{},
+	}
+
+	require.NotPanics(t, func() {
+		ts, ok := ddlSessionTimestampFromOriginDefault(ddlEvent, "UTC")
+		require.False(t, ok)
+		require.Equal(t, float64(0), ts)
+	})
+}

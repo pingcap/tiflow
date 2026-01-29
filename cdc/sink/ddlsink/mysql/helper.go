@@ -49,7 +49,7 @@ func formatUnixTimestamp(unixTimestamp float64) string {
 }
 
 func ddlSessionTimestampFromOriginDefault(ddl *model.DDLEvent, timezone string) (float64, bool) {
-	if ddl == nil || ddl.TableInfo == nil {
+	if ddl == nil || ddl.TableInfo == nil || ddl.TableInfo.TableInfo == nil {
 		return 0, false
 	}
 	targetColumns, err := extractCurrentTimestampDefaultColumns(ddl.Query)
@@ -58,6 +58,9 @@ func ddlSessionTimestampFromOriginDefault(ddl *model.DDLEvent, timezone string) 
 	}
 
 	for _, col := range ddl.TableInfo.Columns {
+		if col == nil {
+			continue
+		}
 		if _, ok := targetColumns[col.Name.L]; !ok {
 			continue
 		}
