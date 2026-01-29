@@ -630,6 +630,7 @@ func (s *mysqlBackend) multiStmtExecute(
 	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
 ) error {
 	var multiStmtArgs []any
+	
 	for _, value := range dmls.values {
 		multiStmtArgs = append(multiStmtArgs, value...)
 	}
