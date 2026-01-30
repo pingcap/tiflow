@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
@@ -533,7 +532,7 @@ func GenFakeTableInfo(cols ...string) *model.TableInfo {
 		info.Columns = append(info.Columns,
 			&model.ColumnInfo{
 				FieldType: *tp,
-				Name:      pmodel.NewCIStr(name),
+				Name:      ast.NewCIStr(name),
 			},
 		)
 	}
