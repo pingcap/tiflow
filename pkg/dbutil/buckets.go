@@ -31,8 +31,10 @@ import (
 	"go.uber.org/zap"
 )
 
-type Bucket = tidbdbutil.Bucket
-type QueryExecutor = tidbdbutil.QueryExecutor
+type (
+	Bucket        = tidbdbutil.Bucket
+	QueryExecutor = tidbdbutil.QueryExecutor
+)
 
 // GetBucketsInfo selects from stats_buckets in TiDB.
 func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string, tableInfo *model.TableInfo) (map[string][]Bucket, error) {
@@ -179,7 +181,7 @@ ORDER BY is_index, hist_id, bucket_id`
 				log.Warn("GetBucketsInfo: No primary key buckets found, returning empty buckets",
 					zap.String("schema", schema),
 					zap.String("table", table),
-					zap.String("primary_key_column", index.Columns[0].Name.O))
+					zap.String("primaryKeyColumn", index.Columns[0].Name.O))
 				return buckets, nil
 			}
 			buckets[index.Name.O] = buckets[index.Columns[0].Name.O]

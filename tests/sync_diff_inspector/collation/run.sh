@@ -22,7 +22,7 @@ mysql -uroot -h 127.0.0.1 -P 4001 -e "create table collation_test.t (a varchar(1
 mysql -uroot -h 127.0.0.1 -P 4001 -e "insert into collation_test.t values ('a', 1), ('B', 2), ('c', 4), ('D', 33);"
 
 echo "check should return two different rows"
-sync_diff_inspector --config=./config1.toml > $OUT_DIR/expression_diff.output || true
+sync_diff_inspector --config=./config1.toml >$OUT_DIR/expression_diff.output || true
 check_contains "+2/-2" $OUT_DIR/summary.txt
 rm -rf $OUT_DIR/*
 
@@ -33,7 +33,7 @@ mysql -uroot -h 127.0.0.1 -P 4001 -e "create table collation_test.t2 (a varchar(
 mysql -uroot -h 127.0.0.1 -P 4001 -e "insert into collation_test.t2 values ('a', 1), ('B', 3), ('c', 4), ('æ', 4);"
 
 echo "check should return three different rows"
-sync_diff_inspector --config=./config2.toml > $OUT_DIR/expression_diff.output || true
+sync_diff_inspector --config=./config2.toml >$OUT_DIR/expression_diff.output || true
 check_contains "+3/-3" $OUT_DIR/summary.txt
 rm -rf $OUT_DIR/*
 
@@ -44,7 +44,7 @@ mysql -uroot -h 127.0.0.1 -P 4002 -e "create table collation_test.t3 (id int PRI
 mysql -uroot -h 127.0.0.1 -P 4002 -e "insert into collation_test.t3 values (1, 'a'), (2, 'b');"
 
 echo "check should pass"
-sync_diff_inspector --config=./config3.toml > $OUT_DIR/expression_diff.output
+sync_diff_inspector --config=./config3.toml >$OUT_DIR/expression_diff.output
 rm -rf $OUT_DIR/*
 
 echo "Test4: MySQL shards with collation"
@@ -56,6 +56,6 @@ mysql -uroot -h 127.0.0.1 -P 4000 -e "create table collation_test.shards (name v
 mysql -uroot -h 127.0.0.1 -P 4000 -e "insert into collation_test.shards values ('a'), ('e'), ('B'), ('C'), ('d');"
 
 echo "check should return one superfluous rows"
-sync_diff_inspector --config=./config_shard.toml > $OUT_DIR/expression_diff.output || true
+sync_diff_inspector --config=./config_shard.toml >$OUT_DIR/expression_diff.output || true
 check_contains "+0/-1" $OUT_DIR/summary.txt
 rm -rf $OUT_DIR/*
