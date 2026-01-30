@@ -790,10 +790,10 @@ func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 	s.doCreateTable(tbInfo, currentTs)
 	tag := negative(currentTs)
 	// when the table is a partition table, we have to record all partition ids
-	if old.IsPartitionTable() {
+	if old.GetPartitionInfo() != nil {
 		newPi := tbInfo.GetPartitionInfo()
 		oldPi := old.GetPartitionInfo()
-		newPartitionIDMap := make(map[int64]struct{}, len(newPi.NewPartitionIDs))
+		newPartitionIDMap := make(map[int64]struct{}, len(newPi.Definitions))
 		for _, partition := range newPi.Definitions {
 			newPartitionIDMap[partition.ID] = struct{}{}
 		}
