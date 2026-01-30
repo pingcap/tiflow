@@ -56,7 +56,7 @@ groups=(
 	# G11
 	'resolve_lock move_table autorandom generate_column'
 	# G12
-	'many_pk_or_uk capture_session_done_during_task ddl_attributes'
+	'many_pk_or_uk capture_session_done_during_task ddl_attributes partial_index'
 	# G13 pulsar mtls authentication enabled
 	'tiflash region_merge common_1'
 	# G14
