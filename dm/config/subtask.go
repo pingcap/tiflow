@@ -29,7 +29,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/google/uuid"
-	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
@@ -177,9 +177,9 @@ type SubTaskConfig struct {
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
 	// members below are injected by dataflow engine
-	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
-	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
-	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
+	ExtStorage      storeapi.Storage `toml:"-" json:"-"`
+	MetricsFactory  promutil.Factory `toml:"-" json:"-"`
+	FrameworkLogger *zap.Logger      `toml:"-" json:"-"`
 	// members below are injected by dataflow engine
 	// UUID should be unique in one go runtime.
 	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a

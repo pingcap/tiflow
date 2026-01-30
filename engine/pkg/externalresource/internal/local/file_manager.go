@@ -198,7 +198,7 @@ func (m *FileManager) RemoveResource(
 	// filePath is the path for the resource directory on the local
 	// file system. Note that the dataflow engine only manages file
 	// resources on the directory level, so that business logic using
-	// brStorage.ExternalStorage can be compatible.
+	// external storage can be compatible.
 	filePath := localPathWithEncoding(
 		m.config.BaseDir,
 		creator,
