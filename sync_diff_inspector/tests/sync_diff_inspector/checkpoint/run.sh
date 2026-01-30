@@ -50,7 +50,7 @@ echo $first_chunk_info | awk -F '=' '{print $3}' >$OUT_DIR/first_chunk_index
 cat $OUT_DIR/first_chunk_index
 # Notice: when chunk is created paralleling, the least chunk may not appear in the first line. so we sort it as before.
 check_contains "${last_chunk_bound}" $OUT_DIR/first_chunk_bound
-check_contains_regex ".:${bucket_index_right}-.:0:." $OUT_DIR/first_chunk_index
+check_contains_regex ".*:${bucket_index_right}-.*:0:.*" $OUT_DIR/first_chunk_index
 
 echo "--------2. chunk is in the middle of the bucket--------"
 rm -rf $OUT_DIR

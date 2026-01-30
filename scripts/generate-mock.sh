@@ -16,6 +16,23 @@ set -eu
 
 cd "$(dirname "${BASH_SOURCE[0]}")"/..
 
+ROOT_DIR="$(pwd)"
+TMP_GOWORK=""
+if [ -z "${GOWORK:-}" ]; then
+	GO_VERSION="$(awk '/^go / { print $2; exit }' "${ROOT_DIR}/go.mod" || true)"
+	if [ -z "${GO_VERSION}" ]; then
+		GO_VERSION="$(go env GOVERSION | sed 's/^go//')"
+	fi
+	TMP_GOWORK="$(mktemp)"
+	cat >"${TMP_GOWORK}" <<EOF
+go ${GO_VERSION}
+
+use ${ROOT_DIR}
+EOF
+	export GOWORK="${TMP_GOWORK}"
+	trap 'rm -f "${TMP_GOWORK}"' EXIT
+fi
+
 MOCKGEN="tools/bin/mockgen"
 
 if [ ! -f "$MOCKGEN" ]; then
