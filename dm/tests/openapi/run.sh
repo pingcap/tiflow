@@ -663,6 +663,52 @@ function test_noshard_task_dump_status() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
 }
 
+function test_task_status_source_error_fallback() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TASK STATUS SOURCE ERROR FALLBACK"
+	prepare_database
+
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus=return();github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout=return(200)'
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	task_name="test-source-status-error-fallback"
+
+	openapi_source_check "create_source1_success"
+	openapi_source_check "create_source2_success"
+
+	openapi_task_check "create_noshard_task_success" $task_name ""
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
+
+	openapi_task_check "get_task_status_success_with_source_error" "$task_name" 2 "database driver error" "context deadline exceeded"
+
+	export GO_FAILPOINTS=""
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	openapi_source_check "list_source_success" 2
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TASK STATUS SOURCE ERROR FALLBACK SUCCESS"
+}
+
 function test_task_with_ignore_check_items() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TEST TASK WITH IGNORE CHECK ITEMS"
 	prepare_database
@@ -1244,6 +1290,7 @@ function run() {
 	test_dump_and_load_task
 	test_task_templates
 	test_noshard_task_dump_status
+	test_task_status_source_error_fallback
 	test_complex_operations_of_source_and_task
 	test_task_with_ignore_check_items
 	test_delete_task_with_stopped_downstream
