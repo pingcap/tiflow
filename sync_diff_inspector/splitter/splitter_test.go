@@ -693,8 +693,7 @@ func TestBucketSpliter(t *testing.T) {
 	db, mock, err = sqlmock.New()
 	require.NoError(t, err)
 	createFakeResultForBucketSplit(mock, nil, nil)
-	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(64)")
-	createFakeResultForRandom(mock, testCases[0].aRandomValues[stopJ:], testCases[0].bRandomValues[stopJ:])
+	createFakeResultForRandom(mock, testCases[0].aRandomValues[stopJ-1:], testCases[0].bRandomValues[stopJ-1:])
 	iter, err = NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo, utils.NewWorkerPool(1, "bucketIter"))
 	require.NoError(t, err)
 	chunk, err = iter.Next()
@@ -703,6 +702,14 @@ func TestBucketSpliter(t *testing.T) {
 	for i, bound := range chunk.Bounds {
 		require.Equal(t, bounds1[i].Upper, bound.Lower)
 	}
+	for {
+		c, err := iter.Next()
+		require.NoError(t, err)
+		if c == nil {
+			break
+		}
+	}
+	iter.Close()
 
 	// Mock column a is ignored.
 	tableDiff.Info, _ = utils.ResetColumns(tableInfo, []string{"a"})
