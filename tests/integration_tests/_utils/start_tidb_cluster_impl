@@ -27,6 +27,34 @@ randomGenSocketsConf() {
 	echo "socket = \"/tmp/tidb-$random_str.sock\"" >>"$random_file_name"
 }
 
+# Wait for TiDB to become stably available on a given host/port.
+wait_tidb_ready() {
+	local host=$1
+	local port=$2
+	local label=$3
+	local max_retry=${4:-60}
+	local stable_required=${5:-3}
+	local exit_code=${6:-2}
+
+	local i=0
+	local stable=0
+	while [ $i -lt $max_retry ]; do
+		if mysql -uroot -h${host} -P${port} --connect-timeout=2 --default-character-set utf8mb4 -e 'select * from mysql.tidb;' >/dev/null 2>&1; then
+			stable=$((stable + 1))
+			if [ "$stable" -ge "$stable_required" ]; then
+				return 0
+			fi
+		else
+			stable=0
+		fi
+		i=$((i + 1))
+		sleep 2
+	done
+
+	echo "Failed to start ${label} TiDB"
+	exit ${exit_code}
+}
+
 while [[ ${1} ]]; do
 	case "${1}" in
 	--workdir)
@@ -271,36 +299,11 @@ tidb-server \
 	--log-file "$OUT_DIR/tidb_down.log" &
 
 echo "Verifying Upstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-	i=$((i + 1))
-	if [ "$i" -gt 60 ]; then
-		echo 'Failed to start upstream TiDB'
-		exit 2
-	fi
-	sleep 2
-done
-
-i=0
-while ! mysql -uroot -h${UP_TIDB_HOST} -P${UP_TIDB_OTHER_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-	i=$((i + 1))
-	if [ "$i" -gt 60 ]; then
-		echo 'Failed to start upstream TiDB'
-		exit 2
-	fi
-	sleep 2
-done
+wait_tidb_ready ${UP_TIDB_HOST} ${UP_TIDB_PORT} "upstream"
+wait_tidb_ready ${UP_TIDB_HOST} ${UP_TIDB_OTHER_PORT} "upstream"
 
 echo "Verifying Downstream TiDB is started..."
-i=0
-while ! mysql -uroot -h${DOWN_TIDB_HOST} -P${DOWN_TIDB_PORT} --default-character-set utf8mb4 -e 'select * from mysql.tidb;'; do
-	i=$((i + 1))
-	if [ "$i" -gt 60 ]; then
-		echo 'Failed to start downstream TiDB'
-		exit 1
-	fi
-	sleep 2
-done
+wait_tidb_ready ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} "downstream" 60 3 1
 
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "update mysql.tidb set variable_value='60m' where variable_name='tikv_gc_life_time';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
