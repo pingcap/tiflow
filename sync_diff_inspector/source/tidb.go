@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -44,28 +45,36 @@ type TiDBTableAnalyzer struct {
 // AnalyzeSplitter returns a new iterator for TiDB table
 func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.TableDiff, startRange *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	matchedSource := getMatchSource(a.sourceTableMap, table)
-	// Shallow Copy
 	originTable := *table
 	originTable.Schema = matchedSource.OriginSchema
 	originTable.Table = matchedSource.OriginTable
-	progressID := dbutil.TableName(table.Schema, table.Table)
-	// if we decide to use bucket to split chunks
-	// we always use bucksIter even we load from checkpoint is not bucketNode
-	// TODO check whether we can use bucket for this table to split chunks.
-	// NOTICE: If checkpoint use random splitter, it will also fail the next time build bucket splitter.
-	bucketIter, err := splitter.NewBucketIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange, a.bucketSpliterPool)
-	if err == nil {
-		return bucketIter, nil
-	}
-	log.Info("failed to build bucket iterator, fall back to use random iterator", zap.Error(err))
-	// fall back to random splitter
 
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
-	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
+	tp, candidate, err := splitter.ChooseSplitType(ctx, a.dbConn, &originTable, startRange)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return randIter, nil
+	log.Info("choose splitter",
+		zap.Any("type", tp),
+		zap.Any("candidates", candidate))
+
+	var iter splitter.ChunkIterator
+	progressID := dbutil.TableName(table.Schema, table.Table)
+	switch tp {
+	case chunk.Bucket:
+		iter, err = splitter.NewBucketIterator(
+			ctx, progressID, &originTable, a.dbConn,
+			startRange, a.bucketSpliterPool, candidate)
+	case chunk.Random:
+		iter, err = splitter.NewRandomIteratorWithCheckpoint(
+			ctx, progressID, &originTable, a.dbConn, startRange, candidate)
+	case chunk.Limit:
+		iter, err = splitter.NewLimitIteratorWithCheckpoint(
+			ctx, progressID, &originTable, a.dbConn, startRange, candidate)
+	default:
+		err = errors.Errorf("unsupported splitter type %v", tp)
+	}
+
+	return iter, errors.Trace(err)
 }
 
 // TiDBRowsIterator is used to iterate rows in TiDB

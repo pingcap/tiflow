@@ -901,7 +901,7 @@ func GetCountAndMD5Checksum(
 		dbutil.TableName(schemaName, tableName),
 		limitRange,
 	)
-	log.Debug("count and checksum", zap.String("sql", query), zap.Reflect("args", args))
+	log.Debug("get count and checksum", zap.String("sql", query), zap.Reflect("args", args))
 
 	var count sql.NullInt64
 	var checksum uint64

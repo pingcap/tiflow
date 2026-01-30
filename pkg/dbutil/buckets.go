@@ -39,8 +39,11 @@ type (
 // GetBucketsInfo selects from stats_buckets in TiDB.
 func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string, tableInfo *model.TableInfo) (map[string][]Bucket, error) {
 	buckets := make(map[string][]Bucket)
+	missingIndexHistIDs := make(map[int64]struct{})
+	missingColumnHistIDs := make(map[int64]struct{})
 
 	indices := tidbdbutil.FindAllIndex(tableInfo)
+
 	// Pre-build lightweight maps for indices: index ID -> index name / column types.
 	indexColumnTypesMap := make(map[int64][]byte, len(indices))
 	indexNameMap := make(map[int64]string, len(indices))
@@ -57,9 +60,7 @@ func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string,
 				}
 			}
 		}
-		if len(idxColumnTypes) > 0 {
-			indexColumnTypesMap[idx.ID] = idxColumnTypes
-		}
+		indexColumnTypesMap[idx.ID] = idxColumnTypes
 	}
 
 	// Pre-build lightweight maps for columns: column ID -> name / FieldType.
@@ -104,9 +105,12 @@ ORDER BY is_index, hist_id, bucket_id`
 			idxColumnTypes, ok := indexColumnTypesMap[histID.Int64]
 			indexName := indexNameMap[histID.Int64]
 			if !ok {
-				// If cannot determine key, skip this record.
-				log.Warn("skipping index bucket with unknown key",
-					zap.Int64("histID", histID.Int64))
+				if _, seen := missingIndexHistIDs[histID.Int64]; !seen {
+					// If cannot determine key, skip this record.
+					log.Warn("skipping index bucket with unknown key",
+						zap.Int64("histID", histID.Int64))
+					missingIndexHistIDs[histID.Int64] = struct{}{}
+				}
 				continue
 			}
 
@@ -133,9 +137,12 @@ ORDER BY is_index, hist_id, bucket_id`
 			columnName, ok := columnNameMap[histID.Int64]
 			columnTypes := columnTypeMap[histID.Int64]
 			if !ok {
-				// If cannot determine key, skip this record.
-				log.Warn("skipping column bucket with unknown key",
-					zap.Int64("histID", histID.Int64))
+				if _, seen := missingColumnHistIDs[histID.Int64]; !seen {
+					// If cannot determine key, skip this record.
+					log.Warn("skipping column bucket with unknown key",
+						zap.Int64("histID", histID.Int64))
+					missingColumnHistIDs[histID.Int64] = struct{}{}
+				}
 				continue
 			}
 
@@ -181,7 +188,8 @@ ORDER BY is_index, hist_id, bucket_id`
 				log.Warn("GetBucketsInfo: No primary key buckets found, returning empty buckets",
 					zap.String("schema", schema),
 					zap.String("table", table),
-					zap.String("primaryKeyColumn", index.Columns[0].Name.O))
+					zap.String("primaryKeyColumn", index.Columns[0].Name.O),
+				)
 				return buckets, nil
 			}
 			buckets[index.Name.O] = buckets[index.Columns[0].Name.O]

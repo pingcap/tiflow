@@ -14,17 +14,17 @@
 package splitter
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"go.uber.org/zap"
 )
 
-// indexFields wraps the column info for the user config "index-fields".
+// indexFields wraps the column info from the user config "index-fields".
 type indexFields struct {
 	cols      []*model.ColumnInfo
 	tableInfo *model.TableInfo
@@ -33,7 +33,6 @@ type indexFields struct {
 
 func indexFieldsFromConfigString(strFields string, tableInfo *model.TableInfo) (*indexFields, error) {
 	if len(strFields) == 0 {
-		// Empty option
 		return &indexFields{empty: true}, nil
 	}
 
@@ -43,34 +42,29 @@ func indexFieldsFromConfigString(strFields string, tableInfo *model.TableInfo) (
 	}
 
 	splitFieldArr := strings.Split(strFields, ",")
+	splitCols := make([]*model.ColumnInfo, 0, len(splitFieldArr))
 	for i := range splitFieldArr {
 		splitFieldArr[i] = strings.TrimSpace(splitFieldArr[i])
+		col := dbutil.FindColumnByName(tableInfo.Columns, splitFieldArr[i])
+		if col == nil {
+			return nil, errors.NotFoundf(
+				"column %s in table %s", splitFieldArr[i], tableInfo.Name)
+		}
+		splitCols = append(splitCols, col)
 	}
-
-	fields, err := GetSplitFields(tableInfo, splitFieldArr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	// Sort the columns to help with comparison.
-	sortColsInPlace(fields)
 
 	return &indexFields{
-		cols:      fields,
+		cols:      splitCols,
 		tableInfo: tableInfo,
 	}, nil
 }
 
 func (f *indexFields) MatchesIndex(index *model.IndexInfo) bool {
 	if f.empty {
-		// Default config matches all.
 		return true
 	}
 
 	// Sanity checks.
-	if index == nil {
-		log.Panic("matching with empty index")
-	}
 	if len(f.cols) == 0 {
 		log.Panic("unexpected cols with length 0")
 	}
@@ -82,10 +76,7 @@ func (f *indexFields) MatchesIndex(index *model.IndexInfo) bool {
 	}
 
 	indexCols := utils.GetColumnsFromIndex(index, f.tableInfo)
-	// Sort for comparison
-	sortColsInPlace(indexCols)
-
-	for i := 0; i < len(indexCols); i++ {
+	for i := range indexCols {
 		if f.cols[i].ID != indexCols[i].ID {
 			return false
 		}
@@ -102,10 +93,4 @@ func (f *indexFields) Cols() []*model.ColumnInfo {
 // user-configured "index-fields" option.
 func (f *indexFields) IsEmpty() bool {
 	return f.empty
-}
-
-func sortColsInPlace(cols []*model.ColumnInfo) {
-	sort.SliceStable(cols, func(i, j int) bool {
-		return cols[i].ID < cols[j].ID
-	})
 }
