@@ -54,12 +54,14 @@ type SourceDumpPrivilegeChecker struct {
 	checkTables       []filter.Table
 	consistency       string
 	dumpWholeInstance bool
+	version           string
 }
 
 // NewSourceDumpPrivilegeChecker returns a RealChecker.
 func NewSourceDumpPrivilegeChecker(
 	db *sql.DB,
 	dbinfo *dbutil.DBConfig,
+	version string,
 	checkTables []filter.Table,
 	consistency string,
 	dumpWholeInstance bool,
@@ -70,6 +72,7 @@ func NewSourceDumpPrivilegeChecker(
 		checkTables:       checkTables,
 		consistency:       consistency,
 		dumpWholeInstance: dumpWholeInstance,
+		version:           version,
 	}
 }
 
@@ -107,7 +110,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		dumpRequiredPrivs[mysql.LockTablesPriv] = priv{needGlobal: true}
 	}
 
-	err2 := verifyPrivilegesWithResult(result, grants, dumpRequiredPrivs)
+	err2 := verifyPrivilegesWithResult(result, grants, dumpRequiredPrivs, pc.version)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.Instruction = "Please grant the required privileges to the account."
@@ -126,13 +129,14 @@ func (pc *SourceDumpPrivilegeChecker) Name() string {
 
 // SourceReplicatePrivilegeChecker checks replication privileges of source DB.
 type SourceReplicatePrivilegeChecker struct {
-	db     *sql.DB
-	dbinfo *dbutil.DBConfig
+	db      *sql.DB
+	dbinfo  *dbutil.DBConfig
+	version string
 }
 
 // NewSourceReplicationPrivilegeChecker returns a RealChecker.
-func NewSourceReplicationPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
-	return &SourceReplicatePrivilegeChecker{db: db, dbinfo: dbinfo}
+func NewSourceReplicationPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, version string) RealChecker {
+	return &SourceReplicatePrivilegeChecker{db: db, dbinfo: dbinfo, version: version}
 }
 
 // Check implements the RealChecker interface.
@@ -154,7 +158,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.ReplicationSlavePriv:  {needGlobal: true},
 		mysql.ReplicationClientPriv: {needGlobal: true},
 	}
-	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs)
+	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs, pc.version)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		result.State = StateFailure
@@ -169,12 +173,13 @@ func (pc *SourceReplicatePrivilegeChecker) Name() string {
 }
 
 type TargetPrivilegeChecker struct {
-	db     *sql.DB
-	dbinfo *dbutil.DBConfig
+	db      *sql.DB
+	dbinfo  *dbutil.DBConfig
+	version string
 }
 
-func NewTargetPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
-	return &TargetPrivilegeChecker{db: db, dbinfo: dbinfo}
+func NewTargetPrivilegeChecker(db *sql.DB, dbinfo *dbutil.DBConfig, version string) RealChecker {
+	return &TargetPrivilegeChecker{db: db, dbinfo: dbinfo, version: version}
 }
 
 func (t *TargetPrivilegeChecker) Name() string {
@@ -203,7 +208,7 @@ func (t *TargetPrivilegeChecker) Check(ctx context.Context) *Result {
 		mysql.DropPriv:   {needGlobal: true},
 		mysql.IndexPriv:  {needGlobal: true},
 	}
-	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs)
+	err2 := verifyPrivilegesWithResult(result, grants, replRequiredPrivs, t.version)
 	if err2 != nil {
 		result.Errors = append(result.Errors, err2)
 		// because we cannot be very precisely sure about which table
@@ -217,8 +222,9 @@ func verifyPrivilegesWithResult(
 	result *Result,
 	grants []string,
 	requiredPriv map[mysql.PrivilegeType]priv,
+	version string,
 ) *Error {
-	lackedPriv, err := VerifyPrivileges(grants, requiredPriv)
+	lackedPriv, err := VerifyPrivileges(grants, requiredPriv, version)
 	if err != nil {
 		// nolint
 		return NewError("%s", err.Error())
@@ -284,12 +290,19 @@ func LackedPrivilegesAsStr(lackPriv map[mysql.PrivilegeType]priv) string {
 func VerifyPrivileges(
 	grants []string,
 	lackPrivs map[mysql.PrivilegeType]priv,
+	version string,
 ) (map[mysql.PrivilegeType]priv, error) {
 	if len(grants) == 0 {
 		return nil, errors.New("there is no such grant defined for current user on host '%%'")
 	}
 
 	p := parser.New()
+
+	// Support for BINLOG MONITOR and other MariaDB things
+	if strings.Contains(version, "MariaDB") {
+		p.SetMariaDB(true)
+	}
+
 	for _, grant := range grants {
 		if len(lackPrivs) == 0 {
 			break

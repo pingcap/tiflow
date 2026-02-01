@@ -304,6 +304,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		c.checkList = append(c.checkList, checker.NewTargetPrivilegeChecker(
 			c.instances[0].targetDB.DB,
 			c.instances[0].targetDBInfo,
+			c.instances[0].targetDB.Version,
 		))
 	}
 	// sourceID -> DB
@@ -334,6 +335,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
 					instance.sourceDB.DB,
 					instance.sourceDBinfo,
+					instance.sourceDB.Version,
 					info.sourceID2SourceTables[sourceID],
 					exportCfg.Consistency,
 					c.dumpWholeInstance,
@@ -364,7 +366,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, instance.sourceDB.Version))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, info.sourceID2InterestedDB[i], c.onlineDDL, instance.baList))
