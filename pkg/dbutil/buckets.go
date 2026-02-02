@@ -16,10 +16,17 @@ package dbutil
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/statistics"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/codec"
 	tidbdbutil "github.com/pingcap/tidb/pkg/util/dbutil"
 	"go.uber.org/zap"
 )
@@ -32,13 +39,33 @@ func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string,
 	buckets := make(map[string][]Bucket)
 
 	indices := tidbdbutil.FindAllIndex(tableInfo)
-	indexMap := make(map[int64]string, len(indices))
+	// Pre-build lightweight maps for indices: index ID -> index name / column types.
+	indexColumnTypesMap := make(map[int64][]byte, len(indices))
+	indexNameMap := make(map[int64]string, len(indices))
 	for _, idx := range indices {
-		indexMap[idx.ID] = idx.Name.O
+		indexNameMap[idx.ID] = idx.Name.O
+
+		// Build column types array for this index.
+		idxColumnTypes := make([]byte, 0, len(idx.Columns))
+		for _, idxCol := range idx.Columns {
+			for _, col := range tableInfo.Columns {
+				if col.Name.L == idxCol.Name.L {
+					idxColumnTypes = append(idxColumnTypes, col.GetType())
+					break
+				}
+			}
+		}
+		if len(idxColumnTypes) > 0 {
+			indexColumnTypesMap[idx.ID] = idxColumnTypes
+		}
 	}
-	columnMap := make(map[int64]string, len(tableInfo.Columns))
+
+	// Pre-build lightweight maps for columns: column ID -> name / FieldType.
+	columnTypeMap := make(map[int64]*types.FieldType, len(tableInfo.Columns))
+	columnNameMap := make(map[int64]string, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
-		columnMap[col.ID] = col.Name.O
+		columnNameMap[col.ID] = col.Name.O
+		columnTypeMap[col.ID] = &col.FieldType
 	}
 
 	query := `SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound
@@ -60,22 +87,75 @@ ORDER BY is_index, hist_id, bucket_id`
 
 	for rows.Next() {
 		var isIndex, histID, bucketID, count sql.NullInt64
-		var lowerBound, upperBound sql.NullString
-		if err := rows.Scan(&isIndex, &histID, &bucketID, &count, &lowerBound, &upperBound); err != nil {
+		var lowerBoundBytes, upperBoundBytes []byte
+
+		if err := rows.Scan(&isIndex, &histID, &bucketID, &count, &lowerBoundBytes, &upperBoundBytes); err != nil {
 			return nil, errors.Trace(err)
+		}
+
+		var key string
+		var lowerBoundStr, upperBoundStr string
+		var decodeErr error
+
+		if isIndex.Int64 == 1 {
+			// Index bucket (is_index = 1).
+			idxColumnTypes := indexColumnTypesMap[histID.Int64]
+			indexName := indexNameMap[histID.Int64]
+
+			key = indexName
+
+			// Decode index bound using pre-computed column types.
+			lowerBoundStr, decodeErr = decodeIndexBound(lowerBoundBytes, idxColumnTypes)
+			if decodeErr != nil {
+				log.Warn("Failed to decode lower_bound for index",
+					zap.Error(decodeErr),
+					zap.Int64("histID", histID.Int64))
+				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
+			}
+
+			upperBoundStr, decodeErr = decodeIndexBound(upperBoundBytes, idxColumnTypes)
+			if decodeErr != nil {
+				log.Warn("Failed to decode upper_bound for index",
+					zap.Error(decodeErr),
+					zap.Int64("histID", histID.Int64))
+				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
+			}
+		} else {
+			// Column bucket (is_index = 0).
+			columnName := columnNameMap[histID.Int64]
+			columnTypes := columnTypeMap[histID.Int64]
+
+			key = columnName
+
+			lowerBoundStr, decodeErr = decodeColumnBound(lowerBoundBytes, columnTypes)
+			if decodeErr != nil {
+				log.Warn("Failed to decode lower_bound for column",
+					zap.Error(decodeErr),
+					zap.Int64("histID", histID.Int64))
+				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
+			}
+
+			upperBoundStr, decodeErr = decodeColumnBound(upperBoundBytes, columnTypes)
+			if decodeErr != nil {
+				log.Warn("Failed to decode upper_bound for column",
+					zap.Error(decodeErr),
+					zap.Int64("histID", histID.Int64))
+				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
+			}
+		}
+
+		if key == "" {
+			// If cannot determine key, skip this record.
+			log.Warn("Skipping bucket with unknown key",
+				zap.Int64("histID", histID.Int64),
+				zap.Bool("isIndex", isIndex.Int64 == 1))
+			continue
 		}
 
 		b := Bucket{
 			Count:      count.Int64,
-			LowerBound: lowerBound.String,
-			UpperBound: upperBound.String,
-		}
-
-		var key string
-		if isIndex.Int64 == 1 {
-			key = indexMap[histID.Int64]
-		} else {
-			key = columnMap[histID.Int64]
+			LowerBound: lowerBoundStr,
+			UpperBound: upperBoundStr,
 		}
 
 		buckets[key] = append(buckets[key], b)
@@ -104,4 +184,106 @@ ORDER BY is_index, hist_id, bucket_id`
 	}
 
 	return buckets, nil
+}
+
+// decodeColumnBound decodes column bound values (is_index=0) using FieldType only.
+func decodeColumnBound(boundBytes []byte, originalFt *types.FieldType) (string, error) {
+	if len(boundBytes) == 0 {
+		return "", nil
+	}
+
+	ctx := statistics.UTCWithAllowInvalidDateCtx
+
+	// Here we directly create KindBytes type Datum, then convert to TypeBlob.
+	blobDatum := types.NewBytesDatum(boundBytes)
+
+	// First convert to TypeBlob (simulate GetDatum behavior).
+	blobFt := types.NewFieldType(tmysql.TypeBlob)
+	blobFt.SetCharset(charset.CharsetBin)
+	blobFt.SetCollate(charset.CollationBin)
+	blobTypeDatum, err := blobDatum.ConvertTo(ctx, blobFt)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	// For string types, need special handling (because may store collate key).
+	// Reference: pkg/statistics/handle/storage/read.go
+	// First convert to TypeBlob type (bypass charset/collation check), then convert back to original type.
+	var targetFt *types.FieldType
+	if types.EvalType(originalFt.GetType()) == types.ETString &&
+		originalFt.GetType() != tmysql.TypeEnum &&
+		originalFt.GetType() != tmysql.TypeSet {
+		targetFt = types.NewFieldType(tmysql.TypeBlob)
+		targetFt.SetCharset(charset.CharsetBin)
+		targetFt.SetCollate(charset.CollationBin)
+	} else {
+		targetFt = originalFt
+	}
+
+	// Use convertBoundFromBlob logic (reference: pkg/statistics/handle/storage/read.go:918-946).
+	var convertedDatum types.Datum
+	if originalFt.GetType() == tmysql.TypeBit {
+		// BIT type special handling (reference: convertBoundFromBlob).
+		// Simplified: first convert to TypeBlob, then convert back to BIT.
+		convertedDatum, err = blobTypeDatum.ConvertTo(ctx, targetFt)
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		// Then convert back to BIT type.
+		convertedDatum, err = convertedDatum.ConvertTo(ctx, originalFt)
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+	} else {
+		// Other types: convert from TypeBlob to target type.
+		convertedDatum, err = blobTypeDatum.ConvertTo(ctx, targetFt)
+		if err != nil {
+			return "", errors.Trace(err)
+		}
+		// If string type, need to convert back to original type (restore correct charset/collation).
+		if types.EvalType(originalFt.GetType()) == types.ETString &&
+			originalFt.GetType() != tmysql.TypeEnum &&
+			originalFt.GetType() != tmysql.TypeSet {
+			convertedDatum, err = convertedDatum.ConvertTo(ctx, originalFt)
+			if err != nil {
+				return "", errors.Trace(err)
+			}
+		}
+	}
+
+	return convertedDatum.ToString()
+}
+
+// decodeIndexBound decodes index bound values (is_index=1) using pre-computed column types.
+func decodeIndexBound(boundBytes []byte, idxColumnTypes []byte) (string, error) {
+	if len(boundBytes) == 0 {
+		return "", nil
+	}
+
+	// If cannot get column types, use default value (single column index).
+	if len(idxColumnTypes) == 0 {
+		idxColumnTypes = []byte{tmysql.TypeVarchar}
+	}
+
+	// Decode encoded values.
+	numCols := len(idxColumnTypes)
+	if numCols == 0 {
+		numCols = 1
+	}
+
+	decodedVals, remained, err := codec.DecodeRange(
+		boundBytes,
+		numCols,
+		idxColumnTypes,
+		time.UTC,
+	)
+	if err != nil {
+		return "", errors.Trace(err)
+	}
+
+	if len(remained) > 0 {
+		decodedVals = append(decodedVals, types.NewBytesDatum(remained))
+	}
+
+	return types.DatumsToString(decodedVals, true)
 }
