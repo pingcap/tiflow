@@ -157,6 +157,8 @@ func DefaultS3Retryer() aws.Retryer {
 			so.MaxBackoff = 32 * time.Second
 			so.RateLimiter = ratelimit.None
 		}),
+		minRetryDelay:    1 * time.Second,
+		minThrottleDelay: 2 * time.Second,
 	}
 }
 
