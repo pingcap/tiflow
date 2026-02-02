@@ -46,7 +46,7 @@ jobs:
 
       - name: Cache Tools
         id: cache-tools
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: tools/bin
           key: macos-latest-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
