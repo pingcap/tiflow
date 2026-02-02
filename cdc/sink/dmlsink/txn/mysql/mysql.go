@@ -625,7 +625,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	}
 }
 
-// execute SQLs in the multi statements way.
+// execute SQLs in the multi statements way. 
+// 
 func (s *mysqlBackend) multiStmtExecute(
 	ctx context.Context, dmls *preparedDMLs, tx *sql.Tx, writeTimeout time.Duration,
 ) error {
