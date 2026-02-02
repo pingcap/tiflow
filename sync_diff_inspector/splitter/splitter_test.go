@@ -715,11 +715,14 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 	*/
 
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
+	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	for i := 0; i < 5; i++ {
-		statsRows.AddRow("test", "test", "PRIMARY", 1, (i+1)*64, (i+1)*64, 1, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
 	}
-	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
 
 	createFakeResultForRandom(mock, aRandomValues, bRandomValues)
 }
@@ -898,10 +901,13 @@ func TestChunkSize(t *testing.T) {
 	}
 
 	// test bucket splitter chunksize
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
+	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	// Notice, use wrong Bound to kill bucket producer
-	statsRows.AddRow("test", "test", "PRIMARY", 1, 0, 1000000000, 1, "(1, 2, wrong!)", "(2, 3, wrong!)")
-	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
+	statsRows.AddRow(1, 1, 0, 1000000000, "(1, 2, wrong!)", "(2, 3, wrong!)")
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
 
 	bucketIter, err := NewBucketIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
@@ -1052,23 +1058,27 @@ func TestRandomSpliterHint(t *testing.T) {
 
 func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
 	/*
-		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
-		| Db_name | Table_name | Column_name | Is_index | Bucket_id | Count | Repeats | Lower_Bound | Upper_Bound |
-		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
-		| test    | test       | PRIMARY     |        1 |         0 |    64 |       1 | (0, 0)      | (63, 11)    |
-		| test    | test       | PRIMARY     |        1 |         1 |   128 |       1 | (64, 12)    | (127, 23)   |
-		| test    | test       | PRIMARY     |        1 |         2 |   192 |       1 | (128, 24)   | (191, 35)   |
-		| test    | test       | PRIMARY     |        1 |         3 |   256 |       1 | (192, 36)   | (255, 47)   |
-		| test    | test       | PRIMARY     |        1 |         4 |   320 |       1 | (256, 48)   | (319, 59)   |
-		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
+		+---------+----------+-----------+-------+-------------+-------------+
+		| hist_id | is_index | bucket_id | count | lower_bound | upper_bound |
+		+---------+----------+-----------+-------+-------------+-------------+
+		| 1       |        1 |         0 |    64 | (0, 0)      | (63, 11)    |
+		| 1       |        1 |         1 |   128 | (64, 12)    | (127, 23)   |
+		| 1       |        1 |         2 |   192 | (128, 24)   | (191, 35)   |
+		| 1       |        1 |         3 |   256 | (192, 36)   | (255, 47)   |
+		| 1       |        1 |         4 |   320 | (256, 48)   | (319, 59)   |
+		+---------+----------+-----------+-------+-------------+-------------+
 	*/
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
-	for _, indexName := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
-		for i := range 5 {
-			statsRows.AddRow("test", "test", indexName, 1, (i+1)*64, (i+1)*64, 1, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	for i := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
+		histID := int64(i + 1) // hist_id starts from 1
+		for j := 0; j < 5; j++ {
+			statsRows.AddRow(1, histID, j, (j+1)*64, fmt.Sprintf("(%d, %d)", j*64, j*12), fmt.Sprintf("(%d, %d)", (j+1)*64-1, (j+1)*12-1))
 		}
 	}
-	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
 
 	for range indexCount {
 		mock.ExpectQuery("SELECT COUNT\\(DISTINCT *").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
