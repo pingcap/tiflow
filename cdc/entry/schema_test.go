@@ -138,7 +138,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 112,
+		TableID: 114,
 	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
@@ -150,7 +150,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 112,
+		TableID: 114,
 	}, tableName)
 }
 
