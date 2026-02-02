@@ -436,7 +436,7 @@ replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675f
 // copy from TiDB
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
 
-// cpoy from TiDB
+// copy from TiDB to downgrade grpc
 replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.0.0-20250911101656-62c34c9a3b82
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
