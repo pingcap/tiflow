@@ -27,8 +27,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/s3"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	"github.com/pingcap/tidb/br/pkg/mock"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/s3like"
+	"github.com/pingcap/tidb/pkg/objstore/s3store"
+	"github.com/pingcap/tidb/pkg/objstore/s3store/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -179,14 +180,14 @@ func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 type s3Suite struct {
 	controller *gomock.Controller
 	s3         *mock.MockS3API
-	storage    *storage.S3Storage
+	storage    *s3like.Storage
 }
 
 func createS3Suite(c gomock.TestReporter) (s *s3Suite, clean func()) {
 	s = new(s3Suite)
 	s.controller = gomock.NewController(c)
 	s.s3 = mock.NewMockS3API(s.controller)
-	s.storage = storage.NewS3StorageForTest(
+	s.storage = s3store.NewS3StorageForTest(
 		s.s3,
 		&backuppb.S3{
 			Region:       "us-west-2",
@@ -195,8 +196,7 @@ func createS3Suite(c gomock.TestReporter) (s *s3Suite, clean func()) {
 			Acl:          "acl",
 			Sse:          "sse",
 			StorageClass: "sc",
-		},
-	)
+		}, nil)
 
 	clean = func() {
 		s.controller.Finish()
@@ -245,7 +245,6 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	// test s3
 	s, clean := createS3Suite(t)
 	defer clean()
-	ctx := aws.BackgroundContext()
 
 	objects := make([]*s3.Object, 0, len(fileNames))
 	for _, fileName := range fileNames {
@@ -257,7 +256,7 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	}
 
 	s.s3.EXPECT().
-		ListObjectsWithContext(ctx, gomock.Any()).
+		ListObjects(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...request.Option) (*s3.ListObjectsOutput, error) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.Equal(t, "prefix/", aws.StringValue(input.Prefix))
@@ -310,7 +309,7 @@ func TestRemoveAll(t *testing.T) {
 	}
 
 	firstCall := s.s3.EXPECT().
-		ListObjectsWithContext(ctx, gomock.Any()).
+		ListObjects(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...request.Option) (*s3.ListObjectsOutput, error) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.Equal(t, "prefix/", aws.StringValue(input.Prefix))
@@ -323,21 +322,21 @@ func TestRemoveAll(t *testing.T) {
 			}, nil
 		})
 	secondCall := s.s3.EXPECT().
-		DeleteObjectWithContext(ctx, gomock.Any()).
+		DeleteObject(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...request.Option) (*s3.DeleteObjectInput, error) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.True(t, aws.StringValue(input.Key) == "prefix/schema.sql" || aws.StringValue(input.Key) == "prefix/table.sql")
 			return &s3.DeleteObjectInput{}, nil
 		}).After(firstCall)
 	thirdCall := s.s3.EXPECT().
-		DeleteObjectWithContext(ctx, gomock.Any()).
+		DeleteObject(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...request.Option) (*s3.DeleteObjectInput, error) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.True(t, aws.StringValue(input.Key) == "prefix/schema.sql" || aws.StringValue(input.Key) == "prefix/table.sql")
 			return &s3.DeleteObjectInput{}, nil
 		}).After(secondCall)
 	fourthCall := s.s3.EXPECT().
-		DeleteObjectWithContext(ctx, gomock.Any()).
+		DeleteObject(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, input *s3.DeleteObjectInput, opt ...request.Option) (*s3.DeleteObjectInput, error) {
 			require.Equal(t, "bucket", aws.StringValue(input.Bucket))
 			require.Equal(t, "prefix/", aws.StringValue(input.Key))
@@ -345,7 +344,7 @@ func TestRemoveAll(t *testing.T) {
 		}).After(thirdCall)
 
 	s.s3.EXPECT().
-		HeadObjectWithContext(ctx, gomock.Any()).
+		HeadObject(gomock.Any(), gomock.Any()).
 		Return(nil, awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil)).After(fourthCall)
 
 	err = RemoveAll(context.Background(), "", s.storage)
@@ -371,7 +370,7 @@ func TestIsNotExistError(t *testing.T) {
 	ctx := aws.BackgroundContext()
 
 	s.s3.EXPECT().
-		GetObjectWithContext(ctx, gomock.Any()).
+		GetObject(gomock.Any(), gomock.Any()).
 		Return(nil, awserr.New(s3.ErrCodeNoSuchKey, "no such key", nil))
 
 	_, err = s.storage.ReadFile(ctx, "test.log")
@@ -387,7 +386,7 @@ func TestIsNotExistError(t *testing.T) {
 
 	// test other s3 error
 	s.s3.EXPECT().
-		GetObjectWithContext(ctx, gomock.Any()).
+		GetObject(gomock.Any(), gomock.Any()).
 		Return(nil, errors.New("just some unrelated error"))
 
 	_, err = s.storage.ReadFile(ctx, "test.log")

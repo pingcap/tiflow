@@ -16,7 +16,7 @@ package internal
 import (
 	"context"
 
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
 
@@ -26,5 +26,5 @@ type ResourceDescriptor interface {
 	URI() string
 	ID() resModel.ResourceID
 	ResourceIdent() ResourceIdent
-	ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error)
+	ExternalStorage(ctx context.Context) (storeapi.Storage, error)
 }

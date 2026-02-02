@@ -23,8 +23,8 @@ import (
 	"strings"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	brstorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -47,7 +47,7 @@ func ParseMetaData(
 	ctx context.Context,
 	dir string,
 	filename string,
-	extStorage brstorage.ExternalStorage,
+	extStorage storeapi.Storage,
 ) (*binlog.Location, *binlog.Location, error) {
 	fd, err := storage.OpenFile(ctx, dir, filename, extStorage)
 	if err != nil {
