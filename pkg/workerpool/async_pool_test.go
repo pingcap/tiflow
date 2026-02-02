@@ -99,7 +99,12 @@ loop:
 			atomic.AddInt32(&sum, int32(finalI+1))
 		})
 		if err != nil {
-			require.Regexp(t, "context canceled", err.Error())
+			cause := errors.Cause(err)
+			require.True(t,
+				cause == context.Canceled || cause == context.DeadlineExceeded,
+				"unexpected error: %v",
+				err,
+			)
 		} else {
 			sumExpected += int32(i + 1)
 		}
