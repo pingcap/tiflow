@@ -17,7 +17,7 @@ function run() {
 
 	start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
 	# Force a single session and skip set/reset for targeted DDLs to simulate leakage.
-export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql/MySQLSinkForceSingleConnection=return(true);github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql/MySQLSinkSkipResetSessionTimestampAfterDDL=return("c2");github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql/MySQLSinkSkipSetSessionTimestamp=return("d2")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql/MySQLSinkForceSingleConnection=return(true);github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql/MySQLSinkSkipResetSessionTimestampAfterDDL=return("c2");github.com/pingcap/tiflow/cdc/sinkv2/ddlsink/mysql/MySQLSinkSkipSetSessionTimestamp=return("d2")'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
 	run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="mysql://normal:123456@127.0.0.1:3306/"
 
