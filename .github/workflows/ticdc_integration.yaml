@@ -41,7 +41,7 @@ jobs:
 
       - name: Cache Vendor
         id: cache-vendor
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: vendor
           key: ${{ runner.os }}-cdc-integration-vendor-${{ hashFiles('go.sum') }}
@@ -93,7 +93,7 @@ jobs:
 
       - name: Cache Vendor
         id: cache-vendor
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: vendor
           key: ${{ runner.os }}-cdc-integration-vendor-${{ hashFiles('go.sum') }}
@@ -145,7 +145,7 @@ jobs:
 
       - name: Cache Vendor
         id: cache-vendor
-        uses: actions/cache@v4
+        uses: actions/cache@v2
         with:
           path: vendor
           key: ${{ runner.os }}-cdc-integration-vendor-${{ hashFiles('go.sum') }}
