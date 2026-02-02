@@ -23,6 +23,8 @@ import (
 	"unsafe"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/parser/ast"
 	"github.com/pingcap/tidb/parser/model"
 	"github.com/pingcap/tidb/parser/mysql"
 	"github.com/pingcap/tidb/util/rowcodec"
@@ -716,6 +718,7 @@ type DDLEvent struct {
 	Query        string           `msg:"query"`
 	TableInfo    *TableInfo       `msg:"-"`
 	PreTableInfo *TableInfo       `msg:"-"`
+	ReferTable   *TableName       `msg:"-"`
 	Type         model.ActionType `msg:"-"`
 	Done         atomic.Bool      `msg:"-"`
 	Charset      string           `msg:"-"`
@@ -782,6 +785,38 @@ func (d *DDLEvent) FromJobWithArgs(
 		}
 	default:
 		d.Query = job.Query
+	}
+	d.setReferTableFromQuery()
+}
+
+// setReferTableFromQuery parses CREATE TABLE ... LIKE ... and stores the refer table in the event.
+func (d *DDLEvent) setReferTableFromQuery() {
+	if d.Type != model.ActionCreateTable || d.Query == "" {
+		return
+	}
+	p := parser.New()
+	stmt, err := p.ParseOneStmt(d.Query, "", "")
+	if err != nil {
+		log.Warn("parse create table ddl failed",
+			zap.Error(err),
+			zap.String("ddl", d.Query))
+		return
+	}
+	createStmt, ok := stmt.(*ast.CreateTableStmt)
+	if !ok || createStmt.ReferTable == nil {
+		return
+	}
+	schemaName := createStmt.ReferTable.Schema.O
+	if schemaName == "" && d.TableInfo != nil {
+		schemaName = d.TableInfo.TableName.Schema
+	}
+	tableName := createStmt.ReferTable.Name.O
+	if schemaName == "" || tableName == "" {
+		return
+	}
+	d.ReferTable = &TableName{
+		Schema: schemaName,
+		Table:  tableName,
 	}
 }
 

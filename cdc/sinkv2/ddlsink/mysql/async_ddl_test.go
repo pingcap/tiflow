@@ -25,6 +25,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	timodel "github.com/pingcap/tidb/parser/model"
+	"github.com/pingcap/tiflow/cdc/contextutil"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
@@ -115,6 +116,8 @@ func TestWaitAsynExecDone(t *testing.T) {
 	ddlSink.Close()
 }
 
+// This case should be failed after repair CREATE TABLE B LIKE A and ADD INDEX ON A operations are executed out of order,
+// causing the downstream table structure to be inconsistent.
 func TestAsyncExecAddIndex(t *testing.T) {
 	ddlExecutionTime := time.Second * 15
 	var dbIndex int32 = 0
@@ -194,4 +197,213 @@ func TestNeedWaitAsyncExecDone(t *testing.T) {
 	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTable))
 	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateTables))
 	require.False(t, sink.needWaitAsyncExecDone(timodel.ActionCreateSchema))
+}
+
+func TestGetCreateTableLikeSourceTable(t *testing.T) {
+	sink := &DDLSink{
+		id: model.DefaultChangeFeedID("test"),
+	}
+	ddl := &model.DDLEvent{
+		Type:  timodel.ActionCreateTable,
+		Query: "create table b like a",
+		ReferTable: &model.TableName{
+			Schema: "test",
+			Table:  "a",
+		},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "b",
+			},
+		},
+	}
+	sourceTable, ok := sink.getCreateTableLikeSourceTable(ddl)
+	require.True(t, ok)
+	require.Equal(t, model.TableName{Schema: "test", Table: "a"}, sourceTable)
+
+	ddl.Query = "create table test.b like other.a"
+	ddl.ReferTable = &model.TableName{
+		Schema: "other",
+		Table:  "a",
+	}
+	sourceTable, ok = sink.getCreateTableLikeSourceTable(ddl)
+	require.True(t, ok)
+	require.Equal(t, model.TableName{Schema: "other", Table: "a"}, sourceTable)
+
+	ddl.Type = timodel.ActionCreateSchema
+	_, ok = sink.getCreateTableLikeSourceTable(ddl)
+	require.False(t, ok)
+}
+
+func TestWaitAsynExecDoneCreateTable(t *testing.T) {
+	var dbIndex int32 = 0
+	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			atomic.AddInt32(&dbIndex, 1)
+		}()
+		if atomic.LoadInt32(&dbIndex) == 0 {
+			db, err := pmysql.MockTestDB(true)
+			require.NoError(t, err)
+			return db, nil
+		}
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.NoError(t, err)
+		mock.ExpectQuery("select tidb_version()").
+			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+		mock.ExpectClose()
+		return db, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID("test"))
+	sinkURI, err := url.Parse("mysql://root:@127.0.0.1:4000")
+	require.NoError(t, err)
+	replicateCfg := config.GetDefaultReplicaConfig()
+	ddlSink, err := NewDDLSink(ctx, sinkURI, replicateCfg)
+	require.NoError(t, err)
+
+	ddl := &model.DDLEvent{
+		Type:  timodel.ActionCreateTable,
+		Query: "create table b (id int)",
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "b",
+			},
+		},
+	}
+	ddlSink.waitAsynExecDone(ctx, ddl)
+
+	ddlSink.Close()
+}
+
+func TestWaitAsynExecDoneCreateTableLike(t *testing.T) {
+	var dbIndex int32 = 0
+	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			atomic.AddInt32(&dbIndex, 1)
+		}()
+		if atomic.LoadInt32(&dbIndex) == 0 {
+			db, err := pmysql.MockTestDB(true)
+			require.NoError(t, err)
+			return db, nil
+		}
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.NoError(t, err)
+		mock.ExpectQuery("select tidb_version()").
+			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "test", "a")).WillReturnRows(
+			sqlmock.NewRows(nil),
+		)
+		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "other", "a")).WillReturnRows(
+			sqlmock.NewRows(nil),
+		)
+		mock.ExpectClose()
+		return db, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID("test"))
+	sinkURI, err := url.Parse("mysql://root:@127.0.0.1:4000")
+	require.NoError(t, err)
+	replicateCfg := config.GetDefaultReplicaConfig()
+	ddlSink, err := NewDDLSink(ctx, sinkURI, replicateCfg)
+	require.NoError(t, err)
+
+	ddl := &model.DDLEvent{
+		Type:  timodel.ActionCreateTable,
+		Query: "create table b like a",
+		ReferTable: &model.TableName{
+			Schema: "test",
+			Table:  "a",
+		},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "b",
+			},
+		},
+	}
+	ddlSink.waitAsynExecDone(ctx, ddl)
+
+	ddl.Query = "create table test.b like other.a"
+	ddl.ReferTable = &model.TableName{
+		Schema: "other",
+		Table:  "a",
+	}
+	ddlSink.waitAsynExecDone(ctx, ddl)
+
+	ddlSink.Close()
+}
+
+// TestWaitAsynExecDoneCreateTableLikeWaitsForRunningJob verifies the wait loop retries after a running job.
+func TestWaitAsynExecDoneCreateTableLikeWaitsForRunningJob(t *testing.T) {
+	oldInterval := waitAsyncExecDoneCheckInterval
+	waitAsyncExecDoneCheckInterval = 10 * time.Millisecond
+	defer func() {
+		waitAsyncExecDoneCheckInterval = oldInterval
+	}()
+
+	var dbIndex int32 = 0
+	GetDBConnImpl = func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+		defer func() {
+			atomic.AddInt32(&dbIndex, 1)
+		}()
+		if atomic.LoadInt32(&dbIndex) == 0 {
+			db, err := pmysql.MockTestDB(true)
+			require.NoError(t, err)
+			return db, nil
+		}
+
+		db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+		require.NoError(t, err)
+		mock.ExpectQuery("select tidb_version()").
+			WillReturnRows(sqlmock.NewRows([]string{"tidb_version()"}).AddRow("5.7.25-TiDB-v4.0.0-beta-191-ga1b3e3b"))
+		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "test", "a")).WillReturnRows(
+			sqlmock.NewRows([]string{
+				"JOB_ID", "DB_NAME", "TABLE_NAME", "JOB_TYPE", "SCHEMA_STATE", "SCHEMA_ID", "TABLE_ID",
+				"ROW_COUNT", "CREATE_TIME", "START_TIME", "END_TIME", "STATE",
+			}).AddRow(
+				1, "test", "a", "add index", "write reorganization", 1, 1, 0, time.Now(), nil, time.Now(), "running",
+			),
+		)
+		mock.ExpectQuery(fmt.Sprintf(checkRunningAddIndexSQL, "test", "a")).WillReturnRows(
+			sqlmock.NewRows(nil),
+		)
+		mock.ExpectClose()
+		return db, nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	ctx = contextutil.PutChangefeedIDInCtx(ctx, model.DefaultChangeFeedID("test"))
+	sinkURI, err := url.Parse("mysql://root:@127.0.0.1:4000")
+	require.NoError(t, err)
+	replicateCfg := config.GetDefaultReplicaConfig()
+	ddlSink, err := NewDDLSink(ctx, sinkURI, replicateCfg)
+	require.NoError(t, err)
+
+	ddl := &model.DDLEvent{
+		Type:  timodel.ActionCreateTable,
+		Query: "create table b like a",
+		ReferTable: &model.TableName{
+			Schema: "test",
+			Table:  "a",
+		},
+		TableInfo: &model.TableInfo{
+			TableName: model.TableName{
+				Schema: "test",
+				Table:  "b",
+			},
+		},
+	}
+	start := time.Now()
+	ddlSink.waitAsynExecDone(ctx, ddl)
+	require.GreaterOrEqual(t, time.Since(start), waitAsyncExecDoneCheckInterval)
+
+	ddlSink.Close()
 }
