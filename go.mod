@@ -65,6 +65,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
+<<<<<<< HEAD
 	github.com/pierrec/lz4/v4 v4.1.26
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
@@ -75,6 +76,18 @@ require (
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20260312160659-adb287a22464
 	github.com/prometheus/client_golang v1.23.0
+=======
+	github.com/pierrec/lz4/v4 v4.1.21
+	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
+	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
+	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
+	github.com/pingcap/kvproto v0.0.0-20251104104744-291054671541
+	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
+	github.com/pingcap/tidb v1.1.0-beta.0.20251112043738-8c2781681a46
+	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20251112043738-8c2781681a46
+	github.com/prometheus/client_golang v1.22.0
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
@@ -91,7 +104,11 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20260128081005-bc0c2a6df45c
+=======
+	github.com/tikv/client-go/v2 v2.0.8-0.20251028065425-b7d4dfd8520e
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20251219084741-029eb6e7d5d0
 	github.com/tinylib/msgp v1.1.6
@@ -121,8 +138,13 @@ require (
 	golang.org/x/time v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250425173222-7b384671a197
+<<<<<<< HEAD
 	google.golang.org/grpc v1.64.1
 	google.golang.org/protobuf v1.36.10
+=======
+	google.golang.org/grpc v1.64.0
+	google.golang.org/protobuf v1.36.6
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	gopkg.in/yaml.v2 v2.4.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.11
@@ -135,6 +157,20 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
+<<<<<<< HEAD
+=======
+	github.com/alibabacloud-go/alibabacloud-gateway-spi v0.0.5 // indirect
+	github.com/alibabacloud-go/darabonba-openapi/v2 v2.0.11 // indirect
+	github.com/alibabacloud-go/debug v1.0.1 // indirect
+	github.com/alibabacloud-go/endpoint-util v1.1.0 // indirect
+	github.com/alibabacloud-go/openapi-util v0.1.1 // indirect
+	github.com/alibabacloud-go/sts-20150401/v2 v2.0.4 // indirect
+	github.com/alibabacloud-go/tea v1.3.11 // indirect
+	github.com/alibabacloud-go/tea-utils/v2 v2.0.7 // indirect
+	github.com/alibabacloud-go/tea-xml v1.1.3 // indirect
+	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.2.3 // indirect
+	github.com/aliyun/credentials-go v1.4.7 // indirect
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/apache/arrow-go/v18 v18.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
@@ -188,12 +224,20 @@ require (
 	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/otiai10/copy v1.2.0 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
+<<<<<<< HEAD
+=======
+	github.com/pingcap/metering_sdk v0.0.0-20251110022152-dac449ac5389 // indirect
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	github.com/qri-io/jsonpointer v0.1.1 // indirect
 	github.com/qri-io/jsonschema v0.2.1 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sergi/go-diff v1.3.1 // indirect
+<<<<<<< HEAD
 	github.com/spf13/afero v1.11.0 // indirect
+=======
+	github.com/spf13/afero v1.14.0 // indirect
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	github.com/tidwall/btree v1.7.0 // indirect
 	github.com/tidwall/buntdb v1.3.0 // indirect
 	github.com/tidwall/gjson v1.14.3 // indirect
@@ -208,7 +252,10 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.22.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.22.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
+<<<<<<< HEAD
 	golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c // indirect
+=======
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -340,7 +387,11 @@ require (
 	github.com/pingcap/fn v1.0.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
+<<<<<<< HEAD
 	github.com/pingcap/tipb v0.0.0-20260202031324-4ce7b6c65c98 // indirect
+=======
+	github.com/pingcap/tipb v0.0.0-20250928030846-9fd33ded6f2c // indirect
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -398,7 +449,11 @@ require (
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	modernc.org/libc v1.41.0 // indirect
+<<<<<<< HEAD
 	modernc.org/mathutil v1.6.0 // indirect
+=======
+	modernc.org/mathutil v1.7.1 // indirect
+>>>>>>> 0ea757eae7 (go.mod: upgrade tidb to support partial index (#12506))
 	modernc.org/memory v1.7.2 // indirect
 	modernc.org/sqlite v1.29.6 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
@@ -419,6 +474,9 @@ replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.
 
 // copy from TiDB
 replace github.com/go-ldap/ldap/v3 v3.4.4 => github.com/yangkeao/ldap/v3 v3.4.5-0.20230421065457-369a3bab1117
+
+// copy from TiDB to downgrade grpc
+replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.0.0-20250911101656-62c34c9a3b82
 
 replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 
