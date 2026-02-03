@@ -191,6 +191,15 @@ func makeCredential4Testing(t *testing.T) *security.Credential {
 	require.NoError(t, err)
 	t.Logf("%s", strings.TrimSpace(string(currentPath)))
 	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
+	lsOutput1, err := exec.Command("ls", "-alh", strings.TrimSpace(string(gitPath))).Output()
+	require.NoError(t, err)
+	lsOutput2, err := exec.Command("ls", "-alh", strings.TrimSpace(string(gitPath)+"/tiflow")).Output()
+	require.NoError(t, err)
+	lsOutput3, err := exec.Command("ls", "-alh", strings.TrimSpace(string(gitPath)+"/tiflow/.git")).Output()
+	require.NoError(t, err)
+	t.Logf("git root path ls output:\n%s", string(lsOutput1))
+	t.Logf("git root/tiflow path ls output:\n%s", string(lsOutput2))
+	t.Logf("git root/tiflow/.git path ls output:\n%s", string(lsOutput3))
 	return &security.Credential{
 		CAPath:        path.Join(tlsPath, "ca.pem"),
 		CertPath:      path.Join(tlsPath, "server.pem"),
