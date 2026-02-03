@@ -200,6 +200,9 @@ func makeCredential4Testing(t *testing.T) *security.Credential {
 	lsOutput3, err := exec.Command("ls", "-alh", strings.TrimSpace(string(gitPath))+"/tiflow/.git").Output()
 	require.NoError(t, err)
 	t.Logf("git root/tiflow/.git path ls output:\n%s", string(lsOutput3))
+	worktree, err := exec.Command("git", "config", "core.worktree").Output()
+	require.NoError(t, err)
+	t.Logf("git worktree: %s", strings.TrimSpace(string(worktree)))
 	return &security.Credential{
 		CAPath:        path.Join(tlsPath, "ca.pem"),
 		CertPath:      path.Join(tlsPath, "server.pem"),
