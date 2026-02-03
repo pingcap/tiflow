@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os/exec"
 	"path"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -182,6 +184,12 @@ func makeCredential4Testing(t *testing.T) *security.Credential {
 	stat, err := find.Repo()
 	require.NoError(t, err)
 
+	gitPath, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	require.NoError(t, err)
+	t.Logf("%s", strings.TrimSpace(string(gitPath)))
+	currentPath, err := exec.Command("pwd").Output()
+	require.NoError(t, err)
+	t.Logf("%s", strings.TrimSpace(string(currentPath)))
 	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
 	return &security.Credential{
 		CAPath:        path.Join(tlsPath, "ca.pem"),
