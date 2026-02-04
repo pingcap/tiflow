@@ -98,6 +98,11 @@ func NewDDLSink(
 		return nil, err
 	}
 
+	failpoint.Inject("MySQLSinkForceSingleConnection", func() {
+		db.SetMaxIdleConns(1)
+		db.SetMaxOpenConns(1)
+	})
+
 	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, db)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
@@ -252,7 +257,65 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 
+	// Reset session timestamp before DDL to avoid leaking from pooled connections.
+	if err := resetSessionTimestamp(ctx, tx); err != nil {
+		log.Error("Failed to reset session timestamp before DDL execution",
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID),
+			zap.Error(err))
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+		}
+		return err
+	}
+
+	ddlTimestamp, useSessionTimestamp := ddlSessionTimestampFromOriginDefault(ddl, m.cfg.Timezone)
+	skipSetTimestamp := false
+	failpoint.Inject("MySQLSinkSkipSetSessionTimestamp", func(val failpoint.Value) {
+		skipSetTimestamp = matchFailpointValue(val, ddl.Query)
+	})
+	skipResetAfterDDL := false
+	failpoint.Inject("MySQLSinkSkipResetSessionTimestampAfterDDL", func(val failpoint.Value) {
+		skipResetAfterDDL = matchFailpointValue(val, ddl.Query)
+	})
+
+	if useSessionTimestamp && skipSetTimestamp {
+		log.Warn("Skip setting session timestamp due to failpoint",
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID),
+			zap.String("query", ddl.Query))
+	}
+	if useSessionTimestamp && !skipSetTimestamp {
+		// set the session timestamp to match upstream DDL execution time
+		if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
+			log.Error("Fail to set session timestamp for DDL",
+				zap.Float64("timestamp", ddlTimestamp),
+				zap.Uint64("startTs", ddl.StartTs),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+			}
+			return err
+		}
+	}
+
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+		log.Error("Failed to ExecContext", zap.Any("err", err), zap.Any("query", ddl.Query))
+		if useSessionTimestamp {
+			if skipResetAfterDDL {
+				log.Warn("Skip resetting session timestamp after DDL execution failure due to failpoint",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.String("query", ddl.Query))
+			} else if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
+				log.Warn("Failed to reset session timestamp after DDL execution failure",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Error(tsErr))
+			}
+		}
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback",
 				zap.String("namespace", m.id.Namespace),
@@ -263,15 +326,41 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 
+	if useSessionTimestamp {
+		// reset session timestamp after DDL execution to avoid affecting subsequent operations
+		if skipResetAfterDDL {
+			log.Warn("Skip resetting session timestamp after DDL execution due to failpoint",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.String("query", ddl.Query))
+		} else if err := resetSessionTimestamp(ctx, tx); err != nil {
+			log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(rbErr))
+			}
+			return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		log.Error("Failed to exec DDL", zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
 			zap.Duration("duration", time.Since(start)), zap.String("sql", ddl.Query), zap.Error(err))
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
-	log.Info("Exec DDL succeeded",
-		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
-		zap.Duration("duration", time.Since(start)), zap.String("sql", ddl.Query))
+	logFields := []zap.Field{
+		zap.String("namespace", m.id.Namespace),
+		zap.String("changefeed", m.id.ID),
+		zap.Duration("duration", time.Since(start)),
+		zap.String("sql", ddl.Query),
+	}
+
+	if useSessionTimestamp {
+		logFields = append(logFields, zap.Float64("sessionTimestamp", ddlTimestamp))
+	}
+
+	log.Info("Exec DDL succeeded", logFields...)
+
 	return nil
 }
 
@@ -325,4 +414,40 @@ func (m *DDLSink) Close() {
 				zap.Error(err))
 		}
 	}
+<<<<<<< HEAD
+=======
+	return ddlCreateTime
+}
+
+// getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
+func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
+	// ddlCreateTime and createTime are both based on UTC timezone of downstream
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs
+	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
+	//nolint:rowserrcheck
+	jobsRows, err := db.QueryContext(ctx, showJobs)
+	if err != nil {
+		return timodel.JobStateNone, err
+	}
+
+	var jobsResults [][]string
+	jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
+	if err != nil {
+		return timodel.JobStateNone, err
+	}
+	if len(jobsResults) > 0 {
+		result := jobsResults[0]
+		state, jobID, jobType, schemaState := result[1], result[2], result[3], result[4]
+		log.Debug("Find ddl state in downstream",
+			zap.String("jobID", jobID),
+			zap.String("jobType", jobType),
+			zap.String("schemaState", schemaState),
+			zap.String("ddl", ddl),
+			zap.String("state", state),
+			zap.Any("jobsResults", jobsResults),
+		)
+		return timodel.StrToJobState(result[1]), nil
+	}
+	return timodel.JobStateNone, nil
+>>>>>>> 142713c45b (sink/mysql: align DDL time defaults with origin_default (#12490))
 }
