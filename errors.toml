@@ -226,8 +226,6 @@ error = '''
 cannot find mysql.tidb_ddl_job schema
 '''
 
-<<<<<<< HEAD
-=======
 ["CDC:ErrDDLStateNotFound"]
 error = '''
 DDL state not found %s
@@ -238,7 +236,6 @@ error = '''
 unsupport ddl type %s, query %s
 '''
 
->>>>>>> d9a7e9f313 (sink(ticdc): waiting the asynchronous ddl to synchronize (#12123))
 ["CDC:ErrDatumUnflatten"]
 error = '''
 unflatten datume data
