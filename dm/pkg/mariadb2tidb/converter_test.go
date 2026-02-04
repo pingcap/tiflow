@@ -19,7 +19,9 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb/config"
 	"github.com/stretchr/testify/require"
 )
@@ -153,6 +155,121 @@ func TestTransformSQLPlannedRules(t *testing.T) {
 	require.False(t, hasTableOption(stmt.Options, ast.TableOptionKeyBlockSize))
 }
 
+func TestTransformSQLSystemVersioningCleanup(t *testing.T) {
+	converter := NewConverter(nil)
+	input := `CREATE TABLE t (
+  id INT,
+  sys_start TIMESTAMP(6) GENERATED ALWAYS AS ROW START,
+  sys_end TIMESTAMP(6) GENERATED ALWAYS AS ROW END,
+  PERIOD FOR SYSTEM_TIME (sys_start, sys_end)
+) WITH SYSTEM VERSIONING;`
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+	require.NotContains(t, strings.ToLower(output), "system versioning")
+	require.NotContains(t, strings.ToLower(output), "period for system_time")
+
+	stmt := parseCreateTableStmt(t, output)
+	startCol := findColumn(stmt, "sys_start")
+	require.NotNil(t, startCol)
+	require.False(t, hasColumnOption(startCol, ast.ColumnOptionGenerated))
+}
+
+func TestTransformSQLSequenceAndCreateOrReplaceCleanup(t *testing.T) {
+	converter := NewConverter(nil)
+	input := "CREATE OR REPLACE TABLE t (id INT);\nCREATE SEQUENCE s AS BIGINT;"
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+	lower := strings.ToLower(output)
+	require.NotContains(t, lower, "or replace")
+	require.NotContains(t, lower, "as bigint")
+
+	stmts := parseStatements(t, output)
+	require.Len(t, stmts, 3)
+	_, ok := stmts[0].(*ast.DropTableStmt)
+	require.True(t, ok)
+	_, ok = stmts[1].(*ast.CreateTableStmt)
+	require.True(t, ok)
+	_, ok = stmts[2].(*ast.CreateSequenceStmt)
+	require.True(t, ok)
+}
+
+func TestTransformSQLColumnAttributesAndIndexOptions(t *testing.T) {
+	converter := NewConverter(nil)
+	input := `CREATE TABLE t (
+  a INT INVISIBLE,
+  b INT COMPRESSED,
+  c INT PERSISTENT,
+  KEY idx_ignored (a) IGNORED,
+  KEY idx_overlap (a) WITHOUT OVERLAPS,
+  VECTOR INDEX idx_vector (a)
+);`
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+	lower := strings.ToLower(output)
+	require.NotContains(t, lower, "invisible")
+	require.NotContains(t, lower, "compressed")
+	require.NotContains(t, lower, "persistent")
+	require.NotContains(t, lower, " ignored")
+	require.NotContains(t, lower, "not ignored")
+	require.NotContains(t, lower, "without overlaps")
+	require.NotContains(t, lower, "vector index")
+
+	stmt := parseCreateTableStmt(t, output)
+	idxVector := findIndex(stmt, "idx_vector")
+	require.NotNil(t, idxVector)
+	require.NotEqual(t, ast.ConstraintVector, idxVector.Tp)
+}
+
+func TestTransformSQLFulltextSpatialEngineCollationIgnored(t *testing.T) {
+	converter := NewConverter(nil)
+	collation, ok := pickUnsupportedCollation()
+	if !ok {
+		t.Skip("no unsupported collation available in parser catalog")
+	}
+
+	input := `CREATE TABLE t (
+  a TEXT COLUMN_FORMAT DYNAMIC,
+  b TEXT STORAGE DISK,
+  c TEXT,
+  FULLTEXT KEY ft_idx (a, b) WITH PARSER ngram
+) ENGINE=MyISAM COLLATE=` + collation + `;
+
+CREATE SPATIAL INDEX sp_idx ON t (c);`
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+
+	stmts := parseStatements(t, output)
+	require.Len(t, stmts, 2)
+
+	create, ok := stmts[0].(*ast.CreateTableStmt)
+	require.True(t, ok)
+	require.False(t, hasTableOption(create.Options, ast.TableOptionEngine))
+	require.False(t, hasTableOption(create.Options, ast.TableOptionCollate))
+
+	colA := findColumn(create, "a")
+	require.NotNil(t, colA)
+	require.False(t, hasColumnOption(colA, ast.ColumnOptionColumnFormat))
+	colB := findColumn(create, "b")
+	require.NotNil(t, colB)
+	require.False(t, hasColumnOption(colB, ast.ColumnOptionStorage))
+
+	ft := findConstraintByName(create, "ft_idx")
+	require.NotNil(t, ft)
+	require.Equal(t, ast.ConstraintFulltext, ft.Tp)
+	require.Len(t, ft.Keys, 1)
+	if ft.Option != nil {
+		require.Equal(t, "", ft.Option.ParserName.O)
+	}
+
+	spatial, ok := stmts[1].(*ast.CreateIndexStmt)
+	require.True(t, ok)
+	require.Equal(t, ast.IndexKeyTypeNone, spatial.KeyType)
+}
+
 func parseCreateTableStmt(t *testing.T, sql string) *ast.CreateTableStmt {
 	t.Helper()
 	p := parser.New()
@@ -254,4 +371,28 @@ func findIndex(stmt *ast.CreateTableStmt, name string) *ast.Constraint {
 		}
 	}
 	return nil
+}
+
+func findConstraintByName(stmt *ast.CreateTableStmt, name string) *ast.Constraint {
+	lower := strings.ToLower(name)
+	for _, constraint := range stmt.Constraints {
+		if strings.EqualFold(constraint.Name, lower) {
+			return constraint
+		}
+	}
+	return nil
+}
+
+func pickUnsupportedCollation() (string, bool) {
+	supported := make(map[string]struct{})
+	for _, coll := range collate.GetSupportedCollations() {
+		supported[strings.ToLower(coll.Name)] = struct{}{}
+	}
+	for _, coll := range charset.GetSupportedCollations() {
+		name := strings.ToLower(coll.Name)
+		if _, ok := supported[name]; !ok {
+			return coll.Name, true
+		}
+	}
+	return "", false
 }

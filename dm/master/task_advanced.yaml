@@ -11,8 +11,10 @@ enable-heartbeat: false  # whether to enable heartbeat for calculating lag betwe
 # mode: auto (MariaDB sources only), on (force enable), off (disable).
 # strict-mode: if false, conversion errors fall back to the original SQL.
 # available rules: Collation, ZeroTimestamp, UUIDType, MariaDBSpecific, Constraints, TrailingComma,
-# VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, KeyLength,
-# IndexPrefix, IntegerWidth, TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
+# VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, SystemVersioning,
+# SequenceType, ColumnAttributes, IndexOptions, FulltextIndexNormalize, SpatialIndexDrop, CreateOrReplace,
+# EngineOptions, IgnoredClauseCleanup, CollationFallback, KeyLength, IndexPrefix, IntegerWidth,
+# TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
 #mariadb2tidb:
 #  mode: "auto"
 #  strict-mode: true

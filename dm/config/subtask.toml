@@ -59,8 +59,10 @@ batch = 1000
 # strict-mode: if false, conversion errors fall back to the original SQL.
 # enabled-rules/disabled-rules: allow or block specific rule names.
 # available rules: Collation, ZeroTimestamp, UUIDType, MariaDBSpecific, Constraints, TrailingComma,
-# VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, KeyLength,
-# IndexPrefix, IntegerWidth, TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
+# VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, SystemVersioning,
+# SequenceType, ColumnAttributes, IndexOptions, FulltextIndexNormalize, SpatialIndexDrop, CreateOrReplace,
+# EngineOptions, IgnoredClauseCleanup, CollationFallback, KeyLength, IndexPrefix, IntegerWidth,
+# TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
 #
 # [mariadb2tidb]
 # mode = "auto"

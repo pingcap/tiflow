@@ -130,10 +130,13 @@ var (
 	notIgnoredIndexRegex   = regexp.MustCompile(`(?i)\bNOT\s+IGNORED\b`)
 	ignoredIndexRegex      = regexp.MustCompile(`(?i)\bIGNORED\b`)
 	withoutOverlapsRegex   = regexp.MustCompile(`(?i)\bWITHOUT\s+OVERLAPS\b`)
-	createOrReplaceRegex   = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+(TABLE|SEQUENCE|INDEX)\b`)
 	sequenceTypeRegex      = regexp.MustCompile(`(?i)(\bCREATE\s+SEQUENCE\s+[^;]*?)\s+AS\s+\w+\b`)
 	alterSequenceTypeRegex = regexp.MustCompile(`(?i)(\bALTER\s+SEQUENCE\s+[^;]*?)\s+AS\s+\w+\b`)
 	spatialIndexRegex      = regexp.MustCompile(`(?i)\bSPATIAL\s+(INDEX|KEY)\b`)
+
+	createOrReplaceTableRegex    = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+TABLE\s+([^\s(]+)`)
+	createOrReplaceSequenceRegex = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+SEQUENCE\s+([^\s(]+)`)
+	createOrReplaceIndexRegex    = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+INDEX\s+([^\s]+)\s+ON\s+([^\s(]+)`)
 )
 
 // preprocessSQL performs lightweight text-based transformations before AST parsing.
@@ -281,7 +284,10 @@ func stripIndexOptions(sql string) string {
 }
 
 func stripCreateOrReplace(sql string) string {
-	return createOrReplaceRegex.ReplaceAllString(sql, "CREATE $1")
+	sql = createOrReplaceIndexRegex.ReplaceAllString(sql, "DROP INDEX IF EXISTS $1 ON $2; CREATE INDEX $1 ON $2")
+	sql = createOrReplaceTableRegex.ReplaceAllString(sql, "DROP TABLE IF EXISTS $1; CREATE TABLE $1")
+	sql = createOrReplaceSequenceRegex.ReplaceAllString(sql, "DROP SEQUENCE IF EXISTS $1; CREATE SEQUENCE $1")
+	return sql
 }
 
 func stripSequenceType(sql string) string {
