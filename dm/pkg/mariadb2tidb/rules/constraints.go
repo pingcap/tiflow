@@ -15,13 +15,13 @@ package rules
 
 import "github.com/pingcap/tidb/pkg/parser/ast"
 
-// ConstraintsRule drops foreign key constraints that TiDB doesn't support.
+// ConstraintsRule strips unsupported foreign key clauses for TiDB compatibility.
 type ConstraintsRule struct{}
 
 func (r *ConstraintsRule) Name() string { return "Constraints" }
 
 func (r *ConstraintsRule) Description() string {
-	return "Remove foreign key constraints for TiDB compatibility"
+	return "Strip unsupported foreign key clauses such as MATCH and SET DEFAULT"
 }
 
 func (r *ConstraintsRule) Priority() int { return 100 }
@@ -30,25 +30,33 @@ func (r *ConstraintsRule) ShouldApply(node ast.Node) bool {
 	switch n := node.(type) {
 	case *ast.CreateTableStmt:
 		for _, c := range n.Constraints {
-			if c.Tp == ast.ConstraintForeignKey {
+			if needsReferenceCleanup(c) {
+				return true
+			}
+		}
+		for _, col := range n.Cols {
+			if columnHasUnsupportedReference(col) {
 				return true
 			}
 		}
 	case *ast.AlterTableStmt:
 		for _, spec := range n.Specs {
-			if spec.Tp == ast.AlterTableAddConstraint && spec.Constraint != nil && spec.Constraint.Tp == ast.ConstraintForeignKey {
+			if spec.Constraint != nil && needsReferenceCleanup(spec.Constraint) {
 				return true
 			}
-			if spec.Tp == ast.AlterTableDropForeignKey {
-				return true
+			for _, constraint := range spec.NewConstraints {
+				if needsReferenceCleanup(constraint) {
+					return true
+				}
+			}
+			for _, col := range spec.NewColumns {
+				if columnHasUnsupportedReference(col) {
+					return true
+				}
 			}
 		}
 	case *ast.ColumnDef:
-		for _, opt := range n.Options {
-			if opt.Tp == ast.ColumnOptionReference {
-				return true
-			}
-		}
+		return columnHasUnsupportedReference(n)
 	}
 	return false
 }
@@ -56,38 +64,98 @@ func (r *ConstraintsRule) ShouldApply(node ast.Node) bool {
 func (r *ConstraintsRule) Apply(node ast.Node) (ast.Node, error) {
 	switch n := node.(type) {
 	case *ast.CreateTableStmt:
-		constraints := n.Constraints[:0]
 		for _, c := range n.Constraints {
-			if c.Tp == ast.ConstraintForeignKey {
-				continue
-			}
-			constraints = append(constraints, c)
+			cleanupReferenceConstraint(c)
 		}
-		n.Constraints = constraints
+		for _, col := range n.Cols {
+			cleanupColumnReferences(col)
+		}
 		return n, nil
 	case *ast.AlterTableStmt:
-		specs := n.Specs[:0]
 		for _, spec := range n.Specs {
-			if spec.Tp == ast.AlterTableAddConstraint && spec.Constraint != nil && spec.Constraint.Tp == ast.ConstraintForeignKey {
-				continue
+			if spec.Constraint != nil {
+				cleanupReferenceConstraint(spec.Constraint)
 			}
-			if spec.Tp == ast.AlterTableDropForeignKey {
-				continue
+			for _, constraint := range spec.NewConstraints {
+				cleanupReferenceConstraint(constraint)
 			}
-			specs = append(specs, spec)
+			for _, col := range spec.NewColumns {
+				cleanupColumnReferences(col)
+			}
 		}
-		n.Specs = specs
 		return n, nil
 	case *ast.ColumnDef:
-		opts := n.Options[:0]
-		for _, opt := range n.Options {
-			if opt.Tp == ast.ColumnOptionReference {
-				continue
-			}
-			opts = append(opts, opt)
-		}
-		n.Options = opts
+		cleanupColumnReferences(n)
 		return n, nil
 	}
 	return node, nil
+}
+
+func needsReferenceCleanup(constraint *ast.Constraint) bool {
+	if constraint == nil || constraint.Tp != ast.ConstraintForeignKey {
+		return false
+	}
+	return referenceNeedsCleanup(constraint.Refer)
+}
+
+func columnHasUnsupportedReference(col *ast.ColumnDef) bool {
+	if col == nil {
+		return false
+	}
+	for _, opt := range col.Options {
+		if opt.Tp == ast.ColumnOptionReference && referenceNeedsCleanup(opt.Refer) {
+			return true
+		}
+	}
+	return false
+}
+
+func cleanupReferenceConstraint(constraint *ast.Constraint) {
+	if constraint == nil || constraint.Tp != ast.ConstraintForeignKey {
+		return
+	}
+	cleanupReferenceDef(constraint.Refer)
+}
+
+func cleanupColumnReferences(col *ast.ColumnDef) {
+	if col == nil {
+		return
+	}
+	for _, opt := range col.Options {
+		if opt.Tp != ast.ColumnOptionReference {
+			continue
+		}
+		cleanupReferenceDef(opt.Refer)
+	}
+}
+
+func referenceNeedsCleanup(ref *ast.ReferenceDef) bool {
+	if ref == nil {
+		return false
+	}
+	if ref.Match != ast.MatchNone {
+		return true
+	}
+	if ref.OnDelete != nil && ref.OnDelete.ReferOpt == ast.ReferOptionSetDefault {
+		return true
+	}
+	if ref.OnUpdate != nil && ref.OnUpdate.ReferOpt == ast.ReferOptionSetDefault {
+		return true
+	}
+	return false
+}
+
+func cleanupReferenceDef(ref *ast.ReferenceDef) {
+	if ref == nil {
+		return
+	}
+	if ref.Match != ast.MatchNone {
+		ref.Match = ast.MatchNone
+	}
+	if ref.OnDelete != nil && ref.OnDelete.ReferOpt == ast.ReferOptionSetDefault {
+		ref.OnDelete.ReferOpt = ast.ReferOptionNoOption
+	}
+	if ref.OnUpdate != nil && ref.OnUpdate.ReferOpt == ast.ReferOptionSetDefault {
+		ref.OnUpdate.ReferOpt = ast.ReferOptionNoOption
+	}
 }

@@ -137,7 +137,7 @@ func TestTransformSQLPlannedRules(t *testing.T) {
 	require.NotNil(t, uuidCol)
 	require.True(t, hasColumnOption(uuidCol, ast.ColumnOptionDefaultValue))
 
-	require.False(t, hasForeignKeyConstraint(stmt))
+	require.True(t, hasForeignKeyConstraint(stmt))
 
 	idxHash := findIndex(stmt, "idx_hash")
 	require.NotNil(t, idxHash)
@@ -153,6 +153,29 @@ func TestTransformSQLPlannedRules(t *testing.T) {
 	require.Equal(t, uint64(1), autoInc)
 	require.False(t, hasTableOption(stmt.Options, ast.TableOptionRowFormat))
 	require.False(t, hasTableOption(stmt.Options, ast.TableOptionKeyBlockSize))
+}
+
+func TestTransformSQLConstraintCleanup(t *testing.T) {
+	converter := NewConverter(nil)
+	input := `CREATE TABLE t (
+  id INT,
+  ref_id INT,
+  CONSTRAINT fk_ref FOREIGN KEY (ref_id) REFERENCES ref_t(id) MATCH FULL ON DELETE SET DEFAULT ON UPDATE CASCADE
+);`
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+
+	stmt := parseCreateTableStmt(t, output)
+	fk := findConstraintByName(stmt, "fk_ref")
+	require.NotNil(t, fk)
+	require.Equal(t, ast.ConstraintForeignKey, fk.Tp)
+	require.NotNil(t, fk.Refer)
+	require.Equal(t, ast.MatchNone, fk.Refer.Match)
+	require.NotNil(t, fk.Refer.OnDelete)
+	require.Equal(t, ast.ReferOptionNoOption, fk.Refer.OnDelete.ReferOpt)
+	require.NotNil(t, fk.Refer.OnUpdate)
+	require.Equal(t, ast.ReferOptionCascade, fk.Refer.OnUpdate.ReferOpt)
 }
 
 func TestTransformSQLSystemVersioningCleanup(t *testing.T) {
