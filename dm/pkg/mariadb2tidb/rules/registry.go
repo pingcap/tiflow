@@ -102,16 +102,24 @@ type RuleInfo struct {
 func (r *Registry) registerDefaultRules(cfg *config.Config) {
 	r.logger.Info("Registering default rules")
 
-	// For now, register empty stubs for all planned rules
-	// In future iterations, these will be replaced with actual implementations
-
 	defaultRules := []Rule{
 		// T-0002: Collation rule (highest priority for charset handling)
 		NewCollationRule(cfg),
+		&ZeroTimestampRule{},
+		&UUIDTypeRule{},
+		&MariaDBSpecificRule{},
+		&ConstraintsRule{},
+		&TrailingCommaRule{},
+		&VersionMacrosRule{},
+		&AutoIncrementValuesRule{},
+		&OnUpdateCurrentTimestampRule{},
+		&IndexTypeRule{},
+		&QualifiedNamesRule{},
 		// T-0004: KeyLength rule
 		&KeyLengthRule{},
 		// Handle missing prefix lengths on indexed text columns
 		&IndexPrefixRule{},
+		&IntegerWidthRule{},
 		&TextBlobDefaultRule{},
 		&JSONCheckRule{},
 		&FunctionDefaultRule{},

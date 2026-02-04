@@ -113,15 +113,19 @@ func (l *Loader) LoadFromString(sql string) ([]ast.StmtNode, error) {
 }
 
 var (
-	uuidRegex      = regexp.MustCompile(`(?i)\buuid\b`)
-	encryptedRegex = regexp.MustCompile("(?i)\\s*`encrypted`\\s*=\\s*yes\\s*`encryption_key_id`\\s*=\\s*\\d+\\s*")
-	char36Regex    = regexp.MustCompile(`(?i)char\(36\)`)
-	uuidKeyRegex   = regexp.MustCompile("(?i)unique\\s+key\\s+`?uuid`?")
+	uuidRegex         = regexp.MustCompile(`(?i)\buuid\b`)
+	encryptedRegex    = regexp.MustCompile("(?i)\\s*`encrypted`\\s*=\\s*yes\\s*`encryption_key_id`\\s*=\\s*\\d+\\s*")
+	char36Regex       = regexp.MustCompile(`(?i)char\(36\)`)
+	uuidKeyRegex      = regexp.MustCompile("(?i)unique\\s+key\\s+`?uuid`?")
+	versionMacroRegex = regexp.MustCompile(`(?s)/\*!\d+\s*(.*?)\s*\*/`)
 )
 
 // preprocessSQL performs lightweight text-based transformations before AST parsing.
-// Currently handles UUID type replacement and charset/collation transformation for TiDB compatibility.
+// Currently handles versioned comments, trailing commas, UUID normalization, and charset/collation updates.
 func (l *Loader) preprocessSQL(sql string) string {
+	sql = stripVersionedComments(sql)
+	sql = stripTrailingCommas(sql)
+
 	// Remove MariaDB table encryption options that TiDB doesn't support
 	sql = encryptedRegex.ReplaceAllString(sql, " ")
 
@@ -232,6 +236,193 @@ func (l *Loader) applyCharsetMappings(sql string) string {
 	}
 
 	return sql
+}
+
+func stripVersionedComments(sql string) string {
+	return versionMacroRegex.ReplaceAllString(sql, "$1")
+}
+
+func stripTrailingCommas(sql string) string {
+	var out strings.Builder
+	out.Grow(len(sql))
+
+	inSingle := false
+	inDouble := false
+	inBacktick := false
+	inLineComment := false
+	inBlockComment := false
+
+	for i := 0; i < len(sql); i++ {
+		ch := sql[i]
+
+		if inLineComment {
+			out.WriteByte(ch)
+			if ch == '\n' {
+				inLineComment = false
+			}
+			continue
+		}
+
+		if inBlockComment {
+			out.WriteByte(ch)
+			if ch == '*' && i+1 < len(sql) && sql[i+1] == '/' {
+				out.WriteByte(sql[i+1])
+				i++
+				inBlockComment = false
+			}
+			continue
+		}
+
+		if inSingle {
+			out.WriteByte(ch)
+			if ch == '\\' && i+1 < len(sql) {
+				out.WriteByte(sql[i+1])
+				i++
+				continue
+			}
+			if ch == '\'' {
+				if i+1 < len(sql) && sql[i+1] == '\'' {
+					out.WriteByte(sql[i+1])
+					i++
+					continue
+				}
+				inSingle = false
+			}
+			continue
+		}
+
+		if inDouble {
+			out.WriteByte(ch)
+			if ch == '\\' && i+1 < len(sql) {
+				out.WriteByte(sql[i+1])
+				i++
+				continue
+			}
+			if ch == '"' {
+				if i+1 < len(sql) && sql[i+1] == '"' {
+					out.WriteByte(sql[i+1])
+					i++
+					continue
+				}
+				inDouble = false
+			}
+			continue
+		}
+
+		if inBacktick {
+			out.WriteByte(ch)
+			if ch == '`' {
+				if i+1 < len(sql) && sql[i+1] == '`' {
+					out.WriteByte(sql[i+1])
+					i++
+					continue
+				}
+				inBacktick = false
+			}
+			continue
+		}
+
+		if isLineCommentStart(sql, i) {
+			out.WriteByte(ch)
+			out.WriteByte(sql[i+1])
+			i++
+			inLineComment = true
+			continue
+		}
+
+		if ch == '#' {
+			out.WriteByte(ch)
+			inLineComment = true
+			continue
+		}
+
+		if isBlockCommentStart(sql, i) {
+			out.WriteByte(ch)
+			out.WriteByte(sql[i+1])
+			i++
+			inBlockComment = true
+			continue
+		}
+
+		switch ch {
+		case '\'':
+			inSingle = true
+			out.WriteByte(ch)
+			continue
+		case '"':
+			inDouble = true
+			out.WriteByte(ch)
+			continue
+		case '`':
+			inBacktick = true
+			out.WriteByte(ch)
+			continue
+		}
+
+		if ch == ',' && isTrailingComma(sql, i+1) {
+			continue
+		}
+
+		out.WriteByte(ch)
+	}
+
+	return out.String()
+}
+
+func isTrailingComma(sql string, start int) bool {
+	i := start
+	for i < len(sql) {
+		if isSpace(sql[i]) {
+			i++
+			continue
+		}
+		if isLineCommentStart(sql, i) {
+			i = skipLineComment(sql, i)
+			continue
+		}
+		if sql[i] == '#' {
+			i = skipLineComment(sql, i)
+			continue
+		}
+		if isBlockCommentStart(sql, i) {
+			i = skipBlockComment(sql, i)
+			continue
+		}
+		break
+	}
+	return i < len(sql) && sql[i] == ')'
+}
+
+func isLineCommentStart(sql string, i int) bool {
+	if i+1 >= len(sql) || sql[i] != '-' || sql[i+1] != '-' {
+		return false
+	}
+	if i+2 >= len(sql) {
+		return true
+	}
+	return isSpace(sql[i+2])
+}
+
+func isBlockCommentStart(sql string, i int) bool {
+	return i+1 < len(sql) && sql[i] == '/' && sql[i+1] == '*'
+}
+
+func skipLineComment(sql string, i int) int {
+	for i < len(sql) && sql[i] != '\n' {
+		i++
+	}
+	return i
+}
+
+func skipBlockComment(sql string, i int) int {
+	i += 2
+	for i < len(sql) {
+		if sql[i] == '*' && i+1 < len(sql) && sql[i+1] == '/' {
+			return i + 2
+		}
+		i++
+	}
+	return len(sql)
 }
 
 // isSpace reports whether b is an ASCII whitespace character.

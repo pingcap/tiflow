@@ -61,21 +61,15 @@ func (r *StubRule) Apply(node ast.Node) (ast.Node, error) {
 // CreateStubRules creates stub implementations for all planned rules
 func CreateStubRules() []Rule {
 	return []Rule{
-		NewStubRule("Collation", "Transform MariaDB collations to TiDB compatible ones", 10),
-		NewStubRule("KeyLength", "Remove or adjust key length limits", 20),
-		NewStubRule("IntegerWidth", "Remove integer display width specifications", 30),
-		NewStubRule("TextBlobDefaults", "Remove default values from TEXT/BLOB columns", 40),
-		NewStubRule("JsonCheck", "Transform JSON check constraints", 50),
-		NewStubRule("FunctionDefault", "Transform function-based default values", 60),
-		NewStubRule("ZeroTimestamp", "Handle zero timestamp values", 70),
-		NewStubRule("UUIDType", "Transform UUID data types", 80),
-		NewStubRule("MariaDBSpecific", "Remove MariaDB-specific syntax", 90),
-		NewStubRule("Constraints", "Transform constraint definitions", 100),
-		NewStubRule("TrailingComma", "Remove trailing commas", 110),
-		NewStubRule("VersionMacros", "Transform version-specific macros", 130),
-		NewStubRule("AutoIncrementValues", "Adjust auto-increment starting values", 140),
-		NewStubRule("OnUpdateCurrentTimestamp", "Transform ON UPDATE CURRENT_TIMESTAMP", 150),
-		NewStubRule("IndexType", "Transform index type specifications", 160),
-		NewStubRule("QualifiedNames", "Handle qualified table/column names", 170),
+		NewStubRule("SystemVersioning", "Remove or rewrite system-versioning syntax", 800),
+		NewStubRule("SequenceType", "Normalize sequence type clauses", 810),
+		NewStubRule("ColumnAttributes", "Strip unsupported column attributes", 820),
+		NewStubRule("IndexOptions", "Remove unsupported index options", 830),
+		NewStubRule("FulltextIndexNormalize", "Normalize FULLTEXT indexes", 840),
+		NewStubRule("SpatialIndexDrop", "Drop unsupported SPATIAL indexes", 850),
+		NewStubRule("CreateOrReplace", "Rewrite unsupported CREATE OR REPLACE variants", 860),
+		NewStubRule("EngineOptions", "Strip unsupported engine and table options", 870),
+		NewStubRule("IgnoredClauseCleanup", "Remove parsed-but-ignored clauses", 880),
+		NewStubRule("CollationFallback", "Map unsupported collations to defaults", 890),
 	}
 }
