@@ -71,7 +71,7 @@ func isTimeType(tp byte) bool {
 }
 
 func isZeroTimeDefaultExpr(expr ast.ExprNode) bool {
-	valExpr, ok := expr.(*ast.ValueExpr)
+	valExpr, ok := expr.(ast.ValueExpr)
 	if !ok {
 		return false
 	}

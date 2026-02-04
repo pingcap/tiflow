@@ -10,6 +10,9 @@ enable-heartbeat: false  # whether to enable heartbeat for calculating lag betwe
 # MariaDB schema conversion (mariadb2tidb)
 # mode: auto (MariaDB sources only), on (force enable), off (disable).
 # strict-mode: if false, conversion errors fall back to the original SQL.
+# available rules: Collation, ZeroTimestamp, UUIDType, MariaDBSpecific, Constraints, TrailingComma,
+# VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, KeyLength,
+# IndexPrefix, IntegerWidth, TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
 #mariadb2tidb:
 #  mode: "auto"
 #  strict-mode: true

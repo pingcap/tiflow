@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb/config"
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +84,75 @@ func TestTransformSQLNonStrictReturnsOriginal(t *testing.T) {
 	require.Equal(t, input, output)
 }
 
+func TestTransformSQLTrailingCommaAndVersionMacros(t *testing.T) {
+	converter := NewConverter(nil)
+	input := "/*!40101 SET NAMES utf8 */;\nCREATE TABLE t (id INT,);"
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+
+	stmts := parseStatements(t, output)
+	require.Len(t, stmts, 2)
+	_, ok := stmts[0].(*ast.SetStmt)
+	require.True(t, ok)
+	create, ok := stmts[1].(*ast.CreateTableStmt)
+	require.True(t, ok)
+	require.Len(t, create.Cols, 1)
+}
+
+func TestTransformSQLPlannedRules(t *testing.T) {
+	converter := NewConverter(nil)
+	input := `CREATE TABLE db1.t1 (
+  id INT(11) NOT NULL AUTO_INCREMENT,
+  ts TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  zero_ts TIMESTAMP NOT NULL DEFAULT '0000-00-00 00:00:00',
+  uuid CHAR(36) NOT NULL,
+  CONSTRAINT fk_ref FOREIGN KEY (id) REFERENCES db1.t2(id),
+  KEY idx_hash (id) USING HASH,
+  UNIQUE KEY uuid (uuid)
+) AUTO_INCREMENT=0 ROW_FORMAT=COMPACT KEY_BLOCK_SIZE=8;`
+
+	output, err := converter.TransformSQL(input)
+	require.NoError(t, err)
+
+	stmt := parseCreateTableStmt(t, output)
+	require.Equal(t, "", stmt.Table.Schema.O)
+
+	idCol := findColumn(stmt, "id")
+	require.NotNil(t, idCol)
+	require.Equal(t, types.UnspecifiedLength, idCol.Tp.GetFlen())
+
+	tsCol := findColumn(stmt, "ts")
+	require.NotNil(t, tsCol)
+	require.True(t, hasColumnOption(tsCol, ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(tsCol, ast.ColumnOptionOnUpdate))
+
+	zeroCol := findColumn(stmt, "zero_ts")
+	require.NotNil(t, zeroCol)
+	require.False(t, hasColumnOption(zeroCol, ast.ColumnOptionDefaultValue))
+
+	uuidCol := findColumn(stmt, "uuid")
+	require.NotNil(t, uuidCol)
+	require.True(t, hasColumnOption(uuidCol, ast.ColumnOptionDefaultValue))
+
+	require.False(t, hasForeignKeyConstraint(stmt))
+
+	idxHash := findIndex(stmt, "idx_hash")
+	require.NotNil(t, idxHash)
+	if idxHash.Option != nil {
+		require.Equal(t, ast.IndexTypeInvalid, idxHash.Option.Tp)
+	}
+
+	require.NotNil(t, findIndex(stmt, "uuid_key"))
+	require.Nil(t, findIndex(stmt, "uuid"))
+
+	autoInc, ok := findTableOptionUint(stmt.Options, ast.TableOptionAutoIncrement)
+	require.True(t, ok)
+	require.Equal(t, uint64(1), autoInc)
+	require.False(t, hasTableOption(stmt.Options, ast.TableOptionRowFormat))
+	require.False(t, hasTableOption(stmt.Options, ast.TableOptionKeyBlockSize))
+}
+
 func parseCreateTableStmt(t *testing.T, sql string) *ast.CreateTableStmt {
 	t.Helper()
 	p := parser.New()
@@ -93,6 +163,14 @@ func parseCreateTableStmt(t *testing.T, sql string) *ast.CreateTableStmt {
 	return create
 }
 
+func parseStatements(t *testing.T, sql string) []ast.StmtNode {
+	t.Helper()
+	p := parser.New()
+	stmts, _, err := p.Parse(sql, "", "")
+	require.NoError(t, err)
+	return stmts
+}
+
 func findTableOptionValue(options []*ast.TableOption, optionType ast.TableOptionType) string {
 	for _, opt := range options {
 		if opt.Tp == optionType {
@@ -100,6 +178,24 @@ func findTableOptionValue(options []*ast.TableOption, optionType ast.TableOption
 		}
 	}
 	return ""
+}
+
+func findTableOptionUint(options []*ast.TableOption, optionType ast.TableOptionType) (uint64, bool) {
+	for _, opt := range options {
+		if opt.Tp == optionType {
+			return opt.UintValue, true
+		}
+	}
+	return 0, false
+}
+
+func hasTableOption(options []*ast.TableOption, optionType ast.TableOptionType) bool {
+	for _, opt := range options {
+		if opt.Tp == optionType {
+			return true
+		}
+	}
+	return false
 }
 
 func findColumn(stmt *ast.CreateTableStmt, name string) *ast.ColumnDef {
@@ -115,6 +211,15 @@ func findColumn(stmt *ast.CreateTableStmt, name string) *ast.ColumnDef {
 func hasColumnOption(col *ast.ColumnDef, optionType ast.ColumnOptionType) bool {
 	for _, opt := range col.Options {
 		if opt.Tp == optionType {
+			return true
+		}
+	}
+	return false
+}
+
+func hasForeignKeyConstraint(stmt *ast.CreateTableStmt) bool {
+	for _, constraint := range stmt.Constraints {
+		if constraint.Tp == ast.ConstraintForeignKey {
 			return true
 		}
 	}

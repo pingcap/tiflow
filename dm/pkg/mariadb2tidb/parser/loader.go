@@ -113,17 +113,15 @@ func (l *Loader) LoadFromString(sql string) ([]ast.StmtNode, error) {
 }
 
 var (
-	uuidRegex         = regexp.MustCompile(`(?i)\buuid\b`)
-	encryptedRegex    = regexp.MustCompile("(?i)\\s*`encrypted`\\s*=\\s*yes\\s*`encryption_key_id`\\s*=\\s*\\d+\\s*")
-	char36Regex       = regexp.MustCompile(`(?i)char\(36\)`)
-	uuidKeyRegex      = regexp.MustCompile("(?i)unique\\s+key\\s+`?uuid`?")
-	versionMacroRegex = regexp.MustCompile(`(?s)/\*!\d+\s*(.*?)\s*\*/`)
+	uuidRegex      = regexp.MustCompile(`(?i)\buuid\b`)
+	encryptedRegex = regexp.MustCompile("(?i)\\s*`encrypted`\\s*=\\s*yes\\s*`encryption_key_id`\\s*=\\s*\\d+\\s*")
+	char36Regex    = regexp.MustCompile(`(?i)char\(36\)`)
+	uuidKeyRegex   = regexp.MustCompile("(?i)unique\\s+key\\s+`?uuid`?")
 )
 
 // preprocessSQL performs lightweight text-based transformations before AST parsing.
-// Currently handles versioned comments, trailing commas, UUID normalization, and charset/collation updates.
+// Currently handles trailing commas, UUID normalization, and charset/collation updates.
 func (l *Loader) preprocessSQL(sql string) string {
-	sql = stripVersionedComments(sql)
 	sql = stripTrailingCommas(sql)
 
 	// Remove MariaDB table encryption options that TiDB doesn't support
@@ -236,10 +234,6 @@ func (l *Loader) applyCharsetMappings(sql string) string {
 	}
 
 	return sql
-}
-
-func stripVersionedComments(sql string) string {
-	return versionMacroRegex.ReplaceAllString(sql, "$1")
 }
 
 func stripTrailingCommas(sql string) string {

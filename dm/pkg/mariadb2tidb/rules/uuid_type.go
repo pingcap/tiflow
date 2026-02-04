@@ -51,14 +51,14 @@ func (r *UUIDTypeRule) Apply(node ast.Node) (ast.Node, error) {
 		if isUUIDLikeColumn(n) && !hasDefaultOption(n.Options) {
 			n.Options = append(n.Options, &ast.ColumnOption{
 				Tp:   ast.ColumnOptionDefaultValue,
-				Expr: ast.NewValueExpr(""),
+				Expr: ast.NewValueExpr("", "", ""),
 			})
 		}
 		return n, nil
 	case *ast.CreateTableStmt:
 		for _, c := range n.Constraints {
 			if isUUIDConstraintName(c) {
-				c.Name = ast.NewCIStr("uuid_key")
+				c.Name = "uuid_key"
 			}
 		}
 		return n, nil
@@ -93,7 +93,7 @@ func isUUIDConstraintName(c *ast.Constraint) bool {
 	}
 	switch c.Tp {
 	case ast.ConstraintUniq, ast.ConstraintUniqKey, ast.ConstraintUniqIndex:
-		return strings.EqualFold(c.Name.O, "uuid")
+		return strings.EqualFold(c.Name, "uuid")
 	default:
 		return false
 	}
