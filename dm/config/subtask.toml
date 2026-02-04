@@ -53,6 +53,18 @@ meta-file = "./syncer.subTaskA.meta"
 worker-count = 16
 batch = 1000
 
+# MariaDB schema conversion (mariadb2tidb)
+# Converts MariaDB-only DDL into TiDB-compatible SQL during load/check/sync.
+# mode: auto (MariaDB sources only), on (force enable), off (disable).
+# strict-mode: if false, conversion errors fall back to the original SQL.
+# enabled-rules/disabled-rules: allow or block specific rule names.
+#
+# [mariadb2tidb]
+# mode = "auto"
+# strict-mode = true
+# enabled-rules = []
+# disabled-rules = []
+
 # filter
 
 # block allow list provides a library to filter replicate on schema/table by given rules

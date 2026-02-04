@@ -148,7 +148,9 @@ type SubTaskConfig struct {
 	MydumperConfig // Mydumper configuration
 	LoaderConfig   // Loader configuration
 	SyncerConfig   // Syncer configuration
-	ValidatorCfg   ValidatorConfig
+	// MariaDB2TiDB controls MariaDB schema conversion behavior.
+	MariaDB2TiDB MariaDB2TiDBConfig `yaml:"mariadb2tidb" toml:"mariadb2tidb" json:"mariadb2tidb"`
+	ValidatorCfg ValidatorConfig
 
 	// compatible with standalone dm unit
 	LogLevel  string `toml:"log-level" json:"log-level"`
@@ -202,7 +204,9 @@ var SampleSubtaskConfig string
 
 // NewSubTaskConfig creates a new SubTaskConfig.
 func NewSubTaskConfig() *SubTaskConfig {
-	cfg := &SubTaskConfig{}
+	cfg := &SubTaskConfig{
+		MariaDB2TiDB: DefaultMariaDB2TiDBConfig(),
+	}
 	return cfg
 }
 
@@ -346,6 +350,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 
 	if c.MetaSchema == "" {
 		c.MetaSchema = defaultMetaSchema
+	}
+	if err := c.MariaDB2TiDB.Adjust(); err != nil {
+		return err
 	}
 
 	// adjust dir. Do not do this for both load and load&sync mode, as they are standalone
