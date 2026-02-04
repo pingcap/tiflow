@@ -60,16 +60,5 @@ func (r *StubRule) Apply(node ast.Node) (ast.Node, error) {
 
 // CreateStubRules creates stub implementations for all planned rules
 func CreateStubRules() []Rule {
-	return []Rule{
-		NewStubRule("SystemVersioning", "Remove or rewrite system-versioning syntax", 800),
-		NewStubRule("SequenceType", "Normalize sequence type clauses", 810),
-		NewStubRule("ColumnAttributes", "Strip unsupported column attributes", 820),
-		NewStubRule("IndexOptions", "Remove unsupported index options", 830),
-		NewStubRule("FulltextIndexNormalize", "Normalize FULLTEXT indexes", 840),
-		NewStubRule("SpatialIndexDrop", "Drop unsupported SPATIAL indexes", 850),
-		NewStubRule("CreateOrReplace", "Rewrite unsupported CREATE OR REPLACE variants", 860),
-		NewStubRule("EngineOptions", "Strip unsupported engine and table options", 870),
-		NewStubRule("IgnoredClauseCleanup", "Remove parsed-but-ignored clauses", 880),
-		NewStubRule("CollationFallback", "Map unsupported collations to defaults", 890),
-	}
+	return []Rule{}
 }

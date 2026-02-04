@@ -117,11 +117,34 @@ var (
 	encryptedRegex = regexp.MustCompile("(?i)\\s*`encrypted`\\s*=\\s*yes\\s*`encryption_key_id`\\s*=\\s*\\d+\\s*")
 	char36Regex    = regexp.MustCompile(`(?i)char\(36\)`)
 	uuidKeyRegex   = regexp.MustCompile("(?i)unique\\s+key\\s+`?uuid`?")
+
+	withSystemVersioningRegex    = regexp.MustCompile(`(?i)\bWITH\s+SYSTEM\s+VERSIONING\b`)
+	withoutSystemVersioningRegex = regexp.MustCompile(`(?i)\bWITHOUT\s+SYSTEM\s+VERSIONING\b`)
+	periodSystemTimeRegex        = regexp.MustCompile(`(?i)\bPERIOD\s+FOR\s+SYSTEM_TIME\s*\([^)]*\)`)
+	rowStartRegex                = regexp.MustCompile(`(?i)\bGENERATED\s+ALWAYS\s+AS\s+ROW\s+START\b`)
+	rowEndRegex                  = regexp.MustCompile(`(?i)\bGENERATED\s+ALWAYS\s+AS\s+ROW\s+END\b`)
+	alterSystemVersioningRegex   = regexp.MustCompile(`(?i)\b(ADD|DROP)\s+SYSTEM\s+VERSIONING\b`)
+
+	columnAttributeRegex = regexp.MustCompile(`(?i)\b(INVISIBLE|COMPRESSED|PERSISTENT)\b`)
+
+	notIgnoredIndexRegex   = regexp.MustCompile(`(?i)\bNOT\s+IGNORED\b`)
+	ignoredIndexRegex      = regexp.MustCompile(`(?i)\bIGNORED\b`)
+	withoutOverlapsRegex   = regexp.MustCompile(`(?i)\bWITHOUT\s+OVERLAPS\b`)
+	createOrReplaceRegex   = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+(TABLE|SEQUENCE|INDEX)\b`)
+	sequenceTypeRegex      = regexp.MustCompile(`(?i)(\bCREATE\s+SEQUENCE\s+[^;]*?)\s+AS\s+\w+\b`)
+	alterSequenceTypeRegex = regexp.MustCompile(`(?i)(\bALTER\s+SEQUENCE\s+[^;]*?)\s+AS\s+\w+\b`)
+	spatialIndexRegex      = regexp.MustCompile(`(?i)\bSPATIAL\s+(INDEX|KEY)\b`)
 )
 
 // preprocessSQL performs lightweight text-based transformations before AST parsing.
-// Currently handles trailing commas, UUID normalization, and charset/collation updates.
+// Currently handles MariaDB-only syntax cleanup, trailing commas, UUID normalization, and charset/collation updates.
 func (l *Loader) preprocessSQL(sql string) string {
+	sql = stripSystemVersioning(sql)
+	sql = stripColumnAttributes(sql)
+	sql = stripIndexOptions(sql)
+	sql = stripCreateOrReplace(sql)
+	sql = stripSequenceType(sql)
+	sql = stripSpatialIndexKeywords(sql)
 	sql = stripTrailingCommas(sql)
 
 	// Remove MariaDB table encryption options that TiDB doesn't support
@@ -234,6 +257,41 @@ func (l *Loader) applyCharsetMappings(sql string) string {
 	}
 
 	return sql
+}
+
+func stripSystemVersioning(sql string) string {
+	sql = withSystemVersioningRegex.ReplaceAllString(sql, " ")
+	sql = withoutSystemVersioningRegex.ReplaceAllString(sql, " ")
+	sql = periodSystemTimeRegex.ReplaceAllString(sql, " ")
+	sql = rowStartRegex.ReplaceAllString(sql, " ")
+	sql = rowEndRegex.ReplaceAllString(sql, " ")
+	sql = alterSystemVersioningRegex.ReplaceAllString(sql, " ")
+	return sql
+}
+
+func stripColumnAttributes(sql string) string {
+	return columnAttributeRegex.ReplaceAllString(sql, " ")
+}
+
+func stripIndexOptions(sql string) string {
+	sql = notIgnoredIndexRegex.ReplaceAllString(sql, " ")
+	sql = ignoredIndexRegex.ReplaceAllString(sql, " ")
+	sql = withoutOverlapsRegex.ReplaceAllString(sql, " ")
+	return sql
+}
+
+func stripCreateOrReplace(sql string) string {
+	return createOrReplaceRegex.ReplaceAllString(sql, "CREATE $1")
+}
+
+func stripSequenceType(sql string) string {
+	sql = sequenceTypeRegex.ReplaceAllString(sql, "$1")
+	sql = alterSequenceTypeRegex.ReplaceAllString(sql, "$1")
+	return sql
+}
+
+func stripSpatialIndexKeywords(sql string) string {
+	return spatialIndexRegex.ReplaceAllString(sql, "$1")
 }
 
 func stripTrailingCommas(sql string) string {

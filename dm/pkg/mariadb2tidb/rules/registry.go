@@ -115,6 +115,16 @@ func (r *Registry) registerDefaultRules(cfg *config.Config) {
 		&OnUpdateCurrentTimestampRule{},
 		&IndexTypeRule{},
 		&QualifiedNamesRule{},
+		&SystemVersioningRule{},
+		&SequenceTypeRule{},
+		&ColumnAttributesRule{},
+		&IndexOptionsRule{},
+		&FulltextIndexNormalizeRule{},
+		&SpatialIndexDropRule{},
+		&CreateOrReplaceRule{},
+		&EngineOptionsRule{},
+		&IgnoredClauseCleanupRule{},
+		&CollationFallbackRule{},
 		// T-0004: KeyLength rule
 		&KeyLengthRule{},
 		// Handle missing prefix lengths on indexed text columns
