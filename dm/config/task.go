@@ -414,6 +414,10 @@ type SyncerConfig struct {
 	DisableCausality bool   `yaml:"disable-detect" toml:"disable-detect" json:"disable-detect"`
 	SafeMode         bool   `yaml:"safe-mode" toml:"safe-mode" json:"safe-mode"`
 	SafeModeDuration string `yaml:"safe-mode-duration" toml:"safe-mode-duration" json:"safe-mode-duration"`
+	// SafeModeDMLStrategy controls how to generate DML statements in safe-mode.
+	// - replace: INSERT -> REPLACE, UPDATE -> REPLACE or DELETE+REPLACE (default, backward compatible)
+	// - upsert: INSERT -> INSERT ON DUPLICATE KEY UPDATE, UPDATE -> UPDATE
+	SafeModeDMLStrategy string `yaml:"safe-mode-dml-strategy" toml:"safe-mode-dml-strategy" json:"safe-mode-dml-strategy"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
@@ -892,6 +896,12 @@ func (c *TaskConfig) adjust() error {
 		}
 		if inst.Syncer.SafeModeDuration == "" {
 			inst.Syncer.SafeModeDuration = strconv.Itoa(2*inst.Syncer.CheckpointFlushInterval) + "s"
+		}
+		if inst.Syncer.SafeModeDMLStrategy != "" && inst.Syncer.SafeModeDMLStrategy != "replace" && inst.Syncer.SafeModeDMLStrategy != "upsert" {
+			log.L().Warn("unknown safe-mode-dml-strategy, fallback to default",
+				zap.String("strategy", inst.Syncer.SafeModeDMLStrategy),
+				zap.String("default", "replace"))
+			inst.Syncer.SafeModeDMLStrategy = ""
 		}
 		if duration, err := time.ParseDuration(inst.Syncer.SafeModeDuration); err != nil {
 			return terror.ErrConfigInvalidSafeModeDuration.Generate(inst.Syncer.SafeModeDuration, err)

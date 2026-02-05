@@ -394,6 +394,12 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if c.SyncerConfig.SafeModeDuration == "" {
 		c.SyncerConfig.SafeModeDuration = strconv.Itoa(2*c.SyncerConfig.CheckpointFlushInterval) + "s"
 	}
+	if c.SyncerConfig.SafeModeDMLStrategy != "" && c.SyncerConfig.SafeModeDMLStrategy != "replace" && c.SyncerConfig.SafeModeDMLStrategy != "upsert" {
+		log.L().Warn("unknown safe-mode-dml-strategy, fallback to default",
+			zap.String("strategy", c.SyncerConfig.SafeModeDMLStrategy),
+			zap.String("default", "replace"))
+		c.SyncerConfig.SafeModeDMLStrategy = ""
+	}
 	if duration, err := time.ParseDuration(c.SyncerConfig.SafeModeDuration); err != nil {
 		return terror.ErrConfigInvalidSafeModeDuration.Generate(c.SyncerConfig.SafeModeDuration, err)
 	} else if c.SyncerConfig.SafeMode && duration == 0 {
