@@ -32,7 +32,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const limitBatchSize = 128
+const defaultLimitBatchSize = 32
 
 // LimitIterator is the iterator with limit
 type LimitIterator struct {
@@ -41,6 +41,7 @@ type LimitIterator struct {
 	queryTmpl string
 	chunkSize int64
 	indexID   int64
+	batchSize int
 
 	resultCh chan iteratorResult
 	cancel   context.CancelFunc
@@ -131,14 +132,20 @@ func NewLimitIteratorWithCheckpoint(
 	lctx, cancel := context.WithCancel(ctx)
 	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, candidate.Index.Name.O)
 
+	batchSize := defaultLimitBatchSize
+	if table.CheckThreadCount > 0 {
+		batchSize = table.CheckThreadCount * 2
+	}
+
 	limitIterator := &LimitIterator{
 		table,
 
 		queryTmpl,
 		chunkSize,
 		candidate.Index.ID,
+		batchSize,
 
-		make(chan iteratorResult, DefaultChannelBuffer),
+		make(chan iteratorResult, batchSize),
 		cancel,
 		dbConn,
 
@@ -196,8 +203,8 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, tagChunk *chunk.Range, bucketID int) {
-	queryRange := lmt.chunkSize * int64(limitBatchSize)
 	for {
+		queryRange := lmt.chunkSize * int64(lmt.batchSize)
 		where, args := tagChunk.ToString(lmt.table.Collation)
 		query := fmt.Sprintf(lmt.queryTmpl, where)
 		bounds, err := lmt.batchGetBounds(ctx, query, append(args, queryRange)...)
