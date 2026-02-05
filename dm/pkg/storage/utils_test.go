@@ -259,14 +259,15 @@ func TestCollectDirFilesAndRemove(t *testing.T) {
 	}
 
 	s.s3.EXPECT().
-		ListObjects(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...func(*s3.Options)) (*s3.ListObjectsOutput, error) {
+		ListObjectsV2(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.ListObjectsV2Input, opt ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 			require.Equal(t, "bucket", aws.ToString(input.Bucket))
 			require.Equal(t, "prefix/", aws.ToString(input.Prefix))
-			require.Equal(t, "", aws.ToString(input.Marker))
+			require.Equal(t, "", aws.ToString(input.ContinuationToken))
+			require.Equal(t, "", aws.ToString(input.StartAfter))
 			require.Equal(t, int32(1000), aws.ToInt32(input.MaxKeys))
 			require.Equal(t, "", aws.ToString(input.Delimiter))
-			return &s3.ListObjectsOutput{
+			return &s3.ListObjectsV2Output{
 				IsTruncated: aws.Bool(false),
 				Contents:    objects,
 			}, nil
@@ -312,14 +313,15 @@ func TestRemoveAll(t *testing.T) {
 	}
 
 	firstCall := s.s3.EXPECT().
-		ListObjects(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(_ context.Context, input *s3.ListObjectsInput, opt ...func(*s3.Options)) (*s3.ListObjectsOutput, error) {
+		ListObjectsV2(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *s3.ListObjectsV2Input, opt ...func(*s3.Options)) (*s3.ListObjectsV2Output, error) {
 			require.Equal(t, "bucket", aws.ToString(input.Bucket))
 			require.Equal(t, "prefix/", aws.ToString(input.Prefix))
-			require.Equal(t, "", aws.ToString(input.Marker))
+			require.Equal(t, "", aws.ToString(input.ContinuationToken))
+			require.Equal(t, "", aws.ToString(input.StartAfter))
 			require.Equal(t, int32(1000), aws.ToInt32(input.MaxKeys))
 			require.Equal(t, "", aws.ToString(input.Delimiter))
-			return &s3.ListObjectsOutput{
+			return &s3.ListObjectsV2Output{
 				IsTruncated: aws.Bool(false),
 				Contents:    objects,
 			}, nil
