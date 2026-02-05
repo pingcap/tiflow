@@ -24,7 +24,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// indexFields wraps the column info from the user config "index-fields".
+// indexFields wraps the column info for the user config "index-fields".
 type indexFields struct {
 	cols      []*model.ColumnInfo
 	tableInfo *model.TableInfo
@@ -33,6 +33,7 @@ type indexFields struct {
 
 func indexFieldsFromConfigString(strFields string, tableInfo *model.TableInfo) (*indexFields, error) {
 	if len(strFields) == 0 {
+		// Empty option
 		return &indexFields{empty: true}, nil
 	}
 
@@ -61,10 +62,14 @@ func indexFieldsFromConfigString(strFields string, tableInfo *model.TableInfo) (
 
 func (f *indexFields) MatchesIndex(index *model.IndexInfo) bool {
 	if f.empty {
+		// Default config matches all.
 		return true
 	}
 
 	// Sanity checks.
+	if index == nil {
+		log.Panic("matching with empty index")
+	}
 	if len(f.cols) == 0 {
 		log.Panic("unexpected cols with length 0")
 	}

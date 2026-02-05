@@ -45,6 +45,7 @@ type TiDBTableAnalyzer struct {
 // AnalyzeSplitter returns a new iterator for TiDB table
 func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.TableDiff, startRange *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	matchedSource := getMatchSource(a.sourceTableMap, table)
+	// Shallow Copy
 	originTable := *table
 	originTable.Schema = matchedSource.OriginSchema
 	originTable.Table = matchedSource.OriginTable

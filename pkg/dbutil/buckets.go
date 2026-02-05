@@ -43,7 +43,6 @@ func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string,
 	missingColumnHistIDs := make(map[int64]struct{})
 
 	indices := tidbdbutil.FindAllIndex(tableInfo)
-
 	// Pre-build lightweight maps for indices: index ID -> index name / column types.
 	indexColumnTypesMap := make(map[int64][]byte, len(indices))
 	indexNameMap := make(map[int64]string, len(indices))
@@ -188,8 +187,7 @@ ORDER BY is_index, hist_id, bucket_id`
 				log.Warn("GetBucketsInfo: No primary key buckets found, returning empty buckets",
 					zap.String("schema", schema),
 					zap.String("table", table),
-					zap.String("primaryKeyColumn", index.Columns[0].Name.O),
-				)
+					zap.String("primaryKeyColumn", index.Columns[0].Name.O))
 				return buckets, nil
 			}
 			buckets[index.Name.O] = buckets[index.Columns[0].Name.O]
