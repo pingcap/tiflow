@@ -72,6 +72,11 @@ ssl-cert = "$pwd/conf/tidb.crt"
 ssl-key = "$pwd/conf/tidb.key"
 EOF
 
+	# disable new collation
+	cat - >"$OUT_DIR/tidb-disable-collation-config.toml" <<EOF
+new_collations_enabled_on_first_bootstrap = false
+EOF
+
 	echo "Starting TiDB..."
 	tidb-server \
 		-P 4000 \
@@ -90,6 +95,15 @@ EOF
 		--status=20080 \
 		--log-file "$OUT_DIR/down_tidb.log" \
 		-socket "$OUT_DIR/down_tidb.sock" &
+
+	echo "Starting TiDB without new collation..."
+	tidb-server \
+		-P 4002 \
+		--path=$OUT_DIR/tidb2 \
+		--status=30080 \
+		--config "$OUT_DIR/tidb-disable-collation-config.toml" \
+		--log-file "$OUT_DIR/tidb2.log" \
+		-socket "$OUT_DIR/tidb2.sock" &
 
 	echo "Verifying Upstream TiDB is started..."
 	check_db_status "127.0.0.1" 4001 "tidb" "$OUT_DIR/down_tidb.log"
