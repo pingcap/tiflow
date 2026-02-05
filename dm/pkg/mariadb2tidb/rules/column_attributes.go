@@ -26,10 +26,22 @@ func (r *ColumnAttributesRule) Description() string {
 
 func (r *ColumnAttributesRule) Priority() int { return 200 }
 
-func (r *ColumnAttributesRule) ShouldApply(_ ast.Node) bool {
-	return false
+func (r *ColumnAttributesRule) ShouldApply(node ast.Node) bool {
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return false
+	}
+	return hasColumnAttributes(raw.Text())
 }
 
 func (r *ColumnAttributesRule) Apply(node ast.Node) (ast.Node, error) {
-	return node, nil
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return node, nil
+	}
+	updated := stripColumnAttributes(raw.Text())
+	if updated == raw.Text() {
+		return raw, nil
+	}
+	return newRawStatement(updated), nil
 }

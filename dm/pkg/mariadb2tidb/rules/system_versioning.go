@@ -26,10 +26,22 @@ func (r *SystemVersioningRule) Description() string {
 
 func (r *SystemVersioningRule) Priority() int { return 180 }
 
-func (r *SystemVersioningRule) ShouldApply(_ ast.Node) bool {
-	return false
+func (r *SystemVersioningRule) ShouldApply(node ast.Node) bool {
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return false
+	}
+	return hasSystemVersioning(raw.Text())
 }
 
 func (r *SystemVersioningRule) Apply(node ast.Node) (ast.Node, error) {
-	return node, nil
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return node, nil
+	}
+	updated := stripSystemVersioning(raw.Text())
+	if updated == raw.Text() {
+		return raw, nil
+	}
+	return newRawStatement(updated), nil
 }

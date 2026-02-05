@@ -23,26 +23,49 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // required: register TiDB SQL driver for parser
 	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb/config"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb/rules"
 	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb/utils"
 	"go.uber.org/zap"
 )
 
 // Loader handles loading and parsing SQL files
 type Loader struct {
-	parser       *parser.Parser
-	logger       *zap.Logger
-	charsetMap   map[string]string // maps source charset to target charset
-	collationMap map[string]string // maps source collation to target collation
+	parser        *parser.Parser
+	logger        *zap.Logger
+	charsetMap    map[string]string // maps source charset to target charset
+	collationMap  map[string]string // maps source collation to target collation
+	preparseRules []rules.Rule
 }
 
 // NewLoader creates a new SQL loader
 func NewLoader() *Loader {
-	return &Loader{
+	return NewLoaderWithConfig(nil)
+}
+
+// NewLoaderWithConfig creates a loader configured with charset mappings from config
+func NewLoaderWithConfig(cfg *config.Config) *Loader {
+	loader := &Loader{
 		parser:       parser.New(),
 		logger:       utils.GetLogger(),
 		charsetMap:   make(map[string]string),
 		collationMap: make(map[string]string),
 	}
+	loader.preparseRules = rules.NewRegistry(cfg).GetRules()
+
+	if cfg == nil {
+		return loader
+	}
+
+	// Convert charset mappings
+	charsetMap := make(map[string]string)
+	for source, mapping := range cfg.CharsetMappings {
+		charsetMap[source] = mapping.TargetCharset
+	}
+
+	// Use collation mappings directly
+	loader.WithCharsetMappings(charsetMap, cfg.CollationMappings)
+
+	return loader
 }
 
 // WithCharsetMappings configures the loader with charset and collation mappings
@@ -50,24 +73,6 @@ func (l *Loader) WithCharsetMappings(charsetMap map[string]string, collationMap 
 	l.charsetMap = charsetMap
 	l.collationMap = collationMap
 	return l
-}
-
-// NewLoaderWithConfig creates a loader configured with charset mappings from config
-func NewLoaderWithConfig(cfg *config.Config) *Loader {
-	loader := NewLoader()
-
-	if cfg != nil {
-		// Convert charset mappings
-		charsetMap := make(map[string]string)
-		for source, mapping := range cfg.CharsetMappings {
-			charsetMap[source] = mapping.TargetCharset
-		}
-
-		// Use collation mappings directly
-		loader.WithCharsetMappings(charsetMap, cfg.CollationMappings)
-	}
-
-	return loader
 }
 
 // LoadFromFile loads and parses SQL from a file
@@ -118,37 +123,18 @@ var (
 	char36Regex    = regexp.MustCompile(`(?i)char\(36\)`)
 	uuidKeyRegex   = regexp.MustCompile("(?i)unique\\s+key\\s+`?uuid`?")
 
-	withSystemVersioningRegex    = regexp.MustCompile(`(?i)\bWITH\s+SYSTEM\s+VERSIONING\b`)
-	withoutSystemVersioningRegex = regexp.MustCompile(`(?i)\bWITHOUT\s+SYSTEM\s+VERSIONING\b`)
-	periodSystemTimeRegex        = regexp.MustCompile(`(?i)\bPERIOD\s+FOR\s+SYSTEM_TIME\s*\([^)]*\)`)
-	rowStartRegex                = regexp.MustCompile(`(?i)\bGENERATED\s+ALWAYS\s+AS\s+ROW\s+START\b`)
-	rowEndRegex                  = regexp.MustCompile(`(?i)\bGENERATED\s+ALWAYS\s+AS\s+ROW\s+END\b`)
-	alterSystemVersioningRegex   = regexp.MustCompile(`(?i)\b(ADD|DROP)\s+SYSTEM\s+VERSIONING\b`)
-
-	columnAttributeRegex = regexp.MustCompile(`(?i)\b(INVISIBLE|COMPRESSED|PERSISTENT)\b`)
-
-	notIgnoredIndexRegex   = regexp.MustCompile(`(?i)\bNOT\s+IGNORED\b`)
-	ignoredIndexRegex      = regexp.MustCompile(`(?i)\bIGNORED\b`)
-	withoutOverlapsRegex   = regexp.MustCompile(`(?i)\bWITHOUT\s+OVERLAPS\b`)
-	sequenceTypeRegex      = regexp.MustCompile(`(?i)(\bCREATE\s+SEQUENCE\s+[^;]*?)\s+AS\s+\w+\b`)
-	alterSequenceTypeRegex = regexp.MustCompile(`(?i)(\bALTER\s+SEQUENCE\s+[^;]*?)\s+AS\s+\w+\b`)
-	spatialIndexRegex      = regexp.MustCompile(`(?i)\bSPATIAL\s+(INDEX|KEY)\b`)
-
-	createOrReplaceTableRegex    = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+TABLE\s+([^\s(]+)`)
-	createOrReplaceSequenceRegex = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+SEQUENCE\s+([^\s(]+)`)
-	createOrReplaceIndexRegex    = regexp.MustCompile(`(?i)\bCREATE\s+OR\s+REPLACE\s+INDEX\s+([^\s]+)\s+ON\s+([^\s(]+)`)
+	notIgnoredIndexRegex = regexp.MustCompile(`(?i)\bNOT\s+IGNORED\b`)
+	ignoredIndexRegex    = regexp.MustCompile(`(?i)\bIGNORED\b`)
+	withoutOverlapsRegex = regexp.MustCompile(`(?i)\bWITHOUT\s+OVERLAPS\b`)
+	spatialIndexRegex    = regexp.MustCompile(`(?i)\bSPATIAL\s+(INDEX|KEY)\b`)
 )
 
 // preprocessSQL performs lightweight text-based transformations before AST parsing.
 // Currently handles MariaDB-only syntax cleanup, trailing commas, UUID normalization, and charset/collation updates.
 func (l *Loader) preprocessSQL(sql string) string {
-	sql = stripSystemVersioning(sql)
-	sql = stripColumnAttributes(sql)
+	sql = l.applyPreparseRules(sql)
 	sql = stripIndexOptions(sql)
-	sql = stripCreateOrReplace(sql)
-	sql = stripSequenceType(sql)
 	sql = stripSpatialIndexKeywords(sql)
-	sql = stripTrailingCommas(sql)
 
 	// Remove MariaDB table encryption options that TiDB doesn't support
 	sql = encryptedRegex.ReplaceAllString(sql, " ")
@@ -245,6 +231,18 @@ func (l *Loader) preprocessSQL(sql string) string {
 	return out.String()
 }
 
+func (l *Loader) applyPreparseRules(sql string) string {
+	if len(l.preparseRules) == 0 {
+		return sql
+	}
+	updated, err := rules.ApplyPreparseRules(sql, l.preparseRules)
+	if err != nil {
+		l.logger.Error("Failed to apply pre-parse rules", zap.Error(err))
+		return sql
+	}
+	return updated
+}
+
 // applyCharsetMappings applies configured charset and collation transformations
 func (l *Loader) applyCharsetMappings(sql string) string {
 	// Apply charset mappings
@@ -262,20 +260,6 @@ func (l *Loader) applyCharsetMappings(sql string) string {
 	return sql
 }
 
-func stripSystemVersioning(sql string) string {
-	sql = withSystemVersioningRegex.ReplaceAllString(sql, " ")
-	sql = withoutSystemVersioningRegex.ReplaceAllString(sql, " ")
-	sql = periodSystemTimeRegex.ReplaceAllString(sql, " ")
-	sql = rowStartRegex.ReplaceAllString(sql, " ")
-	sql = rowEndRegex.ReplaceAllString(sql, " ")
-	sql = alterSystemVersioningRegex.ReplaceAllString(sql, " ")
-	return sql
-}
-
-func stripColumnAttributes(sql string) string {
-	return columnAttributeRegex.ReplaceAllString(sql, " ")
-}
-
 func stripIndexOptions(sql string) string {
 	sql = notIgnoredIndexRegex.ReplaceAllString(sql, " ")
 	sql = ignoredIndexRegex.ReplaceAllString(sql, " ")
@@ -283,204 +267,8 @@ func stripIndexOptions(sql string) string {
 	return sql
 }
 
-func stripCreateOrReplace(sql string) string {
-	sql = createOrReplaceIndexRegex.ReplaceAllString(sql, "DROP INDEX IF EXISTS $1 ON $2; CREATE INDEX $1 ON $2")
-	sql = createOrReplaceTableRegex.ReplaceAllString(sql, "DROP TABLE IF EXISTS $1; CREATE TABLE $1")
-	sql = createOrReplaceSequenceRegex.ReplaceAllString(sql, "DROP SEQUENCE IF EXISTS $1; CREATE SEQUENCE $1")
-	return sql
-}
-
-func stripSequenceType(sql string) string {
-	sql = sequenceTypeRegex.ReplaceAllString(sql, "$1")
-	sql = alterSequenceTypeRegex.ReplaceAllString(sql, "$1")
-	return sql
-}
-
 func stripSpatialIndexKeywords(sql string) string {
 	return spatialIndexRegex.ReplaceAllString(sql, "$1")
-}
-
-func stripTrailingCommas(sql string) string {
-	var out strings.Builder
-	out.Grow(len(sql))
-
-	inSingle := false
-	inDouble := false
-	inBacktick := false
-	inLineComment := false
-	inBlockComment := false
-
-	for i := 0; i < len(sql); i++ {
-		ch := sql[i]
-
-		if inLineComment {
-			out.WriteByte(ch)
-			if ch == '\n' {
-				inLineComment = false
-			}
-			continue
-		}
-
-		if inBlockComment {
-			out.WriteByte(ch)
-			if ch == '*' && i+1 < len(sql) && sql[i+1] == '/' {
-				out.WriteByte(sql[i+1])
-				i++
-				inBlockComment = false
-			}
-			continue
-		}
-
-		if inSingle {
-			out.WriteByte(ch)
-			if ch == '\\' && i+1 < len(sql) {
-				out.WriteByte(sql[i+1])
-				i++
-				continue
-			}
-			if ch == '\'' {
-				if i+1 < len(sql) && sql[i+1] == '\'' {
-					out.WriteByte(sql[i+1])
-					i++
-					continue
-				}
-				inSingle = false
-			}
-			continue
-		}
-
-		if inDouble {
-			out.WriteByte(ch)
-			if ch == '\\' && i+1 < len(sql) {
-				out.WriteByte(sql[i+1])
-				i++
-				continue
-			}
-			if ch == '"' {
-				if i+1 < len(sql) && sql[i+1] == '"' {
-					out.WriteByte(sql[i+1])
-					i++
-					continue
-				}
-				inDouble = false
-			}
-			continue
-		}
-
-		if inBacktick {
-			out.WriteByte(ch)
-			if ch == '`' {
-				if i+1 < len(sql) && sql[i+1] == '`' {
-					out.WriteByte(sql[i+1])
-					i++
-					continue
-				}
-				inBacktick = false
-			}
-			continue
-		}
-
-		if isLineCommentStart(sql, i) {
-			out.WriteByte(ch)
-			out.WriteByte(sql[i+1])
-			i++
-			inLineComment = true
-			continue
-		}
-
-		if ch == '#' {
-			out.WriteByte(ch)
-			inLineComment = true
-			continue
-		}
-
-		if isBlockCommentStart(sql, i) {
-			out.WriteByte(ch)
-			out.WriteByte(sql[i+1])
-			i++
-			inBlockComment = true
-			continue
-		}
-
-		switch ch {
-		case '\'':
-			inSingle = true
-			out.WriteByte(ch)
-			continue
-		case '"':
-			inDouble = true
-			out.WriteByte(ch)
-			continue
-		case '`':
-			inBacktick = true
-			out.WriteByte(ch)
-			continue
-		}
-
-		if ch == ',' && isTrailingComma(sql, i+1) {
-			continue
-		}
-
-		out.WriteByte(ch)
-	}
-
-	return out.String()
-}
-
-func isTrailingComma(sql string, start int) bool {
-	i := start
-	for i < len(sql) {
-		if isSpace(sql[i]) {
-			i++
-			continue
-		}
-		if isLineCommentStart(sql, i) {
-			i = skipLineComment(sql, i)
-			continue
-		}
-		if sql[i] == '#' {
-			i = skipLineComment(sql, i)
-			continue
-		}
-		if isBlockCommentStart(sql, i) {
-			i = skipBlockComment(sql, i)
-			continue
-		}
-		break
-	}
-	return i < len(sql) && sql[i] == ')'
-}
-
-func isLineCommentStart(sql string, i int) bool {
-	if i+1 >= len(sql) || sql[i] != '-' || sql[i+1] != '-' {
-		return false
-	}
-	if i+2 >= len(sql) {
-		return true
-	}
-	return isSpace(sql[i+2])
-}
-
-func isBlockCommentStart(sql string, i int) bool {
-	return i+1 < len(sql) && sql[i] == '/' && sql[i+1] == '*'
-}
-
-func skipLineComment(sql string, i int) int {
-	for i < len(sql) && sql[i] != '\n' {
-		i++
-	}
-	return i
-}
-
-func skipBlockComment(sql string, i int) int {
-	i += 2
-	for i < len(sql) {
-		if sql[i] == '*' && i+1 < len(sql) && sql[i+1] == '/' {
-			return i + 2
-		}
-		i++
-	}
-	return len(sql)
 }
 
 // isSpace reports whether b is an ASCII whitespace character.

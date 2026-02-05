@@ -26,10 +26,22 @@ func (r *SequenceTypeRule) Description() string {
 
 func (r *SequenceTypeRule) Priority() int { return 190 }
 
-func (r *SequenceTypeRule) ShouldApply(_ ast.Node) bool {
-	return false
+func (r *SequenceTypeRule) ShouldApply(node ast.Node) bool {
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return false
+	}
+	return hasSequenceType(raw.Text())
 }
 
 func (r *SequenceTypeRule) Apply(node ast.Node) (ast.Node, error) {
-	return node, nil
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return node, nil
+	}
+	updated := stripSequenceType(raw.Text())
+	if updated == raw.Text() {
+		return raw, nil
+	}
+	return newRawStatement(updated), nil
 }

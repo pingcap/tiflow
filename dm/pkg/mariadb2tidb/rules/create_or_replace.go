@@ -26,10 +26,22 @@ func (r *CreateOrReplaceRule) Description() string {
 
 func (r *CreateOrReplaceRule) Priority() int { return 240 }
 
-func (r *CreateOrReplaceRule) ShouldApply(_ ast.Node) bool {
-	return false
+func (r *CreateOrReplaceRule) ShouldApply(node ast.Node) bool {
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return false
+	}
+	return hasCreateOrReplace(raw.Text())
 }
 
 func (r *CreateOrReplaceRule) Apply(node ast.Node) (ast.Node, error) {
-	return node, nil
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return node, nil
+	}
+	updated := rewriteCreateOrReplace(raw.Text())
+	if updated == raw.Text() {
+		return raw, nil
+	}
+	return newRawStatement(updated), nil
 }

@@ -26,10 +26,22 @@ func (r *TrailingCommaRule) Description() string {
 
 func (r *TrailingCommaRule) Priority() int { return 110 }
 
-func (r *TrailingCommaRule) ShouldApply(_ ast.Node) bool {
-	return false
+func (r *TrailingCommaRule) ShouldApply(node ast.Node) bool {
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return false
+	}
+	return hasTrailingCommas(raw.Text())
 }
 
 func (r *TrailingCommaRule) Apply(node ast.Node) (ast.Node, error) {
-	return node, nil
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return node, nil
+	}
+	updated, _ := stripTrailingCommas(raw.Text())
+	if updated == raw.Text() {
+		return raw, nil
+	}
+	return newRawStatement(updated), nil
 }

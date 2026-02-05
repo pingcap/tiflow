@@ -26,10 +26,22 @@ func (r *VersionMacrosRule) Description() string {
 
 func (r *VersionMacrosRule) Priority() int { return 130 }
 
-func (r *VersionMacrosRule) ShouldApply(_ ast.Node) bool {
-	return false
+func (r *VersionMacrosRule) ShouldApply(node ast.Node) bool {
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return false
+	}
+	return hasVersionMacros(raw.Text())
 }
 
 func (r *VersionMacrosRule) Apply(node ast.Node) (ast.Node, error) {
-	return node, nil
+	raw, ok := node.(*rawStatement)
+	if !ok {
+		return node, nil
+	}
+	updated := stripVersionMacros(raw.Text())
+	if updated == raw.Text() {
+		return raw, nil
+	}
+	return newRawStatement(updated), nil
 }
