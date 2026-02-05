@@ -25,7 +25,8 @@ import (
 	gcsStorage "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsretry "github.com/aws/aws-sdk-go-v2/aws/retry"
+	"github.com/aws/aws-sdk-go-v2/aws/ratelimit"
+	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/log"
@@ -41,14 +42,14 @@ const (
 	defaultTimeout = 5 * time.Minute
 )
 
-// GetExternalStorageFromURI creates a new external storage from a uri.
+// GetExternalStorageFromURI creates a new storeapi.Storage from a uri.
 func GetExternalStorageFromURI(
 	ctx context.Context, uri string,
 ) (storeapi.Storage, error) {
 	return GetExternalStorage(ctx, uri, nil, DefaultS3Retryer())
 }
 
-// GetExternalStorageWithDefaultTimeout creates a new external storage from a uri
+// GetExternalStorageWithDefaultTimeout creates a new storeapi.Storage from a uri
 // without retry. It is the caller's responsibility to set timeout to the context.
 func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (storeapi.Storage, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
@@ -63,11 +64,11 @@ func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (stor
 	}, err
 }
 
-// GetExternalStorage creates a new external storage based on the uri and options.
+// GetExternalStorage creates a new storeapi.Storage based on the uri and options.
 func GetExternalStorage(
 	ctx context.Context, uri string,
 	opts *objstore.BackendOptions,
-	retryer awsretry.Standard,
+	retryer aws.Retryer,
 ) (storeapi.Storage, error) {
 	backEnd, err := objstore.ParseBackend(uri, opts)
 	if err != nil {
@@ -92,7 +93,7 @@ func GetExternalStorage(
 	return ret, nil
 }
 
-// GetTestExtStorage creates a test external storage from a uri.
+// GetTestExtStorage creates a test storeapi.Storage from a uri.
 func GetTestExtStorage(
 	ctx context.Context, tmpDir string,
 ) (storeapi.Storage, *url.URL, error) {
@@ -108,61 +109,68 @@ func GetTestExtStorage(
 	return ret, uri, nil
 }
 
+// retryerWithLog wraps the client.DefaultRetryer, and logs when retrying.
+type retryerWithLog struct {
+	*retry.Standard
+
+	minRetryDelay    time.Duration
+	minThrottleDelay time.Duration
+}
+
 func isDeadlineExceedError(err error) bool {
-	if err == nil {
+	return strings.Contains(err.Error(), "context deadline exceeded")
+}
+
+func (rl retryerWithLog) IsErrorRetryable(err error) bool {
+	if isDeadlineExceedError(err) {
 		return false
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return true
+	return rl.Standard.IsErrorRetryable(err)
+}
+
+func (rl retryerWithLog) RetryDelay(attempt int, opErr error) (time.Duration, error) {
+	backoffTime, err := rl.Standard.RetryDelay(attempt, opErr)
+	if err != nil {
+		return backoffTime, err
 	}
-	return strings.Contains(err.Error(), "context deadline exceeded")
+	if backoffTime > 0 {
+		log.Warn("failed to request s3, retrying",
+			zap.Error(opErr),
+			zap.Duration("backoff", backoffTime))
+	}
+	minDelay := rl.minRetryDelay
+	if retry.IsErrorThrottles(retry.DefaultThrottles).IsErrorThrottle(opErr).Bool() {
+		minDelay = rl.minThrottleDelay
+	}
+	if backoffTime < minDelay {
+		backoffTime = minDelay
+	}
+	return backoffTime, nil
 }
 
 // DefaultS3Retryer is the default s3 retryer, maybe this function
 // should be extracted to another place.
-func DefaultS3Retryer() awsretry.Standard {
-	return NewS3Retryer(3, 1*time.Second, 2*time.Second)
+func DefaultS3Retryer() aws.Retryer {
+	return retryerWithLog{
+		Standard: retry.NewStandard(func(so *retry.StandardOptions) {
+			so.MaxAttempts = 3
+			so.MaxBackoff = 32 * time.Second
+			so.RateLimiter = ratelimit.None
+		}),
+		minRetryDelay:    1 * time.Second,
+		minThrottleDelay: 2 * time.Second,
+	}
 }
 
 // NewS3Retryer creates a new s3 retryer.
-func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration) awsretry.Standard {
-	if maxRetries < 0 {
-		maxRetries = 0
-	}
-	maxAttempts := maxRetries + 1
-	maxBackoff := minThrottleDelay
-	if maxBackoff < minRetryDelay {
-		maxBackoff = minRetryDelay
-	}
-	backoff := awsretry.NewExponentialJitterBackoff(maxBackoff)
-	retryables := append([]awsretry.IsErrorRetryable{
-		awsretry.IsErrorRetryableFunc(func(err error) aws.Ternary {
-			if isDeadlineExceedError(err) {
-				return aws.FalseTernary
-			}
-			return aws.UnknownTernary
+func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration) aws.Retryer {
+	return retryerWithLog{
+		Standard: retry.NewStandard(func(so *retry.StandardOptions) {
+			so.MaxAttempts = maxRetries
 		}),
-	}, awsretry.DefaultRetryables...)
-
-	return *awsretry.NewStandard(func(o *awsretry.StandardOptions) {
-		o.MaxAttempts = maxAttempts
-		o.Retryables = retryables
-		o.Backoff = awsretry.BackoffDelayerFunc(func(attempt int, err error) (time.Duration, error) {
-			backoffTime, backoffErr := backoff.BackoffDelay(attempt, err)
-			if backoffErr != nil {
-				return 0, backoffErr
-			}
-			if backoffTime < minRetryDelay {
-				backoffTime = minRetryDelay
-			}
-			if backoffTime > 0 && err != nil {
-				log.Warn("failed to request s3, retrying",
-					zap.Error(err),
-					zap.Duration("backoff", backoffTime))
-			}
-			return backoffTime, nil
-		})
-	})
+		minRetryDelay:    minRetryDelay,
+		minThrottleDelay: minThrottleDelay,
+	}
 }
 
 type extStorageWithTimeout struct {

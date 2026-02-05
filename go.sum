@@ -148,8 +148,8 @@ github.com/aws/aws-sdk-go-v2/credentials v1.19.2 h1:qZry8VUyTK4VIo5aEdUcBjPZHL2v
 github.com/aws/aws-sdk-go-v2/credentials v1.19.2/go.mod h1:YUqm5a1/kBnoK+/NY5WEiMocZihKSo15/tJdmdXnM5g=
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.14 h1:WZVR5DbDgxzA0BJeudId89Kmgy6DIU4ORpxwsVHz0qA=
 github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.14/go.mod h1:Dadl9QO0kHgbrH1GRqGiZdYtW5w+IXXaBNCHTIaheM4=
-github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.84 h1:cTXRdLkpBanlDwISl+5chq5ui1d1YWg4PWMR9c3kXyw=
-github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.17.84/go.mod h1:kwSy5X7tfIHN39uucmjQVs2LvDdXEjQucgQQEqCggEo=
+github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.0 h1:2FFgK3oFA8PTNBjprLFfcmkgg7U9YuSimBvR64RUmiA=
+github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.0/go.mod h1:xdxj6nC1aU/jAO80RIlIj3fU40MOSqutEA9N2XFct04=
 github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.14 h1:PZHqQACxYb8mYgms4RZbhZG0a7dPW06xOjmaH0EJC/I=
 github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.14/go.mod h1:VymhrMJUWs69D8u0/lZ7jSB6WgaG/NqHi3gX0aYf6U0=
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.14 h1:bOS19y6zlJwagBfHxs0ESzr1XCOU2KXJCWcq3E2vfjY=
@@ -862,12 +862,12 @@ github.com/pingcap/sarama v1.41.2-pingcap-20250415 h1:jc/31lgAuSWLh8zr3y5bL0atpB
 github.com/pingcap/sarama v1.41.2-pingcap-20250415/go.mod h1:Kwi9CT6CuDYad3KS7HqjsbmD2DWkIKI7qI6a8PKlGb4=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
-github.com/pingcap/tidb v1.1.0-beta.0.20260129035038-e94da4255da9 h1:+X1yHhUU1PA3XAxGEvfV2mUkFV6KJlqvNC7b1JcNh3I=
-github.com/pingcap/tidb v1.1.0-beta.0.20260129035038-e94da4255da9/go.mod h1:aRY07pPHIA3AIi25vermPup6O4R0CMYfKm+EjL6IHCI=
+github.com/pingcap/tidb v1.1.0-beta.0.20260205093021-1eb3d0a8c7a9 h1:dkXLYZPAETX9t5WFnynKJZ+ao/qOaZr740M89PUWkP4=
+github.com/pingcap/tidb v1.1.0-beta.0.20260205093021-1eb3d0a8c7a9/go.mod h1:2tt07wGi1I/gqKvpP5mMg66rsnlE7KMyF9SmRqdmG50=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20260129035038-e94da4255da9 h1:blVQkKWshSZA4SOTJfE4n3HVFg6tGhOd+JlreVAnDJQ=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20260129035038-e94da4255da9/go.mod h1:oHE+ub2QaDERd+UNHe4z2BhFV2jZrm7VNOe6atR9AF4=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20260205093021-1eb3d0a8c7a9 h1:lR9z52dEg+sjnaqPvKf2/7TFyLqNCJLAGJVYFV/P/14=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20260205093021-1eb3d0a8c7a9/go.mod h1:oHE+ub2QaDERd+UNHe4z2BhFV2jZrm7VNOe6atR9AF4=
 github.com/pingcap/tipb v0.0.0-20251230094608-1374320b4bd8 h1:KT/h7b+7lP/P+5OuczNNV+/wsHj9d0L7Eu4ktB5VRIg=
 github.com/pingcap/tipb v0.0.0-20251230094608-1374320b4bd8/go.mod h1:RM8iRcMalzOthG2XJxnNBniM4xFGb/lDwHUwqkaVzt4=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
