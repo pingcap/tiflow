@@ -727,7 +727,7 @@ func TestBucketSpliter(t *testing.T) {
 		testCases[0].aRandomValues[startBucket:],
 		testCases[0].bRandomValues[startBucket:],
 	)
-	iter, err = NewBucketIterator(ctx, "", tableDiff, db, rangeInfo, utils.NewWorkerPool(1, "bucketIter"), buildCandidateForTest(t, tableDiff))
+	iter, err = NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo, utils.NewWorkerPool(1, "bucketIter"), buildCandidateForTest(t, tableDiff))
 	require.NoError(t, err)
 	chunk, err = iter.Next()
 	require.NoError(t, err)
@@ -1063,7 +1063,7 @@ func TestBucketSpliterHint(t *testing.T) {
 
 		createFakeResultForBucketIterator(mock, tc.indexCount)
 
-		iter, err := NewBucketIterator(ctx, "", tableDiff, db, nil, utils.NewWorkerPool(1, "bucketIter"), buildCandidateForTest(t, tableDiff))
+		iter, err := NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, nil, utils.NewWorkerPool(1, "bucketIter"), buildCandidateForTest(t, tableDiff))
 		require.NoError(t, err)
 		chunk, err := iter.Next()
 		require.NoError(t, err)

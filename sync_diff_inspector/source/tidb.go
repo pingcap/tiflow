@@ -62,7 +62,7 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	progressID := dbutil.TableName(table.Schema, table.Table)
 	switch tp {
 	case chunk.Bucket:
-		iter, err = splitter.NewBucketIterator(
+		iter, err = splitter.NewBucketIteratorWithCheckpoint(
 			ctx, progressID, &originTable, a.dbConn,
 			startRange, a.bucketSpliterPool, candidate)
 	case chunk.Random:

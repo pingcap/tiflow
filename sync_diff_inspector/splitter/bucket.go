@@ -61,13 +61,13 @@ func NewBucketIteratorForTest(
 	ctx context.Context, progressID string, table *common.TableDiff,
 	dbConn *sql.DB, candidate *IndexCandidate,
 ) (*BucketIterator, error) {
-	return NewBucketIterator(
+	return NewBucketIteratorWithCheckpoint(
 		ctx, progressID, table, dbConn, nil,
 		utils.NewWorkerPool(1, "bucketIter"), candidate)
 }
 
-// NewBucketIterator return a new iterator
-func NewBucketIterator(
+// NewBucketIteratorWithCheckpoint return a new iterator
+func NewBucketIteratorWithCheckpoint(
 	ctx context.Context,
 	progressID string,
 	table *common.TableDiff,
@@ -76,6 +76,12 @@ func NewBucketIterator(
 	bucketSpliterPool *utils.WorkerPool,
 	candidate *IndexCandidate,
 ) (*BucketIterator, error) {
+	if !utils.IsRangeTrivial(table.Range) {
+		return nil, errors.Errorf(
+			"BucketIterator does not support user configured Range. Range: %s",
+			table.Range)
+	}
+
 	bctx, cancel := context.WithCancel(ctx)
 	bs := &BucketIterator{
 		table:     table,
@@ -174,12 +180,8 @@ func (s *BucketIterator) init(ctx context.Context, candidate *IndexCandidate, st
 		s.chunkSize = utils.CalculateChunkSize(cnt)
 	}
 
-	log.Debug("buckets for index",
-		zap.String("index", index.Name.O),
-		zap.Reflect("buckets", buckets),
-		zap.Int64("chunk size", s.chunkSize),
-		zap.String("db", s.table.Schema),
-		zap.String("table", s.table.Table))
+	log.Info("get chunk size for table", zap.Int64("chunk size", s.chunkSize),
+		zap.String("db", s.table.Schema), zap.String("table", s.table.Table))
 	return nil
 }
 
