@@ -39,8 +39,6 @@ type (
 // GetBucketsInfo selects from stats_buckets in TiDB.
 func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string, tableInfo *model.TableInfo) (map[string][]Bucket, error) {
 	buckets := make(map[string][]Bucket)
-	missingIndexHistIDs := make(map[int64]struct{})
-	missingColumnHistIDs := make(map[int64]struct{})
 
 	indices := tidbdbutil.FindAllIndex(tableInfo)
 	// Pre-build lightweight maps for indices: index ID -> index name / column types.
@@ -59,7 +57,9 @@ func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string,
 				}
 			}
 		}
-		indexColumnTypesMap[idx.ID] = idxColumnTypes
+		if len(idxColumnTypes) > 0 {
+			indexColumnTypesMap[idx.ID] = idxColumnTypes
+		}
 	}
 
 	// Pre-build lightweight maps for columns: column ID -> name / FieldType.
@@ -104,12 +104,9 @@ ORDER BY is_index, hist_id, bucket_id`
 			idxColumnTypes, ok := indexColumnTypesMap[histID.Int64]
 			indexName := indexNameMap[histID.Int64]
 			if !ok {
-				if _, seen := missingIndexHistIDs[histID.Int64]; !seen {
-					// If cannot determine key, skip this record.
-					log.Warn("skipping index bucket with unknown key",
-						zap.Int64("histID", histID.Int64))
-					missingIndexHistIDs[histID.Int64] = struct{}{}
-				}
+				// If cannot determine key, skip this record.
+				log.Warn("skipping index bucket with unknown key",
+					zap.Int64("histID", histID.Int64))
 				continue
 			}
 
@@ -136,12 +133,9 @@ ORDER BY is_index, hist_id, bucket_id`
 			columnName, ok := columnNameMap[histID.Int64]
 			columnTypes := columnTypeMap[histID.Int64]
 			if !ok {
-				if _, seen := missingColumnHistIDs[histID.Int64]; !seen {
-					// If cannot determine key, skip this record.
-					log.Warn("skipping column bucket with unknown key",
-						zap.Int64("histID", histID.Int64))
-					missingColumnHistIDs[histID.Int64] = struct{}{}
-				}
+				// If cannot determine key, skip this record.
+				log.Warn("skipping column bucket with unknown key",
+					zap.Int64("histID", histID.Int64))
 				continue
 			}
 

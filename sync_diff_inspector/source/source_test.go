@@ -290,55 +290,62 @@ func TestTiDBSource(t *testing.T) {
 	tidb.Close()
 }
 
-func TestUseLimitIfRangeIsSet(t *testing.T) {
+func TestFallbackIfRangeIsSet(t *testing.T) {
 	ctx := context.Background()
 
-	conn, mock, err := sqlmock.New()
-	require.NoError(t, err)
-	defer conn.Close()
+	for _, useLimiter := range []bool{true, false} {
+		conn, mock, err := sqlmock.New()
+		require.NoError(t, err)
 
-	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("source_test"))
-	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(sqlmock.NewRows([]string{"Table", "type"}).AddRow("test1", "base"))
+		mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("source_test"))
+		mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(sqlmock.NewRows([]string{"Table", "type"}).AddRow("test1", "base"))
 
-	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
-	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
-	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) cnt")).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(100))
-	mock.ExpectQuery("SELECT `id`.*ROW_NUMBER\\(\\) OVER .*MOD\\(rn, 50000\\) = 0 ORDER BY rn").
-		WillReturnRows(sqlmock.NewRows([]string{"id"}))
-	statsRows := sqlmock.NewRows([]string{"hist_id", "is_index", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
-		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+		mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
+		mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
+		mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) cnt")).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(100))
+		mock.ExpectQuery("SELECT `id`.*ROW_NUMBER\\(\\) OVER .*MOD\\(rn, 50000\\) = 0 ORDER BY rn").
+			WillReturnRows(sqlmock.NewRows([]string{"id"}))
+		statsRows := sqlmock.NewRows([]string{"hist_id", "is_index", "bucket_id", "count", "lower_bound", "upper_bound"})
+		for i := 0; i < 5; i++ {
+			statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+		}
+		f, err := filter.Parse([]string{"source_test.*"})
+		require.NoError(t, err)
+
+		createTableSQL1 := "CREATE TABLE `test1` " +
+			"(`id` int(11) NOT NULL AUTO_INCREMENT, " +
+			" `k` int(11) NOT NULL DEFAULT '0', " +
+			"`c` char(120) NOT NULL DEFAULT '', " +
+			"PRIMARY KEY (`id`), KEY `k_1` (`k`))"
+
+		tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
+		require.NoError(t, err)
+
+		table1 := &common.TableDiff{
+			Schema:           "source_test",
+			Table:            "test1",
+			Info:             tableInfo,
+			Range:            "id < 10", // This should prevent using BucketIterator
+			UseLimitIterator: useLimiter,
+		}
+
+		tidb, err := NewTiDBSource(ctx, []*common.TableDiff{table1}, &config.DataSource{Conn: conn}, utils.NewWorkerPool(1, "bucketIter"), f, false)
+		require.NoError(t, err)
+
+		analyze := tidb.GetTableAnalyzer()
+		chunkIter, err := analyze.AnalyzeSplitter(ctx, table1, nil)
+		require.NoError(t, err)
+		if useLimiter {
+			require.IsType(t, &splitter.LimitIterator{}, chunkIter)
+		} else {
+			require.IsType(t, &splitter.RandomIterator{}, chunkIter)
+		}
+
+		chunkIter.Close()
+		tidb.Close()
+		conn.Close()
 	}
-	f, err := filter.Parse([]string{"source_test.*"})
-	require.NoError(t, err)
-
-	createTableSQL1 := "CREATE TABLE `test1` " +
-		"(`id` int(11) NOT NULL AUTO_INCREMENT, " +
-		" `k` int(11) NOT NULL DEFAULT '0', " +
-		"`c` char(120) NOT NULL DEFAULT '', " +
-		"PRIMARY KEY (`id`), KEY `k_1` (`k`))"
-
-	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
-	require.NoError(t, err)
-
-	table1 := &common.TableDiff{
-		Schema: "source_test",
-		Table:  "test1",
-		Info:   tableInfo,
-		Range:  "id < 10", // This should prevent using BucketIterator
-	}
-
-	tidb, err := NewTiDBSource(ctx, []*common.TableDiff{table1}, &config.DataSource{Conn: conn}, utils.NewWorkerPool(1, "bucketIter"), f, false)
-	require.NoError(t, err)
-
-	analyze := tidb.GetTableAnalyzer()
-	chunkIter, err := analyze.AnalyzeSplitter(ctx, table1, nil)
-	require.NoError(t, err)
-	require.IsType(t, &splitter.RandomIterator{}, chunkIter)
-
-	chunkIter.Close()
-	tidb.Close()
 }
 
 func TestMysqlShardSources(t *testing.T) {

@@ -110,10 +110,11 @@ func TestChooseSplitTypeLimitWhenRangeSet(t *testing.T) {
 	require.NoError(t, err)
 
 	tableDiff := &common.TableDiff{
-		Schema: "test",
-		Table:  "t",
-		Info:   tableInfo,
-		Range:  "a > 10",
+		Schema:           "test",
+		Table:            "t",
+		Info:             tableInfo,
+		Range:            "a > 10",
+		UseLimitIterator: true,
 	}
 
 	tp, candidate, err := ChooseSplitType(ctx, db, tableDiff, nil)
