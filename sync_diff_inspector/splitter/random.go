@@ -33,10 +33,12 @@ import (
 
 // RandomIterator is used to random iterate a table
 type RandomIterator struct {
-	table     *common.TableDiff
-	chunkSize int64
-	chunks    []*chunk.Range
-	nextChunk uint
+	table        *common.TableDiff
+	chunkSize    int64
+	chunkBase    *chunk.Range
+	splitColumns []string
+	randomValues [][]string
+	nextChunk    uint
 
 	dbConn *sql.DB
 }
@@ -128,7 +130,7 @@ NEXTINDEX:
 			return &RandomIterator{
 				table:     table,
 				chunkSize: 0,
-				chunks:    nil,
+				chunkBase: nil,
 				nextChunk: 0,
 				dbConn:    dbConn,
 			}, nil
@@ -174,36 +176,77 @@ NEXTINDEX:
 		bucketChunkCnt = chunkCnt
 	}
 
-	chunks, err := splitRangeByRandom(ctx, dbConn, chunkRange, chunkCnt, table.Schema, table.Table, fields, table.Range, table.Collation)
+	randomValues, err := getRandomSplitValues(ctx, dbConn, chunkRange, chunkCnt, table.Schema, table.Table, fields, table.Range, table.Collation)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	chunk.InitChunks(chunks, chunk.Random, 0, 0, beginIndex, table.Collation, table.Range, bucketChunkCnt)
+	chunkCount := len(randomValues) + 1
+	chunkRange.Index = &chunk.CID{
+		BucketIndexLeft:  0,
+		BucketIndexRight: 0,
+		ChunkIndex:       beginIndex,
+		ChunkCnt:         bucketChunkCnt,
+	}
+	chunkRange.Type = chunk.Random
 
 	failpoint.Inject("ignore-last-n-chunk-in-bucket", func(v failpoint.Value) {
 		log.Info("failpoint ignore-last-n-chunk-in-bucket injected (random splitter)", zap.Int("n", v.(int)))
-		if len(chunks) <= 1+v.(int) {
+		if chunkCount <= 1+v.(int) {
 			failpoint.Return(nil, nil)
 		}
-		chunks = chunks[:(len(chunks) - v.(int))]
+		chunkCount -= v.(int)
+		if len(randomValues) >= chunkCount {
+			randomValues = randomValues[:chunkCount-1]
+		}
 	})
 
-	progress.StartTable(progressID, len(chunks), true)
+	progress.StartTable(progressID, chunkCount, true)
+	splitColumns := make([]string, 0, len(fields))
+	for _, field := range fields {
+		splitColumns = append(splitColumns, field.Name.O)
+	}
 	return &RandomIterator{
-		table:     table,
-		chunkSize: chunkSize,
-		chunks:    chunks,
-		nextChunk: 0,
-		dbConn:    dbConn,
+		table:        table,
+		chunkSize:    chunkSize,
+		chunkBase:    chunkRange,
+		splitColumns: splitColumns,
+		randomValues: randomValues,
+		nextChunk:    0,
+		dbConn:       dbConn,
 	}, nil
+}
+
+func (s *RandomIterator) buildChunk(chunkIndex int) *chunk.Range {
+	c := s.chunkBase.Clone()
+	if len(s.randomValues) > 0 {
+		for i, column := range s.splitColumns {
+			switch {
+			case chunkIndex == 0:
+				c.Update(column, "", s.randomValues[0][i], false, true)
+			case chunkIndex == len(s.randomValues):
+				c.Update(column, s.randomValues[chunkIndex-1][i], "", true, false)
+			default:
+				c.Update(column, s.randomValues[chunkIndex-1][i], s.randomValues[chunkIndex][i], true, true)
+			}
+		}
+	}
+
+	conditions, args := c.ToString(s.table.Collation)
+	c.Where = fmt.Sprintf("((%s) AND (%s))", conditions, s.table.Range)
+	c.Args = args
+	c.Index.ChunkIndex += chunkIndex
+	return c
 }
 
 // Next get the next chunk
 func (s *RandomIterator) Next() (*chunk.Range, error) {
-	if uint(len(s.chunks)) <= s.nextChunk {
+	if s.chunkBase == nil {
 		return nil, nil
 	}
-	c := s.chunks[s.nextChunk]
+	if uint(len(s.randomValues)+1) <= s.nextChunk {
+		return nil, nil
+	}
+	c := s.buildChunk(int(s.nextChunk))
 	s.nextChunk = s.nextChunk + 1
 	failpoint.Inject("print-chunk-info", func() {
 		lowerBounds := make([]string, len(c.Bounds))
@@ -273,14 +316,10 @@ func splitRangeByRandom(ctx context.Context, db *sql.DB, chunk *chunk.Range, cou
 		return chunks, nil
 	}
 
-	chunkLimits, args := chunk.ToString(collation)
-	limitRange := fmt.Sprintf("(%s) AND (%s)", chunkLimits, limits)
-
-	randomValues, err := utils.GetRandomValues(ctx, db, schema, table, columns, count-1, limitRange, args, collation)
+	randomValues, err := getRandomSplitValues(ctx, db, chunk, count, schema, table, columns, limits, collation)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debug("get split values by random", zap.Stringer("chunk", chunk), zap.Int("random values num", len(randomValues)))
 	for i := 0; i <= len(randomValues); i++ {
 		newChunk := chunk.Copy()
 
@@ -301,4 +340,20 @@ func splitRangeByRandom(ctx context.Context, db *sql.DB, chunk *chunk.Range, cou
 	}
 	log.Debug("split range by random", zap.Stringer("origin chunk", chunk), zap.Int("split num", len(chunks)))
 	return chunks, nil
+}
+
+func getRandomSplitValues(ctx context.Context, db *sql.DB, chunk *chunk.Range, count int, schema string, table string, columns []*model.ColumnInfo, limits, collation string) ([][]string, error) {
+	if count <= 1 {
+		return nil, nil
+	}
+
+	chunkLimits, args := chunk.ToString(collation)
+	limitRange := fmt.Sprintf("(%s) AND (%s)", chunkLimits, limits)
+
+	randomValues, err := utils.GetRandomValues(ctx, db, schema, table, columns, count-1, limitRange, args, collation)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	log.Debug("get split values by random", zap.Stringer("chunk", chunk), zap.Int("random values num", len(randomValues)))
+	return randomValues, nil
 }
