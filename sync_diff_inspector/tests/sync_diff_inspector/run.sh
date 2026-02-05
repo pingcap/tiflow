@@ -32,7 +32,7 @@ sync_diff_inspector --config=./config_base_tidb.toml >$OUT_DIR/diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 
 echo "analyze table, and will use tidb's statistical information to split chunks"
-check_contains "type=Random" $OUT_DIR/sync_diff.log
+check_contains "split range by random" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 mysql -uroot -h 127.0.0.1 -P 4000 -e "analyze table diff_test.test"
 # run the explain SQL to load the stats after analyze
