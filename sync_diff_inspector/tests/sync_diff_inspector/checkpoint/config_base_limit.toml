@@ -12,6 +12,8 @@ export-fix-sql = true
 # ignore check table's data
 check-struct-only = false
 
+use-limit-iterator = true
+
 ######################### Databases config #########################
 [data-sources.mysql1]
     host = "127.0.0.1"#MYSQL_HOST

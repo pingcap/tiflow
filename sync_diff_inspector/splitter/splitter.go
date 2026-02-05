@@ -168,27 +168,31 @@ func ChooseSplitType(
 		return chunk.Random, candidate, err
 	}
 
-	if !utils.IsRangeTrivial(table.Range) {
-		logger.Debug("choose limit splitter due to non-trivial range",
-			zap.String("range", table.Range))
-		return chunk.Limit, candidates[0], nil
-	}
-
 	// Try to use bucket splitter first.
-	buckets, err := tiflowdbutil.GetBucketsInfo(
-		ctx, db, table.Schema, table.Table, table.Info)
-	if err == nil {
-		for _, candidate := range candidates {
-			if _, ok := buckets[candidate.Index.Name.O]; ok {
-				logger.Debug("choose bucket splitter",
-					zap.String("index", candidate.Index.Name.O))
-				return chunk.Bucket, candidate, nil
+	if utils.IsRangeTrivial(table.Range) {
+		buckets, err := tiflowdbutil.GetBucketsInfo(
+			ctx, db, table.Schema, table.Table, table.Info)
+		if err == nil {
+			for _, candidate := range candidates {
+				if _, ok := buckets[candidate.Index.Name.O]; ok {
+					logger.Debug("choose bucket splitter",
+						zap.String("index", candidate.Index.Name.O))
+					return chunk.Bucket, candidate, nil
+				}
 			}
 		}
 	}
 
-	logger.Warn("get buckets failed, fallback to limit splitter")
-	return chunk.Limit, candidates[0], nil
+	logger.Debug("bucket splitter not available, try other splitter")
+
+	if table.UseLimitIterator {
+		logger.Debug("choose limit splitter due to user config",
+			zap.String("range", table.Range))
+		return chunk.Limit, candidates[0], nil
+	}
+
+	logger.Debug("choose random splitter due to non-trivial range")
+	return chunk.Random, candidates[0], nil
 }
 
 // BuildFakeCandidateForRandom builds a fake index candidate for Random splitter.
@@ -279,7 +283,7 @@ func BuildIndexCandidates(
 	if err != nil || !isTiDB {
 		return candidates, nil
 	}
-	if len(candidates) == 0 {
+	if len(candidates) <= 1 {
 		return candidates, nil
 	}
 	for _, candidate := range candidates {

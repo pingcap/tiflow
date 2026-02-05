@@ -398,6 +398,8 @@ type Config struct {
 	CheckDataOnly bool `toml:"check-data-only" json:"-"`
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
+	// UseLimitIterator controls the fallback splitter when bucket stats are unavailable.
+	UseLimitIterator bool `toml:"use-limit-iterator" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
 	// DMTask string `toml:"dm-task" json:"dm-task"`
@@ -423,6 +425,7 @@ type Config struct {
 // NewConfig creates a new config.
 func NewConfig() *Config {
 	cfg := &Config{}
+	cfg.UseLimitIterator = false
 	cfg.FlagSet = flag.NewFlagSet("diff", flag.ContinueOnError)
 	fs := cfg.FlagSet
 

@@ -269,10 +269,17 @@ func TestTiDBSource(t *testing.T) {
 
 	analyze := tidb.GetTableAnalyzer()
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
-		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	primaryID := int64(0)
+	for _, idx := range tableDiffs[0].Info.Indices {
+		if idx.Name.O == "PRIMARY" {
+			primaryID = idx.ID
+			break
+		}
 	}
-	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+	for i := 0; i < 5; i++ {
+		statsRows.AddRow(1, primaryID, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	}
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\)[\\s\\S]*ORDER BY is_index, hist_id, bucket_id").
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(statsRows)
 	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
@@ -328,7 +335,7 @@ func TestUseLimitIfRangeIsSet(t *testing.T) {
 	analyze := tidb.GetTableAnalyzer()
 	chunkIter, err := analyze.AnalyzeSplitter(ctx, table1, nil)
 	require.NoError(t, err)
-	require.IsType(t, &splitter.LimitIterator{}, chunkIter)
+	require.IsType(t, &splitter.RandomIterator{}, chunkIter)
 
 	chunkIter.Close()
 	tidb.Close()
