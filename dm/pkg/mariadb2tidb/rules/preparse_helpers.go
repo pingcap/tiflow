@@ -78,7 +78,28 @@ func ApplyPreparseRules(sql string, ruleList []Rule) (string, error) {
 	}
 
 	stmt := newRawStatement(sql)
+	var trailing []Rule
 	for _, rule := range ruleList {
+		if rule.Name() == "TrailingComma" {
+			trailing = append(trailing, rule)
+			continue
+		}
+		if !rule.ShouldApply(stmt) {
+			continue
+		}
+		updated, err := rule.Apply(stmt)
+		if err != nil {
+			return sql, err
+		}
+		if raw, ok := updated.(*rawStatement); ok {
+			stmt = raw
+			continue
+		}
+		if updated != nil {
+			stmt = newRawStatement(updated.Text())
+		}
+	}
+	for _, rule := range trailing {
 		if !rule.ShouldApply(stmt) {
 			continue
 		}
