@@ -48,23 +48,6 @@ const (
 	Empty
 )
 
-// String return string for Type
-func (t Type) String() string {
-	switch t {
-	case Bucket:
-		return "Bucket"
-	case Random:
-		return "Random"
-	case Limit:
-		return "Limit"
-	case Others:
-		return "Others"
-	case Empty:
-		return "Empty"
-	}
-	return "Unknown"
-}
-
 // Bound represents a bound for a column
 type Bound struct {
 	Column string `json:"column"`

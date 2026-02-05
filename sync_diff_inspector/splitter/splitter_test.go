@@ -40,7 +40,7 @@ type chunkResult struct {
 	args     []any
 }
 
-func buildIndexCandidatesForTest(t *testing.T, tableDiff *common.TableDiff) []*IndexCandidate {
+func buildCandidateForTest(t *testing.T, tableDiff *common.TableDiff) *IndexCandidate {
 	t.Helper()
 	fields, err := indexFieldsFromConfigString(tableDiff.Fields, tableDiff.Info)
 	require.NoError(t, err)
@@ -54,12 +54,6 @@ func buildIndexCandidatesForTest(t *testing.T, tableDiff *common.TableDiff) []*I
 			})
 		}
 	}
-	return candidates
-}
-
-func buildCandidateForTest(t *testing.T, tableDiff *common.TableDiff) *IndexCandidate {
-	t.Helper()
-	candidates := buildIndexCandidatesForTest(t, tableDiff)
 	if len(candidates) > 0 {
 		return candidates[0]
 	}

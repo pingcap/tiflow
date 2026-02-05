@@ -135,10 +135,9 @@ func ChooseSplitType(
 
 	// If we have checkpoint info, use it directly.
 	if startRange != nil {
+		logger.Debug("choose splitter from checkpoint")
 		candidate, err := pickCandidateFromCheckpoint(
 			ctx, table, startRange, table.Fields, db)
-		logger.Debug("choose splitter from checkpoint",
-			zap.String("type", startRange.ChunkRange.Type.String()))
 		return startRange.ChunkRange.Type, candidate, err
 	}
 
