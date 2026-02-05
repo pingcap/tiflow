@@ -913,8 +913,8 @@ func TestLimitSpliter(t *testing.T) {
 
 func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
 	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(len(aValues)))
-	for start := 0; start < len(aValues); start += limitBatchSize {
-		end := start + limitBatchSize
+	for start := 0; start < len(aValues); start += defaultLimitBatchSize {
+		end := start + defaultLimitBatchSize
 		if end > len(aValues) {
 			end = len(aValues)
 		}
