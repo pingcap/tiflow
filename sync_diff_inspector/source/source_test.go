@@ -261,6 +261,15 @@ func TestTiDBSource(t *testing.T) {
 	rowIter.Close()
 
 	analyze := tidb.GetTableAnalyzer()
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	for i := 0; i < 5; i++ {
+		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	}
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
+	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 	chunkIter, err := analyze.AnalyzeSplitter(ctx, tableDiffs[0], tableCase.rangeInfo)
 	require.NoError(t, err)
 	chunkIter.Close()
@@ -276,14 +285,13 @@ func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
 
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("source_test"))
 	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(sqlmock.NewRows([]string{"Table", "type"}).AddRow("test1", "base"))
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
-	for i := 0; i < 5; i++ {
-		statsRows.AddRow("source_test", "test1", "PRIMARY", 1, (i+1)*64, (i+1)*64, 1,
-			fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
-	}
+
 	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) cnt")).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(100))
-
+	statsRows := sqlmock.NewRows([]string{"hist_id", "is_index", "bucket_id", "count", "lower_bound", "upper_bound"})
+	for i := 0; i < 5; i++ {
+		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	}
 	f, err := filter.Parse([]string{"source_test.*"})
 	require.NoError(t, err)
 
@@ -628,7 +636,7 @@ func prepareTiDBTables(t *testing.T, tableCases []*tableCaseType) []*common.Tabl
 			Info:   tableInfo,
 		})
 
-		chunkRange := chunk.NewChunkRange()
+		chunkRange := chunk.NewChunkRange(nil)
 		for i, column := range tableCase.rangeColumns {
 			chunkRange.Update(column, tableCase.rangeLeft[i], tableCase.rangeRight[i], true, true)
 		}
