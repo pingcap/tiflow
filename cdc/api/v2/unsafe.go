@@ -56,6 +56,12 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
 		return
 	}
+	if resolveLockReq.RegionID == 0 || resolveLockReq.Ts == 0 {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack(
+			"invalid resolve_lock request: region_id and ts must be non-zero",
+		))
+		return
+	}
 	var (
 		err       error
 		kvStorage tidbkv.Storage
@@ -85,7 +91,15 @@ func (h *OpenAPIV2) ResolveLock(c *gin.Context) {
 		return
 	}
 
-	txnResolver := txnutil.NewLockerResolver(kvStorage.(tikv.Storage),
+	tikvStorage, ok := kvStorage.(tikv.Storage)
+	if !ok {
+		_ = c.Error(cerror.ErrInternalServerError.GenWithStack(
+			"resolve lock is not supported by upstream kv storage type: %T", kvStorage,
+		))
+		return
+	}
+
+	txnResolver := txnutil.NewLockerResolver(tikvStorage,
 		// a fake changefeed id and namespace
 		model.ChangeFeedID{ID: "changefeed-client", Namespace: "default"})
 	err = txnResolver.Resolve(c, resolveLockReq.RegionID, resolveLockReq.Ts)
