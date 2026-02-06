@@ -106,7 +106,7 @@ github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
-check_contains "type=Limit" $OUT_DIR/sync_diff.log
+check_contains "choose limit splitter" $OUT_DIR/sync_diff.log
 # For limit iterator with ignore-last-n-chunk-in-bucket, ChunkCnt > 1 makes
 # chunks non-adjacent, so checkpoint stays at the first chunk in bucket order.
 checkpoint_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'upperBounds=' '{print $2}' | sed 's/[]["]//g' | awk '$1 ~ /^[0-9]+$/ {print}' | sort -n | awk 'NR==1')
