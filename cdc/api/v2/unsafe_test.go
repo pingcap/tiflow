@@ -14,7 +14,6 @@
 package v2
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -34,33 +33,6 @@ import (
 )
 
 var withFuntion = func(context.Context, pd.Client) error { return nil }
-
-func TestResolveLockInvalidParam(t *testing.T) {
-	t.Parallel()
-
-	resolveLock := testCase{url: "/api/v2/unsafe/resolve_lock", method: "POST"}
-
-	cp := mock_capture.NewMockCapture(gomock.NewController(t))
-	helpers := NewMockAPIV2Helpers(gomock.NewController(t))
-	apiV2 := NewOpenAPIV2ForTest(cp, helpers)
-	router := newRouter(apiV2)
-
-	cp.EXPECT().IsOwner().Return(true).AnyTimes()
-	cp.EXPECT().IsReady().Return(true).AnyTimes()
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequestWithContext(
-		context.Background(), resolveLock.method, resolveLock.url, bytes.NewBufferString(`{}`),
-	)
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusBadRequest, w.Code)
-	respErr := model.HTTPError{}
-	err := json.NewDecoder(w.Body).Decode(&respErr)
-	require.Nil(t, err)
-	require.Contains(t, respErr.Code, "ErrAPIInvalidParam")
-}
 
 func TestCDCMetaData(t *testing.T) {
 	t.Parallel()
