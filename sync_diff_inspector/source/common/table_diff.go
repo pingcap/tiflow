@@ -69,7 +69,7 @@ type TableDiff struct {
 
 	CheckThreadCount int `json:"-"`
 
-	UseLimitIterator bool `json:"-"`
+	SplitterStrategy string `json:"-"`
 
 	// TableLack = 1: the table only exists downstream,
 	// TableLack = -1: the table only exists upstream,

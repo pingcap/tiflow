@@ -293,7 +293,7 @@ func TestTiDBSource(t *testing.T) {
 func TestFallbackIfRangeIsSet(t *testing.T) {
 	ctx := context.Background()
 
-	for _, useLimiter := range []bool{true, false} {
+	for _, iteratorMode := range []string{"limit", "random"} {
 		conn, mock, err := sqlmock.New()
 		require.NoError(t, err)
 
@@ -327,7 +327,7 @@ func TestFallbackIfRangeIsSet(t *testing.T) {
 			Table:            "test1",
 			Info:             tableInfo,
 			Range:            "id < 10", // This should prevent using BucketIterator
-			UseLimitIterator: useLimiter,
+			SplitterStrategy: iteratorMode,
 		}
 
 		tidb, err := NewTiDBSource(ctx, []*common.TableDiff{table1}, &config.DataSource{Conn: conn}, utils.NewWorkerPool(1, "bucketIter"), f, false)
@@ -336,7 +336,7 @@ func TestFallbackIfRangeIsSet(t *testing.T) {
 		analyze := tidb.GetTableAnalyzer()
 		chunkIter, err := analyze.AnalyzeSplitter(ctx, table1, nil)
 		require.NoError(t, err)
-		if useLimiter {
+		if iteratorMode == "limit" {
 			require.IsType(t, &splitter.LimitIterator{}, chunkIter)
 		} else {
 			require.IsType(t, &splitter.RandomIterator{}, chunkIter)

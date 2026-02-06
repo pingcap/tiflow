@@ -184,13 +184,13 @@ func ChooseSplitType(
 
 	logger.Debug("bucket splitter not available, try other splitter")
 
-	if table.UseLimitIterator {
+	if table.SplitterStrategy == "limit" {
 		logger.Debug("choose limit splitter due to user config",
 			zap.String("range", table.Range))
 		return chunk.Limit, candidates[0], nil
 	}
 
-	logger.Debug("choose random splitter due to non-trivial range")
+	logger.Debug("choose random splitter")
 	return chunk.Random, candidates[0], nil
 }
 

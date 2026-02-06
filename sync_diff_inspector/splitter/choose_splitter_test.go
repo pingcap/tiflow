@@ -114,7 +114,7 @@ func TestChooseSplitTypeLimitWhenRangeSet(t *testing.T) {
 		Table:            "t",
 		Info:             tableInfo,
 		Range:            "a > 10",
-		UseLimitIterator: true,
+		SplitterStrategy: "limit",
 	}
 
 	tp, candidate, err := ChooseSplitType(ctx, db, tableDiff, nil)

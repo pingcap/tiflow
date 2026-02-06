@@ -145,7 +145,7 @@ func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, ups
 			Collation:           tableConfig.Collation,
 			ChunkSize:           tableConfig.ChunkSize,
 			CheckThreadCount:    cfg.CheckThreadCount,
-			UseLimitIterator:    cfg.UseLimitIterator,
+			SplitterStrategy:    cfg.SplitterStrategy,
 		})
 
 		// When the router set case-sensitive false,

@@ -12,7 +12,7 @@ export-fix-sql = true
 # ignore check table's data
 check-struct-only = false
 
-use-limit-iterator = true
+splitter-strategy = "limit"
 
 ######################### Databases config #########################
 [data-sources.mysql1]
