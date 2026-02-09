@@ -168,9 +168,6 @@ func wrapTLSListener(inner net.Listener, credentials *security.Credential) (net.
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// This is a hack to make `ToTLSConfigWithVerify` work with cmux,
-	// since cmux does not support ALPN.
-	config.NextProtos = nil
 
 	return tls.NewListener(inner, config), nil
 }
