@@ -228,6 +228,67 @@ func TestShouldDisableForeignKeyChecks(t *testing.T) {
 	require.False(t, worker.shouldDisableForeignKeyChecksForJob(anotherJob))
 }
 
+func TestValidateSafeModeForeignKeyUpdate(t *testing.T) {
+	t.Parallel()
+
+	worker := &DMLWorker{foreignKeyChecksEnabled: true}
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "target", Table: "tb"}
+
+	// payload is UK, v is non-key
+	tableInfo := mockTableInfo(t,
+		"create table db.tb(id int primary key, payload varchar(10) unique, v varchar(10))",
+	)
+
+	// PK change
+	pkUpdate := sqlmodel.NewRowChange(
+		source, target,
+		[]interface{}{1, "a", "x"},
+		[]interface{}{2, "a", "x"},
+		tableInfo, nil, nil,
+	)
+
+	// UK change
+	ukUpdate := sqlmodel.NewRowChange(
+		source, target,
+		[]interface{}{1, "a", "x"},
+		[]interface{}{1, "b", "x"},
+		tableInfo, nil, nil,
+	)
+
+	// Non-key change
+	nonKeyUpdate := sqlmodel.NewRowChange(
+		source, target,
+		[]interface{}{1, "a", "x"},
+		[]interface{}{1, "a", "y"},
+		tableInfo, nil, nil,
+	)
+
+	t.Run("safe-mode pk update should error", func(t *testing.T) {
+		j := newDMLJob(pkUpdate, ecWithSafeMode)
+		err := worker.validateSafeModeForeignKeyUpdate([]*job{j})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "PK/UK changes")
+	})
+
+	t.Run("safe-mode uk update should error", func(t *testing.T) {
+		j := newDMLJob(ukUpdate, ecWithSafeMode)
+		err := worker.validateSafeModeForeignKeyUpdate([]*job{j})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "PK/UK changes")
+	})
+
+	t.Run("safe-mode non-key update should pass", func(t *testing.T) {
+		j := newDMLJob(nonKeyUpdate, ecWithSafeMode)
+		require.NoError(t, worker.validateSafeModeForeignKeyUpdate([]*job{j}))
+	})
+
+	t.Run("non-safe-mode pk update should pass", func(t *testing.T) {
+		j := newDMLJob(pkUpdate, ec)
+		require.NoError(t, worker.validateSafeModeForeignKeyUpdate([]*job{j}))
+	})
+}
+
 func TestExecuteBatchJobsWithForeignKey(t *testing.T) {
 	t.Parallel()
 

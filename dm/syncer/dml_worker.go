@@ -88,6 +88,27 @@ func (w *DMLWorker) shouldDisableForeignKeyChecksForJob(j *job) bool {
 	}
 }
 
+func (w *DMLWorker) validateSafeModeForeignKeyUpdate(jobs []*job) error {
+	if !w.foreignKeyChecksEnabled {
+		return nil
+	}
+	for _, j := range jobs {
+		if j == nil || j.tp != dml || !j.safeMode || j.dml == nil {
+			continue
+		}
+		if j.dml.Type() != sqlmodel.RowChangeUpdate {
+			continue
+		}
+		if j.dml.IsPrimaryOrUniqueKeyUpdated() {
+			return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
+				"safe-mode update with foreign_key_checks=1 and PK/UK changes is not supported; " +
+					"delete+replace may break foreign key constraints and cascade operations",
+			)
+		}
+	}
+	return nil
+}
+
 // dmlWorkerWrap creates and runs a dmlWorker instance and returns flush job channel.
 func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 	chanSize := syncer.cfg.QueueSize / 2
@@ -271,6 +292,9 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 	}()
 
 	if len(jobs) == 0 {
+		return
+	}
+	if err = w.validateSafeModeForeignKeyUpdate(jobs); err != nil {
 		return
 	}
 	failpoint.Inject("failSecondJob", func() {
