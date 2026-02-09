@@ -558,9 +558,13 @@ func (tr *Tracker) buildForeignKeyRelations(
 			childIdxs = append(childIdxs, idx)
 		}
 
-		parentTable := &filter.Table{Schema: fk.RefSchema.O, Name: fk.RefTable.O}
+		parentSchema := fk.RefSchema.O
+		if parentSchema == "" {
+			parentSchema = utils.UnpackTableID(tableID).Schema
+		}
+		parentTable := &filter.Table{Schema: parentSchema, Name: fk.RefTable.O}
 		parentTableID := utils.GenTableID(parentTable)
-		parentTableName := (&cdcmodel.TableName{Schema: fk.RefSchema.O, Table: fk.RefTable.O}).String()
+		parentTableName := (&cdcmodel.TableName{Schema: parentSchema, Table: fk.RefTable.O}).String()
 
 		parentOriginTI, err := tr.GetTableInfo(parentTable)
 		if err != nil {
