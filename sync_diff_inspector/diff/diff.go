@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/BurntSushi/toml"
@@ -42,6 +43,7 @@ import (
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // Check file exists or not
@@ -76,6 +78,8 @@ func GetSnapshot(latestSnap []string, snap string, db *sql.DB) string {
 const (
 	// checkpointFile represents the checkpoints' file name which used for save and loads chunks
 	checkpointFile = "sync_diff_checkpoints.pb"
+
+	checksumCheckpointFlushInterval = 10 * time.Second
 )
 
 // ChunkDML SQL struct for each chunk
@@ -84,6 +88,23 @@ type ChunkDML struct {
 	sqls      []string
 	rowAdd    int
 	rowDelete int
+}
+
+// CompareMode controls checksum behavior.
+type CompareMode int
+
+const (
+	// ChecksumOnly compares by checksum/count and skips fix SQL generation.
+	ChecksumOnly CompareMode = iota
+	// ChecksumWithFix compares by checksum/count and generates fix SQL when needed.
+	ChecksumWithFix
+)
+
+func compareModeFromExportFixSQL(exportFixSQL bool) CompareMode {
+	if exportFixSQL {
+		return ChecksumWithFix
+	}
+	return ChecksumOnly
 }
 
 // Diff contains two sql DB, used for comparing.
@@ -97,17 +118,17 @@ type Diff struct {
 
 	checkThreadCount int
 	splitThreadCount int
-	exportFixSQL     bool
-	sqlWg            sync.WaitGroup
-	checkpointWg     sync.WaitGroup
+	mode             CompareMode
 
 	FixSQLDir     string
 	CheckpointDir string
 
-	sqlCh      chan *ChunkDML
-	cp         *checkpoints.Checkpoint
-	startRange *splitter.RangeInfo
-	report     *report.Report
+	sqlCh                chan *ChunkDML
+	cp                   *checkpoints.Checkpoint
+	startRange           *splitter.RangeInfo
+	checksumCheckpoint   *checkpoints.ChecksumState
+	checksumCheckpointMu sync.Mutex
+	report               *report.Report
 }
 
 // NewDiff returns a Diff instance.
@@ -115,7 +136,7 @@ func NewDiff(ctx context.Context, cfg *config.Config) (diff *Diff, err error) {
 	diff = &Diff{
 		checkThreadCount: cfg.CheckThreadCount,
 		splitThreadCount: cfg.SplitThreadCount,
-		exportFixSQL:     cfg.ExportFixSQL,
+		mode:             compareModeFromExportFixSQL(cfg.ExportFixSQL),
 		sqlCh:            make(chan *ChunkDML, splitter.DefaultChannelBuffer),
 		cp:               new(checkpoints.Checkpoint),
 		report:           report.NewReport(&cfg.Task),
@@ -186,6 +207,9 @@ func (df *Diff) init(ctx context.Context, cfg *config.Config) (err error) {
 
 func (df *Diff) initCheckpoint() error {
 	df.cp.Init()
+	if df.mode == ChecksumOnly {
+		return df.initChecksumCheckpoint()
+	}
 
 	finishTableNums := 0
 	path := filepath.Join(df.CheckpointDir, checkpointFile)
@@ -223,6 +247,34 @@ func (df *Diff) initCheckpoint() error {
 		err := df.removeSQLFiles(id)
 		if err != nil {
 			return errors.Trace(err)
+		}
+	}
+	progress.Init(len(df.workSource.GetTables()), finishTableNums)
+	return nil
+}
+
+func (df *Diff) initChecksumCheckpoint() error {
+	finishTableNums := 0
+	path := filepath.Join(df.CheckpointDir, checkpointFile)
+	if fileExists(path) {
+		checksumState, reportInfo, err := df.cp.LoadChecksumState(path)
+		if err != nil {
+			return errors.Annotate(err, "the checksum checkpoint load process failed")
+		}
+		if checksumState != nil {
+			df.checksumCheckpoint = checksumState
+			if reportInfo != nil {
+				df.report.LoadReport(reportInfo)
+			}
+			log.Info("load checksum checkpoint",
+				zap.Int("table index", checksumState.TableIndex),
+				zap.Bool("upstream done", checksumState.Upstream.Done),
+				zap.Bool("downstream done", checksumState.Downstream.Done),
+			)
+			finishTableNums = checksumState.TableIndex
+			if checksumState.Upstream.Done && checksumState.Downstream.Done {
+				finishTableNums++
+			}
 		}
 	}
 	progress.Init(len(df.workSource.GetTables()), finishTableNums)
@@ -275,27 +327,37 @@ func getConfigsForReport(cfg *config.Config) ([][]byte, []byte, error) {
 
 // Equal tests whether two database have same data and schema.
 func (df *Diff) Equal(ctx context.Context) error {
+	if df.mode == ChecksumOnly {
+		return df.equalByGlobalChecksum(ctx)
+	}
+	return df.equalByChunkChecksum(ctx)
+}
+
+func (df *Diff) equalByChunkChecksum(ctx context.Context) error {
 	chunksIter, err := df.generateChunksIterator(ctx)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	defer chunksIter.Close()
 	pool := utils.NewWorkerPool(uint(df.checkThreadCount), "consumer")
-	stopCh := make(chan struct{})
 
-	df.checkpointWg.Add(1)
-	go df.handleCheckpoints(ctx, stopCh)
-	df.sqlWg.Add(1)
-	go df.writeSQLs(ctx)
+	cctx, cancel := context.WithCancel(ctx)
+	eg, egCtx := errgroup.WithContext(cctx)
+	eg.Go(func() error {
+		return df.handleCheckpoints(egCtx, df.flushChunkCheckpoint)
+	})
+	eg.Go(func() error {
+		df.writeSQLs(egCtx)
+		return nil
+	})
 
 	defer func() {
 		pool.WaitFinished()
 		log.Debug("all consume tasks finished")
 		// close the sql channel
 		close(df.sqlCh)
-		df.sqlWg.Wait()
-		stopCh <- struct{}{}
-		df.checkpointWg.Wait()
+		cancel()
+		eg.Wait()
 	}()
 
 	for {
@@ -317,6 +379,234 @@ func (df *Diff) Equal(ctx context.Context) error {
 		})
 	}
 
+	return nil
+}
+
+func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
+	tables := df.downstream.GetTables()
+	startTableIndex := 0
+	if df.checksumCheckpoint != nil {
+		startTableIndex = df.checksumCheckpoint.TableIndex
+		if df.checksumCheckpoint.Upstream.Done && df.checksumCheckpoint.Downstream.Done {
+			if df.checksumCheckpoint.TableIndex >= len(tables)-1 {
+				return nil
+			}
+			startTableIndex++
+		}
+	}
+
+	for tableIndex := startTableIndex; tableIndex < len(tables); tableIndex++ {
+		tableDiff := tables[tableIndex]
+		if tableDiff.IgnoreDataCheck {
+			continue
+		}
+
+		schema, table := tableDiff.Schema, tableDiff.Table
+		chunkID := &chunk.CID{
+			TableIndex:       tableIndex,
+			BucketIndexLeft:  0,
+			BucketIndexRight: 0,
+			ChunkIndex:       0,
+			ChunkCnt:         1,
+		}
+
+		if !common.AllTableExist(tableDiff.TableLack) {
+			lackRange := &splitter.RangeInfo{
+				ChunkRange: &chunk.Range{
+					Index: &chunk.CID{TableIndex: tableIndex},
+				},
+			}
+			upCount := df.upstream.GetCountForLackTable(ctx, lackRange)
+			downCount := df.downstream.GetCountForLackTable(ctx, lackRange)
+			isEqual := upCount == downCount
+			df.report.SetTableDataCheckResult(schema, table, isEqual, int(upCount), int(downCount), upCount, downCount, chunkID)
+			checkpointState := checkpoints.NewChecksumState(tableIndex)
+			checkpointState.Upstream.Done = true
+			checkpointState.Downstream.Done = true
+			if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
+				log.Warn("failed to save checksum checkpoint", zap.Error(err))
+			}
+			df.checksumCheckpoint = checkpointState
+			continue
+		}
+
+		checkpointState := checkpoints.NewChecksumState(tableIndex)
+		if df.checksumCheckpoint != nil && df.checksumCheckpoint.TableIndex == tableIndex {
+			checkpointState = df.checksumCheckpoint
+		}
+
+		var (
+			upCount      int64
+			upChecksum   uint64
+			downCount    int64
+			downChecksum uint64
+			doneCount    atomic.Int32
+		)
+
+		cctx, cancel := context.WithCancel(ctx)
+		eg, egCtx := errgroup.WithContext(cctx)
+		eg.Go(func() error {
+			df.handleCheckpoints(
+				egCtx,
+				func(flushCtx context.Context) error {
+					return df.flushChecksumCheckpoint(flushCtx, checkpointState)
+				},
+			)
+			return nil
+		})
+		eg.Go(func() (err error) {
+			defer func() {
+				if doneCount.Add(1) == 2 {
+					cancel()
+				}
+			}()
+			upCount, upChecksum, err = df.getSourceGlobalChecksum(
+				egCtx,
+				df.upstream,
+				tableIndex,
+				checkpointState.Upstream,
+			)
+			return err
+		})
+		eg.Go(func() (err error) {
+			defer func() {
+				if doneCount.Add(1) == 2 {
+					cancel()
+				}
+			}()
+			downCount, downChecksum, err = df.getSourceGlobalChecksum(
+				egCtx,
+				df.downstream,
+				tableIndex,
+				checkpointState.Downstream,
+			)
+			return err
+		})
+
+		if err := eg.Wait(); err != nil {
+			df.report.SetTableMeetError(schema, table, err)
+			df.report.SetTableDataCheckResult(schema, table, false, 0, 0, -1, -1, chunkID)
+			df.checksumCheckpoint = checkpointState
+			continue
+		}
+
+		equal := upCount == downCount && upChecksum == downChecksum
+		if !equal {
+			log.Debug("global checksum mismatch",
+				zap.String("table", dbutil.TableName(schema, table)),
+				zap.Int64("upstream count", upCount),
+				zap.Int64("downstream count", downCount),
+				zap.Uint64("upstream checksum", upChecksum),
+				zap.Uint64("downstream checksum", downChecksum),
+			)
+		}
+		df.report.SetTableDataCheckResult(schema, table, equal, 0, 0, upCount, downCount, chunkID)
+		df.checksumCheckpoint = checkpointState
+	}
+	return nil
+}
+
+func (df *Diff) getSourceGlobalChecksum(
+	ctx context.Context,
+	src source.Source,
+	tableIndex int,
+	state *checkpoints.ChecksumSourceState,
+) (int64, uint64, error) {
+	if state.Done {
+		return state.Count, state.Checksum, nil
+	}
+
+	var startRange *splitter.RangeInfo
+	if state.LastRange != nil {
+		startRange = &splitter.RangeInfo{
+			ChunkRange: state.LastRange,
+		}
+	}
+
+	iter, err := df.buildChecksumOnlyIterator(ctx, src, tableIndex, startRange)
+	if err != nil {
+		return -1, 0, errors.Trace(err)
+	}
+	defer iter.Close()
+
+	totalCount := int64(0)
+	totalChecksum := uint64(0)
+	if state != nil {
+		totalCount = state.Count
+		totalChecksum = state.Checksum
+	}
+
+	for {
+		chunkRange, err := iter.Next()
+		if err != nil {
+			return -1, 0, errors.Trace(err)
+		}
+		if chunkRange == nil {
+			break
+		}
+		if chunkRange.Index == nil {
+			chunkRange.Index = &chunk.CID{}
+		}
+		chunkRange.Index.TableIndex = tableIndex
+
+		rangeInfo := &splitter.RangeInfo{
+			ChunkRange: chunkRange,
+		}
+		info := src.GetCountAndMD5(ctx, rangeInfo)
+		if info.Err != nil {
+			return -1, 0, errors.Trace(info.Err)
+		}
+		totalCount += info.Count
+		totalChecksum ^= info.Checksum
+
+		df.checksumCheckpointMu.Lock()
+		state.Count = totalCount
+		state.Checksum = totalChecksum
+		state.LastRange = chunkRange.Clone()
+		df.checksumCheckpointMu.Unlock()
+	}
+
+	df.checksumCheckpointMu.Lock()
+	defer df.checksumCheckpointMu.Unlock()
+	state.Done = true
+	return totalCount, totalChecksum, nil
+}
+
+func (df *Diff) buildChecksumOnlyIterator(
+	ctx context.Context,
+	src source.Source,
+	tableIndex int,
+	startRange *splitter.RangeInfo,
+) (splitter.ChunkIterator, error) {
+	switch s := src.(type) {
+	case *source.TiDBSource:
+		return s.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
+	case *source.MySQLSources:
+		return s.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
+	default:
+		return nil, errors.New("unknown source type for checksum-only iterator")
+	}
+}
+
+func (df *Diff) flushChecksumCheckpoint(
+	ctx context.Context,
+	state *checkpoints.ChecksumState,
+) error {
+	df.checksumCheckpointMu.Lock()
+	defer df.checksumCheckpointMu.Unlock()
+
+	tableDiff := df.downstream.GetTables()[state.TableIndex]
+	r, err := df.report.GetSnapshot(
+		&chunk.CID{TableIndex: state.TableIndex},
+		tableDiff.Schema,
+		tableDiff.Table,
+	)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	if err := df.cp.SaveChecksumState(ctx, filepath.Join(df.CheckpointDir, checkpointFile), state, r); err != nil {
+		return errors.Trace(err)
+	}
 	return nil
 }
 
@@ -394,40 +684,55 @@ func (df *Diff) generateChunksIterator(ctx context.Context) (source.RangeIterato
 	return df.workSource.GetRangeIterator(ctx, df.startRange, df.workSource.GetTableAnalyzer(), df.splitThreadCount)
 }
 
-func (df *Diff) handleCheckpoints(ctx context.Context, stopCh chan struct{}) {
-	// a background goroutine which will insert the verified chunk,
-	// and periodically save checkpoint
+func (df *Diff) flushChunkCheckpoint(ctx context.Context) error {
+	chunkSnapshot := df.cp.GetChunkSnapshot()
+	if chunkSnapshot == nil {
+		return nil
+	}
+
+	tableDiff := df.downstream.GetTables()[chunkSnapshot.GetTableIndex()]
+	schema, table := tableDiff.Schema, tableDiff.Table
+	r, err := df.report.GetSnapshot(chunkSnapshot.GetID(), schema, table)
+	if err != nil {
+		return errors.Trace(err)
+	}
+
+	if _, err = df.cp.SaveChunk(
+		ctx,
+		filepath.Join(df.CheckpointDir, checkpointFile),
+		chunkSnapshot,
+		r,
+	); err != nil {
+		return errors.Trace(err)
+	}
+
+	return nil
+}
+
+func (df *Diff) handleCheckpoints(
+	ctx context.Context,
+	flushFn func(context.Context) error,
+) error {
 	log.Info("start handleCheckpoint goroutine")
-	defer func() {
-		log.Info("close handleCheckpoint goroutine")
-		df.checkpointWg.Done()
-	}()
+	defer log.Info("close handleCheckpoint goroutine")
+
 	flush := func() {
-		chunk := df.cp.GetChunkSnapshot()
-		if chunk != nil {
-			tableDiff := df.downstream.GetTables()[chunk.GetTableIndex()]
-			schema, table := tableDiff.Schema, tableDiff.Table
-			r, err := df.report.GetSnapshot(chunk.GetID(), schema, table)
-			if err != nil {
-				log.Warn("fail to save the report", zap.Error(err))
-			}
-			_, err = df.cp.SaveChunk(ctx, filepath.Join(df.CheckpointDir, checkpointFile), chunk, r)
-			if err != nil {
-				log.Warn("fail to save the chunk", zap.Error(err))
-				// maybe we should panic, because SaveChunk method should not failed.
-			}
+		if err := flushFn(ctx); err != nil {
+			log.Warn("fail to flush checkpoint", zap.Error(err))
 		}
 	}
 	defer flush()
+
+	ticker := time.NewTicker(checksumCheckpointFlushInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Stop do checkpoint by context done")
-			return
-		case <-stopCh:
-			log.Info("Stop do checkpoint")
-			return
-		case <-time.After(10 * time.Second):
+			log.Info("stop checkpoint flush by context done")
+			flush()
+			return ctx.Err()
+		case <-ticker.C:
 			flush()
 		}
 	}
@@ -675,7 +980,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 			for lastDownstreamData != nil {
 				rowsDelete++
 
-				if df.exportFixSQL {
+				if df.mode == ChecksumWithFix {
 					sql := df.downstream.GenerateFixSQL(
 						source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 					)
@@ -697,7 +1002,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 			// target lack some data, should insert the last source datas
 			for lastUpstreamData != nil {
 				rowsAdd++
-				if df.exportFixSQL {
+				if df.mode == ChecksumWithFix {
 					sql := df.downstream.GenerateFixSQL(source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
 					log.Debug("[insert]", zap.String("sql", sql))
 
@@ -730,7 +1035,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 		case 1:
 			// delete
 			rowsDelete++
-			if df.exportFixSQL {
+			if df.mode == ChecksumWithFix {
 				sql = df.downstream.GenerateFixSQL(
 					source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 				)
@@ -740,7 +1045,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 		case -1:
 			// insert
 			rowsAdd++
-			if df.exportFixSQL {
+			if df.mode == ChecksumWithFix {
 				sql = df.downstream.GenerateFixSQL(
 					source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 				)
@@ -751,7 +1056,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 			// update
 			rowsAdd++
 			rowsDelete++
-			if df.exportFixSQL {
+			if df.mode == ChecksumWithFix {
 				sql = df.downstream.GenerateFixSQL(
 					source.Replace, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 				)
@@ -778,10 +1083,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 // WriteSQLs write sqls to file
 func (df *Diff) writeSQLs(ctx context.Context) {
 	log.Info("start writeSQLs goroutine")
-	defer func() {
-		log.Info("close writeSQLs goroutine")
-		df.sqlWg.Done()
-	}()
+	defer log.Info("close writeSQLs goroutine")
 	for {
 		select {
 		case <-ctx.Done():
