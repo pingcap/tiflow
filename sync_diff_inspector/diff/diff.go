@@ -397,11 +397,14 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 
 	for tableIndex := startTableIndex; tableIndex < len(tables); tableIndex++ {
 		tableDiff := tables[tableIndex]
+		schema, table := tableDiff.Schema, tableDiff.Table
+		progressID := dbutil.TableName(schema, table)
 		if tableDiff.IgnoreDataCheck {
+			progress.StartTable(progressID, 1, true)
+			progress.Inc(progressID)
 			continue
 		}
 
-		schema, table := tableDiff.Schema, tableDiff.Table
 		chunkID := &chunk.CID{
 			TableIndex:       tableIndex,
 			BucketIndexLeft:  0,
@@ -411,6 +414,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		}
 
 		if !common.AllTableExist(tableDiff.TableLack) {
+			progress.StartTable(progressID, 1, true)
 			lackRange := &splitter.RangeInfo{
 				ChunkRange: &chunk.Range{
 					Index: &chunk.CID{TableIndex: tableIndex},
@@ -419,6 +423,10 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			upCount := df.upstream.GetCountForLackTable(ctx, lackRange)
 			downCount := df.downstream.GetCountForLackTable(ctx, lackRange)
 			isEqual := upCount == downCount
+			if !isEqual {
+				progress.FailTable(progressID)
+			}
+			progress.Inc(progressID)
 			df.report.SetTableDataCheckResult(schema, table, isEqual, int(upCount), int(downCount), upCount, downCount, chunkID)
 			checkpointState := checkpoints.NewChecksumState(tableIndex)
 			checkpointState.Upstream.Done = true
@@ -443,6 +451,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			doneCount    atomic.Int32
 		)
 
+		progress.StartTable(progressID, 1, false)
 		cctx, cancel := context.WithCancel(ctx)
 		eg, egCtx := errgroup.WithContext(cctx)
 		eg.Go(func() error {
@@ -465,6 +474,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				df.upstream,
 				tableIndex,
 				checkpointState.Upstream,
+				progressID,
 			)
 			return err
 		})
@@ -479,11 +489,13 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				df.downstream,
 				tableIndex,
 				checkpointState.Downstream,
+				progressID,
 			)
 			return err
 		})
 
 		if err := eg.Wait(); err != nil {
+			progress.FailTable(progressID)
 			df.report.SetTableMeetError(schema, table, err)
 			df.report.SetTableDataCheckResult(schema, table, false, 0, 0, -1, -1, chunkID)
 			df.checksumCheckpoint = checkpointState
@@ -492,6 +504,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 
 		equal := upCount == downCount && upChecksum == downChecksum
 		if !equal {
+			progress.FailTable(progressID)
 			log.Debug("global checksum mismatch",
 				zap.String("table", dbutil.TableName(schema, table)),
 				zap.Int64("upstream count", upCount),
@@ -500,6 +513,8 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				zap.Uint64("downstream checksum", downChecksum),
 			)
 		}
+		progress.UpdateTotal(progressID, 0, true)
+		progress.Inc(progressID)
 		df.report.SetTableDataCheckResult(schema, table, equal, 0, 0, upCount, downCount, chunkID)
 		df.checksumCheckpoint = checkpointState
 	}
@@ -511,6 +526,7 @@ func (df *Diff) getSourceGlobalChecksum(
 	src source.Source,
 	tableIndex int,
 	state *checkpoints.ChecksumSourceState,
+	progressID string,
 ) (int64, uint64, error) {
 	if state.Done {
 		return state.Count, state.Checksum, nil
@@ -629,6 +645,8 @@ func (df *Diff) getSourceGlobalChecksum(
 			if !ok {
 				break
 			}
+			progress.UpdateTotal(progressID, 1, false)
+			progress.Inc(progressID)
 			totalCount += ordered.count
 			totalChecksum ^= ordered.checksum
 
@@ -641,6 +659,10 @@ func (df *Diff) getSourceGlobalChecksum(
 			delete(pending, nextSeq)
 			nextSeq++
 		}
+	}
+
+	if err := eg.Wait(); err != nil {
+		return -1, 0, errors.Trace(err)
 	}
 
 	df.checksumCheckpointMu.Lock()
