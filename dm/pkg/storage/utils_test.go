@@ -379,6 +379,16 @@ func TestIsNotExistError(t *testing.T) {
 	res = IsNotExistError(err)
 	require.True(t, res)
 
+	// test s3 with AWS SDK v2 error (NoSuchKey)
+	s.s3.EXPECT().
+		GetObject(gomock.Any(), gomock.Any()).
+		Return(nil, &types.NoSuchKey{Message: aws.String("no such key")})
+
+	_, err = s.storage.ReadFile(ctx, "test.log")
+	require.Error(t, err)
+	res = IsNotExistError(err)
+	require.True(t, res)
+
 	// test other local error
 	_, err = os.ReadFile(localDir)
 	require.Error(t, err)

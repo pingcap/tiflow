@@ -41,6 +41,17 @@ func NewClient(credential *security.Credential) (*Client, error) {
 		if tlsConf != nil {
 			httpTrans := http.DefaultTransport.(*http.Transport).Clone()
 			httpTrans.TLSClientConfig = tlsConf
+			// Disable HTTP/2: TiCDC uses cmux to multiplex gRPC and HTTP on
+			// the same TLS listener. The HTTP server behind cmux does not
+			// support HTTP/2, so the client must not negotiate "h2" via ALPN.
+			httpTrans.ForceAttemptHTTP2 = false
+			filteredProtos := make([]string, 0, len(tlsConf.NextProtos))
+			for _, p := range tlsConf.NextProtos {
+				if p != "h2" {
+					filteredProtos = append(filteredProtos, p)
+				}
+			}
+			tlsConf.NextProtos = filteredProtos
 			transport = httpTrans
 		}
 	}

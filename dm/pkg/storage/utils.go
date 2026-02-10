@@ -15,6 +15,7 @@ package storage
 
 import (
 	"context"
+	goerrors "errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -24,6 +25,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	"github.com/pingcap/tidb/pkg/objstore"
@@ -203,9 +205,18 @@ func IsNotExistError(err error) bool {
 	if os.IsNotExist(err) {
 		return true
 	}
+	// AWS SDK v1 error check
 	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
+			return true
+		}
+	}
+	// AWS SDK v2 error check
+	var apiErr smithy.APIError
+	if goerrors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchBucket", "NoSuchKey", "NotFound":
 			return true
 		}
 	}
