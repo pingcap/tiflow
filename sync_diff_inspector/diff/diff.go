@@ -536,34 +536,111 @@ func (df *Diff) getSourceGlobalChecksum(
 		totalChecksum = state.Checksum
 	}
 
-	for {
-		chunkRange, err := iter.Next()
-		if err != nil {
-			return -1, 0, errors.Trace(err)
-		}
-		if chunkRange == nil {
-			break
-		}
-		if chunkRange.Index == nil {
-			chunkRange.Index = &chunk.CID{}
-		}
-		chunkRange.Index.TableIndex = tableIndex
+	type checksumTask struct {
+		rangeInfo *splitter.RangeInfo
+		seq       int
+		count     int64
+		checksum  uint64
+	}
 
-		rangeInfo := &splitter.RangeInfo{
-			ChunkRange: chunkRange,
-		}
-		info := src.GetCountAndMD5(ctx, rangeInfo)
-		if info.Err != nil {
-			return -1, 0, errors.Trace(info.Err)
-		}
-		totalCount += info.Count
-		totalChecksum ^= info.Checksum
+	var (
+		concurrency = max(1, df.checkThreadCount)
+		taskWg      sync.WaitGroup
+		taskCh      = make(chan checksumTask, concurrency)
+		resultCh    = make(chan checksumTask, concurrency)
+	)
 
-		df.checksumCheckpointMu.Lock()
-		state.Count = totalCount
-		state.Checksum = totalChecksum
-		state.LastRange = chunkRange.Clone()
-		df.checksumCheckpointMu.Unlock()
+	eg, egCtx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		defer close(taskCh)
+
+		seq := 0
+		for {
+			chunkRange, iterErr := iter.Next()
+			if iterErr != nil {
+				return errors.Trace(iterErr)
+			}
+			if chunkRange == nil {
+				return nil
+			}
+			chunkRange.Index.TableIndex = tableIndex
+
+			rangeInfo := &splitter.RangeInfo{
+				ChunkRange: chunkRange,
+			}
+
+			select {
+			case <-egCtx.Done():
+				return egCtx.Err()
+			case taskCh <- checksumTask{seq: seq, rangeInfo: rangeInfo}:
+				seq++
+			}
+		}
+	})
+
+	taskWg.Add(concurrency)
+	for range concurrency {
+		eg.Go(func() error {
+			defer taskWg.Done()
+			for {
+				var task checksumTask
+				select {
+				case <-egCtx.Done():
+					return egCtx.Err()
+				case taskInfo, ok := <-taskCh:
+					if !ok {
+						return nil
+					}
+					task = taskInfo
+				}
+
+				info := src.GetCountAndMD5(egCtx, task.rangeInfo)
+				if info.Err != nil {
+					return errors.Trace(info.Err)
+				}
+
+				result := checksumTask{
+					seq:       task.seq,
+					rangeInfo: task.rangeInfo,
+					count:     info.Count,
+					checksum:  info.Checksum,
+				}
+				select {
+				case <-egCtx.Done():
+					return egCtx.Err()
+				case resultCh <- result:
+				}
+			}
+		})
+	}
+
+	eg.Go(func() error {
+		taskWg.Wait()
+		close(resultCh)
+		return nil
+	})
+
+	nextSeq := 0
+	pending := make(map[int]checksumTask, concurrency)
+	for result := range resultCh {
+		pending[result.seq] = result
+		for {
+			ordered, ok := pending[nextSeq]
+			if !ok {
+				break
+			}
+			totalCount += ordered.count
+			totalChecksum ^= ordered.checksum
+
+			df.checksumCheckpointMu.Lock()
+			state.Count = totalCount
+			state.Checksum = totalChecksum
+			state.LastRange = ordered.rangeInfo.ChunkRange.Clone()
+			df.checksumCheckpointMu.Unlock()
+
+			delete(pending, nextSeq)
+			nextSeq++
+		}
 	}
 
 	df.checksumCheckpointMu.Lock()
