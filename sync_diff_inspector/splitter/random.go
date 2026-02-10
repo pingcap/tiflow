@@ -23,6 +23,10 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
@@ -31,14 +35,35 @@ import (
 	"go.uber.org/zap"
 )
 
+const tidbRowID = "_tidb_rowid"
+
+func newTiDBRowIDColumn() *model.ColumnInfo {
+	fieldType := types.NewFieldType(tmysql.TypeLonglong)
+	fieldType.SetCharset(charset.CharsetBin)
+	fieldType.SetCollate(charset.CollationBin)
+
+	return &model.ColumnInfo{
+		Name:      ast.NewCIStr(tidbRowID),
+		FieldType: *fieldType,
+	}
+}
+
 // RandomIterator is used to random iterate a table
 type RandomIterator struct {
 	table     *common.TableDiff
 	chunkSize int64
 	chunks    []*chunk.Range
+	splitColumns []string
 	nextChunk uint
 
 	dbConn *sql.DB
+}
+
+// SplitColumnsForTest returns split columns for tests.
+func (s *RandomIterator) SplitColumnsForTest() []string {
+	cols := make([]string, len(s.splitColumns))
+	copy(cols, s.splitColumns)
+	return cols
 }
 
 // a wrapper for get row count to integrate failpoint.
@@ -188,13 +213,20 @@ NEXTINDEX:
 		chunks = chunks[:(len(chunks) - v.(int))]
 	})
 
-	progress.StartTable(progressID, len(chunks), true)
+	if len(progressID) > 0 {
+		progress.StartTable(progressID, len(chunks), true)
+	}
+	splitColumns := make([]string, 0, len(fields))
+	for _, field := range fields {
+		splitColumns = append(splitColumns, field.Name.O)
+	}
 	return &RandomIterator{
-		table:     table,
-		chunkSize: chunkSize,
-		chunks:    chunks,
-		nextChunk: 0,
-		dbConn:    dbConn,
+		table:        table,
+		chunkSize:    chunkSize,
+		chunks:       chunks,
+		splitColumns: splitColumns,
+		nextChunk:    0,
+		dbConn:       dbConn,
 	}, nil
 }
 
@@ -229,6 +261,10 @@ func GetSplitFields(table *model.TableInfo, splitFields []string) ([]*model.Colu
 	for _, splitField := range splitFields {
 		col := dbutil.FindColumnByName(table.Columns, splitField)
 		if col == nil {
+			if strings.EqualFold(splitField, tidbRowID) {
+				splitCols = append(splitCols, newTiDBRowIDColumn())
+				continue
+			}
 			return nil, errors.NotFoundf("column %s in table %s", splitField, table.Name)
 		}
 		splitCols = append(splitCols, col)

@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
@@ -97,6 +98,63 @@ type TiDBSource struct {
 	dbConn            *sql.DB
 
 	version *semver.Version
+}
+
+// GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
+// It prefers scanning by table handle order for TiDB tables.
+func (s *TiDBSource) GetChecksumOnlyIterator(
+	ctx context.Context,
+	tableIndex int,
+	startRange *splitter.RangeInfo,
+) (splitter.ChunkIterator, error) {
+	table := s.tableDiffs[tableIndex]
+	matchSource := getMatchSource(s.sourceTableMap, table)
+
+	originTable := *table
+	originTable.Schema = matchSource.OriginSchema
+	originTable.Table = matchSource.OriginTable
+
+	splitFields, err := getChecksumSplitFields(originTable.Info)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	originTable.Fields = splitFields
+
+	return splitter.NewRandomIteratorWithCheckpoint(
+		ctx, "", &originTable, s.dbConn, startRange)
+}
+
+func getChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
+	switch {
+	case tableInfo.PKIsHandle:
+		pkCol := tableInfo.GetPkColInfo()
+		if pkCol == nil {
+			return "", errors.New("pk is handle but primary key column not found")
+		}
+		return pkCol.Name.O, nil
+	case tableInfo.IsCommonHandle:
+		splitFields := getPrimaryIndexSplitFields(tableInfo)
+		if splitFields == "" {
+			return "", errors.New("common handle table without primary index")
+		}
+		return splitFields, nil
+	default:
+		return "_tidb_rowid", nil
+	}
+}
+
+func getPrimaryIndexSplitFields(tableInfo *model.TableInfo) string {
+	pkIndex := tables.FindPrimaryIndex(tableInfo)
+	if pkIndex == nil {
+		return ""
+	}
+
+	pkCols := utils.GetColumnsFromIndex(pkIndex, tableInfo)
+	fieldNames := make([]string, 0, len(pkCols))
+	for _, col := range pkCols {
+		fieldNames = append(fieldNames, col.Name.O)
+	}
+	return strings.Join(fieldNames, ",")
 }
 
 // GetTableAnalyzer gets the analyzer for current source

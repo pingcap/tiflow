@@ -14,10 +14,12 @@
 package diff
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 func TestGetSnapshot(t *testing.T) {
@@ -103,4 +105,25 @@ func TestGetSnapshot(t *testing.T) {
 		val := GetSnapshot(cs.latestSnapshot, cs.snapshot, conn)
 		require.Equal(t, cs.expected, val, "case %d", i)
 	}
+}
+
+func TestCompareModeFromExportFixSQL(t *testing.T) {
+	require.Equal(t, ChecksumOnly, compareModeFromExportFixSQL(false))
+	require.Equal(t, ChecksumWithFix, compareModeFromExportFixSQL(true))
+}
+
+type se struct {
+	a int
+	b int
+}
+
+func TestXXX(t *testing.T) {
+	a := atomic.NewPointer(&se{1, 2})
+	p, err := json.Marshal(a)
+	require.NoError(t, err)
+	b := &atomic.Pointer[se]{}
+	err = json.Unmarshal(p, b)
+	require.NoError(t, err)
+	require.Equal(t, 1, b.Load().a)
+	require.Equal(t, 2, b.Load().b)
 }
