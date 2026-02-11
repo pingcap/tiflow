@@ -169,5 +169,19 @@ func wrapTLSListener(inner net.Listener, credentials *security.Credential) (net.
 		return nil, errors.Trace(err)
 	}
 
+	// Remove "h2" from NextProtos so that the TLS listener does not
+	// advertise HTTP/2 via ALPN. TiCDC uses cmux to multiplex gRPC and
+	// HTTP on the same TLS listener; the HTTP server behind cmux only
+	// speaks HTTP/1.1, so if a client (e.g. curl) negotiates "h2" via
+	// ALPN it will receive an empty reply. gRPC still works because
+	// cmux matches gRPC at the application layer, independent of ALPN.
+	filteredProtos := make([]string, 0, len(config.NextProtos))
+	for _, p := range config.NextProtos {
+		if p != "h2" {
+			filteredProtos = append(filteredProtos, p)
+		}
+	}
+	config.NextProtos = filteredProtos
+
 	return tls.NewListener(inner, config), nil
 }
