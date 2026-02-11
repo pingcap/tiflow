@@ -114,7 +114,6 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 		})
 	if err != nil {
 		_ = c.Error(err)
-		return
 	}
 	c.JSON(http.StatusOK, &EmptyResponse{})
 }
