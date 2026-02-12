@@ -64,6 +64,35 @@ function run() {
 	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_demo.child c LEFT JOIN fk_demo.parent p ON c.parent_id=p.parent_id WHERE p.parent_id IS NULL;" "COUNT(*): 0"
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
+	run_sql_source1 "UPDATE fk_demo.parent SET parent_id=4 WHERE parent_id=2;"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Paused\"" 2 \
+		"\"PK/UK changes\"" 1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+
+	cleanup_data fk_demo
+	cleanup_data_upstream fk_demo
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"start-task $cur/conf/dm-task.yaml --remove-meta" \
+		"\"result\": true" 2 \
+		"\"source\": \"$SOURCE_ID1\"" 1
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"result\": true" 2 \
+		"\"stage\": \"Running\"" 2
+
+	run_sql_source1 "CREATE TABLE fk_demo.child_extra (id INT PRIMARY KEY, parent_id INT, CONSTRAINT fk_child_extra FOREIGN KEY (parent_id) REFERENCES fk_demo.parent(parent_id));"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Paused\"" 2 \
+		"\"foreign_key_checks=1\"" 1
 }
 
 cleanup_data fk_demo
