@@ -483,7 +483,7 @@ func FetchAllDoTables(ctx context.Context, db *BaseDB, bw *filter.Filter) (map[s
 	schemaToTables := make(map[string][]string)
 	for _, ftSchema := range ftSchemas {
 		schema := ftSchema.Schema
-		tables, err := dbutil.GetTables(ctx, db.DB, schema)
+		tables, err := GetTables(ctx, db.DB, schema)
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 		}
@@ -554,4 +554,48 @@ func FetchTargetDoTables(
 	}
 
 	return tableMapper, extendedColumnPerTable, nil
+}
+
+// GetTables returns all table names in the schema.
+// It supports both standard MySQL (2 columns) and Ali RDS (4 columns).
+func GetTables(ctx context.Context, db *sql.DB, schema string) ([]string, error) {
+	query := fmt.Sprintf("SHOW FULL TABLES IN `%s`", strings.ReplaceAll(schema, "`", "``"))
+	rows, err := db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cols) < 2 {
+		return nil, errors.New("SHOW FULL TABLES returned less than 2 columns")
+	}
+
+	var tableName, tableType string
+	scanArgs := make([]interface{}, len(cols))
+	scanArgs[0] = &tableName
+	scanArgs[1] = &tableType
+	for i := 2; i < len(cols); i++ {
+		var dummy interface{}
+		scanArgs[i] = &dummy
+	}
+
+	var tables []string
+	for rows.Next() {
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			return nil, err
+		}
+		if tableType == "BASE TABLE" {
+			tables = append(tables, tableName)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return tables, nil
 }
