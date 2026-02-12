@@ -19,6 +19,7 @@ import (
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -113,6 +114,11 @@ type SourceStatus struct {
 }
 
 func GetSourceStatus(tctx *tcontext.Context, db *conn.BaseDB, flavor string) (*SourceStatus, error) {
+	failpoint.Inject("BlockGetSourceStatus", func() {
+		<-tctx.Ctx.Done()
+		failpoint.Return(nil, terror.DBErrorAdapt(tctx.Ctx.Err(), db.Scope, terror.ErrDBDriverError))
+	})
+
 	ret := &SourceStatus{}
 	ctx, cancel := tctx.WithTimeout(conn.DefaultDBTimeout)
 	defer cancel()
