@@ -322,7 +322,7 @@ func TestGenDMLWithSameOp(t *testing.T) {
 		{44, 55, 66},
 	}
 
-	queries, args := genDMLsWithSameOp(dmls)
+	queries, args := genDMLsWithSameOp(dmls, "replace")
 	require.Equal(t, expectQueries, queries)
 	require.Equal(t, expectArgs, args)
 }
