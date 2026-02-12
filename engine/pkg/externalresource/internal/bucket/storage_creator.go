@@ -18,7 +18,8 @@ import (
 	"fmt"
 	"net/url"
 
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -26,12 +27,12 @@ import (
 )
 
 // Creator represents a creator used to create
-// brStorage.ExternalStorage.
+// storeapi.Storage.
 // Implementing mock or stub Creator will make
 // unit testing easier.
 type Creator interface {
-	newBucketForScope(ctx context.Context, scope internal.ResourceScope) (brStorage.ExternalStorage, error)
-	newBucketFromURI(ctx context.Context, uri string) (brStorage.ExternalStorage, error)
+	newBucketForScope(ctx context.Context, scope internal.ResourceScope) (storeapi.Storage, error)
+	newBucketFromURI(ctx context.Context, uri string) (storeapi.Storage, error)
 	baseURI() string
 	resourceType() model.ResourceType
 }
@@ -46,7 +47,7 @@ type CreatorImpl struct {
 	Prefix string
 	// Options provide necessary information such as endpoints and access key
 	// for creating an s3 client.
-	Options *brStorage.BackendOptions
+	Options *objstore.BackendOptions
 	// ResourceType is the bucket type of this creator
 	ResourceType model.ResourceType
 }
@@ -61,7 +62,7 @@ func NewCreator(
 
 func (f *CreatorImpl) newBucketForScope(
 	ctx context.Context, scope internal.ResourceScope,
-) (brStorage.ExternalStorage, error) {
+) (storeapi.Storage, error) {
 	// full uri path is like: `s3://bucket/prefix/executorID/workerID`
 	uri := fmt.Sprintf("%s/%s", f.baseURI(), scope.BuildResPath())
 	return GetExternalStorageFromURI(ctx, uri, f.Options)
@@ -82,14 +83,14 @@ func (f *CreatorImpl) resourceType() model.ResourceType {
 func (f *CreatorImpl) newBucketFromURI(
 	ctx context.Context,
 	uri string,
-) (brStorage.ExternalStorage, error) {
+) (storeapi.Storage, error) {
 	return GetExternalStorageFromURI(ctx, uri, f.Options)
 }
 
-// GetExternalStorageFromURI creates a new brStorage.ExternalStorage from a uri.
+// GetExternalStorageFromURI creates a new storeapi.Storage from a uri.
 func GetExternalStorageFromURI(
-	ctx context.Context, uri string, opts *brStorage.BackendOptions,
-) (brStorage.ExternalStorage, error) {
+	ctx context.Context, uri string, opts *objstore.BackendOptions,
+) (storeapi.Storage, error) {
 	// Note that we may have network I/O here.
 	ret, err := util.GetExternalStorage(ctx, uri, opts, util.DefaultS3Retryer())
 	if err != nil {

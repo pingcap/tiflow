@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
@@ -27,14 +27,14 @@ var _ internal.ResourceDescriptor = (*resourceDescriptor)(nil)
 // resourceDescriptor is a handle for a bucket-backed resource used
 // internally in engine/pkg/externalresource.
 //
-// Note that this implementation caches a brStorage.ExternalStorage object,
+// Note that this implementation caches a storeapi.Storage object,
 // so it is not thread-safe to use. But thread-safety does not seem
 // to be a necessary requirement.
 type resourceDescriptor struct {
 	Ident internal.ResourceIdent
 
 	creator Creator
-	storage brStorage.ExternalStorage
+	storage storeapi.Storage
 }
 
 func newResourceDescriptor(
@@ -49,7 +49,7 @@ func newResourceDescriptor(
 
 // ExternalStorage creates the storage object if one has not been created yet, and returns the
 // created storage object.
-func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
+func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (storeapi.Storage, error) {
 	if r.storage == nil {
 		storage, err := r.makeExternalStorage(ctx)
 		if err != nil {
@@ -61,7 +61,7 @@ func (r *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.Ext
 }
 
 // makeExternalStorage actually creates the storage object.
-func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
+func (r *resourceDescriptor) makeExternalStorage(ctx context.Context) (storeapi.Storage, error) {
 	return r.creator.newBucketFromURI(ctx, r.URI())
 }
 
