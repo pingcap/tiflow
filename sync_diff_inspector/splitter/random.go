@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
@@ -38,6 +37,8 @@ type RandomIterator struct {
 	chunks    []*chunk.Range
 	nextChunk uint
 
+	IndexID int64
+
 	dbConn *sql.DB
 }
 
@@ -52,8 +53,8 @@ func getRowCount(ctx context.Context, db dbutil.QueryExecutor, schemaName string
 }
 
 // NewRandomIterator return a new iterator
-func NewRandomIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*RandomIterator, error) {
-	return NewRandomIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil)
+func NewRandomIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB, candidate *IndexCandidate) (*RandomIterator, error) {
+	return NewRandomIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil, candidate)
 }
 
 // NewRandomIteratorWithCheckpoint return a new iterator with checkpoint
@@ -63,59 +64,12 @@ func NewRandomIteratorWithCheckpoint(
 	table *common.TableDiff,
 	dbConn *sql.DB,
 	startRange *RangeInfo,
+	candidate *IndexCandidate,
 ) (*RandomIterator, error) {
-	// get the chunk count by data count and chunk size
-	var splitFieldArr []string
-	if len(table.Fields) != 0 {
-		splitFieldArr = strings.Split(table.Fields, ",")
-	}
-
-	for i := range splitFieldArr {
-		splitFieldArr[i] = strings.TrimSpace(splitFieldArr[i])
-	}
-
-	fields, err := GetSplitFields(table.Info, splitFieldArr)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
+	fields := candidate.Columns
 	chunkRange := chunk.NewChunkRange(table.Info)
-
-	// Below logic is modified from BucketIterator
-	// It's used to find the index which can match the split fields in RandomIterator.
-	fieldNames := utils.GetColumnNames(fields)
-	indices := dbutil.FindAllIndex(table.Info)
-NEXTINDEX:
-	for _, index := range indices {
-		if index == nil {
-			continue
-		}
-		if startRange != nil && startRange.IndexID != index.ID {
-			continue
-		}
-
-		indexColumns := utils.GetColumnsFromIndex(index, table.Info)
-
-		if len(indexColumns) < len(index.Columns) {
-			// some column in index is ignored.
-			continue
-		}
-
-		if !utils.IsIndexMatchingColumns(index, fieldNames) {
-			// We are enforcing user configured "index-fields" settings.
-			continue
-		}
-
-		// skip the index that has expression column
-		for _, col := range indexColumns {
-			if col.Hidden {
-				continue NEXTINDEX
-			}
-		}
-
-		// Found the index, store column names
-		chunkRange.IndexColumnNames = utils.GetColumnNames(indexColumns)
-		break
+	if candidate.Index != nil && candidate.Index.ID >= 0 {
+		chunkRange.IndexColumnNames = utils.GetColumnNames(fields)
 	}
 
 	beginIndex := 0
@@ -130,6 +84,7 @@ NEXTINDEX:
 				chunkSize: 0,
 				chunks:    nil,
 				nextChunk: 0,
+				IndexID:   candidate.Index.ID,
 				dbConn:    dbConn,
 			}, nil
 		}
@@ -195,6 +150,7 @@ NEXTINDEX:
 		chunks:    chunks,
 		nextChunk: 0,
 		dbConn:    dbConn,
+		IndexID:   candidate.Index.ID,
 	}, nil
 }
 
@@ -217,52 +173,13 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 	return c, nil
 }
 
-// Close close the iterator
-func (s *RandomIterator) Close() {
+// GetIndexID returns the index ID
+func (s *RandomIterator) GetIndexID() int64 {
+	return s.IndexID
 }
 
-// GetSplitFields returns fields to split chunks, order by pk, uk, index, columns.
-func GetSplitFields(table *model.TableInfo, splitFields []string) ([]*model.ColumnInfo, error) {
-	colsMap := make(map[string]*model.ColumnInfo)
-
-	splitCols := make([]*model.ColumnInfo, 0, 2)
-	for _, splitField := range splitFields {
-		col := dbutil.FindColumnByName(table.Columns, splitField)
-		if col == nil {
-			return nil, errors.NotFoundf("column %s in table %s", splitField, table.Name)
-		}
-		splitCols = append(splitCols, col)
-	}
-
-	if len(splitCols) != 0 {
-		return splitCols, nil
-	}
-
-	for _, col := range table.Columns {
-		colsMap[col.Name.O] = col
-	}
-	indices := dbutil.FindAllIndex(table)
-	if len(indices) != 0 {
-	NEXTINDEX:
-		for _, idx := range indices {
-			cols := make([]*model.ColumnInfo, 0, len(table.Columns))
-			for _, icol := range idx.Columns {
-				col := colsMap[icol.Name.O]
-				if col.Hidden {
-					continue NEXTINDEX
-				}
-				cols = append(cols, col)
-			}
-			return cols, nil
-		}
-	}
-
-	for _, col := range table.Columns {
-		if !col.Hidden {
-			return []*model.ColumnInfo{col}, nil
-		}
-	}
-	return nil, errors.NotFoundf("not found column")
+// Close close the iterator
+func (s *RandomIterator) Close() {
 }
 
 // splitRangeByRandom splits a chunk to multiple chunks by random

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -47,17 +48,22 @@ func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.
 	if len(matchedSources) > 1 {
 		log.Fatal("unreachable, shard merge table cannot generate splitter for now.")
 	}
-	// Shallow Copy
 	originTable := *table
 	originTable.Schema = matchedSources[0].OriginSchema
 	originTable.Table = matchedSources[0].OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
-	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, matchedSources[0].DBConn, startRange)
+
+	tp, candidate, err := splitter.ChooseSplitType(
+		ctx, matchedSources[0].DBConn, &originTable, startRange)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	return randIter, nil
+	if tp != chunk.Random {
+		return nil, errors.Errorf("unsupported splitter type %v for mysql shard", tp)
+	}
+
+	return splitter.NewRandomIteratorWithCheckpoint(
+		ctx, progressID, &originTable, matchedSources[0].DBConn, startRange, candidate)
 }
 
 // MySQLSources represent one table in MySQL
