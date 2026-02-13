@@ -18,12 +18,12 @@ cat config.toml | sed 's/export-fix-sql = true/export-fix-sql = false/' >config_
 diff config.toml config_nofix.toml || true
 
 echo "compare json tables, check result should be pass"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/json_diff.output || true
+sync_diff_inspector --config=./config.toml >$OUT_DIR/json_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 
 echo "compare json tables without fixsql, check result should be pass"
-sync_diff_inspector --config=./config_nofix.toml >$OUT_DIR/json_diff.output || true
+sync_diff_inspector --config=./config_nofix.toml >$OUT_DIR/json_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 

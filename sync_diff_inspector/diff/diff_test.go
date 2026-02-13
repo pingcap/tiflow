@@ -18,6 +18,10 @@ import (
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb/pkg/meta/model"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	ttypes "github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/atomic"
 )
@@ -110,6 +114,31 @@ func TestGetSnapshot(t *testing.T) {
 func TestCompareModeFromExportFixSQL(t *testing.T) {
 	require.Equal(t, ChecksumOnly, compareModeFromExportFixSQL(false))
 	require.Equal(t, ChecksumWithFix, compareModeFromExportFixSQL(true))
+}
+
+func buildTableDiff(columnTypes ...byte) *common.TableDiff {
+	cols := make([]*model.ColumnInfo, 0, len(columnTypes))
+	for _, tp := range columnTypes {
+		cols = append(cols, &model.ColumnInfo{
+			FieldType: *ttypes.NewFieldType(tp),
+		})
+	}
+	return &common.TableDiff{
+		Schema: "test",
+		Table:  "test",
+		Info: &model.TableInfo{
+			Columns: cols,
+		},
+	}
+}
+
+func TestShouldUseGlobalChecksum(t *testing.T) {
+	noJSON := buildTableDiff(tmysql.TypeLong)
+	withJSON := buildTableDiff(tmysql.TypeLong, tmysql.TypeJSON)
+
+	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, []*common.TableDiff{noJSON}))
+	require.False(t, shouldUseGlobalChecksum(ChecksumOnly, []*common.TableDiff{withJSON}))
+	require.False(t, shouldUseGlobalChecksum(ChecksumWithFix, []*common.TableDiff{noJSON}))
 }
 
 type se struct {
