@@ -29,10 +29,12 @@ import (
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/capture"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/check"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -338,6 +340,55 @@ func getNamespaceValueWithDefault(c *gin.Context) string {
 	return namespace
 }
 
+// getAllTables return ineligibleTables and EligibleTables.
+func (h *OpenAPIV2) getAllTables(c *gin.Context) {
+	ctx := c.Request.Context()
+	cfg := getDefaultVerifyTableConfig()
+	if err := c.BindJSON(cfg); err != nil {
+		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+
+	var kvStore tidbkv.Storage
+	// if PDAddrs is empty, use the default upstream
+	if len(cfg.PDAddrs) == 0 {
+		up, err := getCaptureDefaultUpstream(h.capture)
+		if err != nil {
+			_ = c.Error(err)
+			return
+		}
+		kvStore = up.KVStorage
+	} else {
+		credential := cfg.PDConfig.toCredential()
+		var err error
+		kvStore, err = h.helpers.createTiStore(ctx, cfg.PDAddrs, credential)
+		if err != nil {
+			_ = c.Error(errors.Trace(err))
+			return
+		}
+	}
+
+	// fill replicaConfig
+	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
+	f, err := filter.NewFilter(replicaCfg, "")
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	_, ineligibleTables, eligibleTables, allTables, err := entry.
+		VerifyTables(f, kvStore, cfg.StartTs)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	tables := &Tables{
+		IneligibleTables: toAPIModelFunc(ineligibleTables),
+		EligibleTables:   toAPIModelFunc(eligibleTables),
+		AllTables:        toAPIModelFunc(allTables),
+	}
+	c.JSON(http.StatusOK, tables)
+}
+
 // verifyTable verify table, return ineligibleTables and EligibleTables.
 func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	cfg := getDefaultVerifyTableConfig()
@@ -377,29 +428,31 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 	replicaCfg := cfg.ReplicaConfig.ToInternalReplicaConfig()
 	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
 
-	ineligibleTables, eligibleTables, err := h.helpers.
+	ineligibleTables, eligibleTables, allTables, err := h.helpers.
 		getVerifiedTables(ctx, replicaCfg, kvStore, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
-	toAPIModelFunc := func(tbls []model.TableName) []TableName {
-		var apiModles []TableName
-		for _, tbl := range tbls {
-			apiModles = append(apiModles, TableName{
-				Schema:      tbl.Schema,
-				Table:       tbl.Table,
-				TableID:     tbl.TableID,
-				IsPartition: tbl.IsPartition,
-			})
-		}
-		return apiModles
-	}
 	tables := &Tables{
 		IneligibleTables: toAPIModelFunc(ineligibleTables),
 		EligibleTables:   toAPIModelFunc(eligibleTables),
+		AllTables:        toAPIModelFunc(allTables),
 	}
 	c.JSON(http.StatusOK, tables)
+}
+
+func toAPIModelFunc(tbls []model.TableName) []TableName {
+	var apiModles []TableName
+	for _, tbl := range tbls {
+		apiModles = append(apiModles, TableName{
+			Schema:      tbl.Schema,
+			Table:       tbl.Table,
+			TableID:     tbl.TableID,
+			IsPartition: tbl.IsPartition,
+		})
+	}
+	return apiModles
 }
 
 // updateChangefeed handles update changefeed request,
