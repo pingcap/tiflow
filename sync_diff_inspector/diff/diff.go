@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/log"
 	tidbconfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
@@ -107,6 +108,37 @@ func compareModeFromExportFixSQL(exportFixSQL bool) CompareMode {
 	return ChecksumOnly
 }
 
+func tableHasJSONColumn(tableInfo *model.TableInfo) bool {
+	if tableInfo == nil {
+		return false
+	}
+	for _, col := range tableInfo.Columns {
+		if col == nil || col.Hidden {
+			continue
+		}
+		if col.FieldType.GetType() == mysql.TypeJSON {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldUseGlobalChecksum(mode CompareMode, tables []*common.TableDiff) bool {
+	if mode != ChecksumOnly {
+		return false
+	}
+	for _, table := range tables {
+		if tableHasJSONColumn(table.Info) {
+			log.Info(
+				"fallback to chunk compare when table contains JSON column",
+				zap.String("table", dbutil.TableName(table.Schema, table.Table)),
+			)
+			return false
+		}
+	}
+	return true
+}
+
 // Diff contains two sql DB, used for comparing.
 type Diff struct {
 	// we may have multiple sources in dm sharding sync.
@@ -116,9 +148,10 @@ type Diff struct {
 	// workSource is one of upstream/downstream by some policy in #pickSource.
 	workSource source.Source
 
-	checkThreadCount int
-	splitThreadCount int
-	mode             CompareMode
+	checkThreadCount  int
+	splitThreadCount  int
+	mode              CompareMode
+	useGlobalChecksum bool
 
 	FixSQLDir     string
 	CheckpointDir string
@@ -199,6 +232,7 @@ func (df *Diff) init(ctx context.Context, cfg *config.Config) (err error) {
 		return errors.Trace(err)
 	}
 	df.report.Init(df.downstream.GetTables(), sourceConfigs, targetConfig)
+	df.useGlobalChecksum = shouldUseGlobalChecksum(df.mode, df.downstream.GetTables())
 	if err := df.initCheckpoint(); err != nil {
 		return errors.Trace(err)
 	}
@@ -207,7 +241,7 @@ func (df *Diff) init(ctx context.Context, cfg *config.Config) (err error) {
 
 func (df *Diff) initCheckpoint() error {
 	df.cp.Init()
-	if df.mode == ChecksumOnly {
+	if df.useGlobalChecksum {
 		return df.initChecksumCheckpoint()
 	}
 
@@ -327,7 +361,7 @@ func getConfigsForReport(cfg *config.Config) ([][]byte, []byte, error) {
 
 // Equal tests whether two database have same data and schema.
 func (df *Diff) Equal(ctx context.Context) error {
-	if df.mode == ChecksumOnly {
+	if df.useGlobalChecksum {
 		return df.equalByGlobalChecksum(ctx)
 	}
 	return df.equalByChunkChecksum(ctx)
