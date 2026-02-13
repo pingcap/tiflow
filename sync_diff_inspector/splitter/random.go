@@ -50,11 +50,11 @@ func newTiDBRowIDColumn() *model.ColumnInfo {
 
 // RandomIterator is used to random iterate a table
 type RandomIterator struct {
-	table     *common.TableDiff
-	chunkSize int64
-	chunks    []*chunk.Range
+	table        *common.TableDiff
+	chunkSize    int64
+	chunks       []*chunk.Range
 	splitColumns []string
-	nextChunk uint
+	nextChunk    uint
 
 	dbConn *sql.DB
 }
