@@ -123,14 +123,23 @@ func tableHasJSONColumn(tableInfo *model.TableInfo) bool {
 	return false
 }
 
-func shouldUseGlobalChecksum(mode CompareMode, tables []*common.TableDiff) bool {
+func shouldUseGlobalChecksum(
+	mode CompareMode,
+	upstreamIsTiDB bool,
+	downstreamIsTiDB bool,
+	tables []*common.TableDiff,
+) bool {
 	if mode != ChecksumOnly {
 		return false
 	}
+	if upstreamIsTiDB && downstreamIsTiDB {
+		return true
+	}
+
 	for _, table := range tables {
 		if tableHasJSONColumn(table.Info) {
 			log.Info(
-				"fallback to chunk compare when table contains JSON column",
+				"fallback to chunk compare when non-TiDB source table contains JSON column",
 				zap.String("table", dbutil.TableName(table.Schema, table.Table)),
 			)
 			return false
@@ -232,7 +241,14 @@ func (df *Diff) init(ctx context.Context, cfg *config.Config) (err error) {
 		return errors.Trace(err)
 	}
 	df.report.Init(df.downstream.GetTables(), sourceConfigs, targetConfig)
-	df.useGlobalChecksum = shouldUseGlobalChecksum(df.mode, df.downstream.GetTables())
+	_, upstreamIsTiDB := df.upstream.(*source.TiDBSource)
+	_, downstreamIsTiDB := df.downstream.(*source.TiDBSource)
+	df.useGlobalChecksum = shouldUseGlobalChecksum(
+		df.mode,
+		upstreamIsTiDB,
+		downstreamIsTiDB,
+		df.downstream.GetTables(),
+	)
 	if err := df.initCheckpoint(); err != nil {
 		return errors.Trace(err)
 	}

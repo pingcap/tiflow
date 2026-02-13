@@ -136,9 +136,10 @@ func TestShouldUseGlobalChecksum(t *testing.T) {
 	noJSON := buildTableDiff(tmysql.TypeLong)
 	withJSON := buildTableDiff(tmysql.TypeLong, tmysql.TypeJSON)
 
-	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, []*common.TableDiff{noJSON}))
-	require.False(t, shouldUseGlobalChecksum(ChecksumOnly, []*common.TableDiff{withJSON}))
-	require.False(t, shouldUseGlobalChecksum(ChecksumWithFix, []*common.TableDiff{noJSON}))
+	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, true, true, []*common.TableDiff{withJSON}))
+	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, false, true, []*common.TableDiff{noJSON}))
+	require.False(t, shouldUseGlobalChecksum(ChecksumOnly, false, true, []*common.TableDiff{withJSON}))
+	require.False(t, shouldUseGlobalChecksum(ChecksumWithFix, true, true, []*common.TableDiff{noJSON}))
 }
 
 type se struct {
