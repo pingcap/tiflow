@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/worker"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -52,7 +53,15 @@ func main() {
 		Format: cfg.LogFormat,
 		Level:  strings.ToLower(cfg.LogLevel),
 	})
-	log.SetRedactLog(cfg.RedactInfoLog)
+	// Initialize log redaction using the unified RedactInfoLogType
+	err2 := logutil.InitLogRedactionFromType(cfg.RedactInfoLog)
+	if err2 != nil {
+		common.PrintLinesf("init log redaction error %s", terror.Message(err2))
+		os.Exit(2)
+	}
+
+	// For backward compatibility, also set DM's legacy redaction
+	log.SetRedactLog(cfg.RedactInfoLog != logutil.RedactInfoLogOFF)
 	if err != nil {
 		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
