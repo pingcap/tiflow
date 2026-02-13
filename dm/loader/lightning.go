@@ -496,6 +496,9 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	}
 
 	if status < lightningStatusFinished {
+		if err = l.maybeTransformSchemaFiles(ctx); err != nil {
+			return err
+		}
 		if err = l.checkPointList.RegisterCheckPoint(ctx); err != nil {
 			return err
 		}

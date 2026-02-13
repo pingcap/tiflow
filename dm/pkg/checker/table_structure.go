@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
@@ -84,6 +85,7 @@ type TablesChecker struct {
 	// downstream table -> extended column names
 	extendedColumnPerTable map[filter.Table][]string
 	dumpThreads            int
+	converters             map[string]*mariadb2tidb.Converter
 	// a simple cache for downstream table structure
 	// filter.Table -> *ast.CreateTableStmt
 	// if the value is nil, it means the downstream table is not created yet
@@ -97,6 +99,7 @@ func NewTablesChecker(
 	tableMap map[string]map[filter.Table][]filter.Table,
 	extendedColumnPerTable map[filter.Table][]string,
 	dumpThreads int,
+	converters map[string]*mariadb2tidb.Converter,
 ) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
@@ -107,6 +110,7 @@ func NewTablesChecker(
 		tableMap:               tableMap,
 		extendedColumnPerTable: extendedColumnPerTable,
 		dumpThreads:            dumpThreads,
+		converters:             converters,
 	}
 	log.L().Logger.Debug("check table structure", zap.Int("channel pool size", dumpThreads))
 	return c
@@ -144,7 +148,19 @@ func (w *tablesCheckerWorker) handle(ctx context.Context, checkItem *checkItem) 
 		return nil, err
 	}
 
-	upstreamStmt, err := getCreateTableStmt(w.upstreamParser, upstreamSQL)
+	createSQL, err := maybeTransformCreateTable(w.c.converters[checkItem.sourceID], upstreamSQL)
+	if err != nil {
+		opt := &incompatibilityOption{
+			state:      StateWarning,
+			tableID:    dbutil.TableName(table.Schema, table.Name),
+			errMessage: err.Error(),
+		}
+		ret = append(ret, opt)
+		// nolint:nilerr
+		return ret, nil
+	}
+
+	upstreamStmt, err := getCreateTableStmt(w.upstreamParser, createSQL)
 	if err != nil {
 		opt := &incompatibilityOption{
 			state:      StateWarning,

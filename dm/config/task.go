@@ -418,6 +418,68 @@ type SyncerConfig struct {
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
 
+// MariaDB2TiDBMode controls whether to enable MariaDB schema conversion.
+const (
+	MariaDB2TiDBModeAuto = "auto"
+	MariaDB2TiDBModeOn   = "on"
+	MariaDB2TiDBModeOff  = "off"
+)
+
+// MariaDB2TiDBConfig controls schema conversion rules for MariaDB sources.
+type MariaDB2TiDBConfig struct {
+	Mode          string   `yaml:"mode" toml:"mode" json:"mode"`
+	EnabledRules  []string `yaml:"enabled-rules" toml:"enabled-rules" json:"enabled-rules"`
+	DisabledRules []string `yaml:"disabled-rules" toml:"disabled-rules" json:"disabled-rules"`
+	StrictMode    *bool    `yaml:"strict-mode" toml:"strict-mode" json:"strict-mode"`
+}
+
+// DefaultMariaDB2TiDBConfig returns the default config.
+func DefaultMariaDB2TiDBConfig() MariaDB2TiDBConfig {
+	strict := true
+	return MariaDB2TiDBConfig{
+		Mode:       MariaDB2TiDBModeAuto,
+		StrictMode: &strict,
+	}
+}
+
+// Adjust normalizes and validates the config.
+func (c *MariaDB2TiDBConfig) Adjust() error {
+	if c.Mode == "" {
+		c.Mode = MariaDB2TiDBModeAuto
+	}
+	c.Mode = strings.ToLower(c.Mode)
+	switch c.Mode {
+	case MariaDB2TiDBModeAuto, MariaDB2TiDBModeOn, MariaDB2TiDBModeOff:
+	default:
+		return fmt.Errorf("mariadb2tidb.mode must be one of %q, %q, %q", MariaDB2TiDBModeAuto, MariaDB2TiDBModeOn, MariaDB2TiDBModeOff)
+	}
+	if c.StrictMode == nil {
+		strict := true
+		c.StrictMode = &strict
+	}
+	return nil
+}
+
+// EnabledForFlavor reports whether conversion should run for a flavor.
+func (c MariaDB2TiDBConfig) EnabledForFlavor(flavor string) bool {
+	switch strings.ToLower(c.Mode) {
+	case MariaDB2TiDBModeOn:
+		return true
+	case MariaDB2TiDBModeOff:
+		return false
+	default:
+		return strings.EqualFold(flavor, "mariadb")
+	}
+}
+
+// Strict reports whether conversion should fail on errors.
+func (c MariaDB2TiDBConfig) Strict() bool {
+	if c.StrictMode == nil {
+		return true
+	}
+	return *c.StrictMode
+}
+
 // DefaultSyncerConfig return default syncer config for task.
 func DefaultSyncerConfig() SyncerConfig {
 	return SyncerConfig{
@@ -530,6 +592,9 @@ type TaskConfig struct {
 	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
 	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 
+	// mariadb2tidb controls MariaDB schema conversion behavior.
+	MariaDB2TiDB MariaDB2TiDBConfig `yaml:"mariadb2tidb" toml:"mariadb2tidb" json:"mariadb2tidb"`
+
 	TargetDB *dbconfig.DBConfig `yaml:"target-database" toml:"target-database" json:"target-database"`
 
 	MySQLInstances []*MySQLInstance `yaml:"mysql-instances" toml:"mysql-instances" json:"mysql-instances"`
@@ -593,6 +658,7 @@ func NewTaskConfig() *TaskConfig {
 		CleanDumpFile:           true,
 		OnlineDDL:               true,
 		CollationCompatible:     defaultCollationCompatible,
+		MariaDB2TiDB:            DefaultMariaDB2TiDBConfig(),
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
 	return cfg
@@ -698,6 +764,9 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigCollationCompatibleNotSupport.Generate(c.CollationCompatible)
 	} else if c.CollationCompatible == "" {
 		c.CollationCompatible = LooseCollationCompatible
+	}
+	if err := c.MariaDB2TiDB.Adjust(); err != nil {
+		return err
 	}
 
 	for _, item := range c.IgnoreCheckingItems {
