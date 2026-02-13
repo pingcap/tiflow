@@ -38,6 +38,7 @@ type RandomIterator struct {
 	chunkBase    *chunk.Range
 	splitColumns []string
 	randomValues [][]string
+	chunkCount   int
 	nextChunk    uint
 
 	dbConn *sql.DB
@@ -195,9 +196,6 @@ NEXTINDEX:
 			failpoint.Return(nil, nil)
 		}
 		chunkCount -= v.(int)
-		if len(randomValues) >= chunkCount {
-			randomValues = randomValues[:chunkCount-1]
-		}
 	})
 
 	progress.StartTable(progressID, chunkCount, true)
@@ -211,6 +209,7 @@ NEXTINDEX:
 		chunkBase:    chunkRange,
 		splitColumns: splitColumns,
 		randomValues: randomValues,
+		chunkCount:   chunkCount,
 		nextChunk:    0,
 		dbConn:       dbConn,
 	}, nil
@@ -243,7 +242,7 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 	if s.chunkBase == nil {
 		return nil, nil
 	}
-	if uint(len(s.randomValues)+1) <= s.nextChunk {
+	if uint(s.chunkCount) <= s.nextChunk {
 		return nil, nil
 	}
 	c := s.buildChunk(int(s.nextChunk))
