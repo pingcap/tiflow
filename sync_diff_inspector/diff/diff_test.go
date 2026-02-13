@@ -14,10 +14,16 @@
 package diff
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb/pkg/meta/model"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	ttypes "github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/atomic"
 )
 
 func TestGetSnapshot(t *testing.T) {
@@ -103,4 +109,51 @@ func TestGetSnapshot(t *testing.T) {
 		val := GetSnapshot(cs.latestSnapshot, cs.snapshot, conn)
 		require.Equal(t, cs.expected, val, "case %d", i)
 	}
+}
+
+func TestCompareModeFromExportFixSQL(t *testing.T) {
+	require.Equal(t, ChecksumOnly, compareModeFromExportFixSQL(false))
+	require.Equal(t, ChecksumWithFix, compareModeFromExportFixSQL(true))
+}
+
+func buildTableDiff(columnTypes ...byte) *common.TableDiff {
+	cols := make([]*model.ColumnInfo, 0, len(columnTypes))
+	for _, tp := range columnTypes {
+		cols = append(cols, &model.ColumnInfo{
+			FieldType: *ttypes.NewFieldType(tp),
+		})
+	}
+	return &common.TableDiff{
+		Schema: "test",
+		Table:  "test",
+		Info: &model.TableInfo{
+			Columns: cols,
+		},
+	}
+}
+
+func TestShouldUseGlobalChecksum(t *testing.T) {
+	noJSON := buildTableDiff(tmysql.TypeLong)
+	withJSON := buildTableDiff(tmysql.TypeLong, tmysql.TypeJSON)
+
+	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, true, true, []*common.TableDiff{withJSON}))
+	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, false, true, []*common.TableDiff{noJSON}))
+	require.False(t, shouldUseGlobalChecksum(ChecksumOnly, false, true, []*common.TableDiff{withJSON}))
+	require.False(t, shouldUseGlobalChecksum(ChecksumWithFix, true, true, []*common.TableDiff{noJSON}))
+}
+
+type se struct {
+	a int
+	b int
+}
+
+func TestXXX(t *testing.T) {
+	a := atomic.NewPointer(&se{1, 2})
+	p, err := json.Marshal(a)
+	require.NoError(t, err)
+	b := &atomic.Pointer[se]{}
+	err = json.Unmarshal(p, b)
+	require.NoError(t, err)
+	require.Equal(t, 1, b.Load().a)
+	require.Equal(t, 2, b.Load().b)
 }

@@ -60,6 +60,37 @@ func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.
 	return randIter, nil
 }
 
+// GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
+// It ignores configured split fields and prefers primary key columns.
+func (s *MySQLSources) GetChecksumOnlyIterator(
+	ctx context.Context,
+	tableIndex int,
+	startRange *splitter.RangeInfo,
+) (splitter.ChunkIterator, error) {
+	table := s.tableDiffs[tableIndex]
+	matchedSources := getMatchedSourcesForTable(s.sourceTablesMap, table)
+
+	// It's useful we are not able to pick shard merge source as workSource to generate ChunksIterator.
+	if len(matchedSources) > 1 {
+		log.Fatal("unreachable, shard merge table cannot generate splitter for now.")
+	}
+
+	originTable := *table
+	originTable.Schema = matchedSources[0].OriginSchema
+	originTable.Table = matchedSources[0].OriginTable
+
+	// In checksum-only mode, ignore user configured split fields.
+	originTable.Fields = getPrimaryIndexSplitFields(originTable.Info)
+
+	return splitter.NewRandomIteratorWithCheckpoint(
+		ctx,
+		"",
+		&originTable,
+		matchedSources[0].DBConn,
+		startRange,
+	)
+}
+
 // MySQLSources represent one table in MySQL
 type MySQLSources struct {
 	tableDiffs []*common.TableDiff
