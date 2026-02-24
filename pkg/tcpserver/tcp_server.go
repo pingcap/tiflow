@@ -168,9 +168,9 @@ func wrapTLSListener(inner net.Listener, credentials *security.Credential) (net.
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	// This is a hack to make `ToTLSConfigWithVerify` work with cmux,
-	// since cmux does not support ALPN.
-	config.NextProtos = nil
+	// Prefer HTTP/1.1 for non-gRPC traffic. gRPC clients will still negotiate
+	// "h2" because they only advertise "h2" in ALPN.
+	config.NextProtos = []string{"http/1.1", "h2"}
 
 	return tls.NewListener(inner, config), nil
 }
