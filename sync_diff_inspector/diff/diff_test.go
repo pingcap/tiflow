@@ -14,7 +14,6 @@
 package diff
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -23,7 +22,6 @@ import (
 	ttypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/atomic"
 )
 
 func TestGetSnapshot(t *testing.T) {
@@ -140,20 +138,4 @@ func TestShouldUseGlobalChecksum(t *testing.T) {
 	require.True(t, shouldUseGlobalChecksum(ChecksumOnly, false, true, []*common.TableDiff{noJSON}))
 	require.False(t, shouldUseGlobalChecksum(ChecksumOnly, false, true, []*common.TableDiff{withJSON}))
 	require.False(t, shouldUseGlobalChecksum(ChecksumWithFix, true, true, []*common.TableDiff{noJSON}))
-}
-
-type se struct {
-	a int
-	b int
-}
-
-func TestXXX(t *testing.T) {
-	a := atomic.NewPointer(&se{1, 2})
-	p, err := json.Marshal(a)
-	require.NoError(t, err)
-	b := &atomic.Pointer[se]{}
-	err = json.Unmarshal(p, b)
-	require.NoError(t, err)
-	require.Equal(t, 1, b.Load().a)
-	require.Equal(t, 2, b.Load().b)
 }
