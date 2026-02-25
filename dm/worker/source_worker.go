@@ -68,8 +68,7 @@ type SourceWorker struct {
 
 	sourceStatus atomic.Value // stores a pointer to SourceStatus
 	// sourceStatusErr stores latest error when updating sourceStatus (if any).
-	// Stored value type is *sourceStatusErrState.
-	sourceStatusErr atomic.Value
+	sourceStatusErr atomic.Pointer[sourceStatusErrState]
 
 	// subtask functionality
 	subTaskEnabled atomic.Bool
@@ -98,8 +97,7 @@ type SourceWorker struct {
 }
 
 type sourceStatusErrState struct {
-	err  *pb.ProcessError
-	time time.Time
+	err *pb.ProcessError
 }
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
@@ -143,9 +141,6 @@ func NewSourceWorker(
 	}
 
 	InitConditionHub(w)
-
-	// initialize atomic.Value to avoid panics on Load().
-	w.sourceStatusErr.Store(&sourceStatusErrState{})
 
 	w.l.Info("initialized", zap.Stringer("cfg", cfg))
 
@@ -265,7 +260,7 @@ func (w *SourceWorker) Stop(graceful bool) {
 }
 
 func (w *SourceWorker) clearSourceStatusErr() {
-	w.sourceStatusErr.Store(&sourceStatusErrState{})
+	w.sourceStatusErr.Store(nil)
 }
 
 func (w *SourceWorker) setSourceStatusErr(err error) {
@@ -275,13 +270,15 @@ func (w *SourceWorker) setSourceStatusErr(err error) {
 	}
 
 	w.sourceStatusErr.Store(&sourceStatusErrState{
-		err:  unit.NewProcessError(err),
-		time: time.Now(),
+		err: unit.NewProcessError(err),
 	})
 }
 
 func (w *SourceWorker) getSourceStatusErr() *pb.ProcessError {
-	state := w.sourceStatusErr.Load().(*sourceStatusErrState)
+	state := w.sourceStatusErr.Load()
+	if state == nil {
+		return nil
+	}
 	return state.err
 }
 

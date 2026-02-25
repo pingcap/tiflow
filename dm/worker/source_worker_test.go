@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -882,10 +883,8 @@ func TestQueryStatusSourceStatusTimeout(t *testing.T) {
 	w.sourceDBMu.Unlock()
 
 	// make this test fast and deterministic.
-	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout", `return(50)`))
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout")
-	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus", `return()`))
-	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus")
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout", "return(50)")
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus", "return()")
 
 	start := time.Now()
 	status, _, err := w.QueryStatus(ctx, subtaskCfg.Name)
