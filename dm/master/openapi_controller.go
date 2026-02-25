@@ -532,6 +532,15 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		return errorMsg
 	}
 
+	formatProcessErrors := func(errors []*pb.ProcessError) string {
+		var builder strings.Builder
+		for _, err := range errors {
+			builder.WriteString(handleProcessError(err))
+			builder.WriteByte('\n')
+		}
+		return builder.String()
+	}
+
 	for _, workerStatus := range workerStatusList {
 		if workerStatus == nil || workerStatus.SourceStatus == nil {
 			// this should not happen unless the rpc in the worker server has been modified
@@ -615,10 +624,10 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		}
 		// add error if some error happens
 		if subTaskStatus.Result != nil && len(subTaskStatus.Result.Errors) > 0 {
-			var errorMsgs string
-			for _, err := range subTaskStatus.Result.Errors {
-				errorMsgs += fmt.Sprintf("%s\n", handleProcessError(err))
-			}
+			errorMsgs := formatProcessErrors(subTaskStatus.Result.Errors)
+			openapiSubTaskStatus.ErrorMsg = &errorMsgs
+		} else if sourceResult := workerStatus.SourceStatus.GetResult(); sourceResult != nil && len(sourceResult.Errors) > 0 {
+			errorMsgs := formatProcessErrors(sourceResult.Errors)
 			openapiSubTaskStatus.ErrorMsg = &errorMsgs
 		} else if sourceResult := workerStatus.SourceStatus.GetResult(); sourceResult != nil && len(sourceResult.Errors) > 0 {
 			var errorMsgs string

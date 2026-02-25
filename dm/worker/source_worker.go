@@ -103,6 +103,11 @@ type sourceStatusErrState struct {
 	time time.Time
 }
 
+type sourceStatusErrState struct {
+	err  *pb.ProcessError
+	time time.Time
+}
+
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
 // and EnableSubtask later.
 func NewSourceWorker(
