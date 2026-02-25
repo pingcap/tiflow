@@ -91,10 +91,10 @@ type SubTask struct {
 	sync.RWMutex
 	// ctx is used for the whole subtask. It will be created only when we new a subtask.
 	ctx    context.Context
-	cancel context.CancelFunc
+	cancel context.CancelCauseFunc
 	// currCtx is used for one loop. It will be created each time we use st.run/st.Resume
 	currCtx    context.Context
-	currCancel context.CancelFunc
+	currCancel context.CancelCauseFunc
 
 	units    []unit.Unit // units do job one by one
 	currUnit unit.Unit
@@ -122,7 +122,7 @@ func NewRealSubTask(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, work
 
 // NewSubTaskWithStage creates a new SubTask with stage.
 func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *clientv3.Client, workerName string) *SubTask {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancelCause(context.Background())
 	st := SubTask{
 		cfg:        cfg,
 		stage:      stage,
@@ -224,7 +224,7 @@ func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, rela
 
 func (st *SubTask) run() {
 	st.setStageAndResult(pb.Stage_Running, nil) // clear previous result
-	ctx, cancel := context.WithCancel(st.ctx)
+	ctx, cancel := context.WithCancelCause(st.ctx)
 	st.setCurrCtx(ctx, cancel)
 	err := st.unitTransWaitCondition(ctx)
 	if err != nil {
@@ -280,21 +280,27 @@ func (st *SubTask) StopValidator() {
 	st.Unlock()
 }
 
-func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelFunc) {
+func (st *SubTask) setCurrCtx(ctx context.Context, cancel context.CancelCauseFunc) {
 	st.Lock()
 	// call previous cancel func for safety
 	if st.currCancel != nil {
-		st.currCancel()
+		st.currCancel(context.Canceled)
 	}
 	st.currCtx = ctx
 	st.currCancel = cancel
 	st.Unlock()
 }
 
-func (st *SubTask) callCurrCancel() {
+func (st *SubTask) callCurrCancelWithCause(cause error) {
 	st.RLock()
-	st.currCancel()
+	if st.currCancel != nil {
+		st.currCancel(cause)
+	}
 	st.RUnlock()
+}
+
+func (st *SubTask) callCurrCancel() {
+	st.callCurrCancelWithCause(context.Canceled)
 }
 
 // fetchResultAndUpdateStage fetches process result, call Pause of current unit if needed and updates the stage of subtask.
@@ -387,9 +393,12 @@ func (st *SubTask) PrevUnit() unit.Unit {
 	return st.prevUnit
 }
 
-// closeUnits closes all un-closed units (current unit and all the subsequent units).
-func (st *SubTask) closeUnits() {
-	st.cancel()
+// closeUnitsWithCause closes all un-closed units (current unit and all the subsequent units).
+func (st *SubTask) closeUnitsWithCause(cause error) {
+	if cause == nil {
+		cause = context.Canceled
+	}
+	st.cancel(cause)
 	st.resultWg.Wait()
 
 	var (
@@ -547,12 +556,17 @@ func (st *SubTask) Result() *pb.ProcessResult {
 
 // Close stops the sub task.
 func (st *SubTask) Close() {
+	st.CloseWithCause(context.Canceled)
+}
+
+// CloseWithCause stops the sub task with a cancel cause.
+func (st *SubTask) CloseWithCause(cause error) {
 	st.l.Info("closing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
 		return
 	}
-	st.closeUnits() // close all un-closed units
+	st.closeUnitsWithCause(cause) // close all un-closed units
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, pb.Stage_Stopped, st.workerName)
 
 	// we can start/stop validator independent of task, so we don't set st.validator = nil inside
@@ -562,13 +576,23 @@ func (st *SubTask) Close() {
 
 // Kill kill running unit and stop the sub task.
 func (st *SubTask) Kill() {
+	st.KillWithCause(context.Canceled)
+}
+
+// KillWithCause kill running unit and stop the sub task with a cancel cause.
+func (st *SubTask) KillWithCause(cause error) {
 	st.l.Info("killing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
 		return
 	}
+	if cause == nil {
+		cause = context.Canceled
+	}
+	// Cancel before killing the current unit so the cancel cause can be observed by the unit.
+	st.cancel(cause)
 	st.killCurrentUnit()
-	st.closeUnits() // close all un-closed units
+	st.closeUnitsWithCause(cause) // close all un-closed units
 
 	cfg := st.getCfg()
 	updateTaskMetric(cfg.Name, cfg.SourceID, pb.Stage_Stopped, st.workerName)
@@ -609,7 +633,7 @@ func (st *SubTask) Resume(relay relay.Process) error {
 		return terror.ErrWorkerNotPausedStage.Generate(st.Stage().String())
 	}
 
-	ctx, cancel := context.WithCancel(st.ctx)
+	ctx, cancel := context.WithCancelCause(st.ctx)
 	st.setCurrCtx(ctx, cancel)
 	// NOTE: this may block if user resume a task
 	err := st.unitTransWaitCondition(ctx)

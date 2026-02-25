@@ -70,7 +70,7 @@ type LightningLoader struct {
 	logger log.Logger
 	cli    *clientv3.Client
 	core   *lserver.Lightning
-	cancel context.CancelFunc // for per task context, which maybe different from lightning context
+	cancel context.CancelCauseFunc // for per task context, which maybe different from lightning context
 
 	toDB *conn.BaseDB
 
@@ -83,8 +83,6 @@ type LightningLoader struct {
 
 	speedRecorder *export.SpeedRecorder
 	metricProxies *metricProxies
-
-	importIntoFailover *atomic.Bool
 }
 
 // NewLightning creates a new Loader importing data with lightning.
@@ -102,7 +100,6 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 		core:                  lserver.New(lightningCfg),
 		logger:                logger.WithFields(zap.String("task", cfg.Name), zap.String("unit", "lightning-load")),
 		speedRecorder:         export.NewSpeedRecorder(),
-		importIntoFailover:    cfg.ImportIntoFailover,
 	}
 	return loader
 }
@@ -244,7 +241,7 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 }
 
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
-	taskCtx, cancel := context.WithCancel(ctx)
+	taskCtx, cancel := context.WithCancelCause(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
@@ -303,10 +300,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lserver.WithDupIndicator(&hasDup))
 	}
-	if l.cfg.LoaderConfig.ImportMode == config.LoadModeImportInto {
-		opts = append(opts, lserver.WithKeepJobsOnContextCancel(l.importIntoFailover))
-	}
-
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -664,7 +657,7 @@ func (l *LightningLoader) Pause() {
 		return
 	}
 	if l.cancel != nil {
-		l.cancel()
+		l.cancel(context.Canceled)
 	}
 	l.core.Stop()
 }

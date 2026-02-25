@@ -193,10 +193,6 @@ type SubTaskConfig struct {
 	// e.g., pulling binlog
 	DumpUUID         string         `toml:"dump-uuid" json:"-"`
 	DumpIOTotalBytes *atomic.Uint64 `toml:"dump-io-total-bytes" json:"dump-io-total-bytes"`
-
-	// ImportIntoFailover is a flag to indicate whether to keep jobs when context is cancelled.
-	// This field is injected by SourceWorker.
-	ImportIntoFailover *atomic.Bool `toml:"-" json:"-"`
 }
 
 // SampleSubtaskConfig is the content of subtask.toml in current folder.
@@ -536,6 +532,5 @@ func (c *SubTaskConfig) Clone() (*SubTaskConfig, error) {
 	if c.DumpIOTotalBytes != nil {
 		clone.DumpIOTotalBytes = atomic.NewUint64(c.DumpIOTotalBytes.Load())
 	}
-	clone.ImportIntoFailover = c.ImportIntoFailover
 	return clone, nil
 }
