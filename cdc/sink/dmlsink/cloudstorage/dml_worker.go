@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	mcloudstorage "github.com/pingcap/tiflow/cdc/sink/metrics/cloudstorage"
@@ -41,7 +41,7 @@ type dmlWorker struct {
 	// worker id
 	id           int
 	changeFeedID model.ChangeFeedID
-	storage      storage.ExternalStorage
+	storage      storeapi.Storage
 	config       *cloudstorage.Config
 	// toBeFlushedCh contains a set of batchedTask waiting to be flushed to cloud storage.
 	toBeFlushedCh          chan batchedTask
@@ -106,7 +106,7 @@ func (t *batchedTask) generateTaskByTable(table cloudstorage.VersionedTableName)
 func newDMLWorker(
 	id int,
 	changefeedID model.ChangeFeedID,
-	storage storage.ExternalStorage,
+	storage storeapi.Storage,
 	config *cloudstorage.Config,
 	extension string,
 	inputCh *chann.DrainableChann[eventFragment],
@@ -273,7 +273,7 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 			return rowsCnt, bytesCnt, d.storage.WriteFile(ctx, path, buf.Bytes())
 		}
 
-		writer, inErr := d.storage.Create(ctx, path, &storage.WriterOption{
+		writer, inErr := d.storage.Create(ctx, path, &storeapi.WriterOption{
 			Concurrency: d.config.FlushConcurrency,
 		})
 		if inErr != nil {

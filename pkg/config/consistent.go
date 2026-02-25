@@ -16,7 +16,7 @@ package config
 import (
 	"fmt"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/pkg/compression"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
@@ -111,7 +111,7 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 		c.FlushWorkerNum = redo.DefaultFlushWorkerNum
 	}
 
-	uri, err := storage.ParseRawURL(c.Storage)
+	uri, err := objstore.ParseRawURL(c.Storage)
 	if err != nil {
 		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
 			fmt.Sprintf("invalid storage uri: %s", c.Storage))
