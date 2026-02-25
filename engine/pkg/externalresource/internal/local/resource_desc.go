@@ -17,7 +17,7 @@ import (
 	"context"
 	"path/filepath"
 
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
 )
@@ -30,7 +30,7 @@ type resourceDescriptor struct {
 	BasePath string
 	Ident    internal.ResourceIdent
 
-	storage brStorage.ExternalStorage
+	storage storeapi.Storage
 }
 
 // AbsolutePath returns the absolute path of the given resource
@@ -42,7 +42,7 @@ func (d *resourceDescriptor) AbsolutePath() string {
 
 // ExternalStorage creates the storage object if one has not been created yet, and returns the
 // created storage object.
-func (d *resourceDescriptor) ExternalStorage(ctx context.Context) (brStorage.ExternalStorage, error) {
+func (d *resourceDescriptor) ExternalStorage(ctx context.Context) (storeapi.Storage, error) {
 	if d.storage == nil {
 		storage, err := newBrStorageForLocalFile(d.AbsolutePath())
 		if err != nil {
