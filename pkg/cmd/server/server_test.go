@@ -200,10 +200,6 @@ func TestParseCfg(t *testing.T) {
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
-			CDCV2: &config.CDCV2{
-				Enable:          false,
-				MetaStoreConfig: config.MetaStoreConfiguration{},
-			},
 			Puller: &config.PullerConfig{
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
@@ -347,10 +343,6 @@ check-balance-interval = "10s"
 				CheckBalanceInterval: config.TomlDuration(10 * time.Second),
 				AddTableBatchSize:    50,
 			},
-			CDCV2: &config.CDCV2{
-				Enable:          false,
-				MetaStoreConfig: config.MetaStoreConfiguration{},
-			},
 			Puller: &config.PullerConfig{
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
@@ -488,10 +480,6 @@ cert-allowed-cn = ["dd","ee"]
 				CheckBalanceInterval: 60000000000,
 				AddTableBatchSize:    50,
 			},
-			CDCV2: &config.CDCV2{
-				Enable:          false,
-				MetaStoreConfig: config.MetaStoreConfiguration{},
-			},
 			Puller: &config.PullerConfig{
 				EnableResolvedTsStuckDetection: false,
 				ResolvedTsStuckInterval:        config.TomlDuration(5 * time.Minute),
@@ -553,10 +541,6 @@ unknown3 = 3
 			MaxTaskConcurrency:   10,
 			CheckBalanceInterval: 60000000000,
 			AddTableBatchSize:    50,
-		},
-		CDCV2: &config.CDCV2{
-			Enable:          false,
-			MetaStoreConfig: config.MetaStoreConfiguration{},
 		},
 		Puller: &config.PullerConfig{
 			EnableResolvedTsStuckDetection: false,
