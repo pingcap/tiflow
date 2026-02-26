@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/relay"
+	"github.com/pingcap/tiflow/dm/unit"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -58,10 +59,15 @@ type SourceWorker struct {
 	cfg        *config.SourceConfig
 	sourceDB   *conn.BaseDB
 	sourceDBMu sync.Mutex // if the sourceDB can't be connected at start time, we try to re-connect before using it.
+	// sourceDBConnecting indicates whether a goroutine is creating sourceDB now.
+	// It prevents holding sourceDBMu for a long time (e.g. upstream dial timeout) and blocking query-status.
+	sourceDBConnecting atomic.Bool
 
 	l log.Logger
 
 	sourceStatus atomic.Value // stores a pointer to SourceStatus
+	// sourceStatusErr stores latest error when updating sourceStatus (if any).
+	sourceStatusErr atomic.Pointer[sourceStatusErrState]
 
 	// subtask functionality
 	subTaskEnabled atomic.Bool
@@ -87,6 +93,10 @@ type SourceWorker struct {
 	etcdClient *clientv3.Client
 
 	name string
+}
+
+type sourceStatusErrState struct {
+	err *pb.ProcessError
 }
 
 // NewSourceWorker creates a new SourceWorker. The functionality of relay and subtask is disabled by default, need call EnableRelay
@@ -182,7 +192,7 @@ func (w *SourceWorker) Start() {
 					continue
 				}
 			}
-			if err2 := w.updateSourceStatus(w.ctx, true); err2 != nil {
+			if err2 := w.updateSourceStatus(w.ctx, true, true); err2 != nil {
 				if terror.ErrNoMasterStatus.Equal(err2) {
 					w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err2))
 				} else {
@@ -238,16 +248,51 @@ func (w *SourceWorker) Stop(graceful bool) {
 		w.taskStatusChecker.Close()
 	}
 
-	w.sourceDB.Close()
-	w.sourceDB = nil
+	if w.sourceDB != nil {
+		w.sourceDB.Close()
+		w.sourceDB = nil
+	}
 
 	w.closed.Store(true)
 
 	w.l.Info("Stop worker")
 }
 
+func (w *SourceWorker) clearSourceStatusErr() {
+	w.sourceStatusErr.Store(nil)
+}
+
+func (w *SourceWorker) setSourceStatusErr(err error) {
+	if err == nil || terror.ErrNoMasterStatus.Equal(err) {
+		w.clearSourceStatusErr()
+		return
+	}
+
+	w.sourceStatusErr.Store(&sourceStatusErrState{
+		err: unit.NewProcessError(err),
+	})
+}
+
+func (w *SourceWorker) getSourceStatusErr() *pb.ProcessError {
+	state := w.sourceStatusErr.Load()
+	if state == nil {
+		return nil
+	}
+	return state.err
+}
+
+func (w *SourceWorker) querySourceStatusTimeout() time.Duration {
+	timeout := 5 * time.Second
+	failpoint.Inject("QueryStatusSourceStatusTimeout", func(val failpoint.Value) {
+		if ms, ok := val.(int); ok && ms > 0 {
+			timeout = time.Duration(ms) * time.Millisecond
+		}
+	})
+	return timeout
+}
+
 // updateSourceStatus updates w.sourceStatus.
-func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) error {
+func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool, allowReconnect bool) error {
 	var cfg *config.SourceConfig
 	if needLock {
 		w.RLock()
@@ -256,23 +301,55 @@ func (w *SourceWorker) updateSourceStatus(ctx context.Context, needLock bool) er
 	} else {
 		cfg = w.cfg
 	}
+	// Ensure sourceDB exists (optionally reconnect), but never hold sourceDBMu while dialing upstream.
 	w.sourceDBMu.Lock()
-	if w.sourceDB == nil {
-		var err error
-		w.sourceDB, err = conn.GetUpstreamDB(&cfg.GetDecryptedClone().From)
-		if err != nil {
-			w.sourceDBMu.Unlock()
-			return err
-		}
-	}
+	sourceDB := w.sourceDB
 	w.sourceDBMu.Unlock()
 
-	status, err := binlog.GetSourceStatus(tcontext.NewContext(ctx, w.l), w.sourceDB, cfg.Flavor)
+	if sourceDB == nil {
+		if !allowReconnect {
+			err := terror.WithScope(
+				terror.ErrDBDriverError.Generatef("upstream database connection is not ready"),
+				terror.ScopeUpstream,
+			)
+			w.setSourceStatusErr(err)
+			return err
+		}
+		if !w.sourceDBConnecting.CAS(false, true) {
+			err := terror.WithScope(
+				terror.ErrDBDriverError.Generatef("upstream database connection is being established"),
+				terror.ScopeUpstream,
+			)
+			w.setSourceStatusErr(err)
+			return err
+		}
+		db, err := conn.GetUpstreamDB(&cfg.GetDecryptedClone().From)
+		w.sourceDBConnecting.Store(false)
+		if err != nil {
+			w.setSourceStatusErr(err)
+			return err
+		}
+
+		w.sourceDBMu.Lock()
+		// Set only if still nil (avoid overwriting a newer connection).
+		if w.sourceDB == nil {
+			w.sourceDB = db
+		} else {
+			// another goroutine already set it
+			db.Close()
+		}
+		sourceDB = w.sourceDB
+		w.sourceDBMu.Unlock()
+	}
+
+	status, err := binlog.GetSourceStatus(tcontext.NewContext(ctx, w.l), sourceDB, cfg.Flavor)
 	if err != nil {
+		w.setSourceStatusErr(err)
 		return err
 	}
 
 	w.sourceStatus.Store(status)
+	w.clearSourceStatusErr()
 	return nil
 }
 
@@ -662,7 +739,9 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 		relayStatus  *pb.RelayStatus
 	)
 
-	if err := w.updateSourceStatus(ctx, false); err != nil {
+	ctx1, cancel := context.WithTimeout(ctx, w.querySourceStatusTimeout())
+	defer cancel()
+	if err := w.updateSourceStatus(ctx1, false, false); err != nil {
 		if terror.ErrNoMasterStatus.Equal(err) {
 			w.l.Warn("This source's bin_log is OFF, so it only supports full_mode.", zap.String("sourceID", w.cfg.SourceID), zap.Error(err))
 		} else {
