@@ -950,3 +950,130 @@ func TestCheckTableMatched(t *testing.T) {
 	require.Equal(t, 1, tables[1].TableLack)
 	require.Equal(t, -1, tables[2].TableLack)
 }
+
+func TestGetChecksumChunkIterator(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	intPKTableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `source_test`.`test0` (`id` int, `b` varchar(24), PRIMARY KEY(`id`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+	intPKTableInfo.PKIsHandle = true
+	intPKTableInfo.IsCommonHandle = false
+
+	commonHandleTableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `source_test`.`test1` (`a` int, `b` varchar(24), PRIMARY KEY(`a`, `b`) CLUSTERED)",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	rowIDTableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `source_test`.`test2` (`a` int, `b` varchar(24), KEY idx_a(`a`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	tidb := &TiDBSource{
+		tableDiffs: []*common.TableDiff{
+			{
+				Schema: "source_test",
+				Table:  "test0",
+				Info:   intPKTableInfo,
+				Fields: "b",
+			},
+			{
+				Schema: "source_test",
+				Table:  "test1",
+				Info:   commonHandleTableInfo,
+				Fields: "b",
+			},
+			{
+				Schema: "source_test",
+				Table:  "test2",
+				Info:   rowIDTableInfo,
+				Fields: "a",
+			},
+		},
+		sourceTableMap: map[string]*common.TableSource{},
+		dbConn:         db,
+	}
+
+	countRows := sqlmock.NewRows([]string{"cnt"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM `source_test`.`test0`").WillReturnRows(countRows)
+	countRows = sqlmock.NewRows([]string{"cnt"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM `source_test`.`test1`").WillReturnRows(countRows)
+	countRows = sqlmock.NewRows([]string{"cnt"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM `source_test`.`test2`").WillReturnRows(countRows)
+
+	iter, err := tidb.GetChecksumOnlyIterator(ctx, 0, nil)
+	require.NoError(t, err)
+	randIter, ok := iter.(*splitter.RandomIterator)
+	require.True(t, ok)
+	require.Equal(t, []string{"id"}, randIter.SplitColumnsForTest())
+	randIter.Close()
+
+	iter, err = tidb.GetChecksumOnlyIterator(ctx, 1, nil)
+	require.NoError(t, err)
+	randIter, ok = iter.(*splitter.RandomIterator)
+	require.True(t, ok)
+	require.Equal(t, []string{"a", "b"}, randIter.SplitColumnsForTest())
+	randIter.Close()
+
+	iter, err = tidb.GetChecksumOnlyIterator(ctx, 2, nil)
+	require.NoError(t, err)
+	randIter, ok = iter.(*splitter.RandomIterator)
+	require.True(t, ok)
+	require.Equal(t, []string{"_tidb_rowid"}, randIter.SplitColumnsForTest())
+	randIter.Close()
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestMySQLChecksumOnlyIteratorIgnoreSplitFields(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `source_test`.`test1` (`id` int, `a` int, PRIMARY KEY(`id`), KEY idx_a(`a`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	my := &MySQLSources{
+		tableDiffs: []*common.TableDiff{
+			{
+				Schema: "source_test",
+				Table:  "test1",
+				Info:   tableInfo,
+				Fields: "a",
+			},
+		},
+		sourceTablesMap: map[string][]*common.TableShardSource{
+			utils.UniqueID("source_test", "test1"): {
+				{
+					TableSource: common.TableSource{
+						OriginSchema: "source_test",
+						OriginTable:  "test1",
+					},
+					DBConn: db,
+				},
+			},
+		},
+	}
+
+	countRows := sqlmock.NewRows([]string{"cnt"}).AddRow(0)
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM `source_test`.`test1`").WillReturnRows(countRows)
+
+	iter, err := my.GetChecksumOnlyIterator(ctx, 0, nil)
+	require.NoError(t, err)
+	randIter, ok := iter.(*splitter.RandomIterator)
+	require.True(t, ok)
+	require.Equal(t, []string{"id"}, randIter.SplitColumnsForTest())
+	randIter.Close()
+	require.NoError(t, mock.ExpectationsWereMet())
+}

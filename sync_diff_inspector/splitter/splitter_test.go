@@ -407,6 +407,19 @@ func TestRandomSpliter(t *testing.T) {
 	require.Equal(t, chunk.Index.ChunkIndex, chunkID1.ChunkIndex+1)
 }
 
+func TestGetSplitFieldsWithTiDBRowID(t *testing.T) {
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"create table `test`.`test`(`a` int, `b` varchar(10), primary key(`a`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	splitCols, err := GetSplitFields(tableInfo, []string{"_tidb_rowid"})
+	require.NoError(t, err)
+	require.Len(t, splitCols, 1)
+	require.Equal(t, "_tidb_rowid", splitCols[0].Name.O)
+}
+
 func createFakeResultForRandomSplit(t *testing.T, mock sqlmock.Sqlmock, count int, randomValues [][]string) {
 	createFakeResultForCount(t, count)
 	if randomValues == nil {

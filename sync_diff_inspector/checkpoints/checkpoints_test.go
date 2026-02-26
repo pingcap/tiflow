@@ -123,3 +123,49 @@ func TestLoadChunk(t *testing.T) {
 	require.Equal(t, node.GetID().Compare(id), 0)
 	require.Equal(t, node.ChunkRange.IndexColumnNames, testColNames)
 }
+
+func TestSaveLoadChecksumState(t *testing.T) {
+	checker := new(Checkpoint)
+	checker.Init()
+	ctx := context.Background()
+
+	state := &ChecksumState{
+		TableIndex: 3,
+		Upstream: &ChecksumSourceState{
+			LastRange: &chunk.Range{
+				Index: &chunk.CID{
+					TableIndex:       3,
+					BucketIndexLeft:  0,
+					BucketIndexRight: 0,
+					ChunkIndex:       1,
+					ChunkCnt:         5,
+				},
+			},
+			Checksum: 123,
+			Count:    456,
+			Done:     false,
+		},
+		Downstream: &ChecksumSourceState{
+			Checksum: 789,
+			Count:    100,
+			Done:     true,
+		},
+	}
+
+	defer os.Remove("TestSaveLoadChecksumState")
+	err := checker.SaveChecksumState(ctx, "TestSaveLoadChecksumState", state, nil)
+	require.NoError(t, err)
+
+	loaded, _, err := checker.LoadChecksumState("TestSaveLoadChecksumState")
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	require.Equal(t, 3, loaded.TableIndex)
+	require.Equal(t, uint64(123), loaded.Upstream.Checksum)
+	require.Equal(t, int64(456), loaded.Upstream.Count)
+	require.False(t, loaded.Upstream.Done)
+	require.NotNil(t, loaded.Upstream.LastRange)
+	require.Equal(t, 1, loaded.Upstream.LastRange.Index.ChunkIndex)
+	require.Equal(t, uint64(789), loaded.Downstream.Checksum)
+	require.Equal(t, int64(100), loaded.Downstream.Count)
+	require.True(t, loaded.Downstream.Done)
+}
