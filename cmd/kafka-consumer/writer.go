@@ -99,13 +99,12 @@ func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Of
 			zap.Uint64("watermark", newWatermark))
 		return
 	}
+	readOldOffset := true
 	if offset > p.watermarkOffset {
-		log.Panic("partition resolved ts fallback",
-			zap.Int32("partition", p.partition),
-			zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
+		readOldOffset = false
 	}
-	log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+	log.Warn("partition resolved ts fall back, ignore it",
+		zap.Bool("readOldOffset", readOldOffset),
 		zap.Int32("partition", p.partition),
 		zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
 		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
