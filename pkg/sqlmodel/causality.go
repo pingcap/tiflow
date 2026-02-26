@@ -35,9 +35,11 @@ func (r *RowChange) CausalityKeys() []string {
 	ret := make([]string, 0, 1)
 	if r.preValues != nil {
 		ret = append(ret, r.getCausalityString(r.preValues)...)
+		ret = append(ret, r.getForeignKeyCausalityString(r.preValues)...)
 	}
 	if r.postValues != nil {
 		ret = append(ret, r.getCausalityString(r.postValues)...)
+		ret = append(ret, r.getForeignKeyCausalityString(r.postValues)...)
 	}
 	return ret
 }
@@ -151,6 +153,46 @@ func truncateIndexValues(
 		values = append(values, datum.GetValue())
 	}
 	return values
+}
+
+func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string {
+	if len(r.foreignKeyRelations) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(r.foreignKeyRelations))
+
+	for _, relation := range r.foreignKeyRelations {
+		if len(relation.ChildColumnIdx) == 0 || len(relation.ParentColumns) == 0 {
+			continue
+		}
+
+		relationValues := make([]interface{}, len(relation.ChildColumnIdx))
+		skip := false
+		for i, idx := range relation.ChildColumnIdx {
+			if idx >= len(values) {
+				skip = true
+				break
+			}
+
+			relationValues[i] = values[idx]
+			if relationValues[i] == nil {
+				skip = true
+				break
+			}
+		}
+
+		if skip {
+			continue
+		}
+
+		key := genKeyString(relation.ParentTable, relation.ParentColumns, relationValues)
+		if len(key) > 0 {
+			keys = append(keys, key)
+		}
+	}
+
+	return keys
 }
 
 func (r *RowChange) getCausalityString(values []interface{}) []string {
