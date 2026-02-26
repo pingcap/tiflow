@@ -15,6 +15,7 @@ package config
 
 import (
 	"crypto/sha256"
+	"crypto/tls"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -155,17 +156,26 @@ func (d *DataSource) ToDBConfig() *dbutil.DBConfig {
 
 // RegisterTLS register TLS config for driver
 func (d *DataSource) RegisterTLS() error {
+	var err error
+	var sec *Security
+	var tlsConfig *tls.Config
+
 	if d.Security == nil {
-		return nil
+		d.Security = &Security{}
+		sec = d.Security
+		tlsConfig = &tls.Config{
+			InsecureSkipVerify: true, // #nosec G402
+		}
+	} else {
+		sec = d.Security
+		log.Info("try to register tls config")
+		tlsConfig, err = tidbutil.NewTLSConfig(
+			tidbutil.WithCAPath(sec.CAPath),
+			tidbutil.WithCertAndKeyPath(sec.CertPath, sec.KeyPath),
+			tidbutil.WithCAContent([]byte(sec.CABytes)),
+			tidbutil.WithCertAndKeyContent([]byte(sec.CertBytes), []byte(sec.KeyBytes)),
+		)
 	}
-	sec := d.Security
-	log.Info("try to register tls config")
-	tlsConfig, err := tidbutil.NewTLSConfig(
-		tidbutil.WithCAPath(sec.CAPath),
-		tidbutil.WithCertAndKeyPath(sec.CertPath, sec.KeyPath),
-		tidbutil.WithCAContent([]byte(sec.CABytes)),
-		tidbutil.WithCertAndKeyContent([]byte(sec.CertBytes), []byte(sec.KeyBytes)),
-	)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -196,8 +206,13 @@ func (d *DataSource) ToDriverConfig() *mysql.Config {
 		log.Info("create connection with snapshot", zap.String("snapshot", d.Snapshot))
 		cfg.Params["tidb_snapshot"] = d.Snapshot
 	}
-	if d.Security != nil && len(d.Security.TLSName) > 0 {
-		cfg.TLSConfig = d.Security.TLSName
+	if d.Security != nil {
+		if len(d.Security.TLSName) > 0 {
+			cfg.TLSConfig = d.Security.TLSName
+		}
+		if d.Security.CAPath == "" {
+			cfg.AllowFallbackToPlaintext = true
+		}
 	}
 
 	for param, value := range d.SessionConfig {
