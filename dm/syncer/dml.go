@@ -410,13 +410,13 @@ func genDMLsWithSameCols(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) ([]str
 
 // genDMLsWithSameTable groups and generates dmls with same table.
 // all the dmls should have same dmlOpType.
-func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]interface{}) {
+func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job, safeModeDMLStrategy string) ([]string, [][]interface{}) {
 	queries := make([]string, 0, len(jobs))
 	args := make([][]interface{}, 0, len(jobs))
 	var lastTable string
 	groupDMLs := make([]*sqlmodel.RowChange, 0, len(jobs))
 
-	if op == sqlmodel.DMLUpdate {
+	if op == sqlmodel.DMLUpdate && safeModeDMLStrategy != "upsert" {
 		for i, j := range jobs {
 			if j.safeMode {
 				if j.dml.IsPrimaryOrUniqueKeyUpdated() {
@@ -476,7 +476,7 @@ func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]inter
 
 // genDMLsWithSameOp groups and generates dmls by dmlOpType.
 // TODO: implement a volcano iterator interface for genDMLsWithSameXXX.
-func genDMLsWithSameOp(jobs []*job) ([]string, [][]interface{}) {
+func genDMLsWithSameOp(jobs []*job, safeModeDMLStrategy string) ([]string, [][]interface{}) {
 	queries := make([]string, 0, len(jobs))
 	args := make([][]interface{}, 0, len(jobs))
 	var lastOp sqlmodel.DMLType
@@ -495,9 +495,13 @@ func genDMLsWithSameOp(jobs []*job) ([]string, [][]interface{}) {
 
 			curOp = sqlmodel.DMLUpdate
 		case sqlmodel.RowChangeInsert:
-			// if insert with safemode, regard it as replace
 			if j.safeMode {
-				curOp = sqlmodel.DMLReplace
+				if safeModeDMLStrategy == "upsert" {
+					curOp = sqlmodel.DMLInsertOnDuplicateUpdate
+				} else {
+					// if insert with safemode, regard it as replace
+					curOp = sqlmodel.DMLReplace
+				}
 				break
 			}
 
@@ -512,7 +516,7 @@ func genDMLsWithSameOp(jobs []*job) ([]string, [][]interface{}) {
 
 		// now there are 5 situations: [insert, replace(insert with safemode), insert on duplicate(update without identify keys), update(update identify keys/update with safemode), delete]
 		if lastOp != curOp {
-			query, arg := genDMLsWithSameTable(lastOp, jobsWithSameOp)
+			query, arg := genDMLsWithSameTable(lastOp, jobsWithSameOp, safeModeDMLStrategy)
 			queries = append(queries, query...)
 			args = append(args, arg...)
 
@@ -522,7 +526,7 @@ func genDMLsWithSameOp(jobs []*job) ([]string, [][]interface{}) {
 		jobsWithSameOp = append(jobsWithSameOp, j)
 	}
 	if len(jobsWithSameOp) > 0 {
-		query, arg := genDMLsWithSameTable(lastOp, jobsWithSameOp)
+		query, arg := genDMLsWithSameTable(lastOp, jobsWithSameOp, safeModeDMLStrategy)
 		queries = append(queries, query...)
 		args = append(args, arg...)
 	}
