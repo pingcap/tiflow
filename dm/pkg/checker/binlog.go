@@ -105,7 +105,7 @@ func (pc *MySQLBinlogFormatChecker) Check(ctx context.Context) *Result {
 	}
 	if strings.ToUpper(value) != "ROW" {
 		result.Errors = append(result.Errors, NewError("binlog_format is %s, and should be ROW", value))
-		result.Instruction = "MySQL as source: please execute 'set global binlog_format=ROW;'; AWS Aurora (MySQL)/RDS MySQL as source: please refer to the document to create a new DB parameter group and set the binlog_format=row: https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html. Then modify the instance to use the new DB parameter group and restart the instance to take effect."
+		result.Instruction = "MySQL or MariaDB as source: please execute 'SET GLOBAL binlog_format=ROW;'; AWS Aurora (MySQL)/RDS MySQL as source: please refer to the document to create a new DB parameter group and set the binlog_format=row: https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/USER_WorkingWithDBInstanceParamGroups.html. Then modify the instance to use the new DB parameter group and restart the instance to take effect."
 		return result
 	}
 	result.State = StateSuccess
@@ -194,6 +194,71 @@ func (pc *MySQLBinlogRowImageChecker) Check(ctx context.Context) *Result {
 func (pc *MySQLBinlogRowImageChecker) Name() string {
 	return "mysql_binlog_row_image"
 }
+
+/*****************************************************/
+
+var mariaDBBinlogLegacyEventPosCheckingRequired MySQLVersion = [3]uint{11, 4, 0}
+
+// MariaDBBinlogLegacyEventPosChecker checks mysql binlog_format.
+type MariaDBBinlogLegacyEventPosChecker struct {
+	db     *sql.DB
+	dbinfo *dbutil.DBConfig
+}
+
+// NewMariaDBBinlogLegacyEventPosChecker returns a RealChecker.
+func NewMariaDBBinlogLegacyEventPosChecker(db *sql.DB, dbinfo *dbutil.DBConfig) RealChecker {
+	return &MariaDBBinlogLegacyEventPosChecker{db: db, dbinfo: dbinfo}
+}
+
+// Check implements the RealChecker interface.
+func (pc *MariaDBBinlogLegacyEventPosChecker) Check(ctx context.Context) *Result {
+	result := &Result{
+		Name:  pc.Name(),
+		Desc:  "check whether mariadb binlog_legacy_event_pos is ON",
+		State: StateFailure,
+		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
+	}
+
+	// check version firstly
+	value, err := dbutil.ShowVersion(ctx, pc.db)
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+
+	version, err := toMySQLVersion(value)
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+
+	// for mariadb.version < 11.4,  we don't need to check binlog_legacy_event_pos
+	if conn.IsMariaDB(value) && !version.Ge(mariaDBBinlogLegacyEventPosCheckingRequired) {
+		result.State = StateSuccess
+		return result
+	}
+
+	value, err = dbutil.ShowMySQLVariable(ctx, pc.db, "binlog_legacy_event_pos")
+	if err != nil {
+		markCheckError(result, err)
+		return result
+	}
+	if strings.ToUpper(value) != "ON" {
+		result.Errors = append(result.Errors, NewError("binlog_legacy_event_pos is %s, and should be ON", value))
+		result.Instruction = "MariaDB 11.4 and newer as source: please execute 'SET GLOBAL binlog_legacy_event_pos=ON;' or update the configuration and apply the configuration. You also need to start replicating from a binlog position that was created after chaning this setting."
+		return result
+	}
+	result.State = StateSuccess
+
+	return result
+}
+
+// Name implements the RealChecker interface.
+func (pc *MariaDBBinlogLegacyEventPosChecker) Name() string {
+	return "mariadb_binlog_legacy_event_pos"
+}
+
+/*****************************************************/
 
 // BinlogDBChecker checks if migrated dbs are in binlog_do_db or binlog_ignore_db.
 type BinlogDBChecker struct {

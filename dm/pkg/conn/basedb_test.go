@@ -121,7 +121,7 @@ func TestNeedsModernTerminology(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		b.version = tc.version
-		require.Equal(t, tc.modern, b.needsModernTerminology(), b.version)
+		b.Version = tc.version
+		require.Equal(t, tc.modern, b.needsModernTerminology(), b.Version)
 	}
 }

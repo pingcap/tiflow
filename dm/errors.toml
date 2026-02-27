@@ -2173,7 +2173,7 @@ tags = ["internal", "high"]
 [error.DM-sync-unit-36069]
 message = "get binlog event error: %v"
 description = ""
-workaround = "Please check if the binlog file could be parsed by `mysqlbinlog`."
+workaround = "Please check if the binlog file could be parsed by `mysqlbinlog` or `mariadb-binlog`."
 tags = ["upstream", "high"]
 
 [error.DM-sync-unit-36070]
