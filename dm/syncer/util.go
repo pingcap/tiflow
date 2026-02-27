@@ -139,7 +139,7 @@ func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg conn.Scope
 	return loc, tzStr, nil
 }
 
-func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location, baList *filter.Filter) (replication.BinlogSyncerConfig, error) {
+func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location, baList *filter.Filter, eventCacheCount int) (replication.BinlogSyncerConfig, error) {
 	var tlsConfig *tls.Config
 	var err error
 	if cfg.From.Security != nil {
@@ -213,6 +213,7 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		TLSConfig:               tlsConfig,
 		RowsEventDecodeFunc:     rowsEventDecodeFunc,
 		Localhost:               h,
+		EventCacheCount:         eventCacheCount,
 	}
 	// when retry count > 1, go-mysql will retry sync from the previous GTID set in GTID mode,
 	// which may get duplicate binlog event after retry success. so just set retry count = 1, and task
