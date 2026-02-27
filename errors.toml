@@ -161,6 +161,11 @@ error = '''
 invalid overwrite-checkpoint-ts %s, overwrite-checkpoint-ts only accept 'now' or a valid timestamp in integer
 '''
 
+["CDC:ErrCliInvalidServiceSafePoint"]
+error = '''
+the min-service-safe-point is bigger than start-ts, min-service-safe-point: %d start-ts: %d
+'''
+
 ["CDC:ErrClusterIDMismatch"]
 error = '''
 cluster ID mismatch, tikv cluster ID is %d and request cluster ID is %d

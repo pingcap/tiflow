@@ -87,6 +87,21 @@ func (mr *MockAPIV2HelpersMockRecorder) getPDClient(ctx, pdAddrs, credential int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPDClient", reflect.TypeOf((*MockAPIV2Helpers)(nil).getPDClient), ctx, pdAddrs, credential)
 }
 
+// getPDSafepoint mocks base method.
+func (m *MockAPIV2Helpers) getPDSafepoint(arg0 []string) (*SafePoint, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getPDSafepoint", arg0)
+	ret0, _ := ret[0].(*SafePoint)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// getPDSafepoint indicates an expected call of getPDSafepoint.
+func (mr *MockAPIV2HelpersMockRecorder) getPDSafepoint(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getPDSafepoint", reflect.TypeOf((*MockAPIV2Helpers)(nil).getPDSafepoint), arg0)
+}
+
 // getVerifiedTables mocks base method.
 func (m *MockAPIV2Helpers) getVerifiedTables(ctx context.Context, replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64, scheme, topic string, protocol config.Protocol) ([]model.TableName, []model.TableName, error) {
 	m.ctrl.T.Helper()
