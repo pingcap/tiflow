@@ -51,6 +51,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
+	"github.com/pingcap/tiflow/dm/worker"
 	pdhttp "github.com/tikv/pd/client/http"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -343,10 +344,16 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			checkMetaPos := len(instance.cfg.Meta.BinLogName) > 0 ||
 				(instance.cfg.EnableGTID && len(instance.cfg.Meta.BinLogGTID) > 0)
 			if _, ok := c.checkingItems[config.MetaPositionChecking]; checkMetaPos && ok {
+				// get position from global checkpoint
+				cpLoc, err := worker.GetMinLocForSubTask(ctx, *instance.cfg)
+				if err != nil {
+					return err
+				}
 				c.checkList = append(c.checkList, checker.NewMetaPositionChecker(instance.sourceDB,
 					instance.cfg.From,
 					instance.cfg.EnableGTID,
-					instance.cfg.Meta))
+					instance.cfg.Meta,
+					cpLoc))
 			}
 		}
 		if config.HasSync(instance.cfg.Mode) {
