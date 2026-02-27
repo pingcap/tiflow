@@ -77,6 +77,7 @@ type DDLWorker struct {
 	tableRouter                *regexprrouter.RouteTable
 	sourceTableNamesFlavor     conn.LowerCaseTableNamesFlavor
 	collationCompatible        string
+	autoIDCacheSize            uint64
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 	baList                     *filter.Filter
@@ -106,6 +107,7 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		tableRouter:                syncer.tableRouter,
 		sourceTableNamesFlavor:     syncer.SourceTableNamesFlavor,
 		collationCompatible:        syncer.cfg.CollationCompatible,
+		autoIDCacheSize:            syncer.cfg.AutoIDCacheSize,
 		charsetAndDefaultCollation: syncer.charsetAndDefaultCollation,
 		idAndCollationMap:          syncer.idAndCollationMap,
 		baList:                     syncer.baList,
@@ -1322,6 +1324,8 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 		ddl.adjustCollation(ddlInfo, qec.eventStatusVars, ddl.charsetAndDefaultCollation, ddl.idAndCollationMap)
 	}
 
+	ddl.adjustAutoIDCache(ddlInfo)
+
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
@@ -1483,6 +1487,39 @@ ColumnLoop:
 				continue
 			}
 			col.Options = append(col.Options, &ast.ColumnOption{Tp: ast.ColumnOptionCollate, StrValue: collation})
+		}
+	}
+}
+
+func (ddl *DDLWorker) adjustAutoIDCache(ddlInfo *ddlInfo) {
+	if ddl.autoIDCacheSize <= 0 {
+		return
+	}
+
+	if createStmt, ok := ddlInfo.stmtCache.(*ast.CreateTableStmt); ok {
+		addAutoIDCache := false
+		for _, col := range createStmt.Cols {
+			for _, opt := range col.Options {
+				if opt.Tp == ast.ColumnOptionAutoIncrement {
+					addAutoIDCache = true
+				}
+			}
+		}
+
+		for _, opt := range createStmt.Options {
+			switch opt.Tp {
+			case ast.TableOptionAutoIncrement:
+				addAutoIDCache = true
+			case ast.TableOptionAutoIdCache:
+				return
+			}
+		}
+
+		if addAutoIDCache {
+			createStmt.Options = append(createStmt.Options, &ast.TableOption{
+				Tp:        ast.TableOptionAutoIdCache,
+				UintValue: ddl.autoIDCacheSize,
+			})
 		}
 	}
 }
