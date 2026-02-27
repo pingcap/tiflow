@@ -127,7 +127,7 @@ type APIV2Helpers interface {
 		storage tidbkv.Storage, startTs uint64,
 		scheme string, topic string, protocol config.Protocol,
 	) (ineligibleTables,
-		eligibleTables []model.TableName, err error,
+		eligibleTables, allTables []model.TableName, err error,
 	)
 }
 
@@ -226,7 +226,7 @@ func (h APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	})
 	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
 
-	ineligibleTables, _, err := h.getVerifiedTables(ctx, replicaCfg, kvStorage, cfg.StartTs, scheme, topic, protocol)
+	ineligibleTables, _, _, err := h.getVerifiedTables(ctx, replicaCfg, kvStorage, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(newInfo.Config.Sink.Protocol))
 
 		// use checkpointTs get snapshot from kv storage
-		ineligibleTables, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, checkpointTs, scheme, topic, protocol)
+		ineligibleTables, _, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, checkpointTs, scheme, topic, protocol)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
@@ -544,46 +544,46 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64,
 	scheme string, topic string, protocol config.Protocol,
-) ([]model.TableName, []model.TableName, error) {
+) ([]model.TableName, []model.TableName, []model.TableName, error) {
 	f, err := filter.NewFilter(replicaConfig, "")
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	tableInfos, ineligibleTables, eligibleTables, err := entry.
+	tableInfos, ineligibleTables, eligibleTables, allTables, err := entry.
 		VerifyTables(f, storage, startTs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	err = f.Verify(tableInfos)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if !sink.IsMQScheme(scheme) {
-		return ineligibleTables, eligibleTables, nil
+		return ineligibleTables, eligibleTables, allTables, nil
 	}
 
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, topic, scheme)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	err = eventRouter.VerifyTables(tableInfos)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	selectors, err := columnselector.New(replicaConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	err = selectors.VerifyTables(tableInfos, eventRouter)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	if ctx.Err() != nil {
-		return nil, nil, errors.Trace(ctx.Err())
+		return nil, nil, nil, errors.Trace(ctx.Err())
 	}
 
-	return ineligibleTables, eligibleTables, nil
+	return ineligibleTables, eligibleTables, allTables, nil
 }
