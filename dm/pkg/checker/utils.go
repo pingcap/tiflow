@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -177,6 +178,20 @@ func getCreateTableStmt(p *parser.Parser, statement string) (*ast.CreateTableStm
 		return nil, errors.Errorf("Expect CreateTableStmt but got %T", stmt)
 	}
 	return ctStmt, nil
+}
+
+func maybeTransformCreateTable(converter *mariadb2tidb.Converter, statement string) (string, error) {
+	if converter == nil {
+		return statement, nil
+	}
+	transformed, err := converter.TransformSQL(statement)
+	if err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(transformed) == "" {
+		return statement, nil
+	}
+	return transformed, nil
 }
 
 func getCharset(stmt *ast.CreateTableStmt) string {

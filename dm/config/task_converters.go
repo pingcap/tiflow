@@ -57,6 +57,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		cfg.Timezone = c.Timezone
 		cfg.Meta = inst.Meta
 		cfg.CollationCompatible = c.CollationCompatible
+		cfg.MariaDB2TiDB = c.MariaDB2TiDB
 		cfg.Experimental = c.Experimental
 
 		fromClone := dbCfg.Clone()
@@ -381,6 +382,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	c.OnlineDDLScheme = stCfg0.OnlineDDLScheme
 	c.CleanDumpFile = stCfg0.CleanDumpFile
 	c.CollationCompatible = stCfg0.CollationCompatible
+	c.MariaDB2TiDB = stCfg0.MariaDB2TiDB
 	c.MySQLInstances = make([]*MySQLInstance, 0, len(stCfgs))
 	c.BAList = make(map[string]*filter.Rules)
 	c.Routes = make(map[string]*router.TableRule)
