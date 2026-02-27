@@ -52,7 +52,7 @@ func main() {
 		Format: cfg.LogFormat,
 		Level:  strings.ToLower(cfg.LogLevel),
 	})
-	log.SetRedactLog(cfg.RedactInfoLog)
+	log.SetRedactType(cfg.RedactInfoLog)
 	if err != nil {
 		common.PrintLinesf("init logger error %s", terror.Message(err))
 		os.Exit(2)
