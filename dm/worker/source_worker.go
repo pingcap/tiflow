@@ -282,7 +282,7 @@ func (w *SourceWorker) getSourceStatusErr() *pb.ProcessError {
 	return state.err
 }
 
-func (w *SourceWorker) queryStatusSourceStatusTimeout() time.Duration {
+func (w *SourceWorker) querySourceStatusTimeout() time.Duration {
 	timeout := 5 * time.Second
 	failpoint.Inject("QueryStatusSourceStatusTimeout", func(val failpoint.Value) {
 		if ms, ok := val.(int); ok && ms > 0 {
@@ -740,7 +740,7 @@ func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubT
 		relayStatus  *pb.RelayStatus
 	)
 
-	ctx1, cancel := context.WithTimeout(ctx, w.queryStatusSourceStatusTimeout())
+	ctx1, cancel := context.WithTimeout(ctx, w.querySourceStatusTimeout())
 	defer cancel()
 	if err := w.updateSourceStatus(ctx1, false, false); err != nil {
 		if terror.ErrNoMasterStatus.Equal(err) {

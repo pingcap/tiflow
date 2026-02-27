@@ -629,12 +629,6 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		} else if sourceResult := workerStatus.SourceStatus.GetResult(); sourceResult != nil && len(sourceResult.Errors) > 0 {
 			errorMsgs := formatProcessErrors(sourceResult.Errors)
 			openapiSubTaskStatus.ErrorMsg = &errorMsgs
-		} else if sourceResult := workerStatus.SourceStatus.GetResult(); sourceResult != nil && len(sourceResult.Errors) > 0 {
-			var errorMsgs string
-			for _, err := range sourceResult.Errors {
-				errorMsgs += fmt.Sprintf("%s\n", handleProcessError(err))
-			}
-			openapiSubTaskStatus.ErrorMsg = &errorMsgs
 		}
 		subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)
 	}
