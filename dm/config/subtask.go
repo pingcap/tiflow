@@ -314,6 +314,16 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigStrictOptimisticShardMode.Generate()
 	}
 
+	// import-into mode does not support sharding (multi-source) scenario
+	if (c.ShardMode != "" || c.IsSharding) && c.LoaderConfig.ImportMode == LoadModeImportInto {
+		return terror.ErrConfigImportIntoShardingNotSupport.Generate()
+	}
+
+	// import-into mode requires shared storage (s3, gcs, azure, etc.)
+	if c.LoaderConfig.ImportMode == LoadModeImportInto && storage.IsLocalDiskPath(c.LoaderConfig.Dir) {
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
+	}
+
 	if len(c.ColumnMappingRules) > 0 {
 		return terror.ErrConfigColumnMappingDeprecated.Generate()
 	}

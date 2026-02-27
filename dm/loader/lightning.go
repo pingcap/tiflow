@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/lightning/pkg/importinto"
 	lserver "github.com/pingcap/tidb/lightning/pkg/server"
 	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
@@ -69,7 +70,7 @@ type LightningLoader struct {
 	logger log.Logger
 	cli    *clientv3.Client
 	core   *lserver.Lightning
-	cancel context.CancelFunc // for per task context, which maybe different from lightning context
+	cancel context.CancelCauseFunc // for per task context, which maybe different from lightning context
 
 	toDB *conn.BaseDB
 
@@ -118,14 +119,16 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	if len(cfg.LoaderConfig.PDAddr) > 0 {
 		lightningCfg.TiDB.PdAddr = cfg.LoaderConfig.PDAddr
 	}
-	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
-	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+	switch cfg.LoaderConfig.ImportMode {
+	case config.LoadModePhysical:
 		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
+	case config.LoadModeImportInto:
+		lightningCfg.TikvImporter.Backend = lcfg.BackendImportInto
+	default:
+		lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
-	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
-		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
-	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
 	return lightningCfg
@@ -209,6 +212,24 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	if status != lightningStatusRunning {
 		return nil
 	}
+
+	// import-into uses a different checkpoint mechanism
+	if cfg.TikvImporter.Backend == lcfg.BackendImportInto {
+		cpMgr, err := importinto.NewCheckpointManager(cfg)
+		if err != nil {
+			return err
+		}
+		if err := cpMgr.Initialize(ctx); err != nil {
+			_ = cpMgr.Close()
+			return err
+		}
+		defer func() {
+			_ = cpMgr.Close()
+		}()
+		return cpMgr.IgnoreError(ctx, common.AllTables)
+	}
+
+	// physical/logical mode uses the original checkpoint mechanism
 	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
 	if err != nil {
 		return err
@@ -220,7 +241,7 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 }
 
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
-	taskCtx, cancel := context.WithCancel(ctx)
+	taskCtx, cancel := context.WithCancelCause(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
@@ -279,7 +300,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lserver.WithDupIndicator(&hasDup))
 	}
-
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -402,10 +422,17 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
-	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
+	switch cfg.TikvImporter.Backend {
+	case lcfg.BackendLocal:
 		cfg.TikvImporter.IncrementalImport = true
-	} else if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
-		return nil, err
+	case lcfg.BackendImportInto:
+		// import-into mode reads configuration from config.Config directly,
+		// no additional setup required here
+	default:
+		// TiDB backend
+		if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
+			return nil, err
+		}
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
@@ -630,7 +657,7 @@ func (l *LightningLoader) Pause() {
 		return
 	}
 	if l.cancel != nil {
-		l.cancel()
+		l.cancel(context.Canceled)
 	}
 	l.core.Stop()
 }
