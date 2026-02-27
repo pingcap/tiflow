@@ -16,6 +16,7 @@ package logutil
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc/grpclog"
@@ -342,4 +344,54 @@ func InitGinLogWritter() io.Writer {
 	logFunc, _ = levelToFunc(logger, zapcore.ErrorLevel)
 	gin.DefaultErrorWriter = &loggerWriter{logFunc: logFunc}
 	return gin.DefaultErrorWriter
+}
+
+// InitLogRedaction initializes log redaction settings
+func InitLogRedaction(enableRedact bool, mode string) error {
+	if !enableRedact {
+		redact.SetRedactionMode(redact.RedactionModeOff)
+		return nil
+	}
+
+	redactionMode, err := redact.ParseRedactionMode(mode)
+	if err != nil {
+		return err
+	}
+	redact.SetRedactionMode(redactionMode)
+	return nil
+}
+
+// RedactString redacts a string according to current settings
+func RedactString(s string) string {
+	return redact.String(s)
+}
+
+// RedactKey redacts a key according to current settings
+func RedactKey(key []byte) string {
+	return redact.Key(key)
+}
+
+// RedactValue redacts a value according to current settings
+func RedactValue(s string) string {
+	return redact.Value(s)
+}
+
+// ZapRedactString returns a zap field with redacted string content
+func ZapRedactString(key, value string) zap.Field {
+	return redact.ZapString(key, value)
+}
+
+// ZapRedactStringer returns a zap field with redacted stringer content
+func ZapRedactStringer(key string, value fmt.Stringer) zap.Field {
+	return redact.ZapStringer(key, value)
+}
+
+// ZapRedactKey returns a zap field with redacted key content
+func ZapRedactKey(key string, value []byte) zap.Field {
+	return redact.ZapKey(key, value)
+}
+
+// IsRedactionEnabled returns whether log redaction is enabled
+func IsRedactionEnabled() bool {
+	return redact.IsRedactionEnabled()
 }

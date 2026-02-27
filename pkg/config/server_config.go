@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"go.uber.org/zap"
 )
@@ -82,8 +83,9 @@ type LogFileConfig struct {
 
 // LogConfig represents log config for server
 type LogConfig struct {
-	File              *LogFileConfig `toml:"file" json:"file"`
-	InternalErrOutput string         `toml:"error-output" json:"error-output"`
+	File              *LogFileConfig            `toml:"file" json:"file"`
+	InternalErrOutput string                    `toml:"error-output" json:"error-output"`
+	RedactInfoLog     logutil.RedactInfoLogType `toml:"redact-info-log" json:"redact-info-log"`
 }
 
 var defaultServerConfig = &ServerConfig{
@@ -98,6 +100,7 @@ var defaultServerConfig = &ServerConfig{
 			MaxBackups: 0,
 		},
 		InternalErrOutput: "stderr",
+		RedactInfoLog:     logutil.RedactInfoLogOFF,
 	},
 	DataDir: "",
 	GcTTL:   24 * 60 * 60, // 24H
