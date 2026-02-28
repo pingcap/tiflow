@@ -2,7 +2,6 @@
 
 set -eu
 
-export DM_MASTER_EXTRA_ARG=""
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PATH=$CUR/../_utils:$PATH # for sync_diff_inspector
 
@@ -209,6 +208,7 @@ function check_master() {
 function test_relay() {
 	cleanup_process
 	check_master
+	install_sync_diff
 	clean_data
 	prepare_binlogs
 	setup_replica

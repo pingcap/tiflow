@@ -122,6 +122,8 @@ function destroy_v2_by_tiup() {
 }
 
 function test() {
+	install_sync_diff
+
 	deploy_v1_by_ansible
 
 	migrate_in_v1

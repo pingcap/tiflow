@@ -70,12 +70,14 @@ main() {
 	local tidb_sha1=$(get_sha1 "tidb" "$tidb_branch")
 	local tikv_sha1=$(get_sha1 "tikv" "$tikv_branch")
 	local pd_sha1=$(get_sha1 "pd" "$pd_branch")
+	local tidb_tools_sha1=$(curl "${FILE_SERVER_URL}/download/refs/pingcap/tidb-tools/master/sha1")
 
 	# Define download URLs
 	local download_urls=(
 		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
 		"${FILE_SERVER_URL}/download/builds/pingcap/tikv/${tikv_sha1}/centos7/tikv-server.tar.gz"
 		"${FILE_SERVER_URL}/download/builds/pingcap/pd/${pd_sha1}/centos7/pd-server.tar.gz"
+		"${FILE_SERVER_URL}/download/builds/pingcap/tidb-tools/${tidb_tools_sha1}/centos7/tidb-tools.tar.gz"
 		"${GITHUB_RELEASE_URL}/gh-ost-binary-linux-20200828140552.tar.gz"
 		"${FILE_SERVER_URL}/download/minio.tar.gz"
 	)
@@ -102,6 +104,10 @@ main() {
 		tikv-server.tar.gz)
 			tar -xz -C "$THIRD_BIN_DIR" bin/tikv-server -f "${TEMP_DIR}/${filename}"
 			mv "${THIRD_BIN_DIR}/bin/tikv-server" "$THIRD_BIN_DIR/"
+			;;
+		tidb-tools.tar.gz)
+			tar -xz -C "$THIRD_BIN_DIR" 'bin/sync_diff_inspector' -f "${TEMP_DIR}/${filename}"
+			mv "${THIRD_BIN_DIR}/bin/sync_diff_inspector" "$THIRD_BIN_DIR/"
 			;;
 		minio.tar.gz | gh-ost-binary-linux-20200828140552.tar.gz)
 			tar -xz -C "$THIRD_BIN_DIR" -f "${TEMP_DIR}/${filename}"

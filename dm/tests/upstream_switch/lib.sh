@@ -30,6 +30,12 @@ function exec_tidb() {
 	echo $2 | mysql -uroot -h$1 -P4000
 }
 
+function install_sync_diff() {
+	curl https://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
+	mkdir -p bin
+	mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
+}
+
 function prepare_more_binlogs() {
 	exec_sql $1 "create database db1 collate latin1_bin;"
 	exec_sql $1 "flush logs;"

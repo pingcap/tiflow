@@ -27,6 +27,12 @@ function exec_tidb() {
 	echo $2 | mysql -uroot -h127.0.0.1 -P$1
 }
 
+function install_sync_diff() {
+	curl https://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
+	mkdir -p bin
+	mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
+}
+
 function get_master_status() {
 	arr=$(echo "show master status;" | MYSQL_PWD=123456 mysql -uroot -h127.0.0.1 -P3306 | awk 'NR==2')
 	echo $arr
