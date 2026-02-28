@@ -20,14 +20,11 @@ import (
 	"sort"
 	"strconv"
 	"testing"
-	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
-	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
-	ttypes "github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -731,23 +728,16 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 	*/
 
-	// Mock query with subquery to get all table_ids (main table + partitions) at once
-	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	// Mock SHOW STATS_BUCKETS result.
+	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
 	for i := 0; i < 5; i++ {
-		// Encode index bounds as real encoded keys: PRIMARY(a, b) where both a and b are integers.
 		lowerA, lowerB := i*64, i*12
 		upperA, upperB := (i+1)*64-1, (i+1)*12-1
 
-		lowerDatums := []ttypes.Datum{ttypes.NewIntDatum(int64(lowerA)), ttypes.NewStringDatum(fmt.Sprintf("%d", lowerB))}
-		upperDatums := []ttypes.Datum{ttypes.NewIntDatum(int64(upperA)), ttypes.NewStringDatum(fmt.Sprintf("%d", upperB))}
-
-		lowerEncoded, _ := codec.EncodeKey(time.UTC, nil, lowerDatums...)
-		upperEncoded, _ := codec.EncodeKey(time.UTC, nil, upperDatums...)
-
-		statsRows.AddRow(1, 1, i, (i+1)*64, lowerEncoded, upperEncoded)
+		statsRows.AddRow("test", "test", "", "PRIMARY", 1, i, (i+1)*64, 1, fmt.Sprintf("(%d, %d)", lowerA, lowerB), fmt.Sprintf("(%d, %d)", upperA, upperB))
 	}
-	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+	mock.ExpectQuery("SHOW STATS_BUCKETS WHERE db_name= \\? AND table_name= \\?;").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(statsRows)
 
 	createFakeResultForRandom(mock, aRandomValues, bRandomValues)
@@ -927,12 +917,12 @@ func TestChunkSize(t *testing.T) {
 	}
 
 	// test bucket splitter chunksize
-	// Mock query with subquery to get all table_ids (main table + partitions) at once
-	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	// Mock SHOW STATS_BUCKETS result.
+	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
 	// Notice, use wrong Bound to kill bucket producer
-	statsRows.AddRow(1, 1, 0, 1000000000, "(1, 2, wrong!)", "(2, 3, wrong!)")
-	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+	statsRows.AddRow("test", "test", "", "PRIMARY", 1, 0, 1000000000, 1, "(1, 2, wrong!)", "(2, 3, wrong!)")
+	mock.ExpectQuery("SHOW STATS_BUCKETS WHERE db_name= \\? AND table_name= \\?;").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(statsRows)
 
 	bucketIter, err := NewBucketIterator(ctx, "", tableDiff, db)
@@ -989,22 +979,22 @@ func TestBucketSpliterHint(t *testing.T) {
 	testCases := []struct {
 		tableSQL      string
 		indexCount    int
-		expectColumns []ast.CIStr
+		expectColumns []pmodel.CIStr
 	}{
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
 			0,
-			[]ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
+			[]pmodel.CIStr{pmodel.NewCIStr("a"), pmodel.NewCIStr("b")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`))",
 			0,
-			[]ast.CIStr{ast.NewCIStr("c")},
+			[]pmodel.CIStr{pmodel.NewCIStr("c")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
 			1,
-			[]ast.CIStr{ast.NewCIStr("b")},
+			[]pmodel.CIStr{pmodel.NewCIStr("b")},
 		},
 	}
 
@@ -1035,23 +1025,23 @@ func TestRandomSpliterHint(t *testing.T) {
 
 	testCases := []struct {
 		tableSQL      string
-		expectColumns []ast.CIStr
+		expectColumns []pmodel.CIStr
 	}{
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
-			[]ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
+			[]pmodel.CIStr{pmodel.NewCIStr("a"), pmodel.NewCIStr("b")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`), key i2(`b`))",
-			[]ast.CIStr{ast.NewCIStr("c")},
+			[]pmodel.CIStr{pmodel.NewCIStr("c")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
-			[]ast.CIStr{ast.NewCIStr("b")},
+			[]pmodel.CIStr{pmodel.NewCIStr("b")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`b`, `a`), unique key i1(`c`))",
-			[]ast.CIStr{ast.NewCIStr("b"), ast.NewCIStr("a")},
+			[]pmodel.CIStr{pmodel.NewCIStr("b"), pmodel.NewCIStr("a")},
 		},
 		{
 			"create table `test`.`test`(`a` int, `b` int, `c` int)",
@@ -1094,16 +1084,19 @@ func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
 		| 1       |        1 |         4 |   320 | (256, 48)   | (319, 59)   |
 		+---------+----------+-----------+-------+-------------+-------------+
 	*/
-	// Mock query with subquery to get all table_ids (main table + partitions) at once
-	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	// Mock SHOW STATS_BUCKETS result.
+	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Partition_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
 	for i := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
-		histID := int64(i + 1) // hist_id starts from 1
+		indexName := fmt.Sprintf("i%d", i)
+		if i == 0 {
+			indexName = "PRIMARY"
+		}
 		for j := 0; j < 5; j++ {
-			statsRows.AddRow(1, histID, j, (j+1)*64, fmt.Sprintf("(%d, %d)", j*64, j*12), fmt.Sprintf("(%d, %d)", (j+1)*64-1, (j+1)*12-1))
+			statsRows.AddRow("test", "test", "", indexName, 1, j, (j+1)*64, 1, fmt.Sprintf("(%d, %d)", j*64, j*12), fmt.Sprintf("(%d, %d)", (j+1)*64-1, (j+1)*12-1))
 		}
 	}
-	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+	mock.ExpectQuery("SHOW STATS_BUCKETS WHERE db_name= \\? AND table_name= \\?;").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(statsRows)
 
 	for range indexCount {

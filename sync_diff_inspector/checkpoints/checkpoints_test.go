@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +57,7 @@ func TestSaveChunk(t *testing.T) {
 							HasUpper: i != rounds,
 						},
 					},
-					IndexColumnNames: []ast.CIStr{ast.NewCIStr("col1"), ast.NewCIStr("col2")},
+					IndexColumnNames: []pmodel.CIStr{pmodel.NewCIStr("col1"), pmodel.NewCIStr("col2")},
 				},
 
 				State: SuccessState,
@@ -84,7 +84,7 @@ func TestLoadChunk(t *testing.T) {
 	checker.Init()
 	ctx := context.Background()
 	rounds := 100
-	testColNames := []ast.CIStr{ast.NewCIStr("col1"), ast.NewCIStr("col2")}
+	testColNames := []pmodel.CIStr{pmodel.NewCIStr("col1"), pmodel.NewCIStr("col2")}
 	wg := &sync.WaitGroup{}
 	for i := 0; i < rounds; i++ {
 		wg.Add(1)

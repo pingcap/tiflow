@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	tiflowdbutil "github.com/pingcap/tiflow/pkg/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -150,7 +149,7 @@ func (s *BucketIterator) init(ctx context.Context, startRange *RangeInfo) error 
 	}
 
 	s.nextChunk = 0
-	buckets, err := tiflowdbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
+	buckets, err := dbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
 	if err != nil {
 		return errors.Trace(err)
 	}
