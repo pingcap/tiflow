@@ -107,7 +107,6 @@ function clean_task() {
 function test_master_down_and_up() {
 	cleanup_process
 	clean_data
-	install_sync_diff
 	setup_replica
 	gen_full_data
 	run_dm_components_and_create_source $1
@@ -143,6 +142,7 @@ function test_master_down_and_up() {
 function run() {
 	wait_mysql 3306 1
 	wait_mysql 3307 2
+	exec_tidb $tidb_port "set global tidb_general_log='on';"
 	test_master_down_and_up no_relay
 	test_master_down_and_up relay
 }
