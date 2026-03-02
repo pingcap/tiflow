@@ -32,7 +32,9 @@ import (
 )
 
 type (
-	Bucket        = tidbdbutil.Bucket
+	// Bucket is an alias of tidbdbutil.Bucket.
+	Bucket = tidbdbutil.Bucket
+	// QueryExecutor is an alias of tidbdbutil.QueryExecutor.
 	QueryExecutor = tidbdbutil.QueryExecutor
 )
 

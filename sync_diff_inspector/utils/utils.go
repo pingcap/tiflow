@@ -1179,11 +1179,11 @@ func GetColumnNames(columns []*model.ColumnInfo) []pmodel.CIStr {
 func BuildOrderByClause(cols []*model.ColumnInfo, collation string) string {
 	orderByFields := make([]string, len(cols))
 	for i, ordreByCol := range cols {
-		column_name := dbutil.ColumnName(ordreByCol.Name.O)
+		columnName := dbutil.ColumnName(ordreByCol.Name.O)
 		if collation != "" && cols[i].FieldType.GetCharset() != charset.CharsetBin {
-			column_name = fmt.Sprintf("%s COLLATE '%s'", column_name, collation)
+			columnName = fmt.Sprintf("%s COLLATE '%s'", columnName, collation)
 		}
-		orderByFields[i] = column_name
+		orderByFields[i] = columnName
 	}
 
 	return strings.Join(orderByFields, ",")
