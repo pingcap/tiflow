@@ -42,6 +42,8 @@ type DMLWorker struct {
 	logger        log.Logger
 	metricProxies *metrics.Proxies
 
+	safeModeDMLStrategy string
+
 	// foreignKeyChecksEnabled indicates whether downstream
 	// connections keep foreign_key_checks on.
 	foreignKeyChecksEnabled bool
@@ -74,6 +76,10 @@ func isForeignKeyChecksEnabled(session map[string]string) bool {
 }
 
 func (w *DMLWorker) shouldDisableForeignKeyChecksForJob(j *job) bool {
+	if w.safeModeDMLStrategy == "upsert" {
+		// keep foreign_key_checks on to preserve downstream FK cascade semantics
+		return false
+	}
 	if !w.foreignKeyChecksEnabled {
 		return false
 	}
@@ -111,6 +117,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		syncCtx:                 syncer.syncCtx, // this ctx can be used to cancel all the workers
 		metricProxies:           syncer.metricsProxies,
 		toDBConns:               syncer.toDBConns,
+		safeModeDMLStrategy:     syncer.cfg.SafeModeDMLStrategy,
 		foreignKeyChecksEnabled: isForeignKeyChecksEnabled(syncer.cfg.To.Session),
 		inCh:                    inCh,
 		flushCh:                 make(chan *job),
@@ -363,7 +370,7 @@ func (w *DMLWorker) setForeignKeyChecks(queueID int, enable bool) error {
 // genSQLs generate SQLs in single row mode or multiple rows mode.
 func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 	if w.multipleRows {
-		return genDMLsWithSameOp(jobs)
+		return genDMLsWithSameOp(jobs, w.safeModeDMLStrategy)
 	}
 
 	queries := make([]string, 0, len(jobs))
@@ -379,18 +386,26 @@ func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
 		switch j.dml.Type() {
 		case sqlmodel.RowChangeInsert:
 			if j.safeMode {
-				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+				if w.safeModeDMLStrategy == "upsert" {
+					query, arg = j.dml.GenSQL(sqlmodel.DMLInsertOnDuplicateUpdate)
+				} else {
+					query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+				}
 			} else {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLInsert)
 			}
 
 		case sqlmodel.RowChangeUpdate:
 			if j.safeMode {
-				if j.dml.IsPrimaryOrUniqueKeyUpdated() {
-					query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
-					appendQueryAndArg()
+				if w.safeModeDMLStrategy == "upsert" {
+					query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
+				} else {
+					if j.dml.IsPrimaryOrUniqueKeyUpdated() {
+						query, arg = j.dml.GenSQL(sqlmodel.DMLDelete)
+						appendQueryAndArg()
+					}
+					query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
 				}
-				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
 			} else {
 				query, arg = j.dml.GenSQL(sqlmodel.DMLUpdate)
 			}
