@@ -116,7 +116,7 @@ function run_local_dir_reject_test() {
 	echo "=== Running import-into mode local dir rejection test ==="
 
 	run_sql_tidb "drop database if exists ${db};"
-	
+
 	echo "try to start task with import-into mode + local dir (should fail)"
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-local.yaml
 	sed -i "s#dir: placeholder#dir: ./local_data#g" $WORK_DIR/dm-task-local.yaml
