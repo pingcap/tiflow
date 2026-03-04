@@ -1842,7 +1842,7 @@ func TestHandleRotateEventUpdatesGlobalCheckpoint(t *testing.T) {
 	}
 	eventHeader := &replication.EventHeader{
 		Timestamp: 1,
-		LogPos:    uint32(newLocation.Position.Pos),
+		LogPos:    newLocation.Position.Pos,
 		EventType: replication.ROTATE_EVENT,
 	}
 	rotateEvent := &replication.RotateEvent{
