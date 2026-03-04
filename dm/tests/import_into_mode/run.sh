@@ -200,12 +200,10 @@ function run_target_table_not_empty_resume_test() {
 	echo "start task with import-into mode (expect downstream table not empty error)"
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-not-empty.yaml
 	sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task-not-empty.yaml
+	# start-task may return before load-unit reports "table not empty",
+	# so we only issue start-task here and verify the error via query-status below.
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"start-task $WORK_DIR/dm-task-not-empty.yaml --remove-meta" \
-		"\"result\": true" 1 \
-		"\"result\": false" 1 \
-		"\"source\": \"$SOURCE_ID1\"" 1 \
-		"target table is not empty" 1
+		"start-task $WORK_DIR/dm-task-not-empty.yaml --remove-meta"
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
