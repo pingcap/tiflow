@@ -589,8 +589,7 @@ func (st *SubTask) KillWithCause(cause error) {
 	if cause == nil {
 		cause = context.Canceled
 	}
-	// Cancel before killing the current unit so the cancel cause can be observed by the unit.
-	st.cancel(cause)
+	// Kill should be ungraceful: kill the running unit first, then cancel the subtask context.
 	st.killCurrentUnit()
 	st.closeUnitsWithCause(cause) // close all un-closed units
 
