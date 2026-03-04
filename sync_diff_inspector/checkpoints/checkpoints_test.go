@@ -17,6 +17,7 @@ import (
 	"context"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"testing"
@@ -152,11 +153,11 @@ func TestSaveLoadChecksumState(t *testing.T) {
 		},
 	}
 
-	defer os.Remove("TestSaveLoadChecksumState")
-	err := checker.SaveChecksumState(ctx, "TestSaveLoadChecksumState", state, nil)
+	checkpointFile := filepath.Join(t.TempDir(), "TestSaveLoadChecksumState")
+	err := checker.SaveChecksumState(ctx, checkpointFile, state, nil)
 	require.NoError(t, err)
 
-	loaded, _, err := checker.LoadChecksumState("TestSaveLoadChecksumState")
+	loaded, _, err := checker.LoadChecksumState(checkpointFile)
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
 	require.Equal(t, 3, loaded.TableIndex)

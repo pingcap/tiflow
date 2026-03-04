@@ -309,15 +309,7 @@ func (cp *Checkpoint) SaveChecksumState(
 		return errors.Trace(err)
 	}
 
-	if err = writeFileAtomic(fileName, checkpointData, config.LocalFilePerm); err != nil {
-		return errors.Trace(err)
-	}
-	log.Info("save checksum checkpoint",
-		zap.Int("table index", state.TableIndex),
-		zap.Bool("upstream done", state.Upstream.Done),
-		zap.Bool("downstream done", state.Downstream.Done),
-	)
-	return nil
+	return writeFileAtomic(fileName, checkpointData, config.LocalFilePerm)
 }
 
 func loadSavedState(fileName string) (*SavedState, error) {

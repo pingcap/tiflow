@@ -24,6 +24,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -101,7 +104,7 @@ type TiDBSource struct {
 }
 
 // GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
-// It prefers scanning by table handle order for TiDB tables.
+// It forces to use _tidb_rowid or clustered PK to split chunks.
 func (s *TiDBSource) GetChecksumOnlyIterator(
 	ctx context.Context,
 	tableIndex int,
@@ -111,50 +114,36 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	matchSource := getMatchSource(s.sourceTableMap, table)
 
 	originTable := *table
+	tableInfo := table.Info.Clone()
+	originTable.Info = tableInfo
 	originTable.Schema = matchSource.OriginSchema
 	originTable.Table = matchSource.OriginTable
-
-	splitFields, err := getChecksumSplitFields(originTable.Info)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-	originTable.Fields = splitFields
+	originTable.Fields = getChecksumSplitFields(tableInfo)
 
 	return splitter.NewRandomIteratorWithCheckpoint(
-		ctx, "", &originTable, s.dbConn, startRange)
+		ctx, dbutil.TableName(table.Schema, table.Table), &originTable, s.dbConn, startRange)
 }
 
-func getChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
+func getChecksumSplitFields(tableInfo *model.TableInfo) string {
 	switch {
 	case tableInfo.PKIsHandle:
 		pkCol := tableInfo.GetPkColInfo()
-		if pkCol == nil {
-			return "", errors.New("pk is handle but primary key column not found")
-		}
-		return pkCol.Name.O, nil
+		return pkCol.Name.O
 	case tableInfo.IsCommonHandle:
-		splitFields := getPrimaryIndexSplitFields(tableInfo)
-		if splitFields == "" {
-			return "", errors.New("common handle table without primary index")
+		pkIndex := tables.FindPrimaryIndex(tableInfo)
+		fieldNames := make([]string, 0, len(pkIndex.Columns))
+		for _, idxCol := range pkIndex.Columns {
+			fieldNames = append(fieldNames, tableInfo.Columns[idxCol.Offset].Name.O)
 		}
-		return splitFields, nil
+		return strings.Join(fieldNames, ",")
 	default:
-		return "_tidb_rowid", nil
+		tableInfo.Columns = append(tableInfo.Columns, &model.ColumnInfo{
+			Name:      ast.NewCIStr("_tidb_rowid"),
+			Offset:    len(tableInfo.Columns),
+			FieldType: *types.NewFieldType(mysql.TypeLonglong),
+		})
+		return "_tidb_rowid"
 	}
-}
-
-func getPrimaryIndexSplitFields(tableInfo *model.TableInfo) string {
-	pkIndex := tables.FindPrimaryIndex(tableInfo)
-	if pkIndex == nil {
-		return ""
-	}
-
-	pkCols := utils.GetColumnsFromIndex(pkIndex, tableInfo)
-	fieldNames := make([]string, 0, len(pkCols))
-	for _, col := range pkCols {
-		fieldNames = append(fieldNames, col.Name.O)
-	}
-	return strings.Join(fieldNames, ",")
 }
 
 // GetTableAnalyzer gets the analyzer for current source
