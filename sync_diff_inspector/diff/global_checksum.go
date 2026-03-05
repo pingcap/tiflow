@@ -132,14 +132,14 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			flush := func() {
-				if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
+				if err := df.flushChecksumCheckpoint(egCtx, checkpointState); err != nil {
 					log.Warn("fail to flush checksum checkpoint", zap.Error(err))
 				}
 			}
 
 			for {
 				select {
-				case <-ctx.Done():
+				case <-egCtx.Done():
 					flush()
 					return nil
 				case <-ticker.C:
