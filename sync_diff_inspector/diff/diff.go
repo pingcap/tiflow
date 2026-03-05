@@ -108,6 +108,9 @@ type Diff struct {
 	cp         *checkpoints.Checkpoint
 	startRange *splitter.RangeInfo
 	report     *report.Report
+
+	checksumCheckpoint   *checkpoints.ChecksumState
+	checksumCheckpointMu sync.Mutex
 }
 
 // NewDiff returns a Diff instance.
@@ -186,6 +189,9 @@ func (df *Diff) init(ctx context.Context, cfg *config.Config) (err error) {
 
 func (df *Diff) initCheckpoint() error {
 	df.cp.Init()
+	if df.shouldUseGlobalChecksum() {
+		return df.initChecksumCheckpoint()
+	}
 
 	finishTableNums := 0
 	path := filepath.Join(df.CheckpointDir, checkpointFile)
@@ -275,6 +281,13 @@ func getConfigsForReport(cfg *config.Config) ([][]byte, []byte, error) {
 
 // Equal tests whether two database have same data and schema.
 func (df *Diff) Equal(ctx context.Context) error {
+	if df.shouldUseGlobalChecksum() {
+		return df.equalByGlobalChecksum(ctx)
+	}
+	return df.equalByChunkChecksum(ctx)
+}
+
+func (df *Diff) equalByChunkChecksum(ctx context.Context) error {
 	chunksIter, err := df.generateChunksIterator(ctx)
 	if err != nil {
 		return errors.Trace(err)

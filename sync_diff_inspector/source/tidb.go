@@ -24,6 +24,10 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
@@ -97,6 +101,49 @@ type TiDBSource struct {
 	dbConn            *sql.DB
 
 	version *semver.Version
+}
+
+// GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
+// It forces to use _tidb_rowid or clustered PK to split chunks.
+func (s *TiDBSource) GetChecksumOnlyIterator(
+	ctx context.Context,
+	tableIndex int,
+	startRange *splitter.RangeInfo,
+) (splitter.ChunkIterator, error) {
+	table := s.tableDiffs[tableIndex]
+	matchSource := getMatchSource(s.sourceTableMap, table)
+
+	originTable := *table
+	tableInfo := table.Info.Clone()
+	originTable.Info = tableInfo
+	originTable.Schema = matchSource.OriginSchema
+	originTable.Table = matchSource.OriginTable
+	originTable.Fields = getChecksumSplitFields(tableInfo)
+
+	return splitter.NewRandomIteratorWithCheckpoint(
+		ctx, dbutil.TableName(table.Schema, table.Table), &originTable, s.dbConn, startRange)
+}
+
+func getChecksumSplitFields(tableInfo *model.TableInfo) string {
+	switch {
+	case tableInfo.PKIsHandle:
+		pkCol := tableInfo.GetPkColInfo()
+		return pkCol.Name.O
+	case tableInfo.IsCommonHandle:
+		pkIndex := tables.FindPrimaryIndex(tableInfo)
+		fieldNames := make([]string, 0, len(pkIndex.Columns))
+		for _, idxCol := range pkIndex.Columns {
+			fieldNames = append(fieldNames, tableInfo.Columns[idxCol.Offset].Name.O)
+		}
+		return strings.Join(fieldNames, ",")
+	default:
+		tableInfo.Columns = append(tableInfo.Columns, &model.ColumnInfo{
+			Name:      ast.NewCIStr("_tidb_rowid"),
+			Offset:    len(tableInfo.Columns),
+			FieldType: *types.NewFieldType(mysql.TypeLonglong),
+		})
+		return "_tidb_rowid"
+	}
 }
 
 // GetTableAnalyzer gets the analyzer for current source
