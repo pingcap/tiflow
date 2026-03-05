@@ -196,8 +196,6 @@ function run_target_table_not_empty_resume_test() {
 	run_sql_tidb "create database if not exists ${db};"
 	run_sql_tidb "create table ${db}.t1 (id int NOT NULL AUTO_INCREMENT, name varchar(20), PRIMARY KEY (id));"
 	run_sql_tidb "insert into ${db}.t1 (id, name) values (1, 'alice');"
-	run_sql_tidb "create table ${db}.t2 (id int PRIMARY KEY, name varchar(50), age int, salary decimal(10, 2), created_at datetime DEFAULT CURRENT_TIMESTAMP);"
-	run_sql_tidb "insert into ${db}.t2 (id, name, age, salary) values (1, 'user1', 25, 5000.50);"
 
 	echo "start task with import-into mode (expect downstream table not empty error)"
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task-not-empty.yaml
@@ -212,9 +210,8 @@ function run_target_table_not_empty_resume_test() {
 		'"stage": "Paused"' 1 \
 		"target table is not empty" 1
 
-	echo "truncate downstream tables and resume task"
+	echo "truncate downstream table and resume task"
 	run_sql_tidb "truncate table ${db}.t1;"
-	run_sql_tidb "truncate table ${db}.t2;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 2 \
