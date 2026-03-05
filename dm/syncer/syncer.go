@@ -52,6 +52,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
@@ -255,7 +256,8 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	ddlWorker *DDLWorker
+	ddlWorker    *DDLWorker
+	ddlConverter *mariadb2tidb.Converter
 }
 
 // NewSyncer creates a new Syncer.
@@ -508,6 +510,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
+	s.ddlConverter = newDDLConverter(s.cfg, s.tctx.L())
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
@@ -2745,6 +2748,7 @@ type queryEventContext struct {
 	p         *parser.Parser // used parser
 	ddlSchema string         // used schema
 	originSQL string         // before split
+	ddlSQL    string         // transformed SQL used for parsing
 	// split multi-schema change DDL into multiple one schema change DDL due to TiDB's limitation
 	splitDDLs      []string // after split before online ddl
 	appliedDDLs    []string // after onlineDDL apply if onlineDDL != nil

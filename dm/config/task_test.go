@@ -816,6 +816,8 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 	require.Equal(t, wordCount(cfg.String()), wordCount(cfg2.String())) // since rules are unordered, so use wordCount to compare
 
 	require.NoError(t, cfg.adjust())
+	stCfg1.MariaDB2TiDB = cfg.MariaDB2TiDB
+	stCfg2.MariaDB2TiDB = cfg.MariaDB2TiDB
 	stCfgs, err := TaskConfigToSubTaskConfigs(cfg, map[string]dbconfig.DBConfig{source1: source1DBCfg, source2: source2DBCfg})
 	require.NoError(t, err)
 	// revert ./dumpped_data.from-sub-tasks
@@ -1049,8 +1051,8 @@ func TestTaskConfigForDowngrade(t *testing.T) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	// without flag, collation_compatible, experimental, validator
-	require.Equal(t, cfgForDowngradeReflect.NumField()+4, cfgReflect.NumField())
+	// without flag, collation_compatible, mariadb2tidb, experimental, validator
+	require.Equal(t, cfgForDowngradeReflect.NumField()+5, cfgReflect.NumField())
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}

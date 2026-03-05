@@ -7,6 +7,20 @@ enable-heartbeat: false  # whether to enable heartbeat for calculating lag betwe
 # heartbeat-update-interval: 1  # interval to do heartbeat and save timestamp, default 1s
 # heartbeat-report-interval: 10 # interval to report time lap to prometheus, default 10s
 
+# MariaDB schema conversion (mariadb2tidb)
+# mode: auto (MariaDB sources only), on (force enable), off (disable).
+# strict-mode: if false, conversion errors fall back to the original SQL.
+# available rules: Collation, ZeroTimestamp, UUIDType, MariaDBSpecific, Constraints, TrailingComma,
+# VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, SystemVersioning,
+# SequenceType, ColumnAttributes, IndexOptions, FulltextIndexNormalize, SpatialIndexDrop, CreateOrReplace,
+# EngineOptions, IgnoredClauseCleanup, CollationFallback, KeyLength, IndexPrefix, IntegerWidth,
+# TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
+#mariadb2tidb:
+#  mode: "auto"
+#  strict-mode: true
+#  enabled-rules: []
+#  disabled-rules: []
+
 target-database:
   host: "192.168.0.1"
   port: 4000

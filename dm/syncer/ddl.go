@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
@@ -80,6 +81,7 @@ type DDLWorker struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 	baList                     *filter.Filter
+	ddlConverter               *mariadb2tidb.Converter
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)
@@ -109,6 +111,7 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		charsetAndDefaultCollation: syncer.charsetAndDefaultCollation,
 		idAndCollationMap:          syncer.idAndCollationMap,
 		baList:                     syncer.baList,
+		ddlConverter:               syncer.ddlConverter,
 		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
 		trackDDL:                   syncer.trackDDL,
 		saveTablePoint:             syncer.saveTablePoint,
@@ -235,14 +238,25 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		}
 	}
 
+	trimmedSQL := utils.TrimCtrlChars(originSQL)
 	qec := &queryEventContext{
 		eventContext:    &ec,
 		ddlSchema:       string(ev.Schema),
-		originSQL:       utils.TrimCtrlChars(originSQL),
+		originSQL:       trimmedSQL,
+		ddlSQL:          trimmedSQL,
 		splitDDLs:       make([]string, 0),
 		appliedDDLs:     make([]string, 0),
 		sourceTbls:      make(map[string]map[string]struct{}),
 		eventStatusVars: ev.StatusVars,
+	}
+	if ddl.ddlConverter != nil {
+		transformed, err2 := ddl.ddlConverter.TransformSQL(qec.originSQL)
+		if err2 != nil {
+			return err2
+		}
+		if strings.TrimSpace(transformed) != "" {
+			qec.ddlSQL = transformed
+		}
 	}
 
 	defer func() {
@@ -953,11 +967,23 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	// We use Parse not ParseOneStmt here, because sometimes we got a commented out ddl which can't be parsed
 	// by ParseOneStmt(it's a limitation of tidb parser.)
 	qec.tctx.L().Info("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
-	stmts, err := parserpkg.Parse(qec.p, qec.originSQL, "", "")
+	parseSQL := qec.ddlSQL
+	if parseSQL == "" {
+		parseSQL = qec.originSQL
+	}
+	stmts, err := parserpkg.Parse(qec.p, parseSQL, "", "")
 	if err != nil {
 		// log error rather than fatal, so other defer can be executed
-		qec.tctx.L().Error("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
-		return nil, terror.ErrSyncerParseDDL.Delegate(err, qec.originSQL)
+		if parseSQL != qec.originSQL {
+			qec.tctx.L().Error("parse ddl after mariadb2tidb transform",
+				zap.String("event", "query"),
+				zap.String("origin_sql", qec.originSQL),
+				zap.String("ddl_sql", parseSQL),
+				zap.Error(err))
+		} else {
+			qec.tctx.L().Error("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		}
+		return nil, terror.ErrSyncerParseDDL.Delegate(err, parseSQL)
 	}
 	if len(stmts) == 0 {
 		return nil, nil
