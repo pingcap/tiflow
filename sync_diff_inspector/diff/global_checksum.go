@@ -123,6 +123,12 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			downChecksum uint64
 		)
 
+		flushCkpt := func(ctx context.Context) {
+			if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
+				log.Warn("fail to flush checksum checkpoint", zap.Error(err))
+			}
+		}
+
 		progress.StartTable(progressID, 1, false)
 		cctx, cancel := context.WithCancel(ctx)
 		eg, egCtx := errgroup.WithContext(cctx)
@@ -131,19 +137,13 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		eg.Go(func() error {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
-			flush := func() {
-				if err := df.flushChecksumCheckpoint(egCtx, checkpointState); err != nil {
-					log.Warn("fail to flush checksum checkpoint", zap.Error(err))
-				}
-			}
 
 			for {
 				select {
 				case <-egCtx.Done():
-					flush()
 					return nil
 				case <-ticker.C:
-					flush()
+					flushCkpt(egCtx)
 				}
 			}
 		})
@@ -179,6 +179,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			progress.FailTable(progressID)
 			df.report.SetTableMeetError(schema, table, err)
 			df.report.SetTableDataCheckResult(schema, table, false, 0, 0, -1, -1, chunkID)
+			flushCkpt(ctx)
 			df.checksumCheckpoint = checkpointState
 			continue
 		}
@@ -197,6 +198,10 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		progress.UpdateTotal(progressID, 0, true)
 		progress.Inc(progressID)
 		df.report.SetTableDataCheckResult(schema, table, equal, 0, 0, upCount, downCount, chunkID)
+
+		checkpointState.Upstream.Done = true
+		checkpointState.Downstream.Done = true
+		flushCkpt(ctx)
 		df.checksumCheckpoint = checkpointState
 	}
 	return nil
@@ -343,9 +348,6 @@ func (df *Diff) getSourceGlobalChecksum(
 		return -1, 0, errors.Trace(err)
 	}
 
-	df.checksumCheckpointMu.Lock()
-	defer df.checksumCheckpointMu.Unlock()
-	state.Done = true
 	return totalCount, totalChecksum, nil
 }
 

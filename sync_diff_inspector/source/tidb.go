@@ -118,31 +118,44 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	originTable.Info = tableInfo
 	originTable.Schema = matchSource.OriginSchema
 	originTable.Table = matchSource.OriginTable
-	originTable.Fields = getChecksumSplitFields(tableInfo)
+	fields, err := getChecksumSplitFields(tableInfo)
+	if err != nil {
+		log.Warn("failed to determine split fields for checksum-only mode, the ignore-columns configuration might be incorrect",
+			zap.String("table", dbutil.TableName(table.Schema, table.Table)),
+			zap.Error(err))
+		return nil, errors.Trace(err)
+	}
+	originTable.Fields = fields
 
 	return splitter.NewRandomIteratorWithCheckpoint(
 		ctx, dbutil.TableName(table.Schema, table.Table), &originTable, s.dbConn, startRange)
 }
 
-func getChecksumSplitFields(tableInfo *model.TableInfo) string {
+func getChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
 	switch {
 	case tableInfo.PKIsHandle:
 		pkCol := tableInfo.GetPkColInfo()
-		return pkCol.Name.O
+		if pkCol == nil {
+			return "", errors.New("PKIsHandle is set but PK column not found")
+		}
+		return pkCol.Name.O, nil
 	case tableInfo.IsCommonHandle:
 		pkIndex := tables.FindPrimaryIndex(tableInfo)
+		if pkIndex == nil || len(pkIndex.Columns) == 0 {
+			return "", errors.New("IsCommonHandle is set but primary index not found")
+		}
 		fieldNames := make([]string, 0, len(pkIndex.Columns))
 		for _, idxCol := range pkIndex.Columns {
 			fieldNames = append(fieldNames, tableInfo.Columns[idxCol.Offset].Name.O)
 		}
-		return strings.Join(fieldNames, ",")
+		return strings.Join(fieldNames, ","), nil
 	default:
 		tableInfo.Columns = append(tableInfo.Columns, &model.ColumnInfo{
 			Name:      ast.NewCIStr("_tidb_rowid"),
 			Offset:    len(tableInfo.Columns),
 			FieldType: *types.NewFieldType(mysql.TypeLonglong),
 		})
-		return "_tidb_rowid"
+		return "_tidb_rowid", nil
 	}
 }
 
