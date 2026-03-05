@@ -65,7 +65,8 @@ function run() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
-	run_sql_source1 "UPDATE fk_demo.parent SET parent_id=4 WHERE parent_id=2;"
+	# use UK update to trigger DM safe-mode FK guard without violating upstream FK(parent_id) restriction.
+	run_sql_source1 "UPDATE fk_demo.parent SET payload='p2_v2' WHERE parent_id=2;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 2 \
