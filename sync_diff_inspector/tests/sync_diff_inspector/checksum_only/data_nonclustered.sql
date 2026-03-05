@@ -6,7 +6,7 @@ CREATE TABLE t (
   id BIGINT NOT NULL,
   k  BIGINT NOT NULL,
   v  VARCHAR(32),
-  PRIMARY KEY (id) /*T![clustered_index] NONCLUSTERED */,
+  PRIMARY KEY (id) NONCLUSTERED,
   KEY idx_k (k)
 );
 
