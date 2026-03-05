@@ -56,9 +56,14 @@ type BucketIterator struct {
 	dbConn *sql.DB
 }
 
-// NewBucketIterator return a new iterator
-func NewBucketIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*BucketIterator, error) {
-	return NewBucketIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil, utils.NewWorkerPool(1, "bucketIter"))
+// NewBucketIteratorForTest return a new iterator for test
+func NewBucketIteratorForTest(
+	ctx context.Context, progressID string, table *common.TableDiff,
+	dbConn *sql.DB, candidate *IndexCandidate,
+) (*BucketIterator, error) {
+	return NewBucketIteratorWithCheckpoint(
+		ctx, progressID, table, dbConn, nil,
+		utils.NewWorkerPool(1, "bucketIter"), candidate)
 }
 
 // NewBucketIteratorWithCheckpoint return a new iterator
@@ -69,6 +74,7 @@ func NewBucketIteratorWithCheckpoint(
 	dbConn *sql.DB,
 	startRange *RangeInfo,
 	bucketSpliterPool *utils.WorkerPool,
+	candidate *IndexCandidate,
 ) (*BucketIterator, error) {
 	if !utils.IsRangeTrivial(table.Range) {
 		return nil, errors.Errorf(
@@ -89,7 +95,7 @@ func NewBucketIteratorWithCheckpoint(
 		progressID: progressID,
 	}
 
-	if err := bs.init(ctx, startRange); err != nil {
+	if err := bs.init(ctx, candidate, startRange); err != nil {
 		return nil, errors.Trace(err)
 	}
 
@@ -143,75 +149,28 @@ func (s *BucketIterator) Next() (*chunk.Range, error) {
 	return c, nil
 }
 
-func (s *BucketIterator) init(ctx context.Context, startRange *RangeInfo) error {
-	fields, err := indexFieldsFromConfigString(s.table.Fields, s.table.Info)
-	if err != nil {
-		return err
-	}
-
-	s.nextChunk = 0
-	buckets, err := tiflowdbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
+func (s *BucketIterator) init(ctx context.Context, candidate *IndexCandidate, startRange *RangeInfo) error {
+	buckets, err := tiflowdbutil.GetBucketsInfo(
+		ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
 	if err != nil {
 		return errors.Trace(err)
 	}
 
-	var indices []*model.IndexInfo
-	if fields.IsEmpty() {
-		indices, err = utils.GetBetterIndex(context.Background(), s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
-		if err != nil {
-			return errors.Trace(err)
+	index := candidate.Index
+	bucket, ok := buckets[index.Name.O]
+	if !ok {
+		if startRange != nil {
+			return errors.Errorf(
+				"checkpoint invalid for %s.%s: index %s not found in bucket stats (schema/index changed or stats dropped)",
+				s.table.Schema, s.table.Table, index.Name.O,
+			)
 		}
-	} else {
-		// There are user configured "index-fields", so we will try to match from all indices.
-		indices = dbutil.FindAllIndex(s.table.Info)
+		return errors.NotFoundf("index %s in buckets info", index.Name.O)
 	}
 
-NEXTINDEX:
-	for _, index := range indices {
-		if index == nil {
-			continue
-		}
-		if startRange != nil && startRange.IndexID != index.ID {
-			continue
-		}
-
-		indexColumns := utils.GetColumnsFromIndex(index, s.table.Info)
-
-		if len(indexColumns) < len(index.Columns) {
-			// some column in index is ignored.
-			continue
-		}
-
-		if !fields.MatchesIndex(index) {
-			// We are enforcing user configured "index-fields" settings.
-			continue
-		}
-
-		// skip the index that has expression column
-		for _, col := range indexColumns {
-			if col.Hidden {
-				continue NEXTINDEX
-			}
-		}
-
-		bucket, ok := buckets[index.Name.O]
-		if !ok {
-			// We found an index matching the "index-fields", but no bucket is found
-			// for that index. Returning an error here will make the caller retry with
-			// the random splitter.
-			return errors.NotFoundf("index %s in buckets info", index.Name.O)
-		}
-		log.Debug("buckets for index", zap.String("index", index.Name.O), zap.Reflect("buckets", buckets))
-
-		s.buckets = bucket
-		s.indexColumns = indexColumns
-		s.indexID = index.ID
-		break
-	}
-
-	if s.buckets == nil || s.indexColumns == nil {
-		return errors.NotFoundf("no index to split buckets")
-	}
+	s.buckets = bucket
+	s.indexColumns = candidate.Columns
+	s.indexID = index.ID
 
 	// Notice: `cnt` is only an estimated value
 	cnt := s.buckets[len(s.buckets)-1].Count

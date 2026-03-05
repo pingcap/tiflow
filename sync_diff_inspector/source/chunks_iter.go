@@ -107,7 +107,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 						return
 					case t.chunksCh <- &splitter.RangeInfo{
 						ChunkRange: c,
-						IndexID:    getCurTableIndexID(chunkIter),
+						IndexID:    chunkIter.GetIndexID(),
 						ProgressID: dbutil.TableName(curTable.Schema, curTable.Table),
 					}:
 					}
@@ -168,7 +168,7 @@ func (t *ChunksIterator) produceChunks(ctx context.Context, startRange *splitter
 					return
 				case t.chunksCh <- &splitter.RangeInfo{
 					ChunkRange: c,
-					IndexID:    getCurTableIndexID(chunkIter),
+					IndexID:    chunkIter.GetIndexID(),
 					ProgressID: dbutil.TableName(table.Schema, table.Table),
 				}:
 				}
@@ -196,12 +196,4 @@ func (t *ChunksIterator) Next(ctx context.Context) (*splitter.RangeInfo, error) 
 func (t *ChunksIterator) Close() {
 	t.cancel()
 	t.wg.Wait()
-}
-
-// TODO: getCurTableIndexID only used for binary search, should be optimized later.
-func getCurTableIndexID(tableIter splitter.ChunkIterator) int64 {
-	if bt, ok := tableIter.(*splitter.BucketIterator); ok {
-		return bt.GetIndexID()
-	}
-	return 0
 }

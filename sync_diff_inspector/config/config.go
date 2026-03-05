@@ -398,6 +398,9 @@ type Config struct {
 	CheckDataOnly bool `toml:"check-data-only" json:"-"`
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
+	// SplitterStrategy controls the fallback splitter when bucket stats are unavailable.
+	// Supported values: "limit" or "random".
+	SplitterStrategy string `toml:"splitter-strategy" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
 	// DMTask string `toml:"dm-task" json:"dm-task"`
@@ -477,6 +480,10 @@ func (c *Config) Parse(arguments []string) error {
 
 	if len(c.FlagSet.Args()) != 0 {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
+	}
+
+	if err := c.normalizeUseLimitIterator(); err != nil {
+		return errors.Trace(err)
 	}
 
 	// Set default value when output is empty
@@ -628,6 +635,10 @@ func (c *Config) CheckConfig() bool {
 		log.Error("check-thread-count must greater than 0!")
 		return false
 	}
+	if err := c.normalizeUseLimitIterator(); err != nil {
+		log.Error(err.Error())
+		return false
+	}
 	if len(c.DMAddr) != 0 {
 		u, err := url.Parse(c.DMAddr)
 		if err != nil || u.Scheme == "" || u.Host == "" {
@@ -641,6 +652,19 @@ func (c *Config) CheckConfig() bool {
 		}
 	}
 	return true
+}
+
+func (c *Config) normalizeUseLimitIterator() error {
+	mode := strings.ToLower(strings.TrimSpace(c.SplitterStrategy))
+	switch mode {
+	case "":
+		c.SplitterStrategy = "random"
+	case "random", "limit":
+		c.SplitterStrategy = mode
+	default:
+		return errors.Errorf("splitter-strategy must be limit or random")
+	}
+	return nil
 }
 
 func timestampOutputDir() string {
