@@ -37,9 +37,9 @@ function run() {
 		"\"result\": true" 2 \
 		"\"stage\": \"Running\"" 2
 
-	run_sql_source1 "SELECT payload FROM fk_demo.parent WHERE parent_id=1;"
-	check_contains "payload: p1_v2"
-	run_sql_tidb_with_retry "SELECT payload FROM fk_demo.parent WHERE parent_id=1;" "payload: p1_v2"
+	run_sql_source1 "SELECT note FROM fk_demo.parent WHERE parent_id=1;"
+	check_contains "note: n1_v2"
+	run_sql_tidb_with_retry "SELECT note FROM fk_demo.parent WHERE parent_id=1;" "note: n1_v2"
 
 	run_sql_source1 "SELECT COUNT(*) FROM fk_demo.child WHERE parent_id=1;"
 	check_contains "COUNT(*): 2"

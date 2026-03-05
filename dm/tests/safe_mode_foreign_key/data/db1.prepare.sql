@@ -6,6 +6,7 @@ USE fk_demo;
 CREATE TABLE parent (
   parent_id INT PRIMARY KEY,
   payload   VARCHAR(100) NOT NULL,
+  note      VARCHAR(100) NOT NULL,
   UNIQUE KEY uk_payload (payload)
 ) ENGINE=InnoDB;
 
@@ -18,8 +19,8 @@ CREATE TABLE child (
     ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-INSERT INTO parent(parent_id, payload) VALUES
- (1,'p1'), (2,'p2'), (3,'p3');
+INSERT INTO parent(parent_id, payload, note) VALUES
+ (1,'p1','n1'), (2,'p2','n2'), (3,'p3','n3');
 
 INSERT INTO child(child_id, parent_id, child_data) VALUES
  (10,1,'c10'), (11,1,'c11'),
