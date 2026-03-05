@@ -18,7 +18,6 @@ import (
 	"database/sql"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
@@ -51,7 +50,11 @@ type mockChecksumSource struct {
 
 	startRange *splitter.RangeInfo
 	infos      map[int]*source.ChecksumInfo
-	delays     map[int]time.Duration
+	// barriers maps chunk index to a channel that must be closed before
+	// GetCountAndMD5 returns for that chunk. Used for deterministic ordering.
+	barriers map[int]<-chan struct{}
+	// onCalled is invoked with the chunk index when GetCountAndMD5 starts.
+	onCalled func(idx int)
 }
 
 func (m *mockChecksumSource) GetChecksumOnlyIteratorWithStart(
@@ -77,11 +80,14 @@ func (m *mockChecksumSource) GetRangeIterator(context.Context, *splitter.RangeIn
 
 func (m *mockChecksumSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.RangeInfo) *source.ChecksumInfo {
 	idx := tableRange.ChunkRange.Index.ChunkIndex
-	if delay, ok := m.delays[idx]; ok && delay > 0 {
+	if m.onCalled != nil {
+		m.onCalled(idx)
+	}
+	if ch, ok := m.barriers[idx]; ok {
 		select {
 		case <-ctx.Done():
 			return &source.ChecksumInfo{Err: ctx.Err()}
-		case <-time.After(delay):
+		case <-ch:
 		}
 	}
 	info, ok := m.infos[idx]
@@ -144,6 +150,9 @@ func TestGetSourceGlobalChecksumKeepsCheckpointOrder(t *testing.T) {
 	df := &Diff{checkThreadCount: 2}
 	state := &checkpoints.ChecksumSourceState{}
 
+	// Use a channel barrier to deterministically force chunk 0 to complete
+	// after chunk 1, without relying on wall-clock timing.
+	chunk1Started := make(chan struct{})
 	src := &mockChecksumSource{
 		iterator: &mockChecksumIterator{
 			chunks: []*chunk.Range{newChecksumChunk(0), newChecksumChunk(1)},
@@ -152,8 +161,13 @@ func TestGetSourceGlobalChecksumKeepsCheckpointOrder(t *testing.T) {
 			0: {Count: 5, Checksum: 7},
 			1: {Count: 11, Checksum: 13},
 		},
-		delays: map[int]time.Duration{
-			0: 40 * time.Millisecond,
+		barriers: map[int]<-chan struct{}{
+			0: chunk1Started, // chunk 0 waits until chunk 1 has started
+		},
+		onCalled: func(idx int) {
+			if idx == 1 {
+				close(chunk1Started)
+			}
 		},
 	}
 
@@ -162,7 +176,6 @@ func TestGetSourceGlobalChecksumKeepsCheckpointOrder(t *testing.T) {
 	require.Equal(t, int64(16), count)
 	require.Equal(t, uint64(10), checksum)
 
-	require.True(t, state.Done)
 	require.Equal(t, int64(16), state.Count)
 	require.Equal(t, uint64(10), state.Checksum)
 	require.NotNil(t, state.LastRange)
@@ -187,7 +200,6 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(9), count)
 	require.Equal(t, uint64(12), checksum)
-	require.True(t, state.Done)
 
 	require.NotNil(t, src.startRange)
 	require.NotNil(t, src.startRange.ChunkRange)

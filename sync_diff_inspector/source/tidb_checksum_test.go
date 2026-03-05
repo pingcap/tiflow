@@ -28,6 +28,7 @@ func TestGetChecksumSplitFields(t *testing.T) {
 		pkIsHandle     bool
 		isCommonHandle bool
 		expectedFields string
+		expectErr      bool
 	}{
 		{
 			name:           "pk is handle",
@@ -50,6 +51,20 @@ func TestGetChecksumSplitFields(t *testing.T) {
 			isCommonHandle: false,
 			expectedFields: "_tidb_rowid",
 		},
+		{
+			name:           "pk is handle but pk col removed by ignore columns",
+			createTableSQL: "CREATE TABLE `t` (`a` INT, `b` INT)",
+			pkIsHandle:     true,
+			isCommonHandle: false,
+			expectErr:      true,
+		},
+		{
+			name:           "common handle but pk index removed by ignore columns",
+			createTableSQL: "CREATE TABLE `t` (`a` INT, `b` INT)",
+			pkIsHandle:     false,
+			isCommonHandle: true,
+			expectErr:      true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -58,7 +73,13 @@ func TestGetChecksumSplitFields(t *testing.T) {
 			require.NoError(t, err)
 			tableInfo.PKIsHandle = tc.pkIsHandle
 			tableInfo.IsCommonHandle = tc.isCommonHandle
-			require.Equal(t, tc.expectedFields, getChecksumSplitFields(tableInfo))
+			fields, err := getChecksumSplitFields(tableInfo)
+			if tc.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedFields, fields)
+			}
 		})
 	}
 }
