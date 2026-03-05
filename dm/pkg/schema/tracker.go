@@ -574,6 +574,17 @@ func (tr *Tracker) buildForeignKeyRelations(
 		if err != nil {
 			return nil, err
 		}
+		parentColumns, err := getColumnsByNames(parentDTI.TableInfo, fk.RefCols)
+		if err != nil {
+			return nil, err
+		}
+		appendDirectRelation := func() {
+			relations = append(relations, sqlmodel.ForeignKeyCausalityRelation{
+				ParentTable:    parentTableName,
+				ParentColumns:  parentColumns,
+				ChildColumnIdx: childIdxs,
+			})
+		}
 
 		parentNameToIdx := buildColumnIndexMap(parentOriginTI)
 		parentRelations, err := tr.buildForeignKeyRelations(tctx, parentTableID, parentDTI.TableInfo, parentOriginTI, cache, visiting)
@@ -582,15 +593,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 		}
 
 		if len(parentRelations) == 0 {
-			parentColumns, err := getColumnsByNames(parentDTI.TableInfo, fk.RefCols)
-			if err != nil {
-				return nil, err
-			}
-			relations = append(relations, sqlmodel.ForeignKeyCausalityRelation{
-				ParentTable:    parentTableName,
-				ParentColumns:  parentColumns,
-				ChildColumnIdx: childIdxs,
-			})
+			appendDirectRelation()
 			continue
 		}
 
@@ -601,6 +604,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 			}
 		}
 
+		mappedCount := 0
 		for _, parentRelation := range parentRelations {
 			mappedChildIdxs := make([]int, len(parentRelation.ChildColumnIdx))
 			skip := false
@@ -621,6 +625,12 @@ func (tr *Tracker) buildForeignKeyRelations(
 				ParentColumns:  parentRelation.ParentColumns,
 				ChildColumnIdx: mappedChildIdxs,
 			})
+			mappedCount++
+		}
+
+		// Preserve direct child->parent causality when lifted parent relations don't map.
+		if mappedCount == 0 {
+			appendDirectRelation()
 		}
 	}
 
