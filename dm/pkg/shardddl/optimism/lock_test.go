@@ -2738,7 +2738,7 @@ func (t *testLock) TestTrySyncForOneDDL(c *check.C) {
 	c.Assert(schemaChanged, check.IsTrue)
 	c.Assert(conflictStage, check.Equals, ConflictNone)
 
-	// check create partition, no changed since https://github.com/pingcap/tidb-tools/blob/d671b0840063bc2532941f02e02e12627402844c/pkg/schemacmp/table.go#L251
+	// check create partition, no changed since https://github.com/pingcap/tidb/blob/42075e6ad60ba5d1f860ac845908f0c34ac28253/pkg/util/schemacmp/table.go#L256
 	schemaChanged, conflictStage = l.trySyncForOneDDL(source, schema, table1, t0, t1)
 	c.Assert(schemaChanged, check.IsTrue)
 	c.Assert(conflictStage, check.Equals, ConflictNone)
