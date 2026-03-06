@@ -103,6 +103,10 @@ type Source interface {
 	// GetTables represents the tableDiffs.
 	GetTables() []*common.TableDiff
 
+	// GetSourceTable returns the physical source table name mapped from tableDiff.
+	// If no route is configured, it returns the same schema/table as tableDiff.
+	GetSourceTable(*splitter.RangeInfo) (schema string, table string)
+
 	// GetSourceStructInfo get the source table info from a given target table
 	GetSourceStructInfo(context.Context, int) ([]*model.TableInfo, error)
 

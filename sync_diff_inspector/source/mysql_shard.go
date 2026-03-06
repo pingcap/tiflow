@@ -163,6 +163,15 @@ func (s *MySQLSources) GetTables() []*common.TableDiff {
 	return s.tableDiffs
 }
 
+// GetSourceTable returns the physical source table mapped from tableDiff.
+func (s *MySQLSources) GetSourceTable(tableRange *splitter.RangeInfo) (schema string, table string) {
+	tableDiff := s.GetTables()[tableRange.GetTableIndex()]
+	if matchedSources, ok := s.sourceTablesMap[utils.UniqueID(tableDiff.Schema, tableDiff.Table)]; ok && len(matchedSources) > 0 {
+		return matchedSources[0].OriginSchema, matchedSources[0].OriginTable
+	}
+	return tableDiff.Schema, tableDiff.Table
+}
+
 // GenerateFixSQL generate SQL
 func (s *MySQLSources) GenerateFixSQL(t DMLType, upstreamData, downstreamData map[string]*dbutil.ColumnData, tableIndex int) string {
 	switch t {

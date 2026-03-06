@@ -950,3 +950,77 @@ func TestCheckTableMatched(t *testing.T) {
 	require.Equal(t, 1, tables[1].TableLack)
 	require.Equal(t, -1, tables[2].TableLack)
 }
+
+func TestTiDBSourceGetSourceTable(t *testing.T) {
+	tableDiff := &common.TableDiff{
+		Schema: "target_schema",
+		Table:  "target_table",
+	}
+	sourceTableMap := map[string]*common.TableSource{
+		utils.UniqueID("target_schema", "target_table"): {
+			OriginSchema: "source_schema",
+			OriginTable:  "source_table",
+		},
+	}
+	tidb := &TiDBSource{
+		tableDiffs:     []*common.TableDiff{tableDiff},
+		sourceTableMap: sourceTableMap,
+	}
+	tableRange := &splitter.RangeInfo{
+		ChunkRange: chunk.NewChunkRange(nil),
+	}
+	tableRange.ChunkRange.Index.TableIndex = 0
+
+	schema, table := tidb.GetSourceTable(tableRange)
+	require.Equal(t, "source_schema", schema)
+	require.Equal(t, "source_table", table)
+
+	tidb.sourceTableMap = map[string]*common.TableSource{
+		utils.UniqueID("other_schema", "other_table"): {
+			OriginSchema: "other_schema",
+			OriginTable:  "other_table",
+		},
+	}
+	schema, table = tidb.GetSourceTable(tableRange)
+	require.Equal(t, "target_schema", schema)
+	require.Equal(t, "target_table", table)
+}
+
+func TestMySQLSourcesGetSourceTable(t *testing.T) {
+	tableDiff := &common.TableDiff{
+		Schema: "target_schema",
+		Table:  "target_table",
+	}
+	mysql := &MySQLSources{
+		tableDiffs: []*common.TableDiff{tableDiff},
+		sourceTablesMap: map[string][]*common.TableShardSource{
+			utils.UniqueID("target_schema", "target_table"): {
+				{
+					TableSource: common.TableSource{
+						OriginSchema: "source_schema_1",
+						OriginTable:  "source_table_1",
+					},
+				},
+				{
+					TableSource: common.TableSource{
+						OriginSchema: "source_schema_2",
+						OriginTable:  "source_table_2",
+					},
+				},
+			},
+		},
+	}
+	tableRange := &splitter.RangeInfo{
+		ChunkRange: chunk.NewChunkRange(nil),
+	}
+	tableRange.ChunkRange.Index.TableIndex = 0
+
+	schema, table := mysql.GetSourceTable(tableRange)
+	require.Equal(t, "source_schema_1", schema)
+	require.Equal(t, "source_table_1", table)
+
+	mysql.sourceTablesMap = map[string][]*common.TableShardSource{}
+	schema, table = mysql.GetSourceTable(tableRange)
+	require.Equal(t, "target_schema", schema)
+	require.Equal(t, "target_table", table)
+}

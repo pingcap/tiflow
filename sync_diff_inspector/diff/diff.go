@@ -78,6 +78,15 @@ const (
 	checkpointFile = "sync_diff_checkpoints.pb"
 )
 
+func getSplitThreshold() int64 {
+	failpoint.Inject("binsearchSplitThreshold", func(val failpoint.Value) {
+		if threshold, ok := val.(int); ok {
+			failpoint.Return(int64(threshold))
+		}
+	})
+	return int64(splitter.SplitThreshold)
+}
+
 // ChunkDML SQL struct for each chunk
 type ChunkDML struct {
 	node      *checkpoints.Node
@@ -464,7 +473,7 @@ func (df *Diff) consume(ctx context.Context, rangeInfo *splitter.RangeInfo) bool
 		state = checkpoints.FailedState
 		// if the chunk's checksum differ, try to do binary check
 		info := rangeInfo
-		if upCount > splitter.SplitThreshold {
+		if upCount > getSplitThreshold() {
 			log.Debug("count greater than threshold, start do bingenerate", zap.Any("chunk id", rangeInfo.ChunkRange.Index), zap.Int64("upstream chunk size", upCount))
 			info, err = df.BinGenerate(ctx, df.workSource, rangeInfo, upCount)
 			if err != nil {
@@ -489,7 +498,7 @@ func (df *Diff) consume(ctx context.Context, rangeInfo *splitter.RangeInfo) bool
 
 // BinGenerate ...
 func (df *Diff) BinGenerate(ctx context.Context, targetSource source.Source, tableRange *splitter.RangeInfo, count int64) (*splitter.RangeInfo, error) {
-	if count <= splitter.SplitThreshold {
+	if count <= getSplitThreshold() {
 		return tableRange, nil
 	}
 	tableDiff := targetSource.GetTables()[tableRange.GetTableIndex()]
@@ -531,7 +540,7 @@ func (df *Diff) BinGenerate(ctx context.Context, targetSource source.Source, tab
 }
 
 func (df *Diff) binSearch(ctx context.Context, targetSource source.Source, tableRange *splitter.RangeInfo, count int64, tableDiff *common.TableDiff, indexColumns []*model.ColumnInfo) (*splitter.RangeInfo, error) {
-	if count <= splitter.SplitThreshold {
+	if count <= getSplitThreshold() {
 		return tableRange, nil
 	}
 	var (
@@ -543,7 +552,8 @@ func (df *Diff) binSearch(ctx context.Context, targetSource source.Source, table
 
 	chunkLimits, args := tableRange.ChunkRange.ToString(tableDiff.Collation)
 	limitRange := fmt.Sprintf("(%s) AND (%s)", chunkLimits, tableDiff.Range)
-	midValues, err := utils.GetApproximateMidBySize(ctx, targetSource.GetDB(), tableDiff.Schema, tableDiff.Table, indexColumns, limitRange, args, count)
+	sourceSchema, sourceTable := targetSource.GetSourceTable(tableRange)
+	midValues, err := utils.GetApproximateMidBySize(ctx, targetSource.GetDB(), sourceSchema, sourceTable, indexColumns, limitRange, args, count)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
