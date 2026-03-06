@@ -391,7 +391,7 @@ func (s *Server) DMAPIGetSourceTableList(c *gin.Context, sourceName string, sche
 		return
 	}
 	defer baseDB.Close()
-	tableList, err := dbutil.GetTables(c.Request.Context(), baseDB.DB, schemaName)
+	tableList, err := conn.GetTables(c.Request.Context(), baseDB.DB, schemaName)
 	if err != nil {
 		_ = c.Error(err)
 		return
