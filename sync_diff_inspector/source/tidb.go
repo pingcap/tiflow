@@ -88,8 +88,8 @@ func (s *TiDBRowsIterator) Next() (map[string]*dbutil.ColumnData, error) {
 
 // TiDBSource represents the table in TiDB
 type TiDBSource struct {
-	tableDiffs     []*common.TableDiff
-	sourceTableMap map[string]*common.TableSource
+	tableDiffs        []*common.TableDiff
+	sourceTableMap    map[string]*common.TableSource
 	snapshot          string
 	sqlHint           string
 	checksumAlgorithm config.ChecksumAlgorithm
@@ -131,8 +131,8 @@ func (s *TiDBSource) Close() {
 	s.dbConn.Close()
 }
 
-// GetCountAndMD5 returns the checksum info
-func (s *TiDBSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
+// GetCountAndChecksum returns the checksum info
+func (s *TiDBSource) GetCountAndChecksum(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
 	beginTime := time.Now()
 	table := s.tableDiffs[tableRange.GetTableIndex()]
 	chunk := tableRange.GetChunk()

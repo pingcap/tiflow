@@ -909,9 +909,8 @@ func GetCountAndChecksum(
 
 	checksumExpr := fmt.Sprintf(checksumFuncTemplate, concatExpr)
 
-	query := fmt.Sprintf("SELECT %s COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(%s, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(%s, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM %s WHERE %s;",
+	query := fmt.Sprintf("SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(hash, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(hash, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM (SELECT %s %s as hash FROM %s WHERE %s) as t;",
 		indexHint,
-		checksumExpr,
 		checksumExpr,
 		dbutil.TableName(schemaName, tableName),
 		limitRange,

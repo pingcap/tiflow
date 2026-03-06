@@ -64,8 +64,8 @@ func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.
 type MySQLSources struct {
 	tableDiffs []*common.TableDiff
 
-	sourceTablesMap    map[string][]*common.TableShardSource
-	checksumAlgorithm  config.ChecksumAlgorithm
+	sourceTablesMap   map[string][]*common.TableShardSource
+	checksumAlgorithm config.ChecksumAlgorithm
 }
 
 func getMatchedSourcesForTable(sourceTablesMap map[string][]*common.TableShardSource, table *common.TableDiff) []*common.TableShardSource {
@@ -100,8 +100,8 @@ func (s *MySQLSources) Close() {
 	}
 }
 
-// GetCountAndMD5 return count and checksum
-func (s *MySQLSources) GetCountAndMD5(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
+// GetCountAndChecksum return count and checksum
+func (s *MySQLSources) GetCountAndChecksum(ctx context.Context, tableRange *splitter.RangeInfo) *ChecksumInfo {
 	beginTime := time.Now()
 	table := s.tableDiffs[tableRange.GetTableIndex()]
 	chunk := tableRange.GetChunk()
