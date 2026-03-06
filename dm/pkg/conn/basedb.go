@@ -229,6 +229,19 @@ func NewBaseDBForTest(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	}
 }
 
+// NewBaseDBForTestWithVersion returns *BaseDB object for test.
+func NewBaseDBForTestWithVersion(db *sql.DB, version string, doFuncInClose ...func()) *BaseDB {
+	conns := make(map[*BaseConn]struct{})
+	return &BaseDB{
+		DB:            db,
+		conns:         conns,
+		Retry:         &retry.FiniteRetryStrategy{},
+		Scope:         terror.ScopeNotSet,
+		doFuncInClose: doFuncInClose,
+		version:       version,
+	}
+}
+
 // NewMockDB returns *BaseDB object for mock.
 func NewMockDB(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	baseDB := NewBaseDBForTest(db, doFuncInClose...)
