@@ -182,7 +182,7 @@ func TestTiDBSource(t *testing.T) {
 		require.Equal(t, n, tableCase.rangeInfo.GetTableIndex())
 		countRows := sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456)
 		mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
-		checksum := tidb.GetCountAndMD5(ctx, tableCase.rangeInfo)
+		checksum := tidb.GetCountAndChecksum(ctx, tableCase.rangeInfo)
 		require.NoError(t, checksum.Err)
 		require.Equal(t, checksum.Count, int64(123))
 		require.Equal(t, checksum.Checksum, uint64(456))
@@ -403,7 +403,7 @@ func TestMysqlShardSources(t *testing.T) {
 			mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 		}
 
-		checksum := shard.GetCountAndMD5(ctx, tableCase.rangeInfo)
+		checksum := shard.GetCountAndChecksum(ctx, tableCase.rangeInfo)
 		require.NoError(t, checksum.Err)
 		require.Equal(t, checksum.Count, int64(len(dbs)))
 		require.Equal(t, checksum.Checksum, resChecksum)

@@ -58,6 +58,16 @@ const (
 	UnifiedTimeZone string = "+0:00"
 )
 
+// ChecksumAlgorithm specifies the hash function to use for chunk checksumming.
+type ChecksumAlgorithm string
+
+const (
+	// MD5 uses MD5 hash function (default for backwards compatibility)
+	MD5 ChecksumAlgorithm = "md5"
+	// SHA256 uses SHA256 hash function (for FIPS-compliant environments)
+	SHA256 ChecksumAlgorithm = "sha256"
+)
+
 // TableConfig is the config of table.
 type TableConfig struct {
 	// table's filter to tell us which table should adapt to this config.
@@ -128,6 +138,8 @@ type DataSource struct {
 
 	Conn          *sql.DB
 	SessionConfig SessionConfig `toml:"session" json:"session"`
+
+	ChecksumAlgorithm ChecksumAlgorithm `toml:"checksum-algorithm" json:"checksum-algorithm"`
 }
 
 // IsAutoSnapshot returns true if the tidb_snapshot is expected to automatically
@@ -403,6 +415,11 @@ type Config struct {
 	// DMTask string `toml:"dm-task" json:"dm-task"`
 	DMTask string `toml:"dm-task" json:"dm-task"`
 
+	// ChecksumAlgorithm specifies the hash function to use for chunk checksumming.
+	// Options: MD5 or SHA256. Default: MD5 (for backwards compatibility)
+	// Set to SHA256 for FIPS-compliant environments.
+	ChecksumAlgorithm ChecksumAlgorithm `toml:"checksum-algorithm" json:"checksum-algorithm"`
+
 	DataSources map[string]*DataSource `toml:"data-sources" json:"data-sources"`
 
 	Routes map[string]*router.TableRule `toml:"routes" json:"routes"`
@@ -437,8 +454,10 @@ func NewConfig() *Config {
 	fs.BoolVar(&cfg.CheckStructOnly, "check-struct-only", false, "ignore check table's data")
 	fs.BoolVar(&cfg.SkipNonExistingTable, "skip-non-existing-table", false, "skip validation for tables that don't exist upstream or downstream")
 	fs.BoolVar(&cfg.CheckDataOnly, "check-data-only", false, "ignore check table's struct")
+	fs.StringVar((*string)(&cfg.ChecksumAlgorithm), "checksum-algorithm", string(MD5), "checksum function: md5, sha256")
 
 	_ = fs.MarkHidden("check-data-only")
+	_ = fs.MarkHidden("checksum-algorithm")
 
 	fs.SortFlags = false
 	return cfg
@@ -540,12 +559,13 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 	}
 	dataSources := make(map[string]*DataSource)
 	dataSources["target"] = &DataSource{
-		Host:     subTaskCfgs[0].To.Host,
-		Port:     subTaskCfgs[0].To.Port,
-		User:     subTaskCfgs[0].To.User,
-		Password: utils.SecretString(subTaskCfgs[0].To.Password),
-		SQLMode:  sqlMode,
-		Security: parseTLSFromDMConfig(subTaskCfgs[0].To.Security),
+		Host:              subTaskCfgs[0].To.Host,
+		Port:              subTaskCfgs[0].To.Port,
+		User:              subTaskCfgs[0].To.User,
+		Password:          utils.SecretString(subTaskCfgs[0].To.Password),
+		SQLMode:           sqlMode,
+		Security:          parseTLSFromDMConfig(subTaskCfgs[0].To.Security),
+		ChecksumAlgorithm: c.ChecksumAlgorithm,
 	}
 	for _, subTaskCfg := range subTaskCfgs {
 		tableRouter, err := router.NewTableRouter(subTaskCfg.CaseSensitive, []*router.TableRule{})
@@ -561,15 +581,15 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 			routeTargetSet[dbutil.TableName(rule.TargetSchema, rule.TargetTable)] = struct{}{}
 		}
 		dataSources[subTaskCfg.SourceID] = &DataSource{
-			Host:     subTaskCfg.From.Host,
-			Port:     subTaskCfg.From.Port,
-			User:     subTaskCfg.From.User,
-			Password: utils.SecretString(subTaskCfg.From.Password),
-			SQLMode:  sqlMode,
-			Security: parseTLSFromDMConfig(subTaskCfg.From.Security),
-			Router:   tableRouter,
-
-			RouteTargetSet: routeTargetSet,
+			Host:              subTaskCfg.From.Host,
+			Port:              subTaskCfg.From.Port,
+			User:              subTaskCfg.From.User,
+			Password:          utils.SecretString(subTaskCfg.From.Password),
+			SQLMode:           sqlMode,
+			Security:          parseTLSFromDMConfig(subTaskCfg.From.Security),
+			Router:            tableRouter,
+			RouteTargetSet:    routeTargetSet,
+			ChecksumAlgorithm: c.ChecksumAlgorithm,
 		}
 	}
 	c.DataSources = dataSources
@@ -585,6 +605,12 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 
 // Init initialize the config
 func (c *Config) Init() (err error) {
+	checksumAlgo := ChecksumAlgorithm(strings.ToLower(string(c.ChecksumAlgorithm)))
+	if checksumAlgo != MD5 && checksumAlgo != SHA256 {
+		return errors.Errorf("checksum-algorithm must be 'md5' or 'sha256', got: %s", c.ChecksumAlgorithm)
+	}
+	c.ChecksumAlgorithm = checksumAlgo
+
 	if len(c.DMAddr) > 0 {
 		err := c.adjustConfigByDMSubTasks()
 		if err != nil {
@@ -597,6 +623,7 @@ func (c *Config) Init() (err error) {
 		return nil
 	}
 	for _, d := range c.DataSources {
+		d.ChecksumAlgorithm = c.ChecksumAlgorithm
 		routeRuleList := make([]*router.TableRule, 0, len(c.Routes))
 		d.RouteTargetSet = make(map[string]struct{})
 		// if we had rules
