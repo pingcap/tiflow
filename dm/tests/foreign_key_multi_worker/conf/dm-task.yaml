@@ -22,7 +22,7 @@ mysql-instances:
 
 block-allow-list:
   instance:
-    do-dbs: ["fk_demo"]
+    do-dbs: ["fk_chain"]
 
 mydumpers:
   global:
@@ -38,7 +38,6 @@ loaders:
 
 syncers:
   global:
-    worker-count: 1
+    worker-count: 4
     batch: 100
-    safe-mode: true
-    safe-mode-duration: "10m"
+    safe-mode: false
