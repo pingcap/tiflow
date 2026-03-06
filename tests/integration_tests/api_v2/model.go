@@ -63,10 +63,11 @@ type Tso struct {
 	LogicTime int64 `json:"logic_time"`
 }
 
-// Tables contains IneligibleTables and EligibleTables
+// Tables contains IneligibleTables, EligibleTables and AllTables
 type Tables struct {
 	IneligibleTables []TableName `json:"ineligible_tables,omitempty"`
 	EligibleTables   []TableName `json:"eligible_tables,omitempty"`
+	AllTables        []TableName `json:"all_tables,omitempty"`
 }
 
 // TableName contains table information
