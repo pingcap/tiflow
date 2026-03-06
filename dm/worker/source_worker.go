@@ -23,6 +23,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/lightning/pkg/importinto"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -230,9 +231,9 @@ func (w *SourceWorker) Stop(graceful bool) {
 
 	// close or kill all subtasks
 	if graceful {
-		w.subTaskHolder.closeAllSubTasks()
+		w.subTaskHolder.closeAllSubTasksWithCause(importinto.ErrFailoverCancel)
 	} else {
-		w.subTaskHolder.killAllSubTasks()
+		w.subTaskHolder.killAllSubTasksWithCause(importinto.ErrFailoverCancel)
 	}
 
 	if w.relayHolder != nil {
@@ -1362,7 +1363,11 @@ func (w *SourceWorker) refreshSourceCfg() error {
 	if err != nil {
 		return err
 	}
-	w.cfg = sourceCfgM[oldCfg.SourceID]
+	if cfg, ok := sourceCfgM[oldCfg.SourceID]; ok && cfg != nil {
+		w.cfg = cfg
+	} else {
+		w.l.Debug("source config not found in etcd, keep current config", zap.String("sourceID", oldCfg.SourceID))
+	}
 	return nil
 }
 

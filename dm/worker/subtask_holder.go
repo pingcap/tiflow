@@ -57,7 +57,7 @@ func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 		stage := st.Stage()
 		st.Close()
 		// TODO: make a st.reset
-		st.ctx, st.cancel = context.WithCancel(context.Background())
+		st.ctx, st.cancel = context.WithCancelCause(context.Background())
 		st.cfg.UseRelay = relay != nil
 		st.Run(stage, st.getValidatorStage(), relay)
 	}
@@ -65,20 +65,30 @@ func (h *subTaskHolder) resetAllSubTasks(relay relay.Process) {
 
 // closeAllSubTasks closes all subtask instances.
 func (h *subTaskHolder) closeAllSubTasks() {
+	h.closeAllSubTasksWithCause(context.Canceled)
+}
+
+// closeAllSubTasksWithCause closes all subtask instances with a cancel cause.
+func (h *subTaskHolder) closeAllSubTasksWithCause(cause error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
-		st.Close()
+		st.CloseWithCause(cause)
 	}
 	h.subTasks = make(map[string]*SubTask)
 }
 
 // killAllSubTasks kill and stop all subtask instances.
 func (h *subTaskHolder) killAllSubTasks() {
+	h.killAllSubTasksWithCause(context.Canceled)
+}
+
+// killAllSubTasksWithCause kill and stop all subtask instances with a cancel cause.
+func (h *subTaskHolder) killAllSubTasksWithCause(cause error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
-		st.Kill()
+		st.KillWithCause(cause)
 	}
 	h.subTasks = make(map[string]*SubTask)
 }
