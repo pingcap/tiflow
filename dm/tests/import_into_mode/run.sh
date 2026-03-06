@@ -210,9 +210,8 @@ function run_target_table_not_empty_resume_test() {
 		'"stage": "Paused"' 1 \
 		"target table is not empty" 1
 
-	echo "truncate downstream tables and resume task"
+	echo "truncate downstream table and resume task"
 	run_sql_tidb "truncate table ${db}.t1;"
-	run_sql_tidb "truncate table ${db}.t2;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
 		"\"result\": true" 2 \
