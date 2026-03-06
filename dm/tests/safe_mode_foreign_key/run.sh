@@ -69,7 +69,7 @@ function run() {
 	run_sql_source1 "UPDATE fk_demo.parent SET payload='p2_v2' WHERE parent_id=2;"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 2 \
+		"\"stage\": \"Paused\"" 1 \
 		"\"PK/UK changes\"" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -92,7 +92,7 @@ function run() {
 	run_sql_source1 "CREATE TABLE fk_demo.child_extra (id INT PRIMARY KEY, parent_id INT, CONSTRAINT fk_child_extra FOREIGN KEY (parent_id) REFERENCES fk_demo.parent(parent_id));"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Paused\"" 2 \
+		"\"stage\": \"Paused\"" 1 \
 		"\"foreign_key_checks=1\"" 1
 }
 
