@@ -18,14 +18,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	grpcTesting "github.com/grpc-ecosystem/go-grpc-middleware/testing"
 	grpcTestingProto "github.com/grpc-ecosystem/go-grpc-middleware/testing/testproto"
-	"github.com/integralist/go-findroot/find"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -179,14 +178,12 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 }
 
 func makeCredential4Testing(t *testing.T) *security.Credential {
-	stat, err := find.Repo()
-	require.NoError(t, err)
-
-	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
+	t.Helper()
+	tlsPath := filepath.Clean("../../tests/integration_tests/_certificates")
 	return &security.Credential{
-		CAPath:        path.Join(tlsPath, "ca.pem"),
-		CertPath:      path.Join(tlsPath, "server.pem"),
-		KeyPath:       path.Join(tlsPath, "server-key.pem"),
+		CAPath:        filepath.Join(tlsPath, "ca.pem"),
+		CertPath:      filepath.Join(tlsPath, "server.pem"),
+		KeyPath:       filepath.Join(tlsPath, "server-key.pem"),
 		CertAllowedCN: nil,
 	}
 }
