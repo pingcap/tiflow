@@ -229,7 +229,7 @@ func NewBaseDBForTest(db *sql.DB, doFuncInClose ...func()) *BaseDB {
 	}
 }
 
-// NewBaseDBForTest returns *BaseDB object for test.
+// NewBaseDBForTestWithVersion returns *BaseDB object for test.
 func NewBaseDBForTestWithVersion(db *sql.DB, version string, doFuncInClose ...func()) *BaseDB {
 	conns := make(map[*BaseConn]struct{})
 	return &BaseDB{
