@@ -104,8 +104,14 @@ func GetRandomServerID(ctx *tcontext.Context, db *BaseDB) (uint32, error) {
 
 // GetSlaveServerID gets all slave server id.
 func GetSlaveServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, error) {
+	replicaQuery := `SHOW SLAVE HOSTS`
+
+	if db.needsModernTerminology() {
+		replicaQuery = `SHOW REPLICAS`
+	}
+
 	// need REPLICATION SLAVE privilege
-	rows, err := db.QueryContext(ctx, `SHOW SLAVE HOSTS`)
+	rows, err := db.QueryContext(ctx, replicaQuery)
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 	}
@@ -115,7 +121,7 @@ func GetSlaveServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, e
 	}()
 
 	/*
-		in MySQL:
+		in MySQL 8.0:
 		mysql> SHOW SLAVE HOSTS;
 		+------------+-----------+------+-----------+--------------------------------------+
 		| Server_id  | Host      | Port | Master_id | Slave_UUID                           |
@@ -123,6 +129,14 @@ func GetSlaveServerID(ctx *tcontext.Context, db *BaseDB) (map[uint32]struct{}, e
 		|  192168010 | iconnect2 | 3306 | 192168011 | 14cb6624-7f93-11e0-b2c0-c80aa9429562 |
 		| 1921680101 | athena    | 3306 | 192168011 | 07af4990-f41f-11df-a566-7ac56fdaf645 |
 		+------------+-----------+------+-----------+--------------------------------------+
+
+		in MySQL 8.4:
+		mysql> SHOW REPLICAS;
+		+-----------+----------------+------+-----------+--------------------------------------+
+		| Server_Id | Host           | Port | Source_Id | Replica_UUID                         |
+		+-----------+----------------+------+-----------+--------------------------------------+
+		| 429529559 | 127.0.0.1:8262 | 3306 |         1 | 6d0690c3-bf12-11f0-affc-22222d34d411 |
+		+-----------+----------------+------+-----------+--------------------------------------+
 
 		in MariaDB:
 		mysql> SHOW SLAVE HOSTS;

@@ -436,11 +436,26 @@ func TestGetSlaveServerID(t *testing.T) {
 	require.NoError(t, err)
 
 	cases := []struct {
+		version string
+		stmt    string
 		rows    *sqlmock.Rows
 		results map[uint32]struct{}
 	}{
-		// For MySQL
+		// For MySQL 8.4
 		{
+			"8.4.8",
+			"SHOW REPLICAS",
+			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Source_id", "Replica_UUID"}).
+				AddRow(192168010, "iconnect2", 3306, 192168011, "14cb6624-7f93-11e0-b2c0-c80aa9429562").
+				AddRow(1921680101, "athena", 3306, 192168011, "07af4990-f41f-11df-a566-7ac56fdaf645"),
+			map[uint32]struct{}{
+				192168010: {}, 1921680101: {},
+			},
+		},
+		// For MySQL 8.0
+		{
+			"8.0.45",
+			"SHOW SLAVE HOSTS",
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id", "Slave_UUID"}).
 				AddRow(192168010, "iconnect2", 3306, 192168011, "14cb6624-7f93-11e0-b2c0-c80aa9429562").
 				AddRow(1921680101, "athena", 3306, 192168011, "07af4990-f41f-11df-a566-7ac56fdaf645"),
@@ -450,6 +465,8 @@ func TestGetSlaveServerID(t *testing.T) {
 		},
 		// For MariaDB
 		{
+			"10.4.7-MariaDB",
+			"SHOW SLAVE HOSTS",
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(192168010, "iconnect2", 3306, 192168011).
 				AddRow(1921680101, "athena", 3306, 192168011),
@@ -459,6 +476,8 @@ func TestGetSlaveServerID(t *testing.T) {
 		},
 		// For MariaDB, with Server_id greater than 2^31, to test uint conversion
 		{
+			"10.4.7-MariaDB",
+			"SHOW SLAVE HOSTS",
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(2147483649, "iconnect2", 3306, 192168011).
 				AddRow(2147483650, "athena", 3306, 192168011),
@@ -470,8 +489,8 @@ func TestGetSlaveServerID(t *testing.T) {
 
 	tctx := tcontext.NewContext(context.Background(), log.L())
 	for _, ca := range cases {
-		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
-		results, err2 := GetSlaveServerID(tctx, NewBaseDBForTest(db))
+		mock.ExpectQuery(ca.stmt).WillReturnRows(ca.rows)
+		results, err2 := GetSlaveServerID(tctx, NewBaseDBForTestWithVersion(db, ca.version))
 		require.NoError(t, err2)
 		require.Equal(t, ca.results, results)
 	}
