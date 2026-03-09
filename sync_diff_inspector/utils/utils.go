@@ -866,7 +866,7 @@ func GetCountAndChecksum(
 ) (int64, uint64, error) {
 	/*
 		calculate checksum and count example (MD5):
-		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM `a`.`t`;
+		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(hash, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(hash, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM (SELECT MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))) as hash FROM `a`.`t` WHERE TRUE) as t;
 		+--------+----------------------
 		|  CNT   | CHECKSUM            |
 		+--------+----------------------
@@ -875,7 +875,7 @@ func GetCountAndChecksum(
 		1 row in set (0.46 sec)
 
 		calculate checksum and count example (SHA256):
-		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(SHA2(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`))), 256), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(SHA2(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`))), 256), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM `a`.`t`;
+		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(hash, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(hash, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM (SELECT SHA2(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`))), 256) as hash FROM `a`.`t` WHERE TRUE) as t;
 	*/
 	columnNames := make([]string, 0, len(tbInfo.Columns))
 	columnIsNull := make([]string, 0, len(tbInfo.Columns))
