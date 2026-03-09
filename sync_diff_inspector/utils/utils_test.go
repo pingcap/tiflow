@@ -23,7 +23,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/stretchr/testify/require"
@@ -741,22 +740,4 @@ func TestCompareTableWithDiffernetIndexOrFK(t *testing.T) {
 		require.Equal(t, tc.isSkip, isSkip)
 		require.Equal(t, tc.isEqual, isEqual)
 	}
-
-	t.Run("index metadata normalization", func(t *testing.T) {
-		parser := parser.New()
-		upstreamTbl, err := GetTableInfoBySQL("CREATE TABLE `t1`(`id` int, `c1` int, PRIMARY KEY (`id`))", parser)
-		require.NoError(t, err)
-		downstreamTbl, err := GetTableInfoBySQL("CREATE TABLE `t1`(`id` int, `c1` int, PRIMARY KEY (`id`))", parser)
-		require.NoError(t, err)
-
-		// TableInfo builders can disagree on internal index metadata while
-		// describing the same SQL definition. CompareStruct should compare the
-		// logical index definition instead of these derived fields.
-		upstreamTbl.Indices[0].Name = pmodel.NewCIStr("primary")
-		upstreamTbl.Indices[0].Columns[0].Offset = -1
-
-		isEqual, isSkip := CompareStruct([]*model.TableInfo{upstreamTbl}, downstreamTbl)
-		require.False(t, isSkip)
-		require.True(t, isEqual)
-	})
 }

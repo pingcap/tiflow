@@ -509,7 +509,7 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		cnt   int
 	})
 	for _, index := range downstreamTableInfo.Indices {
-		downstreamIndicesMap[index.Name.L] = &struct {
+		downstreamIndicesMap[index.Name.O] = &struct {
 			index *model.IndexInfo
 			cnt   int
 		}{index, 0}
@@ -517,42 +517,40 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 	for _, upstreamTableInfo := range upstreamTableInfos {
 	NextIndex:
 		for _, upstreamIndex := range upstreamTableInfo.Indices {
-			indexKey := upstreamIndex.Name.L
-			if _, ok := deleteIndicesSet[indexKey]; ok {
+			if _, ok := deleteIndicesSet[upstreamIndex.Name.O]; ok {
 				continue NextIndex
 			}
 
-			indexU, ok := downstreamIndicesMap[indexKey]
+			indexU, ok := downstreamIndicesMap[upstreamIndex.Name.O]
 			if ok {
 				if len(indexU.index.Columns) != len(upstreamIndex.Columns) {
 					// different index, should be removed
-					deleteIndicesSet[indexKey] = struct{}{}
+					deleteIndicesSet[upstreamIndex.Name.O] = struct{}{}
 					continue NextIndex
 				}
 
 				for i, indexColumn := range upstreamIndex.Columns {
-					if indexColumn.Name.L != indexU.index.Columns[i].Name.L {
+					if indexColumn.Offset != indexU.index.Columns[i].Offset || indexColumn.Name.O != indexU.index.Columns[i].Name.O {
 						// different index, should be removed
-						deleteIndicesSet[indexKey] = struct{}{}
+						deleteIndicesSet[upstreamIndex.Name.O] = struct{}{}
 						continue NextIndex
 					}
 				}
 				indexU.cnt = indexU.cnt + 1
 			} else {
-				unilateralIndicesSet[indexKey] = struct{}{}
+				unilateralIndicesSet[upstreamIndex.Name.O] = struct{}{}
 			}
 		}
 	}
 
 	existBilateralIndex := false
 	for _, indexU := range downstreamIndicesMap {
-		indexKey := indexU.index.Name.L
-		if _, ok := deleteIndicesSet[indexKey]; ok {
+		if _, ok := deleteIndicesSet[indexU.index.Name.O]; ok {
 			continue
 		}
 		if indexU.cnt < len(upstreamTableInfos) {
 			// Some upstreamInfos don't have this index.
-			unilateralIndicesSet[indexKey] = struct{}{}
+			unilateralIndicesSet[indexU.index.Name.O] = struct{}{}
 		} else {
 			// there is an index the whole tables have,
 			// so unilateral indices can be deleted.
@@ -572,7 +570,7 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 	if len(deleteIndicesSet) > 0 {
 		newDownstreamIndices := make([]*model.IndexInfo, 0, len(downstreamTableInfo.Indices))
 		for _, index := range downstreamTableInfo.Indices {
-			if _, ok := deleteIndicesSet[index.Name.L]; !ok {
+			if _, ok := deleteIndicesSet[index.Name.O]; !ok {
 				newDownstreamIndices = append(newDownstreamIndices, index)
 			} else {
 				log.Debug("delete downstream index", zap.String("name", downstreamTableInfo.Name.O), zap.String("index", index.Name.O))
@@ -583,7 +581,7 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		for _, upstreamTableInfo := range upstreamTableInfos {
 			newUpstreamIndices := make([]*model.IndexInfo, 0, len(upstreamTableInfo.Indices))
 			for _, index := range upstreamTableInfo.Indices {
-				if _, ok := deleteIndicesSet[index.Name.L]; !ok {
+				if _, ok := deleteIndicesSet[index.Name.O]; !ok {
 					newUpstreamIndices = append(newUpstreamIndices, index)
 				} else {
 					log.Debug("delete upstream index", zap.String("name", upstreamTableInfo.Name.O), zap.String("index", index.Name.O))
