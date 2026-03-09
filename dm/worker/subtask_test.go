@@ -355,7 +355,7 @@ func (t *testSubTask) TestKillWithCauseDoesNotCancelBeforeKill(c *check.C) {
 	st.Run(pb.Stage_Running, pb.Stage_InvalidStage, nil)
 	<-u.started
 
-	st.KillWithCause(errors.New("test"))
+	st.killWithCause(errors.New("test"))
 	c.Assert(u.canceledAtKill, check.IsFalse)
 }
 

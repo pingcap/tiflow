@@ -73,7 +73,7 @@ func (h *subTaskHolder) closeAllSubTasksWithCause(cause error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
-		st.CloseWithCause(cause)
+		st.closeWithCause(cause)
 	}
 	h.subTasks = make(map[string]*SubTask)
 }
@@ -88,7 +88,7 @@ func (h *subTaskHolder) killAllSubTasksWithCause(cause error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	for _, st := range h.subTasks {
-		st.KillWithCause(cause)
+		st.killWithCause(cause)
 	}
 	h.subTasks = make(map[string]*SubTask)
 }

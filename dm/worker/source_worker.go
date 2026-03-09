@@ -23,10 +23,10 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/lightning/pkg/importinto"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/cancelcause"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -215,6 +215,16 @@ func (w *SourceWorker) Start() {
 
 // Stop stops working and releases resources.
 func (w *SourceWorker) Stop(graceful bool) {
+	w.stopWithCause(graceful, cancelcause.WorkerStopCause())
+}
+
+// StopForFailover stops working and releases resources, but keeps IMPORT INTO jobs running
+// so a new DM worker instance can take over (failover / rebalance).
+func (w *SourceWorker) StopForFailover(graceful bool) {
+	w.stopWithCause(graceful, cancelcause.WorkerFailoverCause())
+}
+
+func (w *SourceWorker) stopWithCause(graceful bool, cause error) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")
 		return
@@ -231,9 +241,9 @@ func (w *SourceWorker) Stop(graceful bool) {
 
 	// close or kill all subtasks
 	if graceful {
-		w.subTaskHolder.closeAllSubTasksWithCause(importinto.ErrFailoverCancel)
+		w.subTaskHolder.closeAllSubTasksWithCause(cause)
 	} else {
-		w.subTaskHolder.killAllSubTasksWithCause(importinto.ErrFailoverCancel)
+		w.subTaskHolder.killAllSubTasksWithCause(cause)
 	}
 
 	if w.relayHolder != nil {

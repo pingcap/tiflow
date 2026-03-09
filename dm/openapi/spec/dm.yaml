@@ -1703,7 +1703,12 @@ components:
         data_dir:
           type: string
           example: "./exported_data"
-          description: "storage dir name"
+          description: |-
+            Storage directory for full import.
+
+            Notes:
+            - When `import_mode` is `import-into`, this must be a shared storage URI (for example, `s3://bucket/prefix`).
+            - Local filesystem paths (for example, `/data/...` or `./exported_data`) are rejected when `import_mode` is `import-into`.
         consistency:
           type: string
           example: "auto"
@@ -1711,7 +1716,16 @@ components:
         import_mode:
           type: string
           example: "logical"
-          description: "to control import mode of full import"
+          description: |-
+            Import mode of full import.
+
+            Notes:
+            - `import-into` does not support sharding / multi-source tasks (for example, when `task.shard_mode` is set, or `source_config.source_conf` contains multiple sources).
+            - `import-into` requires `data_dir` to be a shared storage URI (for example, `s3://bucket/prefix`).
+
+            Validation failures (error message may be returned):
+            - `import-into` + sharding/multi-source: "import-into mode does not support sharding"
+            - `import-into` + local `data_dir`: "import-into mode requires shared storage"
           enum:
             - "logical"
             - "physical"

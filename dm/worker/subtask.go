@@ -556,11 +556,11 @@ func (st *SubTask) Result() *pb.ProcessResult {
 
 // Close stops the sub task.
 func (st *SubTask) Close() {
-	st.CloseWithCause(context.Canceled)
+	st.closeWithCause(context.Canceled)
 }
 
-// CloseWithCause stops the sub task with a cancel cause.
-func (st *SubTask) CloseWithCause(cause error) {
+// closeWithCause stops the sub task with a cancel cause.
+func (st *SubTask) closeWithCause(cause error) {
 	st.l.Info("closing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
@@ -576,11 +576,11 @@ func (st *SubTask) CloseWithCause(cause error) {
 
 // Kill kill running unit and stop the sub task.
 func (st *SubTask) Kill() {
-	st.KillWithCause(context.Canceled)
+	st.killWithCause(context.Canceled)
 }
 
-// KillWithCause kill running unit and stop the sub task with a cancel cause.
-func (st *SubTask) KillWithCause(cause error) {
+// killWithCause kill running unit and stop the sub task with a cancel cause.
+func (st *SubTask) killWithCause(cause error) {
 	st.l.Info("killing")
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")

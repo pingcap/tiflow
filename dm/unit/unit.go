@@ -149,10 +149,11 @@ func IsResumableError(err *pb.ProcessError) bool {
 		// - table may be dropped by other lightning: treat "doesn't exist" as resumable
 		// - table is temporarily in Import mode (e.g. "Table t1 is in mode Import") after cancel,
 		//   downstream may switch it back to normal later, so treat it as resumable too.
-		if strings.Contains(err.RawCause, "doesn't exist") {
+		rawCauseLower := strings.ToLower(err.RawCause)
+		if strings.Contains(rawCauseLower, "doesn't exist") {
 			return true
 		}
-		if strings.Contains(err.RawCause, "is in mode Import") {
+		if strings.Contains(rawCauseLower, "is in mode import") {
 			return true
 		}
 		return false
