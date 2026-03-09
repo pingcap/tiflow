@@ -403,10 +403,6 @@ var (
 		"canal encode failed",
 		errors.RFCCodeText("CDC:ErrCanalEncodeFailed"),
 	)
-	ErrOldValueNotEnabled = errors.Normalize(
-		"old value is not enabled",
-		errors.RFCCodeText("CDC:ErrOldValueNotEnabled"),
-	)
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),
@@ -420,7 +416,7 @@ var (
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
 	)
 	ErrMessageTooLarge = errors.Normalize(
-		"message is too large",
+		"message is too large. table:%s, length:%d, maxMessageBytes:%d",
 		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(

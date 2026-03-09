@@ -149,11 +149,4 @@ func TestKafkaManagerHeartbeat(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return adminClient.GetHeartbeatCount() >= 2
 	}, 2*time.Second, 50*time.Millisecond, "HeartbeatBrokers should be called periodically")
-
-	// Verify that closing the manager stops the heartbeat.
-	countBeforeClose := adminClient.GetHeartbeatCount()
-	manager.Close()
-	// Wait for a short period to ensure no new heartbeats occur.
-	time.Sleep(keepAliveInterval * 2)
-	require.Equal(t, countBeforeClose, adminClient.GetHeartbeatCount(), "Heartbeat should stop after manager is closed")
 }

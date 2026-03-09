@@ -244,7 +244,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 			zap.Int("maxMessageBytes", a.config.MaxMessageBytes),
 			zap.Int("length", message.Length()),
 			zap.Any("table", e.TableInfo.TableName))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.Length())
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs(message.GetTable(), message.Length(), a.config.MaxMessageBytes)
 	}
 
 	a.result = append(a.result, message)

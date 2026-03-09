@@ -19,7 +19,6 @@ import (
 	"io"
 	"net/http"
 	"path/filepath"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -180,12 +179,7 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 
 func makeCredential4Testing(t *testing.T) *security.Credential {
 	t.Helper()
-
-	_, file, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	tlsPath := filepath.Join(repoRoot, "tests", "integration_tests", "_certificates")
+	tlsPath := filepath.Clean("../../tests/integration_tests/_certificates")
 	return &security.Credential{
 		CAPath:        filepath.Join(tlsPath, "ca.pem"),
 		CertPath:      filepath.Join(tlsPath, "server.pem"),

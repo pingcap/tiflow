@@ -72,7 +72,7 @@ func (e *encoder) AppendRowChangedEvent(
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("length", length),
 			zap.Any("table", event.TableInfo.TableName))
-		return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		return cerror.ErrMessageTooLarge.GenWithStackByArgs(result.GetTable(), length, e.config.MaxMessageBytes)
 	}
 
 	var claimCheckLocation string
@@ -109,7 +109,7 @@ func (e *encoder) AppendRowChangedEvent(
 		zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 		zap.Int("length", result.Length()),
 		zap.Any("table", event.TableInfo.TableName))
-	return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+	return cerror.ErrMessageTooLarge.GenWithStackByArgs(result.GetTable(), result.Length(), e.config.MaxMessageBytes)
 }
 
 // Build implement the RowEventEncoder interface
@@ -153,7 +153,7 @@ func (e *encoder) EncodeDDLEvent(event *model.DDLEvent) (*common.Message, error)
 			zap.Int("maxMessageBytes", e.config.MaxMessageBytes),
 			zap.Int("length", result.Length()),
 			zap.Any("table", event.TableInfo.TableName))
-		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		return nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(result.GetTable(), result.Length(), e.config.MaxMessageBytes)
 	}
 	return result, nil
 }

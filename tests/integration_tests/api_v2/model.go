@@ -253,6 +253,8 @@ type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
 	PartitionRule string   `json:"partition"`
 	TopicRule     string   `json:"topic"`
+	IndexName     string   `json:"index,omitempty"`
+	Columns       []string `json:"columns,omitempty"`
 }
 
 // ColumnSelector represents a column selector for a table.
