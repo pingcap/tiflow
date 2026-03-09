@@ -322,6 +322,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	}
 
 	// import-into mode requires shared storage (s3, gcs, azure, etc.)
+	if isImportInto && strings.TrimSpace(c.LoaderConfig.Dir) == "" {
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
+	}
 	if isImportInto && storage.IsLocalDiskPath(c.LoaderConfig.Dir) {
 		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
 	}

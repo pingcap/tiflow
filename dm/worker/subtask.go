@@ -424,13 +424,19 @@ func (st *SubTask) closeUnitsWithCause(cause error) {
 	}
 }
 
-func (st *SubTask) killCurrentUnit() {
-	if st.CurrUnit() != nil {
-		ut := st.CurrUnit().Type()
-		st.l.Info("kill unit", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
-		st.CurrUnit().Kill()
-		st.l.Info("kill unit done", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
+func (st *SubTask) killCurrentUnitWithCause(cause error) {
+	cu := st.CurrUnit()
+	if cu == nil {
+		return
 	}
+	ut := cu.Type()
+	st.l.Info("kill unit", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
+	if killer, ok := cu.(unitKillerWithCause); ok {
+		killer.KillWithCause(cause)
+	} else {
+		cu.Kill()
+	}
+	st.l.Info("kill unit done", zap.String("task", st.cfg.Name), zap.Stringer("unit", ut))
 }
 
 // getNextUnit gets the next process unit from st.units
@@ -579,6 +585,10 @@ func (st *SubTask) Kill() {
 	st.killWithCause(context.Canceled)
 }
 
+type unitKillerWithCause interface {
+	KillWithCause(cause error)
+}
+
 // killWithCause kill running unit and stop the sub task with a cancel cause.
 func (st *SubTask) killWithCause(cause error) {
 	st.l.Info("killing")
@@ -590,7 +600,7 @@ func (st *SubTask) killWithCause(cause error) {
 		cause = context.Canceled
 	}
 	// Kill should be ungraceful: kill the running unit first, then cancel the subtask context.
-	st.killCurrentUnit()
+	st.killCurrentUnitWithCause(cause)
 	st.closeUnitsWithCause(cause) // close all un-closed units
 
 	cfg := st.getCfg()

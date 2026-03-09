@@ -643,13 +643,25 @@ func (l *LightningLoader) Close() {
 
 // Kill does ungraceful shutdown.
 func (l *LightningLoader) Kill() {
-	// TODO: implement kill
-	l.Close()
+	l.KillWithCause(context.Canceled)
+}
+
+// KillWithCause does ungraceful shutdown with a cancel cause.
+// This is used by DM-worker failover so IMPORT INTO jobs can be preserved for takeover.
+func (l *LightningLoader) KillWithCause(cause error) {
+	l.pauseWithCause(cause)
+	l.removeLabelValuesWithTaskInMetrics(l.cfg.Name, l.cfg.SourceID)
+	l.checkPointList.Close()
+	l.closed.Store(true)
 }
 
 // Pause pauses the process, and it can be resumed later
 // should cancel context from external.
 func (l *LightningLoader) Pause() {
+	l.pauseWithCause(context.Canceled)
+}
+
+func (l *LightningLoader) pauseWithCause(cause error) {
 	l.Lock()
 	defer l.Unlock()
 	if l.isClosed() {
@@ -657,7 +669,10 @@ func (l *LightningLoader) Pause() {
 		return
 	}
 	if l.cancel != nil {
-		l.cancel(context.Canceled)
+		if cause == nil {
+			cause = context.Canceled
+		}
+		l.cancel(cause)
 	}
 	l.core.Stop()
 }

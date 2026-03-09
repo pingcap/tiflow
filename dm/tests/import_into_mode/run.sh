@@ -129,31 +129,44 @@ function run_local_dir_reject_test() {
 }
 
 function run_ha_failover_test() {
-	echo "=== Running import-into mode HA failover test ==="
+	echo "=== Running import-into mode HA failover test (keepalive-loss) ==="
 
 	run_sql_tidb "drop database if exists ${db};"
 
 	cleanup_s3
 	start_s3
 
+	echo "prepare source data"
+	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+
+	# Restart worker1 with failpoints:
+	# - Hold the Load unit for a while to make the observation deterministic.
+	# - Interrupt etcd keepalive once to trigger the ungraceful keepalive-loss failover path.
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/loader/longLoadProcess=return(20);github.com/pingcap/tiflow/dm/pkg/ha/InterruptKeepAlive=1*sleep(15000)"
+	echo "restart worker1 with failpoints (hold Load + interrupt keepalive once)"
+	kill_process $WORK_DIR/worker1 || true
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	export GO_FAILPOINTS=''
+
 	# start worker2 (available for failover)
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
-
-	echo "prepare source data"
-	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	echo "start task with import-into mode"
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
 	sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task.yaml
 	dmctl_start_task_standalone $WORK_DIR/dm-task.yaml "--remove-meta"
 
-	# wait until the task enters the Load phase, then kill worker1 to simulate failover
+	# wait until the task enters the Load phase (held by failpoint above)
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		'"unit": "Load"' 1
-	echo "killing worker1 to simulate failover (after Load started)"
-	kill_process $WORK_DIR/worker1 || true
+
+	# wait until keepalive-loss triggers failover and source is rebound to worker2
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"list-member --name worker2" \
+		"\"source\": \"$SOURCE_ID1\"" 1
 
 	# wait for sync to resume on remaining worker
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \

@@ -868,6 +868,13 @@ func (c *TaskConfig) adjust() error {
 			inst.Loader.PoolSize = inst.LoaderThread
 		}
 
+		// import-into does not support sharding / multi-source tasks.
+		// NOTE: TaskConfig.adjust() runs before generating SubTaskConfig, so we validate it here
+		// to avoid multi-source import-into tasks passing admission and failing later at runtime.
+		if len(c.MySQLInstances) > 1 && strings.EqualFold(string(inst.Loader.ImportMode), string(LoadModeImportInto)) {
+			return terror.ErrConfigImportIntoShardingNotSupport.Generate()
+		}
+
 		if len(inst.SyncerConfigName) > 0 {
 			rule, ok := c.Syncers[inst.SyncerConfigName]
 			if !ok {

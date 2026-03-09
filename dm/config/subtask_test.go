@@ -220,6 +220,15 @@ func TestSubTaskAdjustFail(t *testing.T) {
 			},
 			"Message: import-into mode requires shared storage",
 		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.LoaderConfig.ImportMode = LoadModeImportInto
+				cfg.LoaderConfig.Dir = ""
+				return cfg
+			},
+			"Message: import-into mode requires shared storage",
+		},
 	}
 
 	for _, tc := range testCases {
