@@ -63,6 +63,7 @@ require (
 	github.com/mailru/easyjson v0.7.7
 	github.com/mattn/go-shellwords v1.0.12
 	github.com/modern-go/reflect2 v1.0.2
+	github.com/olekukonko/tablewriter v0.0.5
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
 	github.com/pierrec/lz4/v4 v4.1.18
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
