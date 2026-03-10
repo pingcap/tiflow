@@ -564,6 +564,9 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	return ti, nil
 }
 
+// buildForeignKeyRelations builds causality relations for the current child table.
+// It walks parent tables recursively so a child row can be lifted into the same
+// causality key domain as the root/ultimate parent row, not only its direct parent.
 func (tr *Tracker) buildForeignKeyRelations(
 	tctx *tcontext.Context,
 	tableID string,
@@ -700,6 +703,8 @@ func (tr *Tracker) buildForeignKeyRelations(
 			continue
 		}
 
+		// Map the direct parent column positions referenced by the current FK back to
+		// the current child row's visible-column indexes.
 		parentIndexToChild := make(map[int]int, len(fk.RefCols))
 		for i, refCol := range fk.RefCols {
 			if idx, ok := parentNameToIdx[refCol.L]; ok {
@@ -709,6 +714,8 @@ func (tr *Tracker) buildForeignKeyRelations(
 
 		mappedCount := 0
 		for _, parentRelation := range parentRelations {
+			// Reuse the already-lifted parent relation by projecting each parent-side
+			// column index in that relation back onto the current child row.
 			mappedChildIdxs := make([]int, len(parentRelation.ChildColumnIdx))
 			skip := false
 			for i, parentIdx := range parentRelation.ChildColumnIdx {

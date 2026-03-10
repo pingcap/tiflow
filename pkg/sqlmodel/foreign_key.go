@@ -17,9 +17,11 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 )
 
-// ForeignKeyCausalityRelation describes how a row's values relate to a root parent table for causality checks.
-// ChildColumnIdx indexes refer to the row values of the current table (excluding hidden columns),
-// while ParentColumns and ParentTable describe the ultimate parent key the row should collide with.
+// ForeignKeyCausalityRelation describes how a row's values relate to the parent key
+// domain used for causality checks.
+// ChildColumnIdx indexes refer to the row values of the current table (excluding hidden columns).
+// ParentColumns and ParentTable describe the key the row should collide with after recursive lifting,
+// so ParentTable may represent a direct parent or a higher-level ancestor/root parent.
 type ForeignKeyCausalityRelation struct {
 	ParentTable    string
 	ParentColumns  []*timodel.ColumnInfo
