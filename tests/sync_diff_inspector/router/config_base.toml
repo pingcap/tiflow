@@ -1,0 +1,39 @@
+# Diff Configuration.
+
+######################### Global config #########################
+
+# how many goroutines are created to check data
+check-thread-count = 4
+
+# set false if just want compare data by checksum, will skip select data when checksum is not equal.
+# set true if want compare all different rows, will slow down the total compare time.
+export-fix-sql = true
+
+# ignore check table's data
+check-struct-only = false
+
+######################### Databases config #########################
+[data-sources]
+[data-sources.tidb_up]
+    host = "127.0.0.1"
+    port = 4001
+    user = "root"
+    password = ""
+    route-rules = ["rule1"]
+
+[data-sources.mysql_down]
+    host = "127.0.0.1"#MYSQL_HOST
+    port = 3306#MYSQL_PORT
+    user = "root"
+    password = ""
+
+[routes.rule1]
+schema-pattern = "route_up_test"
+target-schema = "route_down_test"
+
+######################### Task config #########################
+[task]
+    output-dir = "/tmp/tidb_tools_test/sync_diff_inspector/output"
+    source-instances = ["tidb_up"]
+    target-instance = "mysql_down"
+    target-check-tables = ["route_down_test.t_route"]
