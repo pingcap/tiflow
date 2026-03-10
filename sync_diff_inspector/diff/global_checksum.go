@@ -199,6 +199,8 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		progress.Inc(progressID)
 		df.report.SetTableDataCheckResult(schema, table, equal, 0, 0, upCount, downCount, chunkID)
 
+		// Safe without checksumCheckpointMu: eg.Wait() has returned, so the
+		// ticker goroutine (the only concurrent reader) has already exited.
 		checkpointState.Upstream.Done = true
 		checkpointState.Downstream.Done = true
 		flushCkpt(ctx)
