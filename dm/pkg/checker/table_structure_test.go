@@ -179,7 +179,7 @@ func TestTablesChecker(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result := checker.Check(ctx)
 	require.Equal(t, StateSuccess, result.State)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -212,7 +212,7 @@ func TestTablesChecker(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 2)
@@ -253,7 +253,7 @@ func TestTablesChecker(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 3)
@@ -292,7 +292,7 @@ func TestTablesChecker(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 5)
@@ -345,7 +345,7 @@ func TestTablesChecker(t *testing.T) {
 		map[filter.Table][]string{
 			{Schema: "test-db", Name: "test-table-1"}: {"ext1", "ext2", "ext3"},
 		},
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateFailure, result.State)
 	require.Len(t, result.Errors, 2)
@@ -400,7 +400,7 @@ func TestCombineInstruction(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result := checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Contains(t, result.Instruction, "TiDB does not support foreign key constraints. See the document: https://docs.pingcap.com/tidb/stable/mysql-compatibility#unsupported-features")
@@ -439,7 +439,7 @@ func TestCombineInstruction(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Equal(t, result.State, StateWarning)
@@ -477,7 +477,7 @@ func TestCombineInstruction(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, result.State, StateWarning)
 	require.Contains(t, result.Errors[0].ShortErr, "charset is not same")
@@ -515,7 +515,7 @@ func TestCombineInstruction(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Contains(t, result.Errors[0].ShortErr, "upstream has more columns than downstream")
@@ -554,7 +554,7 @@ func TestCombineInstruction(t *testing.T) {
 		map[filter.Table][]string{
 			{Schema: "test-db", Name: "test-table-1"}: {"d"},
 		},
-		1) // extended column "d"
+		1, nil) // extended column "d"
 	result = checker.Check(ctx)
 	require.Equal(t, StateFailure, result.State)
 	require.Contains(t, result.Errors[0].ShortErr, "upstream table must not contain extended column")
@@ -587,7 +587,7 @@ func TestCombineInstruction(t *testing.T) {
 		map[filter.Table][]string{
 			{Schema: "test-db", Name: "test-table-1"}: {"d"},
 		},
-		1) // extended column "d"
+		1, nil) // extended column "d"
 	result = checker.Check(ctx)
 	require.Equal(t, StateFailure, result.State)
 	require.Contains(t, result.Errors[0].ShortErr, "does not exist in downstream table")
@@ -747,7 +747,7 @@ func TestUnknownCharsetCollation(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result := checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 1)
@@ -935,7 +935,7 @@ func TestExpressionUK(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result := checker.Check(ctx)
 	require.Equal(t, StateSuccess, result.State)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -980,7 +980,7 @@ func TestExpressionUK(t *testing.T) {
 			},
 		},
 		nil,
-		1)
+		1, nil)
 	result = checker.Check(ctx)
 	require.Equal(t, StateWarning, result.State)
 	require.Len(t, result.Errors, 2)

@@ -48,6 +48,8 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb"
+	mconfig "github.com/pingcap/tiflow/dm/pkg/mariadb2tidb/config"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
@@ -119,6 +121,26 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	}
 
 	return c
+}
+
+func buildMariaDB2TiDBConverters(instances []*mysqlInstance) map[string]*mariadb2tidb.Converter {
+	converters := make(map[string]*mariadb2tidb.Converter)
+	for _, inst := range instances {
+		if inst == nil || inst.cfg == nil {
+			continue
+		}
+		if !inst.cfg.MariaDB2TiDB.EnabledForFlavor(inst.cfg.Flavor) {
+			continue
+		}
+
+		convCfg := mconfig.DefaultConfig()
+		convCfg.EnabledRules = append([]string{}, inst.cfg.MariaDB2TiDB.EnabledRules...)
+		convCfg.DisabledRules = append([]string{}, inst.cfg.MariaDB2TiDB.DisabledRules...)
+		convCfg.StrictMode = inst.cfg.MariaDB2TiDB.Strict()
+
+		converters[inst.cfg.SourceID] = mariadb2tidb.NewConverter(convCfg)
+	}
+	return converters
 }
 
 // tablePairInfo records information about a upstream-downstream(source-target) table pair.
@@ -376,6 +398,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 
 	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
+	converters := buildMariaDB2TiDBConverters(c.instances)
 	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(
 			upstreamDBs,
@@ -383,6 +406,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			info.sourceID2TableMap,
 			info.targetTable2ExtendedColumns,
 			dumpThreads,
+			converters,
 		))
 	}
 	if _, ok := c.checkingItems[config.PrimaryKeyChecking]; ok {
@@ -390,6 +414,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			upstreamDBs,
 			info.sourceID2TableMap,
 			dumpThreads,
+			converters,
 		))
 	}
 

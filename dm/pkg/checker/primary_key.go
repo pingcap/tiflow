@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadb2tidb"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )
@@ -33,6 +34,7 @@ type PrimaryKeyChecker struct {
 	upstreamDBs map[string]*conn.BaseDB
 	tableMap    map[string]map[filter.Table][]filter.Table
 	dumpThreads int
+	converters  map[string]*mariadb2tidb.Converter
 }
 
 // NewPrimaryKeyChecker returns a RealChecker that only checks existence of primary key on upstream tables.
@@ -40,6 +42,7 @@ func NewPrimaryKeyChecker(
 	upstreamDBs map[string]*conn.BaseDB,
 	tableMap map[string]map[filter.Table][]filter.Table,
 	dumpThreads int,
+	converters map[string]*mariadb2tidb.Converter,
 ) RealChecker {
 	if dumpThreads == 0 {
 		dumpThreads = 1
@@ -48,6 +51,7 @@ func NewPrimaryKeyChecker(
 		upstreamDBs: upstreamDBs,
 		tableMap:    tableMap,
 		dumpThreads: dumpThreads,
+		converters:  converters,
 	}
 	log.L().Logger.Debug("check primary key existence", zap.Int("channel pool size", dumpThreads))
 	return c
@@ -83,7 +87,18 @@ func (w *primaryKeyWorker) handle(ctx context.Context, item *checkItem) ([]*inco
 		return nil, err
 	}
 
-	upstreamStmt, err := getCreateTableStmt(w.upstreamParser, upstreamSQL)
+	createSQL, err := maybeTransformCreateTable(w.c.converters[item.sourceID], upstreamSQL)
+	if err != nil {
+		opt := &incompatibilityOption{
+			state:      StateWarning,
+			tableID:    dbutil.TableName(table.Schema, table.Name),
+			errMessage: err.Error(),
+		}
+		ret = append(ret, opt)
+		return ret, nil
+	}
+
+	upstreamStmt, err := getCreateTableStmt(w.upstreamParser, createSQL)
 	if err != nil {
 		opt := &incompatibilityOption{
 			state:      StateWarning,
