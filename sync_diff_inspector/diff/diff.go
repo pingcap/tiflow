@@ -201,14 +201,17 @@ func (df *Diff) initCheckpoint() error {
 			return errors.Annotate(err, "the checkpoint load process failed")
 		}
 
-		// this need not be synchronized, because at the moment, the is only one thread access the section
-		log.Info("load checkpoint",
-			zap.Any("chunk index", node.GetID()),
-			zap.Reflect("chunk", node),
-			zap.String("state", node.GetState()))
-		df.cp.InitCurrentSavedID(node)
-
-		if node != nil {
+		if node == nil {
+			// Checkpoint file was likely written by checksum-only mode.
+			// Start fresh in chunk mode.
+			log.Warn("chunk checkpoint contains nil node (possible mode switch from checksum-only), starting from beginning")
+		} else {
+			// this need not be synchronized, because at the moment, the is only one thread access the section
+			log.Info("load checkpoint",
+				zap.Any("chunk index", node.GetID()),
+				zap.Reflect("chunk", node),
+				zap.String("state", node.GetState()))
+			df.cp.InitCurrentSavedID(node)
 			// remove the sql file that ID bigger than node.
 			// cause we will generate these sql again.
 			err = df.removeSQLFiles(node.GetID())
