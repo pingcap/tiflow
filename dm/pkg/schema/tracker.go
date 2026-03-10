@@ -606,6 +606,11 @@ func (tr *Tracker) buildForeignKeyRelations(
 	relations := make([]sqlmodel.ForeignKeyCausalityRelation, 0, len(downstreamTI.ForeignKeys))
 	for i, fk := range downstreamTI.ForeignKeys {
 		if len(fk.Cols) == 0 || len(fk.Cols) != len(fk.RefCols) {
+			tctx.L().Debug("skip foreign key causality relation with unexpected foreign key metadata",
+				zap.String("table", tableID),
+				zap.String("foreignKey", fk.Name.O),
+				zap.Int("childColumnCount", len(fk.Cols)),
+				zap.Int("parentColumnCount", len(fk.RefCols)))
 			continue
 		}
 
