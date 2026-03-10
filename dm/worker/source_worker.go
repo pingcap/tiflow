@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/cancelcause"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
@@ -214,6 +215,16 @@ func (w *SourceWorker) Start() {
 
 // Stop stops working and releases resources.
 func (w *SourceWorker) Stop(graceful bool) {
+	w.stopWithCause(graceful, cancelcause.WorkerStopCause())
+}
+
+// StopForFailover stops working and releases resources, but keeps IMPORT INTO jobs running
+// so a new DM worker instance can take over (failover / rebalance).
+func (w *SourceWorker) StopForFailover(graceful bool) {
+	w.stopWithCause(graceful, cancelcause.WorkerFailoverCause())
+}
+
+func (w *SourceWorker) stopWithCause(graceful bool, cause error) {
 	if w.closed.Load() {
 		w.l.Warn("already closed")
 		return
@@ -230,9 +241,9 @@ func (w *SourceWorker) Stop(graceful bool) {
 
 	// close or kill all subtasks
 	if graceful {
-		w.subTaskHolder.closeAllSubTasks()
+		w.subTaskHolder.closeAllSubTasksWithCause(cause)
 	} else {
-		w.subTaskHolder.killAllSubTasks()
+		w.subTaskHolder.killAllSubTasksWithCause(cause)
 	}
 
 	if w.relayHolder != nil {
@@ -1362,7 +1373,11 @@ func (w *SourceWorker) refreshSourceCfg() error {
 	if err != nil {
 		return err
 	}
-	w.cfg = sourceCfgM[oldCfg.SourceID]
+	if cfg, ok := sourceCfgM[oldCfg.SourceID]; ok && cfg != nil {
+		w.cfg = cfg
+	} else {
+		w.l.Debug("source config not found in etcd, keep current config", zap.String("sourceID", oldCfg.SourceID))
+	}
 	return nil
 }
 

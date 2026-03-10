@@ -145,9 +145,18 @@ func IsResumableError(err *pb.ProcessError) bool {
 	}
 
 	if err.ErrCode == int32(terror.ErrLoadLightningRuntime.Code()) {
-		// for lightning parallel import, the table may be dropped by other lightning, we
-		// treat it as resumable error.
-		return strings.Contains(err.RawCause, "doesn't exist")
+		// for lightning parallel import, some runtime errors are resumable:
+		// - table may be dropped by other lightning: treat "doesn't exist" as resumable
+		// - table is temporarily in Import mode (e.g. "Table t1 is in mode Import") after cancel,
+		//   downstream may switch it back to normal later, so treat it as resumable too.
+		rawCauseLower := strings.ToLower(err.RawCause)
+		if strings.Contains(rawCauseLower, "doesn't exist") {
+			return true
+		}
+		if strings.Contains(rawCauseLower, "is in mode import") {
+			return true
+		}
+		return false
 	}
 
 	return true
