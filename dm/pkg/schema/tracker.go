@@ -400,15 +400,40 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
 func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
-	dti, err := tr.downstreamTracker.getOrInit(tctx, tableID, originTI)
+	targetTable := utils.UnpackTableID(tableID)
+	dti, err := tr.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := dti.initForeignKeyRelations(tr, tctx, tableID, originTI); err != nil {
+	if err := dti.initForeignKeyRelations(tr, tctx, tableID, targetTable, targetTable, originTI); err != nil {
 		return nil, err
 	}
 
+	return dti, nil
+}
+
+// GetDownStreamTableInfoWithoutForeignKey gets downstream table info without initializing FK relations.
+func (tr *Tracker) GetDownStreamTableInfoWithoutForeignKey(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
+	return tr.downstreamTracker.getOrInit(tctx, tableID, originTI)
+}
+
+// InitDownStreamForeignKeyRelations initializes FK relations for a routed source/target table pair.
+func (tr *Tracker) InitDownStreamForeignKeyRelations(
+	tctx *tcontext.Context,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	originTI *model.TableInfo,
+) (*DownstreamTableInfo, error) {
+	tableID := utils.GenTableID(targetTable)
+	dti, err := tr.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI); err != nil {
+		return nil, err
+	}
 	return dti, nil
 }
 
@@ -452,9 +477,25 @@ func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, o
 	return dti, nil
 }
 
-func (dti *DownstreamTableInfo) initForeignKeyRelations(tr *Tracker, tctx *tcontext.Context, tableID string, originTI *model.TableInfo) error {
+func (dti *DownstreamTableInfo) initForeignKeyRelations(
+	tr *Tracker,
+	tctx *tcontext.Context,
+	tableID string,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	originTI *model.TableInfo,
+) error {
 	dti.foreignKeyInitOnce.Do(func() {
-		relations, err := tr.buildForeignKeyRelations(tctx, tableID, dti.TableInfo, originTI, make(map[string][]sqlmodel.ForeignKeyCausalityRelation), make(map[string]struct{}))
+		relations, err := tr.buildForeignKeyRelations(
+			tctx,
+			tableID,
+			sourceTable,
+			targetTable,
+			dti.TableInfo,
+			originTI,
+			make(map[string][]sqlmodel.ForeignKeyCausalityRelation),
+			make(map[string]struct{}),
+		)
 		if err != nil {
 			dti.foreignKeyInitErr = err
 			return
@@ -526,6 +567,8 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 func (tr *Tracker) buildForeignKeyRelations(
 	tctx *tcontext.Context,
 	tableID string,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
 	downstreamTI *model.TableInfo,
 	originTI *model.TableInfo,
 	cache map[string][]sqlmodel.ForeignKeyCausalityRelation,
@@ -541,10 +584,27 @@ func (tr *Tracker) buildForeignKeyRelations(
 	visiting[tableID] = struct{}{}
 	defer delete(visiting, tableID)
 
+	if sourceTable == nil {
+		sourceTable = utils.UnpackTableID(tableID)
+	}
+	if targetTable == nil {
+		targetTable = utils.UnpackTableID(tableID)
+	}
+
+	if len(downstreamTI.ForeignKeys) > 0 && !sameTableIdentity(sourceTable, targetTable) {
+		return nil, newForeignKeyRouteUnsupportedError(
+			fmt.Sprintf(
+				"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
+				sourceTable,
+				targetTable,
+			),
+		)
+	}
+
 	childNameToIdx := buildColumnIndexMap(originTI)
 
 	relations := make([]sqlmodel.ForeignKeyCausalityRelation, 0, len(downstreamTI.ForeignKeys))
-	for _, fk := range downstreamTI.ForeignKeys {
+	for i, fk := range downstreamTI.ForeignKeys {
 		if len(fk.Cols) == 0 || len(fk.Cols) != len(fk.RefCols) {
 			continue
 		}
@@ -558,15 +618,44 @@ func (tr *Tracker) buildForeignKeyRelations(
 			childIdxs = append(childIdxs, idx)
 		}
 
-		parentSchema := fk.RefSchema.O
-		if parentSchema == "" {
-			parentSchema = utils.UnpackTableID(tableID).Schema
+		sourceFK := findMatchingForeignKey(originTI, fk, i)
+		if sourceFK == nil {
+			return nil, newForeignKeyRouteUnsupportedError(
+				fmt.Sprintf(
+					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; failed to match source foreign key metadata for table %s and downstream FK %s; please use worker_count=1",
+					sourceTable,
+					fk.Name.O,
+				),
+			)
 		}
-		parentTable := &filter.Table{Schema: parentSchema, Name: fk.RefTable.O}
-		parentTableID := utils.GenTableID(parentTable)
-		parentTableName := (&cdcmodel.TableName{Schema: parentSchema, Table: fk.RefTable.O}).String()
 
-		parentOriginTI, err := tr.GetTableInfo(parentTable)
+		sourceParentSchema := sourceFK.RefSchema.O
+		if sourceParentSchema == "" {
+			sourceParentSchema = sourceTable.Schema
+		}
+		sourceParentTable := &filter.Table{Schema: sourceParentSchema, Name: sourceFK.RefTable.O}
+
+		targetParentSchema := fk.RefSchema.O
+		if targetParentSchema == "" {
+			targetParentSchema = targetTable.Schema
+		}
+		targetParentTable := &filter.Table{Schema: targetParentSchema, Name: fk.RefTable.O}
+		if !sameTableIdentity(sourceParentTable, targetParentTable) {
+			return nil, newForeignKeyRouteUnsupportedError(
+				fmt.Sprintf(
+					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; upstream parent table %s and downstream parent table %s do not align for FK %s on table %s; please use worker_count=1",
+					sourceParentTable,
+					targetParentTable,
+					fk.Name.O,
+					sourceTable,
+				),
+			)
+		}
+
+		parentTableID := utils.GenTableID(targetParentTable)
+		parentTableName := (&cdcmodel.TableName{Schema: targetParentSchema, Table: fk.RefTable.O}).String()
+
+		parentOriginTI, err := tr.GetTableInfo(sourceParentTable)
 		if err != nil {
 			return nil, err
 		}
@@ -587,7 +676,16 @@ func (tr *Tracker) buildForeignKeyRelations(
 		}
 
 		parentNameToIdx := buildColumnIndexMap(parentOriginTI)
-		parentRelations, err := tr.buildForeignKeyRelations(tctx, parentTableID, parentDTI.TableInfo, parentOriginTI, cache, visiting)
+		parentRelations, err := tr.buildForeignKeyRelations(
+			tctx,
+			parentTableID,
+			sourceParentTable,
+			targetParentTable,
+			parentDTI.TableInfo,
+			parentOriginTI,
+			cache,
+			visiting,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -636,6 +734,56 @@ func (tr *Tracker) buildForeignKeyRelations(
 
 	cache[tableID] = relations
 	return relations, nil
+}
+
+func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInfo, idx int) *model.FKInfo {
+	if originTI == nil || len(originTI.ForeignKeys) == 0 || downstreamFK == nil {
+		return nil
+	}
+
+	if downstreamFK.Name.L != "" {
+		if fk := model.FindFKInfoByName(originTI.ForeignKeys, downstreamFK.Name.L); fk != nil {
+			return fk
+		}
+	}
+
+	if idx < len(originTI.ForeignKeys) {
+		candidate := originTI.ForeignKeys[idx]
+		if sameColumns(candidate.Cols, downstreamFK.Cols) && sameColumns(candidate.RefCols, downstreamFK.RefCols) {
+			return candidate
+		}
+	}
+
+	for _, fk := range originTI.ForeignKeys {
+		if sameColumns(fk.Cols, downstreamFK.Cols) && sameColumns(fk.RefCols, downstreamFK.RefCols) {
+			return fk
+		}
+	}
+
+	return nil
+}
+
+func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].L != b[i].L {
+			return false
+		}
+	}
+	return true
+}
+
+func sameTableIdentity(a *filter.Table, b *filter.Table) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Schema == b.Schema && a.Name == b.Name
+}
+
+func newForeignKeyRouteUnsupportedError(msg string) error {
+	return dmterror.ErrSyncerUnitNotSupportedOperate.Generatef(msg)
 }
 
 func buildColumnIndexMap(ti *model.TableInfo) map[string]int {

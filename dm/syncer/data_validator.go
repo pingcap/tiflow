@@ -828,8 +828,7 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		return res, nil
 	}
 
-	tableID := utils.GenTableID(targetTable)
-	downstreamTableInfo, err := v.syncer.getDownStreamTableInfo(v.tctx, tableID, tableInfo)
+	downstreamTableInfo, err := v.syncer.getDownStreamTableInfo(v.tctx, sourceTable, targetTable, tableInfo)
 	if err != nil {
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
