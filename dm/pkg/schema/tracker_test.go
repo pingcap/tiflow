@@ -674,6 +674,69 @@ func TestForeignKeyRelationBuildsRootParents(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestForeignKeyRelationBuildsRootParentsWithHiddenColumns(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec("create table b(id int primary key, hidden_mid int, a_id int, constraint fk_b_a foreign key (a_id) references a(id))", "db")
+	createAndExec("create table c(id int primary key, hidden_mid int, b_a_id int, constraint fk_c_b foreign key (b_a_id) references b(a_id))", "db")
+
+	// Simulate expression-index-style hidden columns interleaved with visible columns.
+	bOriginTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "b"})
+	require.NoError(t, err)
+	require.Len(t, bOriginTI.Columns, 3)
+	bOriginTI.Columns[1].Hidden = true
+
+	cOriginTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
+	require.NoError(t, err)
+	require.Len(t, cOriginTI.Columns, 3)
+	cOriginTI.Columns[1].Hidden = true
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDA := "`db`.`a`"
+	tableIDB := "`db`.`b`"
+	tableIDC := "`db`.`c`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c", "create table c(id int primary key, b_a_id int, constraint fk_c_b foreign key (b_a_id) references b(a_id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b", "create table b(id int primary key, a_id int, constraint fk_b_a foreign key (a_id) references a(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a", "create table a(id int primary key)"))
+
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, cOriginTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "a"}).String(), relation.ParentTable)
+	// c has physical columns [id, hidden_mid(hidden), b_a_id], so b_a_id should map to visible index 1.
+	require.Equal(t, []int{1}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestForeignKeyRelationFallsBackToDirectParentWhenUnmappable(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
