@@ -3733,6 +3733,56 @@ func (s *Syncer) precheckForeignKeyCausality(
 	)
 }
 
+func (s *Syncer) precheckForeignKeyReferencedTables(
+	rootTable *filter.Table,
+	currentTable *filter.Table,
+	currentTableInfo *model.TableInfo,
+	downstreamTableInfo *schema.DownstreamTableInfo,
+	visiting map[string]struct{},
+) error {
+	if !isForeignKeyChecksEnabled(s.cfg.To.Session) {
+		return nil
+	}
+	if currentTableInfo == nil || downstreamTableInfo == nil || downstreamTableInfo.TableInfo == nil {
+		return nil
+	}
+	if len(downstreamTableInfo.TableInfo.ForeignKeys) == 0 || len(currentTableInfo.ForeignKeys) == 0 {
+		return nil
+	}
+
+	tableID := utils.GenTableID(currentTable)
+	if _, ok := visiting[tableID]; ok {
+		return nil
+	}
+	visiting[tableID] = struct{}{}
+	defer delete(visiting, tableID)
+
+	for _, fk := range currentTableInfo.ForeignKeys {
+		parentSchema := fk.RefSchema.O
+		if parentSchema == "" {
+			parentSchema = currentTable.Schema
+		}
+		parentTable := &filter.Table{Schema: parentSchema, Name: fk.RefTable.O}
+		if s.skipByTable(parentTable) {
+			return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
+				"foreign_key_checks=1 is not supported when replicated table %s depends on parent/ancestor table %s filtered by block-allow-list; please include the parent table in block-allow-list or disable foreign_key_checks",
+				rootTable.String(),
+				parentTable.String(),
+			)
+		}
+
+		parentTableInfo, err := s.schemaTracker.GetTableInfo(parentTable)
+		if err != nil {
+			return terror.ErrSchemaTrackerCannotGetTable.Delegate(err, parentTable)
+		}
+		if err := s.precheckForeignKeyReferencedTables(rootTable, parentTable, parentTableInfo, downstreamTableInfo, visiting); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func basicDownStreamTableInfo(dti *schema.DownstreamTableInfo) *schema.DownstreamTableInfo {
 	if dti == nil {
 		return nil
@@ -3752,6 +3802,9 @@ func (s *Syncer) prepareDownStreamTableInfo(
 	tableID := utils.GenTableID(targetTable)
 	dti, err := s.schemaTracker.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
 	if err != nil {
+		return nil, err
+	}
+	if err := s.precheckForeignKeyReferencedTables(sourceTable, sourceTable, originTI, dti, make(map[string]struct{})); err != nil {
 		return nil, err
 	}
 

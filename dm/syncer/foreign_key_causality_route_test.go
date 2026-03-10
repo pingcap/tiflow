@@ -40,6 +40,9 @@ func newForeignKeyRouteTestSyncer(t *testing.T, workerCount int) (*Syncer, sqlmo
 	cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
 
 	syncer := NewSyncer(cfg, nil, nil)
+	var err error
+	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	require.NoError(t, err)
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -59,6 +62,15 @@ func newForeignKeyRouteTestSyncer(t *testing.T, workerCount int) (*Syncer, sqlmo
 	})
 
 	return syncer, mock
+}
+
+func setForeignKeyRouteTestBAList(t *testing.T, syncer *Syncer, rules *filter.Rules) {
+	t.Helper()
+
+	syncer.cfg.BAList = rules
+	var err error
+	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	require.NoError(t, err)
 }
 
 func execTrackedDDL(t *testing.T, tracker *schema.Tracker, p *parser.Parser, db string, sql string) {
@@ -178,5 +190,93 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithoutRoute(t *testing.T) {
 	dti, err := syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
 	require.NoError(t, err)
 	require.Len(t, dti.ForeignKeyRelations, 1)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPrepareDownStreamTableInfoRejectsFilteredParentWithForeignKeyChecksSingleWorker(t *testing.T) {
+	syncer, mock := newForeignKeyRouteTestSyncer(t, 1)
+	setForeignKeyRouteTestBAList(t, syncer, &filter.Rules{
+		DoTables: []*filter.Table{{Schema: "db", Name: "child"}},
+	})
+	p := parser.New()
+
+	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+
+	sourceTable := &filter.Table{Schema: "db", Name: "child"}
+	targetTable := &filter.Table{Schema: "db", Name: "child"}
+	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
+	require.NoError(t, err)
+
+	expectDownstreamSQLModeInit(mock)
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))"),
+	)
+
+	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
+	require.ErrorContains(t, err, "block-allow-list")
+	require.ErrorContains(t, err, "`db`.`parent`")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPrepareDownStreamTableInfoRejectsFilteredParentWithForeignKeyChecksMultiWorker(t *testing.T) {
+	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
+	setForeignKeyRouteTestBAList(t, syncer, &filter.Rules{
+		DoTables: []*filter.Table{{Schema: "db", Name: "child"}},
+	})
+	p := parser.New()
+
+	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+
+	sourceTable := &filter.Table{Schema: "db", Name: "child"}
+	targetTable := &filter.Table{Schema: "db", Name: "child"}
+	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
+	require.NoError(t, err)
+
+	expectDownstreamSQLModeInit(mock)
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))"),
+	)
+
+	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
+	require.ErrorContains(t, err, "block-allow-list")
+	require.ErrorContains(t, err, "`db`.`parent`")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestPrepareDownStreamTableInfoRejectsFilteredAncestorWithForeignKeyChecks(t *testing.T) {
+	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
+	setForeignKeyRouteTestBAList(t, syncer, &filter.Rules{
+		DoTables: []*filter.Table{
+			{Schema: "db", Name: "parent"},
+			{Schema: "db", Name: "child"},
+		},
+	})
+	p := parser.New()
+
+	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table grandparent(id int primary key)")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(grandparent_id int primary key, constraint fk_parent_grandparent foreign key (grandparent_id) references grandparent(id))")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(grandparent_id))")
+
+	sourceTable := &filter.Table{Schema: "db", Name: "child"}
+	targetTable := &filter.Table{Schema: "db", Name: "child"}
+	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
+	require.NoError(t, err)
+
+	expectDownstreamSQLModeInit(mock)
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(grandparent_id))"),
+	)
+
+	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
+	require.ErrorContains(t, err, "block-allow-list")
+	require.ErrorContains(t, err, "`db`.`grandparent`")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
