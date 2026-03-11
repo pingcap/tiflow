@@ -633,7 +633,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 		if sourceFK == nil {
 			return nil, newForeignKeyRouteUnsupportedError(
 				fmt.Sprintf(
-					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; failed to match source foreign key metadata for table %s and downstream FK %s; please use worker_count=1",
+					"foreign key causality under foreign_key_checks=1 and worker_count>1 requires aligned source and downstream FK metadata; failed to match source foreign key metadata for table %s and downstream FK %s; please align the schema metadata first, and if route is enabled for this table, please use worker_count=1",
 					sourceTable,
 					fk.Name.O,
 				),
@@ -751,6 +751,9 @@ func (tr *Tracker) buildForeignKeyRelations(
 	return relations, nil
 }
 
+// findMatchingForeignKey maps a downstream FK back to source-side metadata.
+// It matches by FK name first, then by the same ordinal position if the child/ref
+// columns still align, and finally falls back to a linear scan by FK columns.
 func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInfo, idx int) *model.FKInfo {
 	if originTI == nil || len(originTI.ForeignKeys) == 0 || downstreamFK == nil {
 		return nil
