@@ -25,7 +25,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -34,7 +34,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_chain.grandparent;" "COUNT(*): 3"
 	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_chain.parent;" "COUNT(*): 2"

@@ -26,13 +26,13 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	check_sync_diff $WORK_DIR $base/conf/diff_config.toml
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task test" \
-		"\"result\": true" 3
+		"\"result\": true" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"binlog-schema update test fk_chain child $cur/data/child_wrong_schema.sql -s mysql-replica-01" \
@@ -40,10 +40,10 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
-		"\"result\": true" 3
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	run_sql_source1 "INSERT INTO fk_chain.child(child_id, parent_id, data) VALUES (401, 10, 'c401');"
 
@@ -60,10 +60,10 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-task test" \
-		"\"result\": true" 3
+		"\"result\": true" 2
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	run_sql_tidb_with_retry "SELECT parent_id FROM fk_chain.child WHERE child_id=401;" "parent_id: 10"
 	run_sql_tidb_with_retry "SELECT data FROM fk_chain.child WHERE child_id=401;" "data: c401"

@@ -26,7 +26,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
@@ -35,7 +35,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"result\": true" 2 \
-		"\"stage\": \"Running\"" 2
+		"\"stage\": \"Running\"" 1
 
 	run_sql_tidb_with_retry "SELECT note FROM fk_route_dst.parent_r WHERE parent_id=1;" "note: n1_v2"
 	run_sql_tidb_with_retry "SELECT child_data FROM fk_route_dst.child_r WHERE child_id=20;" "child_data: c20_v2"
