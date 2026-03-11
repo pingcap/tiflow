@@ -808,10 +808,10 @@ func newForeignKeyRouteUnsupportedError(msg string) error {
 	return dmterror.ErrSyncerUnitNotSupportedOperate.Generatef(msg)
 }
 
-func newForeignKeySchemaAlignmentError(tableID string, detail string) error {
+func newForeignKeySchemaAlignmentError(tableName string, detail string) error {
 	return dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Generatef(
 		"foreign key causality initialization failed for table %s: %s; this usually means the schema metadata used for FK causality are out of sync (for example, the tracked schema and downstream table schema differ, or the schema was repaired only partially). Please align the schema first; if the tracked schema is stale, use `dmctl binlog-schema update` (or the old `operate-schema set`) and then resume the task",
-		tableID,
+		tableName,
 		detail,
 	)
 }
