@@ -128,6 +128,33 @@ func TestGenSQL(t *testing.T) {
 	}
 }
 
+func TestGenSQLWithSafeModeUpsertStrategy(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "targetSchema", Table: "targetTable"}
+	createSQL := "create table db.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
+	tableInfo := mockTableInfo(t, createSQL)
+
+	worker := &DMLWorker{safeModeDMLStrategy: "upsert"}
+
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, 2, 3, "haha"}, tableInfo, nil, nil)
+	insertJob := newDMLJob(insertChange, ecWithSafeMode)
+	queries, args := worker.genSQLs([]*job{insertJob})
+	require.Equal(t, []string{
+		"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`col1`=VALUES(`col1`),`col2`=VALUES(`col2`),`name`=VALUES(`name`)",
+	}, queries)
+	require.Equal(t, [][]interface{}{{1, 2, 3, "haha"}}, args)
+
+	updatePKChange := sqlmodel.NewRowChange(source, target, []interface{}{1, 2, 3, "haha"}, []interface{}{4, 5, 6, "hihi"}, tableInfo, nil, nil)
+	updateJob := newDMLJob(updatePKChange, ecWithSafeMode)
+	queries, args = worker.genSQLs([]*job{updateJob})
+	require.Equal(t, []string{
+		"UPDATE `targetSchema`.`targetTable` SET `id` = ?, `col1` = ?, `col2` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
+	}, queries)
+	require.Equal(t, [][]interface{}{{4, 5, 6, "hihi", 1}}, args)
+}
+
 func TestJudgeKeyNotFound(t *testing.T) {
 	dmlWorker := &DMLWorker{
 		compact:      true,
