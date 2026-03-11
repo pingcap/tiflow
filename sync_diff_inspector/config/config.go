@@ -98,7 +98,7 @@ func (t *TableConfig) Valid() bool {
 
 // Security is the wrapper for TLS Security
 type Security struct {
-	TLSName string `json:"tls-name"`
+	TLSName string `toml:"-" json:"-"`
 
 	CAPath   string `toml:"ca-path" json:"ca-path"`
 	CertPath string `toml:"cert-path" json:"cert-path"`

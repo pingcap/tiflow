@@ -31,7 +31,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	_ "github.com/pingcap/tidb/pkg/planner/core" // to setup expression.EvalSimpleAst for in core_init
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/collate"
+	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/mock"
 )
@@ -40,10 +40,6 @@ const (
 	annotationClusteredReplaceString    = "${1} /*T![clustered_index] CLUSTERED */${2}\n"
 	annotationNonClusteredReplaceString = "${1} /*T![clustered_index] NONCLUSTERED */${2}\n"
 )
-
-func init() {
-	collate.SetNewCollationEnabledForTest(false)
-}
 
 // addClusteredAnnotation add the `/*T![clustered_index] NONCLUSTERED */` for primary key of create table info
 // In the older version, the create table info hasn't `/*T![clustered_index] NONCLUSTERED */`,

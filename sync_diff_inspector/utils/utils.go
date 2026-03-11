@@ -30,7 +30,10 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"go.uber.org/zap"
@@ -152,7 +155,7 @@ func GetColumnsFromIndex(index *model.IndexInfo, tableInfo *model.TableInfo) []*
 //
 //	e.g. SELECT /*!40001 SQL_NO_CACHE */ `a`, `b` FROM `schema`.`table` WHERE %s ORDER BY `a`.
 func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, collation string) (string, []*model.ColumnInfo) {
-	orderKeys, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
+	_, orderByCols := dbutil.SelectUniqueOrderKey(tableInfo)
 
 	columnNames := make([]string, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
@@ -170,19 +173,12 @@ func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, c
 		}
 		columnNames = append(columnNames, name)
 	}
+
 	columns := strings.Join(columnNames, ", ")
-	if collation != "" {
-		collation = fmt.Sprintf(" COLLATE '%s'", collation)
-	}
+	query := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %%s ORDER BY %s",
+		columns, dbutil.TableName(schema, table), BuildOrderByClause(orderByCols, collation))
 
-	for i, key := range orderKeys {
-		orderKeys[i] = dbutil.ColumnName(key)
-	}
-
-	query := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %%s ORDER BY %s%s",
-		columns, dbutil.TableName(schema, table), strings.Join(orderKeys, ","), collation)
-
-	return query, orderKeyCols
+	return query, orderByCols
 }
 
 // escapeString escapes special characters in the given string
@@ -606,19 +602,30 @@ func NeedQuotes(tp byte) bool {
 	return !(dbutil.IsNumberType(tp) || dbutil.IsFloatType(tp))
 }
 
-// CompareData compare two row datas.
-// equal = true: map1 = map2
+// CompareData compares two rows of data.
+// equal = true: map1 = map2.
 // equal = false:
-//  1. cmp = 0: map1 and map2 have the same orderkeycolumns, but other columns are in difference.
-//  2. cmp = -1: map1 < map2 (by comparing the orderkeycolumns)
-//  3. cmp = 1: map1 > map2
-func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo) (equal bool, cmp int32, err error) {
+//  1. cmp = 0: map1 and map2 have identical order key columns, but other columns differ.
+//  2. cmp = -1: map1 is less than map2 (based on order key columns).
+//  3. cmp = 1: map1 is greater than map2 (based on order key columns).
+//
+// If a case-insensitive collation is specified in the row iterator,
+// the cmp comparison should also be performed in a case-insensitive manner.
+func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo, collation string) (equal bool, cmp int, err error) {
 	var (
 		data1, data2 *dbutil.ColumnData
 		str1, str2   string
 		key          string
 		ok           bool
 	)
+
+	if collation == "" {
+		collation = "utf8mb4_bin"
+	}
+	collator := collate.GetCollator(collation)
+
+	// For string comparison, ctx is not used, so just create a dummy context.
+	dummyCtx := types.Context{}
 
 	equal = true
 
@@ -704,17 +711,15 @@ func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns
 		}
 
 		if NeedQuotes(col.FieldType.GetType()) {
-			strData1 := string(data1.Data)
-			strData2 := string(data2.Data)
-
-			if len(strData1) == len(strData2) && strData1 == strData2 {
-				continue
+			strData1 := types.NewCollationStringDatum(string(data1.Data), collation)
+			strData2 := types.NewCollationStringDatum(string(data2.Data), collation)
+			cmp, err = strData1.Compare(dummyCtx, &strData2, collator)
+			if err != nil {
+				return false, 0, errors.Trace(err)
 			}
 
-			if strData1 < strData2 {
-				cmp = -1
-			} else {
-				cmp = 1
+			if cmp == 0 {
+				continue
 			}
 			break
 		} else if data1.IsNull || data2.IsNull {
@@ -914,7 +919,11 @@ func GetCountAndMD5Checksum(
 }
 
 // GetRandomValues returns some random values. Different from /pkg/dbutil.GetRandomValues, it returns multi-columns at the same time.
-func GetRandomValues(ctx context.Context, db *sql.DB, schema, table string, columns []*model.ColumnInfo, num int, limitRange string, limitArgs []interface{}, collation string) ([][]string, error) {
+func GetRandomValues(
+	ctx context.Context,
+	db *sql.DB, schema, table string, columns []*model.ColumnInfo,
+	num int, limitRange string, limitArgs []any, collation string,
+) ([][]string, error) {
 	/*
 		example: there is one index consists of `id`, `a`, `b`.
 		mysql> SELECT `id`, `a`, `b` FROM (SELECT `id`, `a`, `b`, rand() rand_value FROM `test`.`test`  WHERE `id` COLLATE "latin1_bin" > 0 AND `id` COLLATE "latin1_bin" < 100 ORDER BY rand_value LIMIT 5) rand_tmp ORDER BY `id` COLLATE "latin1_bin";
@@ -931,17 +940,13 @@ func GetRandomValues(ctx context.Context, db *sql.DB, schema, table string, colu
 		limitRange = "TRUE"
 	}
 
-	if collation != "" {
-		collation = fmt.Sprintf(" COLLATE '%s'", collation)
-	}
-
 	columnNames := make([]string, 0, len(columns))
 	for _, col := range columns {
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
 	}
 
-	query := fmt.Sprintf("SELECT %[1]s FROM (SELECT %[1]s, rand() rand_value FROM %[2]s WHERE %[3]s ORDER BY rand_value LIMIT %[4]d)rand_tmp ORDER BY %[1]s%[5]s",
-		strings.Join(columnNames, ", "), dbutil.TableName(schema, table), limitRange, num, collation)
+	query := fmt.Sprintf("SELECT %[1]s FROM (SELECT %[1]s, rand() rand_value FROM %[2]s WHERE %[3]s ORDER BY rand_value LIMIT %[4]d)rand_tmp ORDER BY %[5]s",
+		strings.Join(columnNames, ", "), dbutil.TableName(schema, table), limitRange, num, BuildOrderByClause(columns, collation))
 	log.Debug("get random values", zap.String("sql", query), zap.Reflect("args", limitArgs))
 
 	rows, err := db.QueryContext(ctx, query, limitArgs...)
@@ -1168,4 +1173,18 @@ func GetColumnNames(columns []*model.ColumnInfo) []pmodel.CIStr {
 		columnNames = append(columnNames, c.Name)
 	}
 	return columnNames
+}
+
+// BuildOrderByClause build order by clause by giving columns and collation
+func BuildOrderByClause(cols []*model.ColumnInfo, collation string) string {
+	orderByFields := make([]string, len(cols))
+	for i, ordreByCol := range cols {
+		column_name := dbutil.ColumnName(ordreByCol.Name.O)
+		if collation != "" && cols[i].FieldType.GetCharset() != charset.CharsetBin {
+			column_name = fmt.Sprintf("%s COLLATE '%s'", column_name, collation)
+		}
+		orderByFields[i] = column_name
+	}
+
+	return strings.Join(orderByFields, ",")
 }

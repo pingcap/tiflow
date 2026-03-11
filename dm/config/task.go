@@ -252,6 +252,8 @@ const (
 	LoadModeLogical LoadMode = "logical"
 	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
 	LoadModePhysical LoadMode = "physical"
+	// LoadModeImportInto means use import-into backend of lightning to load data, which uses IMPORT INTO SQL statement.
+	LoadModeImportInto LoadMode = "import-into"
 )
 
 // LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
@@ -340,7 +342,7 @@ func (m *LoaderConfig) adjust() error {
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
 	switch m.ImportMode {
-	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical:
+	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical, LoadModeImportInto:
 	default:
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
@@ -864,6 +866,13 @@ func (c *TaskConfig) adjust() error {
 		}
 		if inst.LoaderThread != 0 {
 			inst.Loader.PoolSize = inst.LoaderThread
+		}
+
+		// import-into does not support sharding / multi-source tasks.
+		// NOTE: TaskConfig.adjust() runs before generating SubTaskConfig, so we validate it here
+		// to avoid multi-source import-into tasks passing admission and failing later at runtime.
+		if len(c.MySQLInstances) > 1 && strings.EqualFold(string(inst.Loader.ImportMode), string(LoadModeImportInto)) {
+			return terror.ErrConfigImportIntoShardingNotSupport.Generate()
 		}
 
 		if len(inst.SyncerConfigName) > 0 {

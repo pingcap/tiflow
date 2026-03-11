@@ -88,6 +88,11 @@ func (s *Credential) ToGRPCDialOption() (grpc.DialOption, error) {
 	if err != nil || tlsCfg == nil {
 		return grpc.WithInsecure(), err
 	}
+	// gRPC requires HTTP/2 over TLS and enforces ALPN ("h2") in newer versions
+	// of grpc-go. Ensure we only advertise "h2" so the server can't negotiate
+	// "http/1.1" when it prefers it for non-gRPC traffic.
+	tlsCfg = tlsCfg.Clone()
+	tlsCfg.NextProtos = []string{"h2"}
 	return grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)), nil
 }
 

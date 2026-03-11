@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	tiflowdbutil "github.com/pingcap/tiflow/pkg/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -149,7 +150,7 @@ func (s *BucketIterator) init(ctx context.Context, startRange *RangeInfo) error 
 	}
 
 	s.nextChunk = 0
-	buckets, err := dbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
+	buckets, err := tiflowdbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -296,7 +297,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 		// build left chunks for this bucket
 		leftCnt := c.Index.ChunkCnt - c.Index.ChunkIndex - 1
 		if leftCnt > 0 {
-			chunkRange := chunk.NewChunkRange()
+			chunkRange := chunk.NewChunkRange(s.table.Info)
 			chunkRange.IndexColumnNames = utils.GetColumnNames(s.indexColumns)
 
 			for i, column := range s.indexColumns {
@@ -329,7 +330,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 			return
 		}
 
-		chunkRange := chunk.NewChunkRange()
+		chunkRange := chunk.NewChunkRange(s.table.Info)
 		chunkRange.IndexColumnNames = utils.GetColumnNames(s.indexColumns)
 		for j, column := range s.indexColumns {
 			var lowerValue, upperValue string
@@ -367,7 +368,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 	}
 
 	// merge the rest keys into one chunk
-	chunkRange := chunk.NewChunkRange()
+	chunkRange := chunk.NewChunkRange(s.table.Info)
 	chunkRange.IndexColumnNames = utils.GetColumnNames(s.indexColumns)
 	if len(lowerValues) > 0 {
 		for j, column := range s.indexColumns {

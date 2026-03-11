@@ -509,6 +509,35 @@ func wordCount(s string) map[string]int {
 	return wordCount
 }
 
+func TestTaskConfigImportIntoMultiSourceRejected(t *testing.T) {
+	t.Parallel()
+
+	taskCfg := NewTaskConfig()
+	taskCfg.Name = "test"
+	taskCfg.TaskMode = ModeAll
+	taskCfg.TargetDB = &dbconfig.DBConfig{
+		Host:     "127.0.0.1",
+		Port:     4000,
+		User:     "root",
+		Password: "",
+	}
+
+	importIntoLoader := DefaultLoaderConfig()
+	importIntoLoader.ImportMode = LoadModeImportInto
+	taskCfg.MySQLInstances = []*MySQLInstance{
+		{
+			SourceID: "mysql-replica-01",
+			Loader:   &importIntoLoader,
+		},
+		{
+			SourceID: "mysql-replica-02",
+		},
+	}
+
+	err := taskCfg.Adjust()
+	require.ErrorContains(t, err, "import-into mode does not support sharding")
+}
+
 func TestGenAndFromSubTaskConfigs(t *testing.T) {
 	t.Parallel()
 

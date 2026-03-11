@@ -211,6 +211,7 @@ func (s *MySQLSources) GetRowsIterator(ctx context.Context, tableRange *splitter
 	sourceRowDatas := &common.RowDatas{
 		Rows:         make([]common.RowData, 0, len(sourceRows)),
 		OrderKeyCols: orderKeyCols,
+		Collators:    common.GetCollatorsForTable(table, orderKeyCols),
 	}
 	heap.Init(sourceRowDatas)
 	// first push one row from all the sources into heap

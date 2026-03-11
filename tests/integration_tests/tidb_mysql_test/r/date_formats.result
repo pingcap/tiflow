@@ -317,13 +317,13 @@ a
 %m.%d.%Y
 select get_format(TIME, 'internal') as a;
 a
-
+%H%i%s
 select get_format(DATETIME, 'eur') as a;
 a
-
+%Y-%m-%d %H.%i.%s
 select get_format(TIMESTAMP, 'eur') as a;
 a
-
+%Y-%m-%d %H.%i.%s
 select get_format(DATE, 'TEST') as a;
 a
 
@@ -469,7 +469,7 @@ Thursday 01 January 2009
 SET NAMES utf8;
 SELECT LEAST('%', GET_FORMAT(datetime, 'eur'), CAST(GET_FORMAT(datetime, 'eur') AS CHAR(65535)));
 LEAST('%', GET_FORMAT(datetime, 'eur'), CAST(GET_FORMAT(datetime, 'eur') AS CHAR(65535)))
-
+%
 SET NAMES latin1;
 #
 # End of 5.1 tests
@@ -541,12 +541,11 @@ b	b IN ('20161213')	b in ('20161213', 0)
 SELECT b, b = '121314',
 CASE b WHEN '121314' then 'found' ELSE 'not found' END FROM t8;
 b	b = '121314'	CASE b WHEN '121314' then 'found' ELSE 'not found' END
+10:13:14	0	not found
 11:13:14	0	not found
 12:13:14	1	found
-10:13:14	0	not found
 SELECT b, b in ('121314'), b in ('121314', 0) FROM t8;
 b	b in ('121314')	b in ('121314', 0)
+10:13:14	0	0
 11:13:14	0	0
 12:13:14	1	1
-10:13:14	0	0
-DROP TABLE t6, t7, t8;

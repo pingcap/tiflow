@@ -170,6 +170,53 @@ func (m *MockUnit) InjectUpdateError(err error) { m.errUpdate = err }
 
 func (m *MockUnit) InjectFreshError(isFresh bool, err error) { m.isFresh, m.errFresh = isFresh, err }
 
+type KillOrderUnit struct {
+	typ pb.UnitType
+
+	started chan struct{}
+	ctx     context.Context
+
+	canceledAtKill bool
+}
+
+func NewKillOrderUnit(typ pb.UnitType) *KillOrderUnit {
+	return &KillOrderUnit{
+		typ:     typ,
+		started: make(chan struct{}),
+	}
+}
+
+func (u *KillOrderUnit) Init(context.Context) error { return nil }
+
+func (u *KillOrderUnit) Process(ctx context.Context, pr chan pb.ProcessResult) {
+	u.ctx = ctx
+	close(u.started)
+	<-ctx.Done()
+	pr <- pb.ProcessResult{IsCanceled: true}
+}
+
+func (u *KillOrderUnit) Close() {}
+
+func (u *KillOrderUnit) Kill() {
+	select {
+	case <-u.ctx.Done():
+		u.canceledAtKill = true
+	default:
+	}
+}
+
+func (u *KillOrderUnit) Pause() {}
+
+func (u *KillOrderUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) { u.Process(ctx, pr) }
+
+func (u *KillOrderUnit) Update(context.Context, *config.SubTaskConfig) error { return nil }
+
+func (u *KillOrderUnit) Status(*binlog.SourceStatus) interface{} { return &pb.SyncStatus{} }
+
+func (u *KillOrderUnit) Type() pb.UnitType { return u.typ }
+
+func (u *KillOrderUnit) IsFreshTask(context.Context) (bool, error) { return true, nil }
+
 func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 	cfg := &config.SubTaskConfig{
 		Name: "testSubtaskScene",
@@ -287,6 +334,29 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
 	c.Assert(st.Stage(), check.Equals, pb.Stage_Finished)
 	c.Assert(st.Result().Errors, check.HasLen, 0)
+}
+
+func (t *testSubTask) TestKillWithCauseDoesNotCancelBeforeKill(c *check.C) {
+	cfg := &config.SubTaskConfig{
+		Name: "testKillOrder",
+		Mode: config.ModeIncrement,
+	}
+
+	u := NewKillOrderUnit(pb.UnitType_Sync)
+
+	defer func() {
+		createUnits = createRealUnits
+	}()
+	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
+		return []unit.Unit{u}
+	}
+
+	st := NewSubTask(cfg, nil, "worker")
+	st.Run(pb.Stage_Running, pb.Stage_InvalidStage, nil)
+	<-u.started
+
+	st.killWithCause(errors.New("test"))
+	c.Assert(u.canceledAtKill, check.IsFalse)
 }
 
 func (t *testSubTask) TestPauseAndResumeSubtask(c *check.C) {
