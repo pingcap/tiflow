@@ -16,7 +16,6 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	sed -i "/relay-binlog-name/i\\relay-dir: $WORK_DIR/worker1/relay_log" $WORK_DIR/source1.yaml
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -94,7 +93,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 1 \
-		"\"foreign_key_checks=1\"" 1
+		"foreign_key_checks=1 mode" 1
 }
 
 cleanup_data fk_demo
