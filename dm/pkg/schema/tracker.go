@@ -617,6 +617,8 @@ func (tr *Tracker) buildForeignKeyRelations(
 			continue
 		}
 
+		// childIdxs are the current child row value indexes (after hidden columns are
+		// skipped) for this direct FK, and are reused by both direct and lifted relations.
 		childIdxs := make([]int, 0, len(fk.Cols))
 		for _, col := range fk.Cols {
 			idx, ok := childNameToIdx[col.L]
@@ -718,7 +720,9 @@ func (tr *Tracker) buildForeignKeyRelations(
 		mappedCount := 0
 		for _, parentRelation := range parentRelations {
 			// Reuse the already-lifted parent relation by projecting each parent-side
-			// column index in that relation back onto the current child row.
+			// column index in that relation back onto the current child row. If a lifted
+			// relation cannot be fully projected through the current direct FK, skip it
+			// and keep looking for other lifted relations that still match.
 			mappedChildIdxs := make([]int, len(parentRelation.ChildColumnIdx))
 			skip := false
 			for i, parentIdx := range parentRelation.ChildColumnIdx {
