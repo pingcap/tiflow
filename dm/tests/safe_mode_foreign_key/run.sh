@@ -74,7 +74,7 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
-		"\"result\": true" 3
+		"\"result\": true" 2
 
 	cleanup_data fk_demo
 	cleanup_data_upstream fk_demo
