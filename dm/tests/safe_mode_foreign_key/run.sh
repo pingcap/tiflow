@@ -76,7 +76,8 @@ function run() {
 		"stop-task test" \
 		"\"result\": true" 2
 
-	cleanup_data fk_demo
+	run_sql_tidb "drop database if exists \`fk_demo\`;"
+	run_sql_tidb "drop database if exists dm_meta;"
 	cleanup_data_upstream fk_demo
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
