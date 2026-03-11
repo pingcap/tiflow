@@ -737,6 +737,46 @@ func TestForeignKeyRelationBuildsRootParentsWithHiddenColumns(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestForeignKeyRelationSchemaAlignmentErrorGuidesRepair(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(child_id int primary key, parent_id int not null, data varchar(64) not null, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	require.Len(t, originTI.Columns, 3)
+	originTI.Columns[1].Name = ast.NewCIStr("parent_id_shadow")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(child_id int primary key, parent_id int not null, data varchar(64) not null, constraint fk_child_parent foreign key (parent_id) references parent(id))"))
+
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.ErrorContains(t, err, "foreign key causality initialization failed")
+	require.ErrorContains(t, err, "schema metadata used for FK causality are out of sync")
+	require.ErrorContains(t, err, "binlog-schema update")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestForeignKeyRelationFallsBackToDirectParentWhenUnmappable(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()

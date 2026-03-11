@@ -621,7 +621,10 @@ func (tr *Tracker) buildForeignKeyRelations(
 		for _, col := range fk.Cols {
 			idx, ok := childNameToIdx[col.L]
 			if !ok {
-				return nil, dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Generatef("column %s not found in table %s", col.L, tableID)
+				return nil, newForeignKeySchemaAlignmentError(
+					tableID,
+					fmt.Sprintf("downstream FK column %s was not found in the tracked schema", col.L),
+				)
 			}
 			childIdxs = append(childIdxs, idx)
 		}
@@ -798,6 +801,14 @@ func newForeignKeyRouteUnsupportedError(msg string) error {
 	return dmterror.ErrSyncerUnitNotSupportedOperate.Generatef(msg)
 }
 
+func newForeignKeySchemaAlignmentError(tableID string, detail string) error {
+	return dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Generatef(
+		"foreign key causality initialization failed for table %s: %s; this usually means the schema metadata used for FK causality are out of sync (for example, the tracked schema and downstream table schema differ, or the schema was repaired only partially). Please align the schema first; if the tracked schema is stale, use `dmctl binlog-schema update` (or the old `operate-schema set`) and then resume the task",
+		tableID,
+		detail,
+	)
+}
+
 func buildColumnIndexMap(ti *model.TableInfo) map[string]int {
 	nameToIdx := make(map[string]int)
 	valueIdx := 0
@@ -823,7 +834,10 @@ func getColumnsByNames(ti *model.TableInfo, names []ast.CIStr) ([]*model.ColumnI
 			}
 		}
 		if !found {
-			return nil, dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Generatef("column %s not found in table %s", name.O, ti.Name.O)
+			return nil, newForeignKeySchemaAlignmentError(
+				ti.Name.O,
+				fmt.Sprintf("downstream referenced column %s was not found in the parent table schema", name.O),
+			)
 		}
 	}
 
