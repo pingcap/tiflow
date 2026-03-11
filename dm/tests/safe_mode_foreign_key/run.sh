@@ -69,7 +69,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 1 \
-		"PK/UK changes" 1
+		"safe-mode update with foreign_key_checks=1 and PK/UK changes is not supported" 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"stop-task test" \
@@ -93,7 +93,7 @@ function run() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"stage\": \"Paused\"" 1 \
-		"foreign_key_checks=1 mode" 1
+		"CREATE TABLE with FOREIGN KEY" 1
 }
 
 cleanup_data fk_demo
