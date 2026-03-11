@@ -171,6 +171,11 @@ func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string 
 		skip := false
 		for i, idx := range relation.ChildColumnIdx {
 			if idx >= len(values) {
+				log.L().Debug("skip foreign key causality relation with out-of-range child column index",
+					zap.String("childTable", r.sourceTable.String()),
+					zap.String("parentTable", relation.ParentTable),
+					zap.Int("childColumnIndex", idx),
+					zap.Int("valueCount", len(values)))
 				skip = true
 				break
 			}
