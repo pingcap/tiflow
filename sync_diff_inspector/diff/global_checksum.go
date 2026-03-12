@@ -311,7 +311,10 @@ func (df *Diff) getSourceGlobalChecksum(
 
 		nextSeq := 0
 		pending := make(map[int]checksumTask, concurrency)
-		for result := range resultCh {
+		select {
+		case <-egCtx.Done():
+			return
+		case result := <-resultCh:
 			pending[result.seq] = result
 			drainOrderedChecksumTasks(pending, &nextSeq, func(ordered checksumTask) {
 				progress.UpdateTotal(progressID, 1, false)
@@ -329,7 +332,6 @@ func (df *Diff) getSourceGlobalChecksum(
 	}()
 
 	err = eg.Wait()
-	close(resultCh)
 	<-doneCh
 
 	if err != nil {
