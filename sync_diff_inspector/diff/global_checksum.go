@@ -120,25 +120,23 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		}
 
 		progress.StartTable(progressID, 1, false)
-		cctx, cancel := context.WithCancel(ctx)
-		eg, egCtx := errgroup.WithContext(cctx)
-		var taskWg sync.WaitGroup
-		taskWg.Add(2)
-		eg.Go(func() error {
+		eg, egCtx := errgroup.WithContext(ctx)
+		flushDone := make(chan struct{})
+		go func() {
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
+			defer close(flushDone)
 
 			for {
 				select {
 				case <-egCtx.Done():
-					return nil
+					return
 				case <-ticker.C:
 					flushCkpt(egCtx)
 				}
 			}
-		})
+		}()
 		eg.Go(func() (err error) {
-			defer taskWg.Done()
 			upCount, upChecksum, err = df.getSourceGlobalChecksum(
 				egCtx,
 				df.upstream,
@@ -149,7 +147,6 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			return err
 		})
 		eg.Go(func() (err error) {
-			defer taskWg.Done()
 			downCount, downChecksum, err = df.getSourceGlobalChecksum(
 				egCtx,
 				df.downstream,
@@ -159,13 +156,10 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			)
 			return err
 		})
-		eg.Go(func() error {
-			taskWg.Wait()
-			cancel()
-			return nil
-		})
+		err := eg.Wait()
+		<-flushDone
 
-		if err := eg.Wait(); err != nil {
+		if err != nil {
 			progress.FailTable(progressID)
 			df.report.SetTableMeetError(schema, table, err)
 			// Retryable checksum execution errors should not be checkpointed as
@@ -268,7 +262,7 @@ func drainOrderedChecksumTasks(pending map[int]checksumTask, nextSeq *int, fn fu
 		}
 		fn(ordered)
 		delete(pending, *nextSeq)
-		*nextSeq = *nextSeq + 1
+		*nextSeq++
 	}
 }
 
