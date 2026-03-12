@@ -67,6 +67,11 @@ type MySQLSources struct {
 	sourceTablesMap map[string][]*common.TableShardSource
 }
 
+// PreferGlobalChecksum reports whether the source supports the global checksum path.
+func (s *MySQLSources) PreferGlobalChecksum() bool {
+	return false
+}
+
 func getMatchedSourcesForTable(sourceTablesMap map[string][]*common.TableShardSource, table *common.TableDiff) []*common.TableShardSource {
 	if sourceTablesMap == nil {
 		log.Fatal("unreachable, source tables map shouldn't be nil.")
@@ -88,6 +93,11 @@ func (s *MySQLSources) GetTableAnalyzer() TableAnalyzer {
 // GetRangeIterator get range iterator
 func (s *MySQLSources) GetRangeIterator(ctx context.Context, r *splitter.RangeInfo, analyzer TableAnalyzer, splitThreadCount int) (RangeIterator, error) {
 	return NewChunksIterator(ctx, analyzer, s.tableDiffs, r, splitThreadCount)
+}
+
+// GetChecksumOnlyIterator is unsupported for MySQL sources.
+func (s *MySQLSources) GetChecksumOnlyIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, error) {
+	return nil, errors.New("checksum-only iterator is only supported for TiDB sources")
 }
 
 // Close close the current table

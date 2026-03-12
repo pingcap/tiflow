@@ -103,6 +103,11 @@ type TiDBSource struct {
 	version *semver.Version
 }
 
+// PreferGlobalChecksum reports whether the source supports the global checksum path.
+func (s *TiDBSource) PreferGlobalChecksum() bool {
+	return true
+}
+
 // GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
 // It forces to use _tidb_rowid or clustered PK to split chunks.
 func (s *TiDBSource) GetChecksumOnlyIterator(
