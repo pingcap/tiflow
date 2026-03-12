@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGetChecksumSplitFields(t *testing.T) {
+func TestPrepareChecksumSplitFields(t *testing.T) {
 	testCases := []struct {
 		name           string
 		createTableSQL string
@@ -73,7 +73,7 @@ func TestGetChecksumSplitFields(t *testing.T) {
 			require.NoError(t, err)
 			tableInfo.PKIsHandle = tc.pkIsHandle
 			tableInfo.IsCommonHandle = tc.isCommonHandle
-			fields, err := getChecksumSplitFields(tableInfo)
+			fields, err := prepareChecksumSplitFields(tableInfo)
 			if tc.expectErr {
 				require.Error(t, err)
 			} else {
