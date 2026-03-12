@@ -123,7 +123,7 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	originTable.Info = tableInfo
 	originTable.Schema = matchSource.OriginSchema
 	originTable.Table = matchSource.OriginTable
-	fields, err := getChecksumSplitFields(tableInfo)
+	fields, err := prepareChecksumSplitFields(tableInfo)
 	if err != nil {
 		log.Warn("failed to determine split fields for checksum-only mode, the ignore-columns configuration might be incorrect",
 			zap.String("table", dbutil.TableName(table.Schema, table.Table)),
@@ -136,7 +136,9 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 		ctx, dbutil.TableName(table.Schema, table.Table), &originTable, s.dbConn, startRange)
 }
 
-func getChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
+// prepareChecksumSplitFields returns the split fields for checksum-only mode.
+// It may append a synthetic _tidb_rowid column to tableInfo when no handle is available.
+func prepareChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
 	switch {
 	case tableInfo.PKIsHandle:
 		pkCol := tableInfo.GetPkColInfo()
