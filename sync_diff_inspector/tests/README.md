@@ -4,7 +4,7 @@ This folder contains all tests which relies on external service such as TiDB.
 
 ## Preparations
 
-1. The following seven executables must be copied or linked into these locations:
+1. The following six executables must be copied or linked into these locations:
 
    - `bin/pd-server`
    - `bin/tikv-server`
@@ -12,7 +12,10 @@ This folder contains all tests which relies on external service such as TiDB.
    - `bin/sync_diff_inspector`
    - `bin/dumpling`
    - `bin/loader`
-   - `bin/importer`
+
+   `bin/importer` is built automatically by
+   `make sync-diff-inspector-integration_test` from
+   `github.com/pingcap/tidb/cmd/importer@release-8.5`.
 
 2. The following programs must be installed:
 
@@ -25,11 +28,13 @@ This folder contains all tests which relies on external service such as TiDB.
 
 ## Running
 
-Run `make integration_test` to execute the integration tests. This command will
+Run `make sync-diff-inspector-integration_test` to execute the integration
+tests. This command will
 
-1. Build binaries.
-2. Check that all executables exist.
-3. Execute `tests/run.sh`
+1. Build `bin/sync_diff_inspector`.
+2. Build `bin/importer`.
+3. Check that all executables exist.
+4. Execute `tests/run.sh`
 
 If the first two steps are done before, you could also run `tests/run.sh` directly.
 
