@@ -74,6 +74,10 @@ func (m *mockChecksumSource) GetTableAnalyzer() source.TableAnalyzer {
 	return nil
 }
 
+func (m *mockChecksumSource) PreferGlobalChecksum() bool {
+	return true
+}
+
 func (m *mockChecksumSource) GetRangeIterator(context.Context, *splitter.RangeInfo, source.TableAnalyzer, int) (source.RangeIterator, error) {
 	return nil, nil
 }
@@ -128,7 +132,7 @@ func (m *mockChecksumSource) GetSnapshot() string {
 
 func (m *mockChecksumSource) Close() {}
 
-// GetChecksumOnlyIterator adapts the mock to checksumOnlyIteratorSource.
+// GetChecksumOnlyIterator returns the iterator used by global checksum mode.
 func (m *mockChecksumSource) GetChecksumOnlyIterator(
 	ctx context.Context,
 	tableIndex int,

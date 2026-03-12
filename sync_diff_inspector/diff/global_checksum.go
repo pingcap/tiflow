@@ -38,21 +38,11 @@ type checksumTask struct {
 	checksum  uint64
 }
 
-type checksumOnlySource interface {
-	GetChecksumOnlyIterator(
-		ctx context.Context,
-		tableIndex int,
-		startRange *splitter.RangeInfo,
-	) (splitter.ChunkIterator, error)
-}
-
 func (df *Diff) shouldUseGlobalChecksum() bool {
 	if df.exportFixSQL {
 		return false
 	}
-	_, upstreamIsTiDB := df.upstream.(*source.TiDBSource)
-	_, downstreamIsTiDB := df.downstream.(*source.TiDBSource)
-	return upstreamIsTiDB && downstreamIsTiDB
+	return df.upstream.PreferGlobalChecksum() && df.downstream.PreferGlobalChecksum()
 }
 
 func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
@@ -296,7 +286,7 @@ func (df *Diff) getSourceGlobalChecksum(
 		startRange = &splitter.RangeInfo{ChunkRange: state.LastRange.Clone()}
 	}
 
-	iter, err := df.buildChecksumOnlyIterator(ctx, src, tableIndex, startRange)
+	iter, err := src.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
 	if err != nil {
 		return -1, 0, errors.Trace(err)
 	}
@@ -351,17 +341,4 @@ func (df *Diff) getSourceGlobalChecksum(
 	}
 
 	return totalCount, totalChecksum, nil
-}
-
-func (df *Diff) buildChecksumOnlyIterator(
-	ctx context.Context,
-	src source.Source,
-	tableIndex int,
-	startRange *splitter.RangeInfo,
-) (splitter.ChunkIterator, error) {
-	checksumSource, ok := src.(checksumOnlySource)
-	if !ok {
-		return nil, errors.New("invalid source type for global checksum")
-	}
-	return checksumSource.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
 }
