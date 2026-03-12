@@ -17,12 +17,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/config"
+	"github.com/pingcap/tiflow/sync_diff_inspector/report"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -49,6 +52,7 @@ type mockChecksumSource struct {
 	iterator splitter.ChunkIterator
 
 	startRange *splitter.RangeInfo
+	tables     []*common.TableDiff
 	infos      map[int]*source.ChecksumInfo
 	// barriers maps chunk index to a channel that must be closed before
 	// GetCountAndMD5 returns for that chunk. Used for deterministic ordering.
@@ -115,7 +119,7 @@ func (m *mockChecksumSource) GenerateFixSQL(source.DMLType, map[string]*dbutil.C
 }
 
 func (m *mockChecksumSource) GetTables() []*common.TableDiff {
-	return nil
+	return m.tables
 }
 
 func (m *mockChecksumSource) GetSourceStructInfo(context.Context, int) ([]*model.TableInfo, error) {
@@ -209,4 +213,77 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	require.NotNil(t, src.startRange.ChunkRange)
 	require.Equal(t, 3, src.startRange.ChunkRange.Index.ChunkIndex)
 	require.NotSame(t, state.LastRange, src.startRange.ChunkRange)
+}
+
+func TestGlobalChecksumErrorCheckpointDoesNotPersistDataFailure(t *testing.T) {
+	checkpointDir := t.TempDir()
+	tableDiffs := []*common.TableDiff{{
+		Schema: "test",
+		Table:  "tbl",
+	}}
+	taskCfg := &config.TaskConfig{
+		OutputDir: checkpointDir,
+		FixDir:    filepath.Join(checkpointDir, "fix"),
+	}
+
+	errSrc := &mockChecksumSource{
+		iterator: &mockChecksumIterator{
+			chunks: []*chunk.Range{
+				{
+					Index: &chunk.CID{
+						TableIndex: 0,
+						ChunkIndex: 0,
+						ChunkCnt:   1,
+					},
+				},
+			},
+		},
+		tables: tableDiffs,
+		infos: map[int]*source.ChecksumInfo{
+			0: {Err: fmt.Errorf("transient checksum error")},
+		},
+	}
+	okSrc := &mockChecksumSource{
+		iterator: &mockChecksumIterator{
+			chunks: []*chunk.Range{
+				{
+					Index: &chunk.CID{
+						TableIndex: 0,
+						ChunkIndex: 0,
+						ChunkCnt:   1,
+					},
+				},
+			},
+		},
+		tables: tableDiffs,
+		infos: map[int]*source.ChecksumInfo{
+			0: {Count: 5, Checksum: 7},
+		},
+	}
+
+	df := &Diff{
+		upstream:         errSrc,
+		downstream:       okSrc,
+		workSource:       okSrc,
+		checkThreadCount: 1,
+		cp:               new(checkpoints.Checkpoint),
+		report:           report.NewReport(taskCfg),
+		CheckpointDir:    checkpointDir,
+	}
+	df.report.Init(tableDiffs, nil, nil)
+
+	err := df.equalByGlobalChecksum(context.Background())
+	require.NoError(t, err)
+
+	state, reportInfo, err := df.cp.LoadChecksumState(filepath.Join(checkpointDir, checkpointFile))
+	require.NoError(t, err)
+	require.NotNil(t, state)
+	require.NotNil(t, reportInfo)
+
+	result := reportInfo.TableResults["test"]["tbl"]
+	require.NotNil(t, result)
+	require.True(t, result.DataEqual)
+	require.Empty(t, result.ChunkMap)
+	require.Zero(t, result.UpCount)
+	require.Zero(t, result.DownCount)
 }

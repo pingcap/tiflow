@@ -168,7 +168,9 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		if err := eg.Wait(); err != nil {
 			progress.FailTable(progressID)
 			df.report.SetTableMeetError(schema, table, err)
-			df.report.SetTableDataCheckResult(schema, table, false, 0, 0, -1, -1, chunkID)
+			// Retryable checksum execution errors should not be checkpointed as
+			// data inequality, otherwise a later successful resume would inherit
+			// a stale failed table result from the saved report snapshot.
 			flushCkpt(ctx)
 			df.checksumCheckpoint = checkpointState
 			continue
