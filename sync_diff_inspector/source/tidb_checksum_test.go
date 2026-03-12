@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
 )
@@ -82,4 +83,26 @@ func TestPrepareChecksumSplitFields(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPrepareChecksumSplitFieldsOnRowID(t *testing.T) {
+	original, err := utils.GetTableInfoBySQL("CREATE TABLE `t` (`a` INT, `b` INT)", parser.New())
+	require.NoError(t, err)
+
+	cloned := original.Clone()
+	fields, err := prepareChecksumSplitFields(cloned)
+	require.NoError(t, err)
+	require.Equal(t, "_tidb_rowid", fields)
+
+	require.Nil(t, dbutil.FindColumnByName(original.Columns, "_tidb_rowid"))
+	rowIDCol := dbutil.FindColumnByName(cloned.Columns, "_tidb_rowid")
+	require.NotNil(t, rowIDCol)
+
+	originalIndices := dbutil.FindAllIndex(original)
+	require.Empty(t, originalIndices)
+
+	clonedIndices := dbutil.FindAllIndex(cloned)
+	require.Len(t, clonedIndices, 1)
+	require.Len(t, clonedIndices[0].Columns, 1)
+	require.Equal(t, "_tidb_rowid", clonedIndices[0].Columns[0].Name.O)
 }

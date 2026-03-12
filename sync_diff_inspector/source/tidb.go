@@ -157,13 +157,35 @@ func prepareChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
 		}
 		return strings.Join(fieldNames, ","), nil
 	default:
+		ensureChecksumSplitOnRowID(tableInfo)
+		return "_tidb_rowid", nil
+	}
+}
+
+func ensureChecksumSplitOnRowID(tableInfo *model.TableInfo) {
+	if dbutil.FindColumnByName(tableInfo.Columns, "_tidb_rowid") == nil {
 		tableInfo.Columns = append(tableInfo.Columns, &model.ColumnInfo{
 			Name:      ast.NewCIStr("_tidb_rowid"),
 			Offset:    len(tableInfo.Columns),
+			State:     model.StatePublic,
 			FieldType: *types.NewFieldType(mysql.TypeLonglong),
 		})
-		return "_tidb_rowid", nil
 	}
+
+	for _, index := range tableInfo.Indices {
+		if len(index.Columns) == 1 && strings.EqualFold(index.Columns[0].Name.O, "_tidb_rowid") {
+			return
+		}
+	}
+
+	tableInfo.Indices = append(tableInfo.Indices, &model.IndexInfo{
+		ID:      0,
+		Name:    ast.NewCIStr("_tidb_rowid"),
+		State:   model.StatePublic,
+		Unique:  true,
+		Tp:      ast.IndexTypeBtree,
+		Columns: []*model.IndexColumn{{Name: ast.NewCIStr("_tidb_rowid"), Offset: len(tableInfo.Columns) - 1, Length: types.UnspecifiedLength}},
+	})
 }
 
 // GetTableAnalyzer gets the analyzer for current source
