@@ -183,8 +183,9 @@ func (s *ChecksumState) init() {
 	}
 }
 
-// SavedState contains the information of the latest checked chunk and state of `report`
-// When sync-diff start from the checkpoint, it will load this information and continue running
+// SavedState stores mode-dependent checkpoint state plus report state for resume.
+// Depending on the execution mode, it contains either Chunk (chunk diff mode)
+// or Checksum (checksum-only mode).
 type SavedState struct {
 	Chunk    *Node          `json:"chunk-info,omitempty"`
 	Checksum *ChecksumState `json:"checksum-info,omitempty"`
