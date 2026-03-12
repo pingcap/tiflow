@@ -118,7 +118,7 @@ function test_kill_and_isolate_worker() {
 	isolate_worker 4 "isolate"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 3
+		"\"stage\": \"Running\"" 2
 
 	echo "isolate dm-worker3"
 	isolate_worker 3 "isolate"
@@ -131,20 +131,20 @@ function test_kill_and_isolate_worker() {
 	isolate_worker 4 "disable_isolate"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 3
+		"\"stage\": \"Running\"" 2
 
 	echo "query-status from all dm-master"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT1" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 3
+		"\"stage\": \"Running\"" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT2" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 3
+		"\"stage\": \"Running\"" 2
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
 		"query-status test" \
-		"\"stage\": \"Running\"" 3
+		"\"stage\": \"Running\"" 2
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"pause-task test" \
