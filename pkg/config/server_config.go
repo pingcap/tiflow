@@ -41,6 +41,9 @@ const (
 	// DebugConfigurationItem is the name of debug configurations
 	DebugConfigurationItem = "debug"
 
+	// NewArchConfigurationItem is the name of whether enable new architecture configurations
+	NewArchConfigurationItem = "newarch"
+
 	// DefaultChangefeedMemoryQuota is the default memory quota for each changefeed.
 	DefaultChangefeedMemoryQuota = 1024 * 1024 * 1024 // 1GB.
 

@@ -183,3 +183,7 @@ func (a *saramaAdminClient) Close() {
 			zap.Error(err))
 	}
 }
+
+func (a *saramaAdminClient) HeartbeatBrokers() {
+	KeepConnAlive(a.client)
+}

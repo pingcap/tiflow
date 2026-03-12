@@ -230,6 +230,10 @@ func (a *admin) CreateTopic(
 	return nil
 }
 
+// HeartbeatBrokers is a no-op for the admin client.
+// Just satisfy the ClusterAdminClient interface.
+func (a *admin) HeartbeatBrokers() {}
+
 func (a *admin) Close() {
 	log.Info("admin client start closing",
 		zap.String("namespace", a.changefeedID.Namespace),

@@ -15,13 +15,18 @@ package util
 
 import (
 	"context"
+	"math"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
+
+// A fake interval to keep the connection alive in kafka topic manager.
+const FOREVER = time.Duration(math.MaxInt64)
 
 func TestPartition(t *testing.T) {
 	t.Parallel()
@@ -38,7 +43,8 @@ func TestPartition(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
 
-	manager, err := GetTopicManagerAndTryCreateTopic(ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
+	manager, err := GetTopicManagerAndTryCreateTopic(
+		ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient, FOREVER)
 	require.NoError(t, err)
 	defer manager.Close()
 

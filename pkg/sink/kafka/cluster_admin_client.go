@@ -52,6 +52,9 @@ type ClusterAdminClient interface {
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
 
+	// HeartbeatBroker sends a heartbeat to all brokers to keep the kafka connection alive.
+	HeartbeatBrokers()
+
 	// Close shuts down the admin client.
 	Close()
 }

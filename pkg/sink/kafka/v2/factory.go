@@ -303,6 +303,10 @@ func (s *syncWriter) SendMessages(ctx context.Context, topic string, partitionNu
 	return s.w.WriteMessages(ctx, msgs...)
 }
 
+// HeartbeatBrokers is a no-op for the sync producer.
+// Just to satisfy the interface.
+func (s *syncWriter) HeartbeatBrokers() {}
+
 // Close shuts down the producer; you must call this function before a producer
 // object passes out of scope, as it may otherwise leak memory.
 // You must call this before calling Close on the underlying client.

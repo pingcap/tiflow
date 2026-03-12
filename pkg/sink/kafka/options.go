@@ -62,6 +62,10 @@ const (
 	// See: https://kafka.apache.org/documentation/#brokerconfigs_min.insync.replicas and
 	// https://kafka.apache.org/documentation/#topicconfigs_min.insync.replicas
 	MinInsyncReplicasConfigName = "min.insync.replicas"
+	// BrokerConnectionsMaxIdleMsConfigName specifies the maximum idle time of a connection to a broker.
+	// Broker will close the connection if it is idle for this long.
+	// See: https://kafka.apache.org/documentation/#brokerconfigs_connections.max.idle.ms
+	BrokerConnectionsMaxIdleMsConfigName = "connections.max.idle.ms"
 )
 
 const (
@@ -167,9 +171,10 @@ type Options struct {
 	SASL               *security.SASL
 
 	// Timeout for network configurations, default to `10s`
-	DialTimeout  time.Duration
-	WriteTimeout time.Duration
-	ReadTimeout  time.Duration
+	DialTimeout           time.Duration
+	WriteTimeout          time.Duration
+	ReadTimeout           time.Duration
+	KeepConnAliveInterval time.Duration
 }
 
 // NewOptions returns a default Kafka configuration
@@ -177,17 +182,18 @@ func NewOptions() *Options {
 	return &Options{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:    config.DefaultMaxMessageBytes,
-		ReplicationFactor:  1,
-		Compression:        "none",
-		RequiredAcks:       WaitForAll,
-		Credential:         &security.Credential{},
-		InsecureSkipVerify: false,
-		SASL:               &security.SASL{},
-		AutoCreate:         true,
-		DialTimeout:        10 * time.Second,
-		WriteTimeout:       10 * time.Second,
-		ReadTimeout:        10 * time.Second,
+		MaxMessageBytes:       config.DefaultMaxMessageBytes,
+		ReplicationFactor:     1,
+		Compression:           "none",
+		RequiredAcks:          WaitForAll,
+		Credential:            &security.Credential{},
+		InsecureSkipVerify:    false,
+		SASL:                  &security.SASL{},
+		AutoCreate:            true,
+		DialTimeout:           10 * time.Second,
+		WriteTimeout:          10 * time.Second,
+		ReadTimeout:           10 * time.Second,
+		KeepConnAliveInterval: 5 * time.Minute,
 	}
 }
 
@@ -586,6 +592,21 @@ func AdjustOptions(
 		if err != nil {
 			return errors.Trace(err)
 		}
+	}
+
+	// adjust keepConnAliveInterval by `connections.max.idle.ms` broker config.
+	idleMs, err := admin.GetBrokerConfig(ctx, BrokerConnectionsMaxIdleMsConfigName)
+	if err != nil {
+		log.Warn("GetBrokerConfig failed for connections.max.idle.ms", zap.Error(err))
+	} else {
+		idleMsInt, err := strconv.Atoi(idleMs)
+		if err != nil || idleMsInt <= 0 {
+			log.Warn("invalid broker config",
+				zap.String("configName", BrokerConnectionsMaxIdleMsConfigName), zap.String("configValue", idleMs))
+			return errors.Trace(err)
+		}
+		options.KeepConnAliveInterval = time.Duration(idleMsInt/3) * time.Millisecond
+		log.Info("Adjust KeepConnAliveInterval", zap.Duration("KeepConnAliveInterval", options.KeepConnAliveInterval))
 	}
 
 	info, exists := topics[topic]
