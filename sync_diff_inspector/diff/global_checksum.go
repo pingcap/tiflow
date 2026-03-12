@@ -15,7 +15,6 @@ package diff
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -293,6 +292,7 @@ func (df *Diff) getSourceGlobalChecksum(
 	concurrency := max(1, df.checkThreadCount)
 	taskCh := make(chan checksumTask, concurrency)
 	resultCh := make(chan checksumTask, concurrency)
+	doneCh := make(chan struct{})
 
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -300,39 +300,39 @@ func (df *Diff) getSourceGlobalChecksum(
 		return produceChecksumTasks(egCtx, iter, tableIndex, taskCh)
 	})
 
-	var taskWg sync.WaitGroup
-	taskWg.Add(concurrency)
 	for range concurrency {
 		eg.Go(func() error {
-			defer taskWg.Done()
 			return runChecksumWorker(egCtx, src, taskCh, resultCh)
 		})
 	}
-	eg.Go(func() error {
-		taskWg.Wait()
-		close(resultCh)
-		return nil
-	})
 
-	nextSeq := 0
-	pending := make(map[int]checksumTask, concurrency)
-	for result := range resultCh {
-		pending[result.seq] = result
-		drainOrderedChecksumTasks(pending, &nextSeq, func(ordered checksumTask) {
-			progress.UpdateTotal(progressID, 1, false)
-			progress.Inc(progressID)
-			totalCount += ordered.count
-			totalChecksum ^= ordered.checksum
+	go func() {
+		defer close(doneCh)
 
-			df.checksumCheckpointMu.Lock()
-			defer df.checksumCheckpointMu.Unlock()
-			state.Count = totalCount
-			state.Checksum = totalChecksum
-			state.LastRange = ordered.rangeInfo.ChunkRange.Clone()
-		})
-	}
+		nextSeq := 0
+		pending := make(map[int]checksumTask, concurrency)
+		for result := range resultCh {
+			pending[result.seq] = result
+			drainOrderedChecksumTasks(pending, &nextSeq, func(ordered checksumTask) {
+				progress.UpdateTotal(progressID, 1, false)
+				progress.Inc(progressID)
+				totalCount += ordered.count
+				totalChecksum ^= ordered.checksum
 
-	if err := eg.Wait(); err != nil {
+				df.checksumCheckpointMu.Lock()
+				defer df.checksumCheckpointMu.Unlock()
+				state.Count = totalCount
+				state.Checksum = totalChecksum
+				state.LastRange = ordered.rangeInfo.ChunkRange.Clone()
+			})
+		}
+	}()
+
+	err = eg.Wait()
+	close(resultCh)
+	<-doneCh
+
+	if err != nil {
 		return -1, 0, errors.Trace(err)
 	}
 
