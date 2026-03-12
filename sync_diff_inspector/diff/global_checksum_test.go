@@ -14,9 +14,11 @@
 package diff
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"path/filepath"
 	"testing"
 
@@ -25,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
+	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/report"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -271,6 +274,8 @@ func TestGlobalChecksumErrorCheckpointDoesNotPersistDataFailure(t *testing.T) {
 		CheckpointDir:    checkpointDir,
 	}
 	df.report.Init(tableDiffs, nil, nil)
+	progress.Init(len(tableDiffs), 0)
+	progress.SetOutput(io.Discard)
 
 	err := df.equalByGlobalChecksum(context.Background())
 	require.NoError(t, err)
@@ -286,4 +291,10 @@ func TestGlobalChecksumErrorCheckpointDoesNotPersistDataFailure(t *testing.T) {
 	require.Empty(t, result.ChunkMap)
 	require.Zero(t, result.UpCount)
 	require.Zero(t, result.DownCount)
+
+	progress.Close()
+	summary := new(bytes.Buffer)
+	progress.SetOutput(summary)
+	progress.PrintSummary()
+	require.Contains(t, summary.String(), "1 tables failed")
 }

@@ -160,6 +160,8 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 
 		if err != nil {
 			progress.FailTable(progressID)
+			progress.UpdateTotal(progressID, 0, true)
+			progress.Inc(progressID)
 			df.report.SetTableMeetError(schema, table, err)
 			// Retryable checksum execution errors should not be checkpointed as
 			// data inequality, otherwise a later successful resume would inherit
