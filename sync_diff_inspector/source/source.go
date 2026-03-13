@@ -82,11 +82,17 @@ type Source interface {
 	// the implement of this function is different in mysql/tidb.
 	GetTableAnalyzer() TableAnalyzer
 
+	// PreferGlobalChecksum reports whether the source supports the global checksum path.
+	PreferGlobalChecksum() bool
+
 	// GetRangeIterator generates the range iterator with the checkpoint(*splitter.RangeInfo) and analyzer.
 	// this is the mainly iterator across the whole sync diff.
 	// One source has one range iterator to produce the range to channel.
 	// there are many workers consume the range from the channel to compare.
 	GetRangeIterator(context.Context, *splitter.RangeInfo, TableAnalyzer, int) (RangeIterator, error)
+
+	// GetChecksumOnlyIterator generates the range iterator used by global checksum mode.
+	GetChecksumOnlyIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, error)
 
 	// GetCountAndMD5 gets the md5 result and the count from given range.
 	GetCountAndMD5(context.Context, *splitter.RangeInfo) *ChecksumInfo

@@ -108,6 +108,9 @@ type Diff struct {
 	cp         *checkpoints.Checkpoint
 	startRange *splitter.RangeInfo
 	report     *report.Report
+
+	checksumCheckpoint   *checkpoints.ChecksumState
+	checksumCheckpointMu sync.Mutex
 }
 
 // NewDiff returns a Diff instance.
@@ -186,6 +189,9 @@ func (df *Diff) init(ctx context.Context, cfg *config.Config) (err error) {
 
 func (df *Diff) initCheckpoint() error {
 	df.cp.Init()
+	if df.shouldUseGlobalChecksum() {
+		return df.initChecksumCheckpoint()
+	}
 
 	finishTableNums := 0
 	path := filepath.Join(df.CheckpointDir, checkpointFile)
@@ -201,21 +207,18 @@ func (df *Diff) initCheckpoint() error {
 			zap.Reflect("chunk", node),
 			zap.String("state", node.GetState()))
 		df.cp.InitCurrentSavedID(node)
-
-		if node != nil {
-			// remove the sql file that ID bigger than node.
-			// cause we will generate these sql again.
-			err = df.removeSQLFiles(node.GetID())
-			if err != nil {
-				return errors.Trace(err)
-			}
-			df.startRange = splitter.FromNode(node)
-			df.report.LoadReport(reportInfo)
-			finishTableNums = df.startRange.GetTableIndex()
-			if df.startRange.ChunkRange.Type == chunk.Empty {
-				// chunk_iter will skip this table directly
-				finishTableNums++
-			}
+		// remove the sql file that ID bigger than node.
+		// cause we will generate these sql again.
+		err = df.removeSQLFiles(node.GetID())
+		if err != nil {
+			return errors.Trace(err)
+		}
+		df.startRange = splitter.FromNode(node)
+		df.report.LoadReport(reportInfo)
+		finishTableNums = df.startRange.GetTableIndex()
+		if df.startRange.ChunkRange.Type == chunk.Empty {
+			// chunk_iter will skip this table directly
+			finishTableNums++
 		}
 	} else {
 		log.Info("not found checkpoint file, start from beginning")
@@ -275,6 +278,13 @@ func getConfigsForReport(cfg *config.Config) ([][]byte, []byte, error) {
 
 // Equal tests whether two database have same data and schema.
 func (df *Diff) Equal(ctx context.Context) error {
+	if df.shouldUseGlobalChecksum() {
+		return df.equalByGlobalChecksum(ctx)
+	}
+	return df.equalByChunkChecksum(ctx)
+}
+
+func (df *Diff) equalByChunkChecksum(ctx context.Context) error {
 	chunksIter, err := df.generateChunksIterator(ctx)
 	if err != nil {
 		return errors.Trace(err)
