@@ -106,7 +106,8 @@ func newMockDDLJobPuller(
 			false,
 			model.DefaultChangeFeedID("test"),
 			util.RoleTester,
-			f)
+			f,
+			nil)
 		require.Nil(t, err)
 		res.schemaStorage = schemaStorage
 		res.kvStorage = kvStorage
@@ -551,6 +552,7 @@ func TestDDLPuller(t *testing.T) {
 		model.DefaultChangeFeedID(changefeedInfo.ID),
 		util.RoleTester,
 		f,
+		nil,
 	)
 	require.Nil(t, err)
 	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)
@@ -681,6 +683,7 @@ func TestResolvedTsStuck(t *testing.T) {
 		model.DefaultChangeFeedID(changefeedInfo.ID),
 		util.RoleTester,
 		f,
+		nil,
 	)
 	require.Nil(t, err)
 	p := NewDDLPuller(up, startTs, model.DefaultChangeFeedID(changefeedInfo.ID), schemaStorage, f)

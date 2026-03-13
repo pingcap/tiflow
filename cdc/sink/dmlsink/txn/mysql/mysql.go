@@ -204,6 +204,7 @@ func NewMySQLBackends(
 func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent) (needFlush bool) {
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
+
 	return s.rows >= s.cfg.MaxTxnRow
 }
 
@@ -566,7 +567,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 			}
 		}
 
-		quoteTable := firstRow.TableInfo.TableName.QuoteString()
+		quoteTable := firstRow.TableInfo.TableName.QuoteSinkString()
 		for _, row := range event.Event.Rows {
 			var query string
 			var args []interface{}
