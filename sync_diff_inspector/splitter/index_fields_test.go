@@ -83,6 +83,36 @@ func TestIndexFieldsComposite(t *testing.T) {
 	}
 }
 
+func TestIndexFieldsOrderSensitive(t *testing.T) {
+	t.Parallel()
+
+	createTableSQL1 := "CREATE TABLE `sbtest1` " +
+		"(`id` int(11) NOT NULL AUTO_INCREMENT, " +
+		" `k` int(11) NOT NULL DEFAULT '0', " +
+		"`c` char(120) NOT NULL DEFAULT '', " +
+		"PRIMARY KEY (`id`, `k`)," +
+		"KEY `k_id` (`k`, `id`))"
+
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL1, parser.New())
+	require.NoError(t, err)
+
+	fields, err := indexFieldsFromConfigString("k, id", tableInfo)
+	require.NoError(t, err)
+	require.False(t, fields.IsEmpty())
+	require.Len(t, fields.Cols(), 2)
+
+	for _, index := range tableInfo.Indices {
+		switch index.Name.String() {
+		case "PRIMARY":
+			require.False(t, fields.MatchesIndex(index))
+		case "k_id":
+			require.True(t, fields.MatchesIndex(index))
+		default:
+			require.FailNow(t, "unreachable")
+		}
+	}
+}
+
 func TestIndexFieldsEmpty(t *testing.T) {
 	t.Parallel()
 
