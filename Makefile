@@ -6,7 +6,7 @@
 	mysql_docker_integration_test mysql_docker_integration_test_with_build \
 	build_mysql_integration_test_images clean_integration_test_images \
 	dm dm-master dm-worker dmctl dm-syncer dm_coverage \
-	sync-diff-inspector \
+	sync-diff-inspector importer \
 	engine tiflow tiflow-demo tiflow-chaos-case engine_image help \
 	format-makefiles check-makefiles oauth2_server prepare_test_binaries
 
@@ -388,7 +388,15 @@ clean:
 sync-diff-inspector:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/sync_diff_inspector ./sync_diff_inspector
 
-sync-diff-inspector-integration_test: failpoint-enable sync-diff-inspector failpoint-disable
+importer:
+	@mkdir -p bin
+	@tmp_dir=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp_dir"' EXIT; \
+	git clone --depth 1 --branch master --filter=blob:none https://github.com/pingcap/tidb-tools.git "$$tmp_dir/tidb-tools" >/dev/null 2>&1; \
+	cd "$$tmp_dir/tidb-tools"; \
+	$(GO) build -o "$(CURDIR)/bin/$@" ./importer
+
+sync-diff-inspector-integration_test: failpoint-enable sync-diff-inspector importer failpoint-disable
 	@which bin/tidb-server
 	@which bin/tikv-server
 	@which bin/pd-server
