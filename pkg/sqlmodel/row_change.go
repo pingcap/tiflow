@@ -70,6 +70,8 @@ type RowChange struct {
 	tp          RowChangeType
 	whereHandle *WhereHandle
 
+	foreignKeyRelations []ForeignKeyCausalityRelation
+
 	approximateDataSize int64
 }
 
@@ -204,6 +206,11 @@ func (r *RowChange) UniqueNotNullIdx() *timodel.IndexInfo {
 // RowChange lazily initialize it.
 func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
 	r.whereHandle = whereHandle
+}
+
+// SetForeignKeyRelations sets the precomputed foreign key relations to build causality keys.
+func (r *RowChange) SetForeignKeyRelations(relations []ForeignKeyCausalityRelation) {
+	r.foreignKeyRelations = relations
 }
 
 // GetApproximateDataSize returns internal approximateDataSize, it could be zero
