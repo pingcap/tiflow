@@ -46,13 +46,7 @@ echo $first_chunk_info | awk -F '=' '{print $3}' >$OUT_DIR/first_chunk_index
 cat $OUT_DIR/first_chunk_index
 # Notice: when chunk is created paralleling, the least chunk may not appear in the first line. so we sort it as before.
 check_contains "${last_chunk_bound}" $OUT_DIR/first_chunk_bound
-OLD_IFS="$IFS"
-IFS=":"
-first_chunk_index_array=($(cat $OUT_DIR/first_chunk_index))
-IFS="$OLD_IFS"
-for s in ${first_chunk_index_array[@]}; do
-	echo "$s"
-done
+IFS=: read -r -a first_chunk_index_array < "$OUT_DIR/first_chunk_index"
 # After resuming from the last chunk in a bucket, the next chunk should start a new bucket.
 [[ ${first_chunk_index_array[2]} -eq 0 ]] || exit 1
 
@@ -92,13 +86,7 @@ echo $first_chunk_info | awk -F '=' '{print $3}' >$OUT_DIR/first_chunk_index
 cat $OUT_DIR/first_chunk_index
 # Notice: when chunk is created paralleling, the least chunk may not appear in the first line. so we sort it as before.
 check_contains "${last_chunk_bound}" $OUT_DIR/first_chunk_bound
-OLD_IFS="$IFS"
-IFS=":"
-first_chunk_index_array=($(cat $OUT_DIR/first_chunk_index))
-IFS="$OLD_IFS"
-for s in ${first_chunk_index_array[@]}; do
-	echo "$s"
-done
+IFS=: read -r -a first_chunk_index_array < "$OUT_DIR/first_chunk_index"
 [[ ${first_chunk_index_array[2]} -eq $((${last_chunk_index_array[2]} + 1)) ]] || exit 1
 [[ ${first_chunk_index_array[3]} -eq ${last_chunk_index_array[3]} ]] || exit 1
 
