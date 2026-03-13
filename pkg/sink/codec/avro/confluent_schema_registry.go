@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/log"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"go.uber.org/zap"
@@ -139,7 +140,7 @@ func (m *confluentSchemaManager) Register(
 		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaName) + "/versions"
-	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
+	log.Info("Registering schema", logutil.ZapRedactString("uri", uri), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
@@ -171,7 +172,7 @@ func (m *confluentSchemaManager) Register(
 		log.Error(
 			"Failed to register schema to the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode),
-			zap.String("uri", uri),
+			logutil.ZapRedactString("uri", uri),
 			zap.ByteString("requestBody", payload),
 			zap.ByteString("responseBody", body),
 		)
@@ -194,7 +195,7 @@ func (m *confluentSchemaManager) Register(
 
 	log.Info("Registered schema successfully",
 		zap.Int("schemaID", jsonResp.SchemaID),
-		zap.String("uri", uri),
+		logutil.ZapRedactString("uri", uri),
 		zap.ByteString("body", body))
 
 	id.confluentSchemaID = jsonResp.SchemaID
@@ -243,7 +244,7 @@ func (m *confluentSchemaManager) Lookup(
 	if resp.StatusCode != 200 && resp.StatusCode != 404 {
 		log.Error("Failed to query schema from the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode),
-			zap.String("uri", uri),
+			logutil.ZapRedactString("uri", uri),
 			zap.ByteString("responseBody", body))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Failed to query schema from the Registry, HTTP error",
