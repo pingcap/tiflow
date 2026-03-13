@@ -926,13 +926,17 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			beforeImage = ev.Rows[i]
 		}
 
-		beforeImage, err = adjustValueImageFromBinlogData(beforeImage, tableInfo)
-		if err != nil {
-			return terror.Annotate(err, "failed to adjust row before image")
+		if beforeImage != nil {
+			beforeImage, err = adjustValueFromBinlogData(beforeImage, tableInfo)
+			if err != nil {
+				return terror.Annotate(err, "failed to adjust row before image")
+			}
 		}
-		afterImage, err = adjustValueImageFromBinlogData(afterImage, tableInfo)
-		if err != nil {
-			return terror.Annotate(err, "failed to adjust row after image")
+		if afterImage != nil {
+			afterImage, err = adjustValueFromBinlogData(afterImage, tableInfo)
+			if err != nil {
+				return terror.Annotate(err, "failed to adjust row after image")
+			}
 		}
 
 		rowChange := sqlmodel.NewRowChange(
@@ -963,13 +967,6 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 		}
 	}
 	return nil
-}
-
-func adjustValueImageFromBinlogData(data []interface{}, sourceTI *model.TableInfo) ([]interface{}, error) {
-	if data == nil {
-		return nil, nil
-	}
-	return adjustValueFromBinlogData(data, sourceTI)
 }
 
 func (v *DataValidator) checkAndPersistCheckpointAndData(loc binlog.Location) error {
