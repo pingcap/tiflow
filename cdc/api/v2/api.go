@@ -91,4 +91,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)
+
+	// safepoint APIs
+	v2.GET("/safepoint", api.querySafePoint)
+	v2.POST("/safepoint", api.setSafePoint)
+	v2.DELETE("/safepoint", api.deleteSafePoint)
 }
