@@ -16,6 +16,7 @@ package sqlmodel
 import (
 	"strings"
 
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -40,18 +41,7 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 		return r.preValues, r.postValues
 	}
 
-	pre := make([]interface{}, 0, len(indexInfo.Columns))
-	post := make([]interface{}, 0, len(indexInfo.Columns))
-
-	for _, column := range indexInfo.Columns {
-		if r.preValues != nil {
-			pre = append(pre, r.preValues[column.Offset])
-		}
-		if r.postValues != nil {
-			post = append(post, r.postValues[column.Offset])
-		}
-	}
-	return pre, post
+	return r.identityValuesByIndex(indexInfo)
 }
 
 // RowIdentity returns the identity of this row change, caller should
@@ -107,6 +97,66 @@ func (r *RowChange) IsIdentityUpdated() bool {
 		}
 	}
 	return false
+}
+
+// IsPrimaryOrUniqueKeyUpdated returns true when any primary or unique key value changes.
+func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
+	if r.tp != RowChangeUpdate {
+		return false
+	}
+
+	r.lazyInitWhereHandle()
+	identityUpdated := func(pre, post []interface{}) bool {
+		if len(pre) != len(post) {
+			// should not happen
+			return true
+		}
+		for i := range pre {
+			if pre[i] != post[i] {
+				return true
+			}
+		}
+		return false
+	}
+
+	if idx := r.whereHandle.UniqueNotNullIdx; idx != nil {
+		pre, post := r.identityValuesByIndex(idx)
+		if identityUpdated(pre, post) {
+			return true
+		}
+	} else {
+		if identityUpdated(r.preValues, r.postValues) {
+			return true
+		}
+	}
+
+	for _, idx := range r.whereHandle.UniqueIdxs {
+		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx {
+			continue
+		}
+		pre, post := r.identityValuesByIndex(idx)
+		if identityUpdated(pre, post) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// identityValuesByIndex extra pre and post column values of given index
+func (r *RowChange) identityValuesByIndex(indexInfo *timodel.IndexInfo) ([]interface{}, []interface{}) {
+	pre := make([]interface{}, 0, len(indexInfo.Columns))
+	post := make([]interface{}, 0, len(indexInfo.Columns))
+
+	for _, column := range indexInfo.Columns {
+		if r.preValues != nil {
+			pre = append(pre, r.preValues[column.Offset])
+		}
+		if r.postValues != nil {
+			post = append(post, r.postValues[column.Offset])
+		}
+	}
+	return pre, post
 }
 
 // genKey gens key by values e.g. "a.1.b".
