@@ -201,7 +201,7 @@ type BaseDB struct {
 	doNotClose bool
 
 	// SELECT VERSION()
-	version string
+	Version string
 }
 
 // NewBaseDB returns *BaseDB object for test.
@@ -213,7 +213,7 @@ func NewBaseDB(db *sql.DB, scope terror.ErrScope, version string, doFuncInClose 
 		Retry:         &retry.FiniteRetryStrategy{},
 		Scope:         scope,
 		doFuncInClose: doFuncInClose,
-		version:       version,
+		Version:       version,
 	}
 }
 
@@ -385,7 +385,7 @@ func (d *BaseDB) needsModernTerminology() bool {
 	// - https://mariadb.com/docs/server/reference/sql-statements/administrative-sql-statements/show/show-replica-hosts
 	//
 	// Old syntax is still accepted.
-	if strings.Contains(d.version, "MariaDB") {
+	if strings.Contains(d.Version, "MariaDB") {
 		return false
 	}
 
@@ -393,7 +393,7 @@ func (d *BaseDB) needsModernTerminology() bool {
 	// MySQL 8.4 removed `SHOW MASTER STATUS`.
 	minVer := semver.New("8.4.0")
 
-	v, err := semver.NewVersion(d.version)
+	v, err := semver.NewVersion(d.Version)
 	if err != nil {
 		return false
 	}
