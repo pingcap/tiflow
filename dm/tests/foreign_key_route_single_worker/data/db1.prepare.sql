@@ -1,7 +1,7 @@
 SET @@foreign_key_checks=1;
-DROP DATABASE IF EXISTS fk_demo;
-CREATE DATABASE fk_demo;
-USE fk_demo;
+DROP DATABASE IF EXISTS fk_route_src;
+CREATE DATABASE fk_route_src;
+USE fk_route_src;
 
 CREATE TABLE parent (
   parent_id INT PRIMARY KEY,
@@ -11,8 +11,8 @@ CREATE TABLE parent (
 ) ENGINE=InnoDB;
 
 CREATE TABLE child (
-  child_id  INT PRIMARY KEY,
-  parent_id INT NOT NULL,
+  child_id   INT PRIMARY KEY,
+  parent_id  INT NOT NULL,
   child_data VARCHAR(100) NOT NULL,
   CONSTRAINT fk_child_parent
     FOREIGN KEY (parent_id) REFERENCES parent(parent_id)

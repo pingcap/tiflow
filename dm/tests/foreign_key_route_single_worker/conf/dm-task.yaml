@@ -16,13 +16,26 @@ target-database:
 mysql-instances:
   - source-id: "mysql-replica-01"
     block-allow-list: "instance"
+    route-rules: ["parent-route", "child-route"]
     mydumper-config-name: "global"
     loader-config-name: "global"
     syncer-config-name: "global"
 
 block-allow-list:
   instance:
-    do-dbs: ["fk_demo"]
+    do-dbs: ["fk_route_src"]
+
+routes:
+  parent-route:
+    schema-pattern: "fk_route_src"
+    table-pattern: "parent"
+    target-schema: "fk_route_dst"
+    target-table: "parent_r"
+  child-route:
+    schema-pattern: "fk_route_src"
+    table-pattern: "child"
+    target-schema: "fk_route_dst"
+    target-table: "child_r"
 
 mydumpers:
   global:
@@ -40,5 +53,4 @@ syncers:
   global:
     worker-count: 1
     batch: 100
-    safe-mode: true
-    safe-mode-duration: "10m"
+    safe-mode: false

@@ -3707,8 +3707,123 @@ func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, err
 	return s.schemaTracker.GetTableInfo(table)
 }
 
-func (s *Syncer) getDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*schema.DownstreamTableInfo, error) {
-	return s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, originTI)
+func (s *Syncer) needForeignKeyCausality() bool {
+	return isForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
+}
+
+func (s *Syncer) precheckForeignKeyCausality(
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	downstreamTableInfo *schema.DownstreamTableInfo,
+) error {
+	if downstreamTableInfo == nil || downstreamTableInfo.TableInfo == nil {
+		return nil
+	}
+	if len(downstreamTableInfo.TableInfo.ForeignKeys) == 0 {
+		return nil
+	}
+	if sourceTable.Schema == targetTable.Schema && sourceTable.Name == targetTable.Name {
+		return nil
+	}
+
+	return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
+		"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
+		sourceTable.String(),
+		targetTable.String(),
+	)
+}
+
+func (s *Syncer) precheckForeignKeyReferencedTables(
+	rootTable *filter.Table,
+	currentTable *filter.Table,
+	currentTableInfo *model.TableInfo,
+	downstreamTableInfo *schema.DownstreamTableInfo,
+	visiting map[string]struct{},
+) error {
+	if !isForeignKeyChecksEnabled(s.cfg.To.Session) {
+		return nil
+	}
+	if currentTableInfo == nil || downstreamTableInfo == nil || downstreamTableInfo.TableInfo == nil {
+		return nil
+	}
+	if len(downstreamTableInfo.TableInfo.ForeignKeys) == 0 || len(currentTableInfo.ForeignKeys) == 0 {
+		return nil
+	}
+
+	tableID := utils.GenTableID(currentTable)
+	if _, ok := visiting[tableID]; ok {
+		return nil
+	}
+	visiting[tableID] = struct{}{}
+	defer delete(visiting, tableID)
+
+	for _, fk := range currentTableInfo.ForeignKeys {
+		parentSchema := fk.RefSchema.O
+		if parentSchema == "" {
+			parentSchema = currentTable.Schema
+		}
+		parentTable := &filter.Table{Schema: parentSchema, Name: fk.RefTable.O}
+		if s.skipByTable(parentTable) {
+			return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
+				"foreign_key_checks=1 is not supported when replicated table %s depends on parent/ancestor table %s filtered by block-allow-list; please include the parent table in block-allow-list or disable foreign_key_checks",
+				rootTable.String(),
+				parentTable.String(),
+			)
+		}
+
+		parentTableInfo, err := s.schemaTracker.GetTableInfo(parentTable)
+		if err != nil {
+			return terror.ErrSchemaTrackerCannotGetTable.Delegate(err, parentTable)
+		}
+		if err := s.precheckForeignKeyReferencedTables(rootTable, parentTable, parentTableInfo, downstreamTableInfo, visiting); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func basicDownStreamTableInfo(dti *schema.DownstreamTableInfo) *schema.DownstreamTableInfo {
+	if dti == nil {
+		return nil
+	}
+	return &schema.DownstreamTableInfo{
+		TableInfo:   dti.TableInfo,
+		WhereHandle: dti.WhereHandle,
+	}
+}
+
+func (s *Syncer) prepareDownStreamTableInfo(
+	tctx *tcontext.Context,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	originTI *model.TableInfo,
+) (*schema.DownstreamTableInfo, error) {
+	tableID := utils.GenTableID(targetTable)
+	dti, err := s.schemaTracker.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.precheckForeignKeyReferencedTables(sourceTable, sourceTable, originTI, dti, make(map[string]struct{})); err != nil {
+		return nil, err
+	}
+
+	if !s.needForeignKeyCausality() {
+		return basicDownStreamTableInfo(dti), nil
+	}
+	if err := s.precheckForeignKeyCausality(sourceTable, targetTable, dti); err != nil {
+		return nil, err
+	}
+	return s.schemaTracker.InitDownStreamForeignKeyRelations(tctx, sourceTable, targetTable, originTI)
+}
+
+func (s *Syncer) getDownStreamTableInfo(
+	tctx *tcontext.Context,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	originTI *model.TableInfo,
+) (*schema.DownstreamTableInfo, error) {
+	return s.prepareDownStreamTableInfo(tctx, sourceTable, targetTable, originTI)
 }
 
 func (s *Syncer) getTableInfoFromCheckpoint(table *filter.Table) *model.TableInfo {
