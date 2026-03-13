@@ -392,9 +392,9 @@ importer:
 	@mkdir -p bin
 	@tmp_dir=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp_dir"' EXIT; \
-	git clone --depth 1 --branch release-8.5 --filter=blob:none https://github.com/pingcap/tidb.git "$$tmp_dir/tidb" >/dev/null 2>&1; \
-	cd "$$tmp_dir/tidb"; \
-	GOWORK=off $(GO) build -o "$(CURDIR)/bin/$@" ./cmd/importer
+	git clone --depth 1 --branch master --filter=blob:none https://github.com/pingcap/tidb-tools.git "$$tmp_dir/tidb-tools" >/dev/null 2>&1; \
+	cd "$$tmp_dir/tidb-tools"; \
+	$(GO) build -o "$(CURDIR)/bin/$@" ./importer
 
 sync-diff-inspector-integration_test: failpoint-enable sync-diff-inspector importer failpoint-disable
 	@which bin/tidb-server

@@ -15,7 +15,7 @@ This folder contains all tests which relies on external service such as TiDB.
 
    `bin/importer` is built automatically by
    `make sync-diff-inspector-integration_test` from
-   `github.com/pingcap/tidb/cmd/importer@release-8.5`.
+   `github.com/pingcap/tidb-tools/importer@master`.
 
 2. The following programs must be installed:
 
