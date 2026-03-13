@@ -80,6 +80,7 @@ type DDLWorker struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 	baList                     *filter.Filter
+	foreignKeyChecksEnabled    bool
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)
@@ -109,6 +110,7 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		charsetAndDefaultCollation: syncer.charsetAndDefaultCollation,
 		idAndCollationMap:          syncer.idAndCollationMap,
 		baList:                     syncer.baList,
+		foreignKeyChecksEnabled:    isForeignKeyChecksEnabled(syncer.cfg.To.Session),
 		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
 		trackDDL:                   syncer.trackDDL,
 		saveTablePoint:             syncer.saveTablePoint,
@@ -1295,6 +1297,9 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 	if err != nil {
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
 	}
+	if err := ddl.rejectForeignKeyDDL(stmt); err != nil {
+		return nil, err
+	}
 	// get another stmt, one for representing original ddl, one for letting other function modify it.
 	stmt2, _ := qec.p.ParseOneStmt(sql, "", "")
 
@@ -1325,6 +1330,27 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 	ddlInfo.routedDDL = routedDDL
 	return ddlInfo, err
+}
+
+func (ddl *DDLWorker) rejectForeignKeyDDL(stmt ast.StmtNode) error {
+	if !ddl.foreignKeyChecksEnabled {
+		return nil
+	}
+	switch node := stmt.(type) {
+	case *ast.CreateTableStmt:
+		for _, constraint := range node.Constraints {
+			if constraint.Tp == ast.ConstraintForeignKey {
+				return terror.ErrSyncerUnsupportedStmt.Generate("CREATE TABLE with FOREIGN KEY", "foreign_key_checks=1")
+			}
+		}
+	case *ast.AlterTableStmt:
+		for _, spec := range node.Specs {
+			if spec.Tp == ast.AlterTableAddConstraint && spec.Constraint != nil && spec.Constraint.Tp == ast.ConstraintForeignKey {
+				return terror.ErrSyncerUnsupportedStmt.Generate("ALTER TABLE ADD FOREIGN KEY", "foreign_key_checks=1")
+			}
+		}
+	}
+	return nil
 }
 
 func (ddl *Pessimist) dropSchemaInSharding(tctx *tcontext.Context, sourceSchema string) error {
