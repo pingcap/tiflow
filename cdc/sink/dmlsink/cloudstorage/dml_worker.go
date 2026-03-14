@@ -255,7 +255,12 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 	buf := bytes.NewBuffer(make([]byte, 0, task.size))
 	rowsCnt := 0
 	bytesCnt := int64(0)
+	// There is always only one message here in task.msgs
 	for _, msg := range task.msgs {
+		if msg.Key != nil && rowsCnt == 0 {
+			buf.Write(msg.Key)
+			bytesCnt += int64(len(msg.Key))
+		}
 		bytesCnt += int64(len(msg.Value))
 		rowsCnt += msg.GetRowsCount()
 		buf.Write(msg.Value)

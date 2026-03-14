@@ -295,6 +295,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 				BinaryEncodingMethod: c.Sink.CSVConfig.BinaryEncodingMethod,
 				OutputOldValue:       c.Sink.CSVConfig.OutputOldValue,
 				OutputHandleKey:      c.Sink.CSVConfig.OutputHandleKey,
+				OutputFieldHeader:    c.Sink.CSVConfig.OutputFieldHeader,
 			}
 		}
 		var pulsarConfig *config.PulsarConfig
@@ -599,6 +600,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 				BinaryEncodingMethod: cloned.Sink.CSVConfig.BinaryEncodingMethod,
 				OutputOldValue:       cloned.Sink.CSVConfig.OutputOldValue,
 				OutputHandleKey:      cloned.Sink.CSVConfig.OutputHandleKey,
+				OutputFieldHeader:    cloned.Sink.CSVConfig.OutputFieldHeader,
 			}
 		}
 		var kafkaConfig *KafkaConfig
@@ -983,6 +985,7 @@ type CSVConfig struct {
 	BinaryEncodingMethod string `json:"binary_encoding_method"`
 	OutputOldValue       bool   `json:"output_old_value"`
 	OutputHandleKey      bool   `json:"output_handle_key"`
+	OutputFieldHeader    bool   `json:"output_field_header"`
 }
 
 // LargeMessageHandleConfig denotes the large message handling config

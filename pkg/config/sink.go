@@ -260,6 +260,8 @@ type CSVConfig struct {
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 	// output handle key
 	OutputHandleKey bool `toml:"output-handle-key" json:"output-handle-key"`
+	// output field header
+	OutputFieldHeader bool `toml:"output-field-header" json:"output-field-header"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {

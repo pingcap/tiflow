@@ -42,12 +42,12 @@ CREATE TABLE multi_data_type
 );
 
 CREATE TABLE multi_charset (
-	id INT,
-	name varchar(128) CHARACTER SET gbk,
-	country char(32) CHARACTER SET gbk,
-	city varchar(64),
+	`id` INT,
+	Name varchar(128) CHARACTER SET gbk,
+	`Country` char(32) CHARACTER SET gbk,
+	CITY varchar(64),
 	description text CHARACTER SET gbk,
-	image tinyblob,
+	`IMAGE` tinyblob,
 	PRIMARY KEY (id)
 ) ENGINE = InnoDB CHARSET = utf8mb4;
 
