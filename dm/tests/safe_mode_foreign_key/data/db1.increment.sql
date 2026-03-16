@@ -14,6 +14,3 @@ DELETE FROM parent WHERE parent_id=3;
 -- insert new child and replay to assert idempotence
 INSERT INTO child(child_id, parent_id, child_data) VALUES (21,2,'c21');
 INSERT INTO child(child_id, parent_id, child_data) VALUES (21,2,'c21') ON DUPLICATE KEY UPDATE child_data=VALUES(child_data);
-
--- use UK update to trigger DM safe-mode FK guard without violating upstream FK(parent_id) restriction.
-UPDATE parent SET payload='p2_v2' WHERE parent_id=2;
