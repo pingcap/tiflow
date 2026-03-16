@@ -49,6 +49,68 @@ func parseSQL(t *testing.T, p *parser.Parser, sql string) ast.StmtNode {
 	return ret
 }
 
+func runForeignKeyRelationTest(
+	t *testing.T,
+	createTableB string,
+	createTableC string,
+	showCreateB string,
+	showCreateC string,
+	expectedParentTable string,
+) {
+	t.Helper()
+
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec(createTableB, "db")
+	createAndExec(createTableC, "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDA := "`db`.`a`"
+	tableIDB := "`db`.`b`"
+	tableIDC := "`db`.`c`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c", showCreateC))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b", showCreateB))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a", "create table a(id int primary key)"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
+	require.NoError(t, err)
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: expectedParentTable}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestNeedSessionCfgInOldImpl(t *testing.T) {
 	ctx := context.Background()
 	table := &filter.Table{
@@ -623,56 +685,14 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 }
 
 func TestForeignKeyRelationBuildsRootParents(t *testing.T) {
-	ctx := context.Background()
-	p := parser.New()
-
-	dbConn, mock := mockBaseConn(t)
-	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
-	require.NoError(t, err)
-	defer tracker.Close()
-
-	createAndExec := func(sql string, db string) {
-		stmt, parseErr := p.ParseOneStmt(sql, "", "")
-		require.NoError(t, parseErr)
-		require.NoError(t, tracker.Exec(ctx, db, stmt))
-	}
-
-	createAndExec("create database db", "")
-	createAndExec("create table a(id int primary key)", "db")
-	createAndExec("create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))", "db")
-	createAndExec("create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))", "db")
-
-	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-
-	tableIDA := "`db`.`a`"
-	tableIDB := "`db`.`b`"
-	tableIDC := "`db`.`c`"
-
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("c", "create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))"))
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("b", "create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))"))
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("a", "create table a(id int primary key)"))
-
-	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
-	require.NoError(t, err)
-	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, originTI)
-	require.NoError(t, err)
-	require.Len(t, dti.ForeignKeyRelations, 1)
-
-	relation := dti.ForeignKeyRelations[0]
-	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "a"}).String(), relation.ParentTable)
-	require.Equal(t, []int{0}, relation.ChildColumnIdx)
-	require.Len(t, relation.ParentColumns, 1)
-	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
-
-	require.NoError(t, mock.ExpectationsWereMet())
+	runForeignKeyRelationTest(
+		t,
+		"create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))",
+		"create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))",
+		"create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))",
+		"create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))",
+		"a",
+	)
 }
 
 func TestForeignKeyRelationBuildsRootParentsWithHiddenColumns(t *testing.T) {
@@ -779,56 +799,14 @@ func TestForeignKeyRelationSchemaAlignmentErrorGuidesRepair(t *testing.T) {
 }
 
 func TestForeignKeyRelationFallsBackToDirectParentWhenUnmappable(t *testing.T) {
-	ctx := context.Background()
-	p := parser.New()
-
-	dbConn, mock := mockBaseConn(t)
-	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
-	require.NoError(t, err)
-	defer tracker.Close()
-
-	createAndExec := func(sql string, db string) {
-		stmt, parseErr := p.ParseOneStmt(sql, "", "")
-		require.NoError(t, parseErr)
-		require.NoError(t, tracker.Exec(ctx, db, stmt))
-	}
-
-	createAndExec("create database db", "")
-	createAndExec("create table a(id int primary key)", "db")
-	createAndExec("create table b(id int primary key, g int, constraint fk_b_a foreign key (g) references a(id))", "db")
-	createAndExec("create table c(b_id int primary key, constraint fk_c_b foreign key (b_id) references b(id))", "db")
-
-	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-
-	tableIDA := "`db`.`a`"
-	tableIDB := "`db`.`b`"
-	tableIDC := "`db`.`c`"
-
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("c", "create table c(b_id int primary key, constraint fk_c_b foreign key (b_id) references b(id))"))
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("b", "create table b(id int primary key, g int, constraint fk_b_a foreign key (g) references a(id))"))
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("a", "create table a(id int primary key)"))
-
-	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
-	require.NoError(t, err)
-	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, originTI)
-	require.NoError(t, err)
-	require.Len(t, dti.ForeignKeyRelations, 1)
-
-	relation := dti.ForeignKeyRelations[0]
-	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "b"}).String(), relation.ParentTable)
-	require.Equal(t, []int{0}, relation.ChildColumnIdx)
-	require.Len(t, relation.ParentColumns, 1)
-	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
-
-	require.NoError(t, mock.ExpectationsWereMet())
+	runForeignKeyRelationTest(
+		t,
+		"create table b(id int primary key, g int, constraint fk_b_a foreign key (g) references a(id))",
+		"create table c(b_id int primary key, constraint fk_c_b foreign key (b_id) references b(id))",
+		"create table b(id int primary key, g int, constraint fk_b_a foreign key (g) references a(id))",
+		"create table c(b_id int primary key, constraint fk_c_b foreign key (b_id) references b(id))",
+		"b",
+	)
 }
 
 func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
