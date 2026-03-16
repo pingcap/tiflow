@@ -13,9 +13,8 @@ mysql -uroot -h 127.0.0.1 -P 4000 <./data_clustered.sql
 mysql -uroot -h 127.0.0.1 -P 4001 <./data_clustered.sql
 
 echo "run checksum-only mode on clustered PK table"
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
 sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered.output
-export GO_FAILPOINTS=""
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -28,9 +27,8 @@ rm -rf $OUT_DIR/*
 
 echo "introduce mismatch, checksum-only mode should fail on clustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_clustered.t SET v='z' WHERE id=1;"
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
 sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered_fail.output || true
-export GO_FAILPOINTS=""
 
 check_contains "check failed" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -49,9 +47,8 @@ mysql -uroot -h 127.0.0.1 -P 4001 <./data_nonclustered.sql
 mysql -uroot -h 127.0.0.1 -P 4000 -e "SELECT _tidb_rowid FROM checksum_mode_nonclustered.t LIMIT 1;" >$OUT_DIR/nonclustered_rowid.output
 
 echo "run checksum-only mode on nonclustered PK table"
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
 sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered.output
-export GO_FAILPOINTS=""
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -63,9 +60,8 @@ rm -rf $OUT_DIR/*
 
 echo "introduce mismatch, checksum-only mode should fail on nonclustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_nonclustered.t SET v='z' WHERE id=1;"
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
 sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered_fail.output || true
-export GO_FAILPOINTS=""
 
 check_contains "check failed" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -81,11 +77,8 @@ mysql -uroot -h 127.0.0.1 -P 4001 <./data_clustered.sql
 
 # ========== Partial checkpoint restart: simulate interrupted checksum run ==========
 echo "inject source error to create a partial checkpoint"
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-skip-chunk=return();\
-github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-error-source=1*return();\
-github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-skip-chunk=return();github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-error-source=1*return();github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
 sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/partial_run.output || true
-export GO_FAILPOINTS=""
 
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
 check_contains "checksum-info" $CHECKPOINT_FILE
@@ -95,9 +88,8 @@ check_contains "\"done\":false" $CHECKPOINT_FILE
 
 echo "restart from partial checkpoint without error, should resume and pass"
 rm -f $OUT_DIR/sync_diff.log
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
 sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/restart_run.output
-export GO_FAILPOINTS=""
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # After successful restart both sides must be done.
