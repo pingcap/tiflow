@@ -329,6 +329,78 @@ func TestValidatorWaitSyncerRunning(t *testing.T) {
 	require.NoError(t, validator.waitSyncerRunning())
 }
 
+func TestValidatorProcessRowsEventAdjustUnsignedData(t *testing.T) {
+	const (
+		schemaName = "test"
+		tableName  = "tbl_unsigned"
+		createSQL  = "CREATE TABLE `tbl_unsigned`(id int unsigned primary key, v varchar(32))"
+	)
+
+	createAST, err := parseSQL(createSQL)
+	require.NoError(t, err)
+
+	cfg := genSubtaskConfig(t)
+	syncerObj := NewSyncer(cfg, nil, nil)
+	syncerObj.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, []*router.TableRule{})
+	require.NoError(t, err)
+	tableInfo := filter.Table{Schema: schemaName, Name: tableName}
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	mock.MatchExpectationsInOrder(false)
+	mock.ExpectBegin()
+	mock.ExpectExec("SET SESSION SQL_MODE.*").WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableInfo.String() + ".*").WillReturnRows(
+		mock.NewRows([]string{"Table", "Create Table"}).AddRow(tableName, createSQL),
+	)
+
+	dbConn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	syncerObj.downstreamTrackConn = dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(dbConn, &retry.FiniteRetryStrategy{}))
+	syncerObj.schemaTracker, err = schema.NewTestTracker(context.Background(), cfg.Name, syncerObj.downstreamTrackConn, log.L())
+	require.NoError(t, err)
+	defer syncerObj.schemaTracker.Close()
+	require.NoError(t, syncerObj.schemaTracker.CreateSchemaIfNotExists(schemaName))
+	require.NoError(t, syncerObj.schemaTracker.Exec(context.Background(), schemaName, createAST))
+
+	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	validator.ctx, validator.cancel = context.WithCancel(context.Background())
+	defer validator.cancel()
+	validator.tctx = tcontext.NewContext(validator.ctx, validator.L)
+	validator.reset()
+	validator.workers = []*validateWorker{newValidateWorker(validator, 0)}
+
+	err = validator.processRowsEvent(
+		&replication.EventHeader{
+			EventType: replication.WRITE_ROWS_EVENTv2,
+			EventSize: 128,
+		},
+		&replication.RowsEvent{
+			Table: &replication.TableMapEvent{
+				Schema: []byte(schemaName),
+				Table:  []byte(tableName),
+			},
+			ColumnCount: 2,
+			Rows: [][]interface{}{
+				{int32(-2061521730), "v1"},
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	select {
+	case job := <-validator.workers[0].rowChangeCh:
+		require.Equal(t, "2233445566", job.Key)
+		require.EqualValues(t, uint64(2233445566), job.row.RowValues()[0])
+		require.Equal(t, []string{"2233445566"}, job.row.RowStrIdentity())
+	default:
+		t.Fatal("expected validator to dispatch one row change job")
+	}
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestValidatorDoValidate(t *testing.T) {
 	var (
 		schemaName      = "test"

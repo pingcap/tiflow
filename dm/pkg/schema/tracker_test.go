@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
@@ -759,7 +760,7 @@ func TestForeignKeyRelationSchemaAlignmentErrorGuidesRepair(t *testing.T) {
 	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
 	require.NoError(t, err)
 	require.Len(t, originTI.Columns, 3)
-	originTI.Columns[1].Name = ast.NewCIStr("parent_id_shadow")
+	originTI.Columns[1].Name = pmodel.NewCIStr("parent_id_shadow")
 
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))

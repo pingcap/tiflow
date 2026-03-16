@@ -14,14 +14,23 @@
 package syncer
 
 import (
+	"context"
+	"database/sql/driver"
+	"regexp"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/dm/config"
+	connpkg "github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +96,14 @@ func TestGenSQL(t *testing.T) {
 		},
 		{
 			[]interface{}{1, 2, 3, "haha"},
+			[]interface{}{1, 2, 3, "hihi"},
+			true,
+
+			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
+			[][]interface{}{{1, 2, 3, "hihi"}},
+		},
+		{
+			[]interface{}{1, 2, 3, "haha"},
 			[]interface{}{4, 5, 6, "hihi"},
 			true,
 
@@ -128,8 +145,6 @@ func TestJudgeKeyNotFound(t *testing.T) {
 	require.False(t, dmlWorker.judgeKeyNotFound(2, jobs))
 	require.False(t, dmlWorker.judgeKeyNotFound(4, jobs))
 }
-<<<<<<< HEAD
-=======
 
 func TestShouldDisableForeignKeyChecksForJob(t *testing.T) {
 	t.Parallel()
@@ -177,7 +192,6 @@ func TestIsForeignKeyChecksEnabled(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, c.expected, isForeignKeyChecksEnabled(c.session))
@@ -358,4 +372,3 @@ func TestExecuteBatchJobsWithForeignKey(t *testing.T) {
 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
->>>>>>> e709452702 (DM: Add foreign key causality for DM syncer. (#12414))

@@ -786,7 +786,7 @@ func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInf
 	return nil
 }
 
-func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
+func sameColumns(a []pmodel.CIStr, b []pmodel.CIStr) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -830,7 +830,7 @@ func buildColumnIndexMap(ti *model.TableInfo) map[string]int {
 	return nameToIdx
 }
 
-func getColumnsByNames(ti *model.TableInfo, names []ast.CIStr) ([]*model.ColumnInfo, error) {
+func getColumnsByNames(ti *model.TableInfo, names []pmodel.CIStr) ([]*model.ColumnInfo, error) {
 	columns := make([]*model.ColumnInfo, 0, len(names))
 	for _, name := range names {
 		found := false
