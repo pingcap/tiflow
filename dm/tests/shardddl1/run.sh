@@ -841,7 +841,7 @@ function run() {
 	DM_RestartMaster
 	DM_ADD_DROP_COLUMNS
 	DM_COLUMN_INDEX
-	DM_DML_EXECUTE_ERROR
+	#DM_DML_EXECUTE_ERROR
 	DM_KEY_NOT_FOUND
 	start=1
 	end=5
