@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
@@ -313,11 +314,13 @@ func (df *Diff) getSourceGlobalChecksum(
 
 		nextSeq := 0
 		pending := make(map[int]checksumTask, concurrency)
-		select {
-		case <-egCtx.Done():
-			return
-		case result := <-resultCh:
+		for result := range resultCh {
 			pending[result.seq] = result
+			failpoint.Inject("checksum-skip-chunk", func() {
+				if result.seq == 2 {
+					failpoint.Continue()
+				}
+			})
 			drainOrderedChecksumTasks(pending, &nextSeq, func(ordered checksumTask) {
 				progress.UpdateTotal(progressID, 1, false)
 				progress.Inc(progressID)
@@ -334,7 +337,12 @@ func (df *Diff) getSourceGlobalChecksum(
 	}()
 
 	err = eg.Wait()
+	close(resultCh)
 	<-doneCh
+
+	failpoint.Inject("checksum-error-source", func() {
+		failpoint.Return(-1, 0, errors.New("injected source checksum error"))
+	})
 
 	if err != nil {
 		return -1, 0, errors.Trace(err)

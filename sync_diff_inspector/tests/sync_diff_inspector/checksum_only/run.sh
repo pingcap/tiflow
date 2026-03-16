@@ -75,4 +75,35 @@ check_contains "_tidb_rowid" $CHECKPOINT_FILE
 
 rm -rf $OUT_DIR/*
 
+# Reload matching data (previous test left a mismatch).
+mysql -uroot -h 127.0.0.1 -P 4000 <./data_clustered.sql
+mysql -uroot -h 127.0.0.1 -P 4001 <./data_clustered.sql
+
+# ========== Partial checkpoint restart: simulate interrupted checksum run ==========
+echo "inject source error to create a partial checkpoint"
+export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-skip-chunk=return();\
+github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-error-source=1*return();\
+github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/partial_run.output || true
+export GO_FAILPOINTS=""
+
+CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
+check_contains "checksum-info" $CHECKPOINT_FILE
+# checksum-skip-chunk skips seq 2, so only chunks 0-1 are checkpointed.
+# checksum-error-source errors one source. Both sides must be done:false.
+check_contains "\"done\":false" $CHECKPOINT_FILE
+
+echo "restart from partial checkpoint without error, should resume and pass"
+rm -f $OUT_DIR/sync_diff.log
+export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
+sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/restart_run.output
+export GO_FAILPOINTS=""
+
+check_contains "check pass!!!" $OUT_DIR/sync_diff.log
+# After successful restart both sides must be done.
+CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
+check_not_contains "\"done\":false" $CHECKPOINT_FILE
+
+rm -rf $OUT_DIR/*
+
 echo "checksum_only test passed"
