@@ -264,6 +264,8 @@ func TestValidateSafeModeForeignKeyUpdate(t *testing.T) {
 	)
 
 	t.Run("safe-mode pk update should error", func(t *testing.T) {
+		t.Parallel()
+
 		j := newDMLJob(pkUpdate, ecWithSafeMode)
 		err := worker.validateSafeModeForeignKeyUpdate([]*job{j})
 		require.Error(t, err)
@@ -271,6 +273,8 @@ func TestValidateSafeModeForeignKeyUpdate(t *testing.T) {
 	})
 
 	t.Run("safe-mode uk update should error", func(t *testing.T) {
+		t.Parallel()
+
 		j := newDMLJob(ukUpdate, ecWithSafeMode)
 		err := worker.validateSafeModeForeignKeyUpdate([]*job{j})
 		require.Error(t, err)
@@ -278,11 +282,15 @@ func TestValidateSafeModeForeignKeyUpdate(t *testing.T) {
 	})
 
 	t.Run("safe-mode non-key update should pass", func(t *testing.T) {
+		t.Parallel()
+
 		j := newDMLJob(nonKeyUpdate, ecWithSafeMode)
 		require.NoError(t, worker.validateSafeModeForeignKeyUpdate([]*job{j}))
 	})
 
 	t.Run("non-safe-mode pk update should pass", func(t *testing.T) {
+		t.Parallel()
+
 		j := newDMLJob(pkUpdate, ec)
 		require.NoError(t, worker.validateSafeModeForeignKeyUpdate([]*job{j}))
 	})

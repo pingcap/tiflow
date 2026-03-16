@@ -1297,8 +1297,8 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 	if err != nil {
 		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New(err.Error()), "ddl %s", sql)
 	}
-	if err := ddl.rejectForeignKeyDDL(stmt); err != nil {
-		return nil, err
+	if rejectErr := ddl.rejectForeignKeyDDL(stmt); rejectErr != nil {
+		return nil, rejectErr
 	}
 	// get another stmt, one for representing original ddl, one for letting other function modify it.
 	stmt2, _ := qec.p.ParseOneStmt(sql, "", "")
