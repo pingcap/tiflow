@@ -52,27 +52,38 @@ func (m *mockChecksumIterator) Next() (*chunk.Range, error) {
 func (m *mockChecksumIterator) Close() {}
 
 type mockChecksumSource struct {
-	iterator splitter.ChunkIterator
+	iterator  splitter.ChunkIterator
+	iterators map[int]splitter.ChunkIterator
 
-	startRange *splitter.RangeInfo
-	tables     []*common.TableDiff
-	infos      map[int]*source.ChecksumInfo
+	startRange   *splitter.RangeInfo
+	tables       []*common.TableDiff
+	infos        map[int]*source.ChecksumInfo
+	infosByTable map[int]map[int]*source.ChecksumInfo
 	// barriers maps chunk index to a channel that must be closed before
 	// GetCountAndMD5 returns for that chunk. Used for deterministic ordering.
 	barriers map[int]<-chan struct{}
 	// onCalled is invoked with the chunk index when GetCountAndMD5 starts.
-	onCalled func(idx int)
+	onCalled         func(idx int)
+	getIteratorCalls []int
 }
 
 func (m *mockChecksumSource) GetChecksumOnlyIteratorWithStart(
 	_ context.Context,
-	_ int,
+	tableIndex int,
 	startRange *splitter.RangeInfo,
 ) (splitter.ChunkIterator, error) {
 	if startRange != nil {
 		m.startRange = startRange.Copy()
 	} else {
 		m.startRange = nil
+	}
+	m.getIteratorCalls = append(m.getIteratorCalls, tableIndex)
+	if m.iterators != nil {
+		iter, ok := m.iterators[tableIndex]
+		if !ok {
+			return nil, fmt.Errorf("missing iterator for table %d", tableIndex)
+		}
+		return iter, nil
 	}
 	return m.iterator, nil
 }
@@ -90,6 +101,7 @@ func (m *mockChecksumSource) GetRangeIterator(context.Context, *splitter.RangeIn
 }
 
 func (m *mockChecksumSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.RangeInfo) *source.ChecksumInfo {
+	tableIdx := tableRange.ChunkRange.Index.TableIndex
 	idx := tableRange.ChunkRange.Index.ChunkIndex
 	if m.onCalled != nil {
 		m.onCalled(idx)
@@ -101,9 +113,17 @@ func (m *mockChecksumSource) GetCountAndMD5(ctx context.Context, tableRange *spl
 		case <-ch:
 		}
 	}
-	info, ok := m.infos[idx]
+	infos := m.infos
+	if m.infosByTable != nil {
+		var ok bool
+		infos, ok = m.infosByTable[tableIdx]
+		if !ok {
+			return &source.ChecksumInfo{Err: fmt.Errorf("missing checksum infos for table %d", tableIdx)}
+		}
+	}
+	info, ok := infos[idx]
 	if !ok {
-		return &source.ChecksumInfo{Err: fmt.Errorf("missing checksum info for chunk %d", idx)}
+		return &source.ChecksumInfo{Err: fmt.Errorf("missing checksum info for table %d chunk %d", tableIdx, idx)}
 	}
 	ret := *info
 	return &ret
@@ -218,49 +238,91 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	require.NotSame(t, state.LastRange, src.startRange.ChunkRange)
 }
 
-func TestGlobalChecksumErrorCheckpointDoesNotPersistDataFailure(t *testing.T) {
+func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
 	checkpointDir := t.TempDir()
-	tableDiffs := []*common.TableDiff{{
-		Schema: "test",
-		Table:  "tbl",
-	}}
+	tableDiffs := []*common.TableDiff{
+		{
+			Schema: "test",
+			Table:  "tbl0",
+		},
+		{
+			Schema: "test",
+			Table:  "tbl1",
+		},
+	}
 	taskCfg := &config.TaskConfig{
 		OutputDir: checkpointDir,
 		FixDir:    filepath.Join(checkpointDir, "fix"),
 	}
 
 	errSrc := &mockChecksumSource{
-		iterator: &mockChecksumIterator{
-			chunks: []*chunk.Range{
-				{
-					Index: &chunk.CID{
-						TableIndex: 0,
-						ChunkIndex: 0,
-						ChunkCnt:   1,
+		iterators: map[int]splitter.ChunkIterator{
+			0: &mockChecksumIterator{
+				chunks: []*chunk.Range{
+					{
+						Index: &chunk.CID{
+							TableIndex: 0,
+							ChunkIndex: 0,
+							ChunkCnt:   1,
+						},
+					},
+				},
+			},
+			1: &mockChecksumIterator{
+				chunks: []*chunk.Range{
+					{
+						Index: &chunk.CID{
+							TableIndex: 1,
+							ChunkIndex: 0,
+							ChunkCnt:   1,
+						},
 					},
 				},
 			},
 		},
 		tables: tableDiffs,
-		infos: map[int]*source.ChecksumInfo{
-			0: {Err: fmt.Errorf("transient checksum error")},
+		infosByTable: map[int]map[int]*source.ChecksumInfo{
+			0: {
+				0: {Err: fmt.Errorf("transient checksum error")},
+			},
+			1: {
+				0: {Count: 8, Checksum: 11},
+			},
 		},
 	}
 	okSrc := &mockChecksumSource{
-		iterator: &mockChecksumIterator{
-			chunks: []*chunk.Range{
-				{
-					Index: &chunk.CID{
-						TableIndex: 0,
-						ChunkIndex: 0,
-						ChunkCnt:   1,
+		iterators: map[int]splitter.ChunkIterator{
+			0: &mockChecksumIterator{
+				chunks: []*chunk.Range{
+					{
+						Index: &chunk.CID{
+							TableIndex: 0,
+							ChunkIndex: 0,
+							ChunkCnt:   1,
+						},
+					},
+				},
+			},
+			1: &mockChecksumIterator{
+				chunks: []*chunk.Range{
+					{
+						Index: &chunk.CID{
+							TableIndex: 1,
+							ChunkIndex: 0,
+							ChunkCnt:   1,
+						},
 					},
 				},
 			},
 		},
 		tables: tableDiffs,
-		infos: map[int]*source.ChecksumInfo{
-			0: {Count: 5, Checksum: 7},
+		infosByTable: map[int]map[int]*source.ChecksumInfo{
+			0: {
+				0: {Count: 5, Checksum: 7},
+			},
+			1: {
+				0: {Count: 8, Checksum: 11},
+			},
 		},
 	}
 
@@ -284,13 +346,22 @@ func TestGlobalChecksumErrorCheckpointDoesNotPersistDataFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, state)
 	require.NotNil(t, reportInfo)
+	require.Equal(t, 0, state.TableIndex)
 
-	result := reportInfo.TableResults["test"]["tbl"]
+	result := reportInfo.TableResults["test"]["tbl0"]
 	require.NotNil(t, result)
 	require.True(t, result.DataEqual)
 	require.Empty(t, result.ChunkMap)
 	require.Zero(t, result.UpCount)
 	require.Zero(t, result.DownCount)
+	result = reportInfo.TableResults["test"]["tbl1"]
+	require.NotNil(t, result)
+	require.True(t, result.DataEqual)
+	require.Empty(t, result.ChunkMap)
+	require.Zero(t, result.UpCount)
+	require.Zero(t, result.DownCount)
+	require.Equal(t, []int{0}, errSrc.getIteratorCalls)
+	require.Equal(t, []int{0}, okSrc.getIteratorCalls)
 
 	progress.Close()
 	summary := new(bytes.Buffer)

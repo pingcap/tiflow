@@ -169,7 +169,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			// a stale failed table result from the saved report snapshot.
 			flushCkpt(ctx)
 			df.checksumCheckpoint = checkpointState
-			continue
+			break
 		}
 
 		equal := upCount == downCount && upChecksum == downChecksum

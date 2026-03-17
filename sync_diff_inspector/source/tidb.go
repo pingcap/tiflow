@@ -109,7 +109,8 @@ func (s *TiDBSource) PreferGlobalChecksum() bool {
 }
 
 // GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
-// It forces to use _tidb_rowid or clustered PK to split chunks.
+// It prefers _tidb_rowid or clustered PK, then falls back to the regular
+// splitter fields when ignore-columns removes the checksum-specific handle.
 func (s *TiDBSource) GetChecksumOnlyIterator(
 	ctx context.Context,
 	tableIndex int,
@@ -125,10 +126,10 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	originTable.Table = matchSource.OriginTable
 	fields, err := prepareChecksumSplitFields(tableInfo)
 	if err != nil {
-		log.Warn("failed to determine split fields for checksum-only mode, the ignore-columns configuration might be incorrect",
+		log.Warn("failed to determine checksum-specific split fields, fallback to regular split fields",
 			zap.String("table", dbutil.TableName(table.Schema, table.Table)),
 			zap.Error(err))
-		return nil, errors.Trace(err)
+		fields = originTable.Fields
 	}
 	originTable.Fields = fields
 

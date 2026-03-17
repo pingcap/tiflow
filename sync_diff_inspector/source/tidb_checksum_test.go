@@ -14,10 +14,14 @@
 package source
 
 import (
+	"context"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
+	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
 )
@@ -105,4 +109,40 @@ func TestPrepareChecksumSplitFieldsOnRowID(t *testing.T) {
 	require.Len(t, clonedIndices, 1)
 	require.Len(t, clonedIndices[0].Columns, 1)
 	require.Equal(t, "_tidb_rowid", clonedIndices[0].Columns[0].Name.O)
+}
+
+func TestGetChecksumOnlyIteratorFallsBackToRegularFields(t *testing.T) {
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT, KEY `idx_v`(`v`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	filteredInfo, _ := utils.ResetColumns(tableInfo.Clone(), []string{"id"})
+	src := &TiDBSource{
+		tableDiffs: []*common.TableDiff{{
+			Schema: "test",
+			Table:  "t",
+			Info:   filteredInfo,
+		}},
+		sourceTableMap: map[string]*common.TableSource{
+			dbutil.TableName("test", "t"): {
+				OriginSchema: "test",
+				OriginTable:  "t",
+			},
+		},
+	}
+
+	startRange := &splitter.RangeInfo{
+		ChunkRange: &chunk.Range{
+			Index: &chunk.CID{
+				TableIndex: 0,
+				ChunkIndex: 0,
+				ChunkCnt:   1,
+			},
+		},
+	}
+	iter, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
+	require.NoError(t, err)
+	require.NotNil(t, iter)
 }
