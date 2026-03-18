@@ -154,18 +154,18 @@ func TestComputeConfigHashIgnoresTLSName(t *testing.T) {
 		CheckTables: []string{"test.t1"},
 	}
 
-	hash1, err := task.ComputeConfigHash()
+	hash1, err := task.ComputeConfigHash(false)
 	require.NoError(t, err)
 
 	task.SourceInstances[0].Security.TLSName = "source-tls-2"
 	task.TargetInstance.Security.TLSName = "target-tls-2"
 
-	hash2, err := task.ComputeConfigHash()
+	hash2, err := task.ComputeConfigHash(false)
 	require.NoError(t, err)
 	require.Equal(t, hash1, hash2)
 
 	task.TargetInstance.Security.CAPath = "/tmp/target-ca-new.pem"
-	hash3, err := task.ComputeConfigHash()
+	hash3, err := task.ComputeConfigHash(false)
 	require.NoError(t, err)
 	require.NotEqual(t, hash2, hash3)
 }
