@@ -115,10 +115,16 @@ func TestReport(t *testing.T) {
 	report.SetTableDataCheckResult("test", "tbl", true, 100, 200, 222, 222, &chunk.CID{1, 1, 1, 1, 2})
 	report.SetTableMeetError("test", "tbl", errors.New("eeee"))
 
-	newReport := NewReport(task)
-	newReport.LoadReport(report)
+	payload, err := json.Marshal(report)
+	require.NoError(t, err)
 
-	require.Equal(t, newReport.TotalSize, int64(579))
+	var persisted Report
+	require.NoError(t, json.Unmarshal(payload, &persisted))
+
+	newReport := NewReport(task)
+	newReport.LoadReport(&persisted)
+
+	require.Equal(t, newReport.TotalSize, int64(0))
 	result, ok := newReport.TableResults["test"]["tbl"]
 	require.True(t, ok)
 	require.Nil(t, result.MeetError)

@@ -102,9 +102,7 @@ func (r *Report) LoadReport(reportInfo *Report) {
 			r.TableResults[schema] = make(map[string]*TableResult)
 		}
 		for table, result := range tableMap {
-			copied := *result
-			copied.MeetError = nil
-			r.TableResults[schema][table] = &copied
+			r.TableResults[schema][table] = result
 		}
 	}
 	r.refreshResult()
