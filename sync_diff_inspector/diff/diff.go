@@ -201,24 +201,28 @@ func (df *Diff) initCheckpoint() error {
 			return errors.Annotate(err, "the checkpoint load process failed")
 		}
 
-		// this need not be synchronized, because at the moment, the is only one thread access the section
-		log.Info("load checkpoint",
-			zap.Any("chunk index", node.GetID()),
-			zap.Reflect("chunk", node),
-			zap.String("state", node.GetState()))
-		df.cp.InitCurrentSavedID(node)
-		// remove the sql file that ID bigger than node.
-		// cause we will generate these sql again.
-		err = df.removeSQLFiles(node.GetID())
-		if err != nil {
-			return errors.Trace(err)
-		}
-		df.startRange = splitter.FromNode(node)
-		df.report.LoadReport(reportInfo)
-		finishTableNums = df.startRange.GetTableIndex()
-		if df.startRange.ChunkRange.Type == chunk.Empty {
-			// chunk_iter will skip this table directly
-			finishTableNums++
+		if node == nil {
+			log.Warn("checkpoint file exists but contains no chunk info, starting from beginning")
+		} else {
+			// this need not be synchronized, because at the moment, the is only one thread access the section
+			log.Info("load checkpoint",
+				zap.Any("chunk index", node.GetID()),
+				zap.Reflect("chunk", node),
+				zap.String("state", node.GetState()))
+			df.cp.InitCurrentSavedID(node)
+			// remove the sql file that ID bigger than node.
+			// cause we will generate these sql again.
+			err = df.removeSQLFiles(node.GetID())
+			if err != nil {
+				return errors.Trace(err)
+			}
+			df.startRange = splitter.FromNode(node)
+			df.report.LoadReport(reportInfo)
+			finishTableNums = df.startRange.GetTableIndex()
+			if df.startRange.ChunkRange.Type == chunk.Empty {
+				// chunk_iter will skip this table directly
+				finishTableNums++
+			}
 		}
 	} else {
 		log.Info("not found checkpoint file, start from beginning")

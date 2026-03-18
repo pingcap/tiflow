@@ -42,7 +42,9 @@ func (df *Diff) shouldUseGlobalChecksum() bool {
 	if df.exportFixSQL {
 		return false
 	}
-	return df.upstream.PreferGlobalChecksum() && df.downstream.PreferGlobalChecksum()
+	_, upOK := df.upstream.(source.ChecksumCapableSource)
+	_, downOK := df.downstream.(source.ChecksumCapableSource)
+	return upOK && downOK
 }
 
 func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
@@ -170,6 +172,10 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			// a stale failed table result from the saved report snapshot.
 			flushCkpt(ctx)
 			df.checksumCheckpoint = checkpointState
+			log.Warn("global checksum stopped due to table error, remaining tables skipped",
+				zap.String("table", dbutil.TableName(schema, table)),
+				zap.Int("remaining", len(tables)-tableIndex-1),
+				zap.Error(err))
 			break
 		}
 
@@ -286,7 +292,11 @@ func (df *Diff) getSourceGlobalChecksum(
 		startRange = &splitter.RangeInfo{ChunkRange: state.LastRange.Clone()}
 	}
 
-	iter, err := src.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
+	checksumSrc, ok := src.(source.ChecksumCapableSource)
+	if !ok {
+		return -1, 0, errors.New("source does not support checksum-only mode")
+	}
+	iter, err := checksumSrc.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
 	if err != nil {
 		return -1, 0, errors.Trace(err)
 	}

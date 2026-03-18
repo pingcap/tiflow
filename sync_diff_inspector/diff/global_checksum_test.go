@@ -92,10 +92,6 @@ func (m *mockChecksumSource) GetTableAnalyzer() source.TableAnalyzer {
 	return nil
 }
 
-func (m *mockChecksumSource) PreferGlobalChecksum() bool {
-	return true
-}
-
 func (m *mockChecksumSource) GetRangeIterator(context.Context, *splitter.RangeInfo, source.TableAnalyzer, int) (source.RangeIterator, error) {
 	return nil, nil
 }
