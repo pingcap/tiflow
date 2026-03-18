@@ -83,7 +83,7 @@ func TestBasicTableUtilOperation(t *testing.T) {
 	require.NoError(t, err)
 
 	query, orderKeyCols := GetTableRowsQueryFormat("test", "test", tableInfo, "123")
-	require.Equal(t, query, "SELECT /*!40001 SQL_NO_CACHE */ `a`, `b`, round(`c`, 5-floor(log10(abs(`c`)))) as `c`, `d` FROM `test`.`test` WHERE %s ORDER BY `a`,`b` COLLATE '123'")
+	require.Equal(t, query, "SELECT /*!40001 SQL_NO_CACHE */ `a`, `b`, cast(`c` as decimal(65, 30)) as `c`, `d` FROM `test`.`test` WHERE %s ORDER BY `a`,`b` COLLATE '123'")
 	expectName := []string{"a", "b"}
 	for i, col := range orderKeyCols {
 		require.Equal(t, col.Name.O, expectName[i])

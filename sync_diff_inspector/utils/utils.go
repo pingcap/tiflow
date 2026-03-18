@@ -164,12 +164,8 @@ func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, c
 		}
 
 		name := dbutil.ColumnName(col.Name.O)
-		// When col value is 0, the result is NULL.
-		// But we can use ISNULL to distinguish between null and 0.
-		if col.FieldType.GetType() == mysql.TypeFloat {
-			name = fmt.Sprintf("round(%s, 5-floor(log10(abs(%s)))) as %s", name, name, name)
-		} else if col.FieldType.GetType() == mysql.TypeDouble {
-			name = fmt.Sprintf("round(%s, 14-floor(log10(abs(%s)))) as %s", name, name, name)
+		if col.FieldType.GetType() == mysql.TypeFloat || col.FieldType.GetType() == mysql.TypeDouble {
+			name = fmt.Sprintf("cast(%s as decimal(65, 30)) as %s", name, name)
 		}
 		columnNames = append(columnNames, name)
 	}
@@ -885,12 +881,8 @@ func GetCountAndChecksum(
 			continue
 		}
 		name := dbutil.ColumnName(col.Name.O)
-		// When col value is 0, the result is NULL.
-		// But we can use ISNULL to distinguish between null and 0.
-		if col.FieldType.GetType() == mysql.TypeFloat {
-			name = fmt.Sprintf("round(%s, 5-floor(log10(abs(%s))))", name, name)
-		} else if col.FieldType.GetType() == mysql.TypeDouble {
-			name = fmt.Sprintf("round(%s, 14-floor(log10(abs(%s))))", name, name)
+		if col.FieldType.GetType() == mysql.TypeFloat || col.FieldType.GetType() == mysql.TypeDouble {
+			name = fmt.Sprintf("cast(%s as decimal(65, 30))", name)
 		}
 		columnNames = append(columnNames, name)
 		columnIsNull = append(columnIsNull, fmt.Sprintf("ISNULL(%s)", name))
