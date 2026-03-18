@@ -62,8 +62,8 @@ func TestParseConfig(t *testing.T) {
 
 func TestComputeConfigHashIncludesExportFixSQL(t *testing.T) {
 	cfg := NewConfig()
-	require.NoError(t, os.RemoveAll("/tmp/output/config"))
 	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
 	require.NoError(t, cfg.Init())
 
 	cfg.Task.ExportFixSQL = true
@@ -75,7 +75,6 @@ func TestComputeConfigHashIncludesExportFixSQL(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEqual(t, withFixSQL, withoutFixSQL)
-	require.NoError(t, os.RemoveAll(cfg.Task.OutputDir))
 }
 
 func TestError(t *testing.T) {
