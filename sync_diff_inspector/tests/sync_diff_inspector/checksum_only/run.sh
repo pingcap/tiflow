@@ -14,7 +14,7 @@ mysql -uroot -h 127.0.0.1 -P 4001 <./data_clustered.sql
 
 echo "run checksum-only mode on clustered PK table"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered.output
+	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -28,7 +28,7 @@ rm -rf $OUT_DIR/*
 echo "introduce mismatch, checksum-only mode should fail on clustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_clustered.t SET v='z' WHERE id=1;"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered_fail.output || true
+	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered_fail.output || true
 
 check_contains "check failed" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -48,7 +48,7 @@ mysql -uroot -h 127.0.0.1 -P 4000 -e "SELECT _tidb_rowid FROM checksum_mode_nonc
 
 echo "run checksum-only mode on nonclustered PK table"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered.output
+	sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -61,7 +61,7 @@ rm -rf $OUT_DIR/*
 echo "introduce mismatch, checksum-only mode should fail on nonclustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_nonclustered.t SET v='z' WHERE id=1;"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered_fail.output || true
+	sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered_fail.output || true
 
 check_contains "check failed" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -78,7 +78,7 @@ mysql -uroot -h 127.0.0.1 -P 4001 <./data_clustered.sql
 # ========== Partial checkpoint restart: simulate interrupted checksum run ==========
 echo "inject source error to create a partial checkpoint"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-skip-chunk=return();github.com/pingcap/tiflow/sync_diff_inspector/diff/checksum-error-source=1*return();github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/partial_run.output || true
+	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/partial_run.output || true
 
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
 check_contains "checksum-info" $CHECKPOINT_FILE
@@ -89,7 +89,7 @@ check_contains "\"done\":false" $CHECKPOINT_FILE
 echo "restart from partial checkpoint without error, should resume and pass"
 rm -f $OUT_DIR/sync_diff.log
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/restart_run.output
+	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/restart_run.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # After successful restart both sides must be done.
