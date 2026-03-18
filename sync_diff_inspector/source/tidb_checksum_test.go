@@ -146,3 +146,41 @@ func TestGetChecksumOnlyIteratorFallsBackToRegularFields(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, iter)
 }
+
+func TestGetChecksumOnlyIteratorReturnsErrorForInvalidConfiguredFallbackFields(t *testing.T) {
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT, KEY `idx_v`(`v`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	filteredInfo, _ := utils.ResetColumns(tableInfo.Clone(), []string{"id"})
+	src := &TiDBSource{
+		tableDiffs: []*common.TableDiff{{
+			Schema: "test",
+			Table:  "t",
+			Info:   filteredInfo,
+			Fields: "id",
+		}},
+		sourceTableMap: map[string]*common.TableSource{
+			dbutil.TableName("test", "t"): {
+				OriginSchema: "test",
+				OriginTable:  "t",
+			},
+		},
+	}
+
+	startRange := &splitter.RangeInfo{
+		ChunkRange: &chunk.Range{
+			Index: &chunk.CID{
+				TableIndex: 0,
+				ChunkIndex: 0,
+				ChunkCnt:   1,
+			},
+		},
+	}
+	iter, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
+	require.Error(t, err)
+	require.Nil(t, iter)
+	require.Contains(t, err.Error(), "column id")
+}

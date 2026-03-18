@@ -90,6 +90,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				progress.FailTable(progressID)
 			}
 			progress.Inc(progressID)
+			df.report.ClearTableMeetError(schema, table)
 			df.report.SetTableDataCheckResult(schema, table, isEqual, int(upCount), int(downCount), upCount, downCount, chunkID)
 			checkpointState := checkpoints.NewChecksumState(tableIndex)
 			checkpointState.Upstream.Done = true
@@ -185,6 +186,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 		}
 		progress.UpdateTotal(progressID, 0, true)
 		progress.Inc(progressID)
+		df.report.ClearTableMeetError(schema, table)
 		df.report.SetTableDataCheckResult(schema, table, equal, 0, 0, upCount, downCount, chunkID)
 
 		// Safe without checksumCheckpointMu: eg.Wait() has returned, so the
