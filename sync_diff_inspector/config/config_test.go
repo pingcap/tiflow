@@ -34,7 +34,7 @@ func TestParseConfig(t *testing.T) {
 
 	require.Nil(t, cfg.Parse([]string{"--config", "config.toml"}))
 	require.Nil(t, cfg.Init())
-	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs, cfg.ExportFixSQL))
+	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))
 
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
 	// we change the config from config.toml to config_sharding.toml
@@ -45,14 +45,14 @@ func TestParseConfig(t *testing.T) {
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
 	// this time will be ok, because we remove the last outputDir.
 	require.Nil(t, cfg.Init())
-	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs, cfg.ExportFixSQL))
+	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))
 
 	require.True(t, cfg.CheckConfig())
 
 	// we might not use the same config to run this test. e.g. MYSQL_PORT can be 4000
 	require.JSONEq(t, cfg.String(),
 		"{\"check-thread-count\":4,\"split-thread-count\":5,\"export-fix-sql\":true,\"check-struct-only\":false,\"dm-addr\":\"\",\"dm-task\":\"\",\"data-sources\":{\"mysql1\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},\"mysql2\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},\"mysql3\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule3\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},\"tidb0\":{\"host\":\"127.0.0.1\",\"port\":4000,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":null,\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":{\"max_execution_time\":86400,\"tidb_opt_prefer_range_scan\":\"ON\"}}},\"routes\":{\"rule1\":{\"schema-pattern\":\"test_*\",\"table-pattern\":\"t_*\",\"target-schema\":\"test\",\"target-table\":\"t\"},\"rule2\":{\"schema-pattern\":\"test2_*\",\"table-pattern\":\"t2_*\",\"target-schema\":\"test2\",\"target-table\":\"t2\"},\"rule3\":{\"schema-pattern\":\"test2_*\",\"table-pattern\":\"t2_*\",\"target-schema\":\"test\",\"target-table\":\"t\"}},\"table-configs\":{\"config1\":{\"target-tables\":[\"schema*.table*\",\"test2.t2\"],\"Schema\":\"\",\"Table\":\"\",\"ConfigIndex\":0,\"HasMatched\":false,\"IgnoreColumns\":[\"\",\"\"],\"Fields\":[\"\"],\"Range\":\"age \\u003e 10 AND age \\u003c 20\",\"TargetTableInfo\":null,\"Collation\":\"\",\"chunk-size\":0}},\"task\":{\"source-instances\":[\"mysql1\",\"mysql2\",\"mysql3\"],\"source-routes\":null,\"target-instance\":\"tidb0\",\"target-check-tables\":[\"schema*.table*\",\"!c.*\",\"test2.t2\"],\"target-configs\":[\"config1\"],\"output-dir\":\"/tmp/output/config\",\"SourceInstances\":[{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule3\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null}],\"TargetInstance\":{\"host\":\"127.0.0.1\",\"port\":4000,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":null,\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":{\"max_execution_time\":86400,\"tidb_opt_prefer_range_scan\":\"ON\"}},\"TargetTableConfigs\":[{\"target-tables\":[\"schema*.table*\",\"test2.t2\"],\"Schema\":\"\",\"Table\":\"\",\"ConfigIndex\":0,\"HasMatched\":false,\"IgnoreColumns\":[\"\",\"\"],\"Fields\":[\"\"],\"Range\":\"age \\u003e 10 AND age \\u003c 20\",\"TargetTableInfo\":null,\"Collation\":\"\",\"chunk-size\":0}],\"TargetCheckTables\":[{},{},{}],\"FixDir\":\"/tmp/output/config/fix-on-tidb0\",\"CheckpointDir\":\"/tmp/output/config/checkpoint\",\"HashFile\":\"\"},\"ConfigFile\":\"config_sharding.toml\",\"PrintVersion\":false}")
-	hash, err := cfg.Task.ComputeConfigHash(cfg.ExportFixSQL)
+	hash, err := cfg.Task.ComputeConfigHash()
 	require.NoError(t, err)
 	require.Equal(t, hash, "e4b4a202a072904121101d516f05ff8144e431ca6094db0fcca375221ddde98d")
 	require.True(t, cfg.TableConfigs["config1"].Valid())
@@ -66,10 +66,12 @@ func TestComputeConfigHashIncludesExportFixSQL(t *testing.T) {
 	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
 	require.NoError(t, cfg.Init())
 
-	withFixSQL, err := cfg.Task.ComputeConfigHash(true)
+	cfg.Task.ExportFixSQL = true
+	withFixSQL, err := cfg.Task.ComputeConfigHash()
 	require.NoError(t, err)
 
-	withoutFixSQL, err := cfg.Task.ComputeConfigHash(false)
+	cfg.Task.ExportFixSQL = false
+	withoutFixSQL, err := cfg.Task.ComputeConfigHash()
 	require.NoError(t, err)
 
 	require.NotEqual(t, withFixSQL, withoutFixSQL)
@@ -154,18 +156,18 @@ func TestComputeConfigHashIgnoresTLSName(t *testing.T) {
 		CheckTables: []string{"test.t1"},
 	}
 
-	hash1, err := task.ComputeConfigHash(false)
+	hash1, err := task.ComputeConfigHash()
 	require.NoError(t, err)
 
 	task.SourceInstances[0].Security.TLSName = "source-tls-2"
 	task.TargetInstance.Security.TLSName = "target-tls-2"
 
-	hash2, err := task.ComputeConfigHash(false)
+	hash2, err := task.ComputeConfigHash()
 	require.NoError(t, err)
 	require.Equal(t, hash1, hash2)
 
 	task.TargetInstance.Security.CAPath = "/tmp/target-ca-new.pem"
-	hash3, err := task.ComputeConfigHash(false)
+	hash3, err := task.ComputeConfigHash()
 	require.NoError(t, err)
 	require.NotEqual(t, hash2, hash3)
 }

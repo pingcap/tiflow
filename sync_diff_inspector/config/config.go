@@ -232,6 +232,8 @@ type TaskConfig struct {
 	TargetTableConfigs []*TableConfig
 	TargetCheckTables  filter.Filter
 
+	ExportFixSQL bool `json:"-"`
+
 	FixDir        string
 	CheckpointDir string
 	HashFile      string
@@ -241,7 +243,6 @@ type TaskConfig struct {
 func (t *TaskConfig) Init(
 	dataSources map[string]*DataSource,
 	tableConfigs map[string]*TableConfig,
-	exportFixSQL bool,
 ) (err error) {
 	// Parse Source/Target
 	dataSourceList := make([]*DataSource, 0, len(t.Source))
@@ -292,7 +293,7 @@ func (t *TaskConfig) Init(
 		t.TargetTableConfigs = tableConfigsList
 	}
 
-	hash, err := t.ComputeConfigHash(exportFixSQL)
+	hash, err := t.ComputeConfigHash()
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -345,9 +346,9 @@ func (t *TaskConfig) Init(
 // ComputeConfigHash compute the hash according to the task
 // if ConfigHash is as same as checkpoint.hash
 // we think the second sync diff can use the checkpoint.
-func (t *TaskConfig) ComputeConfigHash(exportFixSQL bool) (string, error) {
+func (t *TaskConfig) ComputeConfigHash() (string, error) {
 	hash := make([]byte, 0)
-	hash = append(hash, []byte(strconv.FormatBool(exportFixSQL))...)
+	hash = append(hash, []byte(strconv.FormatBool(t.ExportFixSQL))...)
 	// compute sources
 	for _, c := range t.SourceInstances {
 		configBytes, err := json.Marshal(c)
@@ -592,7 +593,8 @@ func (c *Config) Init() (err error) {
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
 		}
-		err = c.Task.Init(c.DataSources, c.TableConfigs, c.ExportFixSQL)
+		c.Task.ExportFixSQL = c.ExportFixSQL
+		err = c.Task.Init(c.DataSources, c.TableConfigs)
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
 		}
@@ -617,7 +619,8 @@ func (c *Config) Init() (err error) {
 		}
 	}
 
-	err = c.Task.Init(c.DataSources, c.TableConfigs, c.ExportFixSQL)
+	c.Task.ExportFixSQL = c.ExportFixSQL
+	err = c.Task.Init(c.DataSources, c.TableConfigs)
 	if err != nil {
 		return errors.Annotate(err, "failed to init Task")
 	}
