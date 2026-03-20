@@ -1,6 +1,6 @@
 module github.com/breezewish/checker
 
-go 1.25.6
+go 1.25.8
 
 require (
 	github.com/alecthomas/chroma v0.10.0

@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.25.6
+go 1.25.8
 
 require (
 	cloud.google.com/go/storage v1.52.0
@@ -136,7 +136,7 @@ require (
 	cloud.google.com/go/kms v1.21.0 // indirect
 	cloud.google.com/go/longrunning v0.6.6 // indirect
 	cloud.google.com/go/monitoring v1.24.0 // indirect
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
