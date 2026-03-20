@@ -1,6 +1,10 @@
 module avro-checksum-sample
 
+<<<<<<< HEAD
 go 1.25.5
+=======
+go 1.25.8
+>>>>>>> 6c0bc226bd (*: update third-party dependencies (#12560))
 
 require (
 	github.com/linkedin/goavro/v2 v2.11.1

@@ -1,6 +1,10 @@
 module github.com/pingcap/tiflow
 
+<<<<<<< HEAD
 go 1.25.5
+=======
+go 1.25.8
+>>>>>>> 6c0bc226bd (*: update third-party dependencies (#12560))
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -130,9 +134,19 @@ require (
 )
 
 require (
+<<<<<<< HEAD
 	cloud.google.com/go/kms v1.15.8 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect
+=======
+	cel.dev/expr v0.24.0 // indirect
+	cloud.google.com/go/auth v0.16.0 // indirect
+	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
+	cloud.google.com/go/kms v1.21.0 // indirect
+	cloud.google.com/go/longrunning v0.6.6 // indirect
+	cloud.google.com/go/monitoring v1.24.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
+>>>>>>> 6c0bc226bd (*: update third-party dependencies (#12560))
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/andybalholm/brotli v1.0.5 // indirect
