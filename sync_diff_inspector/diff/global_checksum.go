@@ -122,7 +122,13 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			}
 		}
 
-		progress.StartTable(progressID, 1, false)
+		upIter, upChunks, downIter, downChunks, err := df.createChecksumIterators(
+			ctx, tableIndex, checkpointState)
+		if err != nil {
+			return errors.Trace(err)
+		}
+
+		progress.StartTable(progressID, upChunks+downChunks, false)
 		eg, egCtx := errgroup.WithContext(ctx)
 		flushDone := make(chan struct{})
 		go func() {
@@ -144,6 +150,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				egCtx,
 				df.upstream,
 				tableIndex,
+				upIter,
 				checkpointState.Upstream,
 				progressID,
 			)
@@ -154,18 +161,17 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				egCtx,
 				df.downstream,
 				tableIndex,
+				downIter,
 				checkpointState.Downstream,
 				progressID,
 			)
 			return err
 		})
-		err := eg.Wait()
+		err = eg.Wait()
 		<-flushDone
 
 		if err != nil {
 			progress.FailTable(progressID)
-			progress.UpdateTotal(progressID, 0, true)
-			progress.Inc(progressID)
 			df.report.SetTableMeetError(schema, table, err)
 			// Retryable checksum execution errors should not be checkpointed as
 			// data inequality, otherwise a later successful resume would inherit
@@ -276,29 +282,58 @@ func drainOrderedChecksumTasks(pending map[int]checksumTask, nextSeq *int, fn fu
 	}
 }
 
+func createChecksumIterator(
+	ctx context.Context,
+	src source.Source,
+	tableIndex int,
+	st *checkpoints.ChecksumSourceState,
+) (splitter.ChunkIterator, int, error) {
+	if st.Done {
+		return nil, 0, nil
+	}
+	var startRange *splitter.RangeInfo
+	if st.LastRange != nil {
+		startRange = &splitter.RangeInfo{ChunkRange: st.LastRange.Clone()}
+	}
+	checksumSrc, ok := src.(source.ChecksumCapableSource)
+	if !ok {
+		return nil, 0, errors.New("source does not support checksum-only mode")
+	}
+	return checksumSrc.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
+}
+
+// createChecksumIterators builds chunk iterators for both sources.
+// It returns nil iterator with 0 chunks for any source that has already
+// completed (state.Done); getSourceGlobalChecksum handles nil iterators.
+func (df *Diff) createChecksumIterators(
+	ctx context.Context,
+	tableIndex int,
+	state *checkpoints.ChecksumState,
+) (upIter splitter.ChunkIterator, upChunks int, downIter splitter.ChunkIterator, downChunks int, err error) {
+	upIter, upChunks, err = createChecksumIterator(ctx, df.upstream, tableIndex, state.Upstream)
+	if err != nil {
+		return nil, 0, nil, 0, err
+	}
+	downIter, downChunks, err = createChecksumIterator(ctx, df.downstream, tableIndex, state.Downstream)
+	if err != nil {
+		if upIter != nil {
+			upIter.Close()
+		}
+		return nil, 0, nil, 0, err
+	}
+	return upIter, upChunks, downIter, downChunks, nil
+}
+
 func (df *Diff) getSourceGlobalChecksum(
 	ctx context.Context,
 	src source.Source,
 	tableIndex int,
+	iter splitter.ChunkIterator,
 	state *checkpoints.ChecksumSourceState,
 	progressID string,
 ) (int64, uint64, error) {
 	if state.Done {
 		return state.Count, state.Checksum, nil
-	}
-
-	var startRange *splitter.RangeInfo
-	if state.LastRange != nil {
-		startRange = &splitter.RangeInfo{ChunkRange: state.LastRange.Clone()}
-	}
-
-	checksumSrc, ok := src.(source.ChecksumCapableSource)
-	if !ok {
-		return -1, 0, errors.New("source does not support checksum-only mode")
-	}
-	iter, err := checksumSrc.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
-	if err != nil {
-		return -1, 0, errors.Trace(err)
 	}
 	defer iter.Close()
 
@@ -334,7 +369,6 @@ func (df *Diff) getSourceGlobalChecksum(
 				}
 			})
 			drainOrderedChecksumTasks(pending, &nextSeq, func(ordered checksumTask) {
-				progress.UpdateTotal(progressID, 1, false)
 				progress.Inc(progressID)
 				totalCount += ordered.count
 				totalChecksum ^= ordered.checksum
@@ -348,7 +382,7 @@ func (df *Diff) getSourceGlobalChecksum(
 		}
 	}()
 
-	err = eg.Wait()
+	err := eg.Wait()
 	close(resultCh)
 	<-doneCh
 

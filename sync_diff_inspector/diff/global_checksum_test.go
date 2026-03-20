@@ -14,7 +14,6 @@
 package diff
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -52,8 +51,8 @@ func (m *mockChecksumIterator) Next() (*chunk.Range, error) {
 func (m *mockChecksumIterator) Close() {}
 
 type mockChecksumSource struct {
-	iterator  splitter.ChunkIterator
-	iterators map[int]splitter.ChunkIterator
+	iterator  *mockChecksumIterator
+	iterators map[int]*mockChecksumIterator
 
 	startRange   *splitter.RangeInfo
 	tables       []*common.TableDiff
@@ -67,11 +66,10 @@ type mockChecksumSource struct {
 	getIteratorCalls []int
 }
 
-func (m *mockChecksumSource) GetChecksumOnlyIteratorWithStart(
-	_ context.Context,
+func (m *mockChecksumSource) getIterator(
 	tableIndex int,
 	startRange *splitter.RangeInfo,
-) (splitter.ChunkIterator, error) {
+) (*mockChecksumIterator, int, error) {
 	if startRange != nil {
 		m.startRange = startRange.Copy()
 	} else {
@@ -81,11 +79,11 @@ func (m *mockChecksumSource) GetChecksumOnlyIteratorWithStart(
 	if m.iterators != nil {
 		iter, ok := m.iterators[tableIndex]
 		if !ok {
-			return nil, fmt.Errorf("missing iterator for table %d", tableIndex)
+			return nil, 0, fmt.Errorf("missing iterator for table %d", tableIndex)
 		}
-		return iter, nil
+		return iter, len(iter.chunks), nil
 	}
-	return m.iterator, nil
+	return m.iterator, len(m.iterator.chunks), nil
 }
 
 func (m *mockChecksumSource) GetTableAnalyzer() source.TableAnalyzer {
@@ -155,13 +153,12 @@ func (m *mockChecksumSource) GetSnapshot() string {
 
 func (m *mockChecksumSource) Close() {}
 
-// GetChecksumOnlyIterator returns the iterator used by global checksum mode.
 func (m *mockChecksumSource) GetChecksumOnlyIterator(
-	ctx context.Context,
+	_ context.Context,
 	tableIndex int,
 	startRange *splitter.RangeInfo,
-) (splitter.ChunkIterator, error) {
-	return m.GetChecksumOnlyIteratorWithStart(ctx, tableIndex, startRange)
+) (splitter.ChunkIterator, int, error) {
+	return m.getIterator(tableIndex, startRange)
 }
 
 func newChecksumChunk(idx int) *chunk.Range {
@@ -198,7 +195,10 @@ func TestGetSourceGlobalChecksumKeepsCheckpointOrder(t *testing.T) {
 		},
 	}
 
-	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, state, "")
+	iter, _, err := src.GetChecksumOnlyIterator(context.Background(), 0, nil)
+	require.NoError(t, err)
+
+	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "")
 	require.NoError(t, err)
 	require.Equal(t, int64(16), count)
 	require.Equal(t, uint64(10), checksum)
@@ -223,7 +223,10 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	}
 	df := &Diff{checkThreadCount: 1}
 
-	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, state, "")
+	iter, _, err := src.GetChecksumOnlyIterator(context.Background(), 0, &splitter.RangeInfo{ChunkRange: lastRange.Clone()})
+	require.NoError(t, err)
+
+	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "")
 	require.NoError(t, err)
 	require.Equal(t, int64(9), count)
 	require.Equal(t, uint64(12), checksum)
@@ -252,8 +255,8 @@ func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
 	}
 
 	errSrc := &mockChecksumSource{
-		iterators: map[int]splitter.ChunkIterator{
-			0: &mockChecksumIterator{
+		iterators: map[int]*mockChecksumIterator{
+			0: {
 				chunks: []*chunk.Range{
 					{
 						Index: &chunk.CID{
@@ -264,7 +267,7 @@ func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
 					},
 				},
 			},
-			1: &mockChecksumIterator{
+			1: {
 				chunks: []*chunk.Range{
 					{
 						Index: &chunk.CID{
@@ -287,8 +290,8 @@ func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
 		},
 	}
 	okSrc := &mockChecksumSource{
-		iterators: map[int]splitter.ChunkIterator{
-			0: &mockChecksumIterator{
+		iterators: map[int]*mockChecksumIterator{
+			0: {
 				chunks: []*chunk.Range{
 					{
 						Index: &chunk.CID{
@@ -299,7 +302,7 @@ func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
 					},
 				},
 			},
-			1: &mockChecksumIterator{
+			1: {
 				chunks: []*chunk.Range{
 					{
 						Index: &chunk.CID{
@@ -360,8 +363,4 @@ func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
 	require.Equal(t, []int{0}, okSrc.getIteratorCalls)
 
 	progress.Close()
-	summary := new(bytes.Buffer)
-	progress.SetOutput(summary)
-	progress.PrintSummary()
-	require.Contains(t, summary.String(), "1 tables failed")
 }

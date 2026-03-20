@@ -110,7 +110,7 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	ctx context.Context,
 	tableIndex int,
 	startRange *splitter.RangeInfo,
-) (splitter.ChunkIterator, error) {
+) (splitter.ChunkIterator, int, error) {
 	table := s.tableDiffs[tableIndex]
 	matchSource := getMatchSource(s.sourceTableMap, table)
 
@@ -128,8 +128,12 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	}
 	originTable.Fields = fields
 
-	return splitter.NewRandomIteratorWithCheckpoint(
-		ctx, dbutil.TableName(table.Schema, table.Table), &originTable, s.dbConn, startRange)
+	iter, err := splitter.NewRandomIteratorWithCheckpoint(
+		ctx, "", &originTable, s.dbConn, startRange)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return iter, iter.Len(), nil
 }
 
 // prepareChecksumSplitFields returns the split fields for checksum-only mode.

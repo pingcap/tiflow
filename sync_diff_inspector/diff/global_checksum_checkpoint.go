@@ -45,7 +45,7 @@ func (df *Diff) initChecksumCheckpoint() error {
 			}
 		}
 	}
-	progress.Init(len(df.workSource.GetTables()), finishTableNums)
+	progress.Init(len(df.downstream.GetTables()), finishTableNums)
 	return nil
 }
 

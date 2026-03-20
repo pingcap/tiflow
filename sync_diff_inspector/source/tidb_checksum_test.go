@@ -142,9 +142,10 @@ func TestGetChecksumOnlyIteratorFallsBackToRegularFields(t *testing.T) {
 			},
 		},
 	}
-	iter, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
+	iter, chunkCount, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
 	require.NoError(t, err)
 	require.NotNil(t, iter)
+	require.GreaterOrEqual(t, chunkCount, 0)
 }
 
 func TestGetChecksumOnlyIteratorReturnsErrorForInvalidConfiguredFallbackFields(t *testing.T) {
@@ -179,7 +180,7 @@ func TestGetChecksumOnlyIteratorReturnsErrorForInvalidConfiguredFallbackFields(t
 			},
 		},
 	}
-	iter, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
+	iter, _, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
 	require.Error(t, err)
 	require.Nil(t, iter)
 	require.Contains(t, err.Error(), "column id")
