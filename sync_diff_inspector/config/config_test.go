@@ -35,20 +35,20 @@ func TestParseConfig(t *testing.T) {
 	err := cfg.Parse(unknownFlag)
 	require.Contains(t, err.Error(), "LL")
 
-	// Set the output-dir once.
-	cfg.Task.OutputDir = tmpDir
-
 	require.Nil(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = tmpDir
 	require.Nil(t, cfg.Init())
 	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))
 
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
+	cfg.Task.OutputDir = tmpDir
 	// we change the config from config.toml to config_sharding.toml
 	// this action will raise error.
 	require.Contains(t, cfg.Init().Error(), "failed to init Task: config changes breaking the checkpoint, please use another outputDir and start over again")
 
 	require.NoError(t, os.RemoveAll(tmpDir))
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
+	cfg.Task.OutputDir = tmpDir
 	// this time will be ok, because we remove the last outputDir.
 	require.Nil(t, cfg.Init())
 	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))

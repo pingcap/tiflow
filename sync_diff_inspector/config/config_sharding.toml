@@ -79,6 +79,8 @@ target-table = "t"             # target table
     # 2 log: sync-diff.log
     # 3 summary: summary.txt
     # 4 checkpoint: a dir
+    output-dir = "/tmp/output/config"
+
     source-instances = ["mysql1", "mysql2", "mysql3"]
 
     target-instance = "tidb0"
