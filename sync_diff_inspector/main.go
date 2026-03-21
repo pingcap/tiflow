@@ -23,8 +23,8 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/collate"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/diff"
 	flag "github.com/spf13/pflag"
@@ -49,7 +49,7 @@ func main() {
 	}
 
 	if cfg.PrintVersion {
-		fmt.Print(util.GetRawInfo("sync_diff_inspector"))
+		fmt.Print(version.GetRawInfo())
 		return
 	}
 
@@ -72,7 +72,7 @@ func main() {
 	}
 	log.ReplaceGlobals(lg, p)
 
-	util.PrintInfo("sync_diff_inspector")
+	version.LogVersionInfo("sync_diff_inspector")
 
 	// Initial config
 	err = cfg.Init()
