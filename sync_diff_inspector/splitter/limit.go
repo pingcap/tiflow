@@ -43,8 +43,7 @@ type LimitIterator struct {
 	indexID   int64
 	batchSize int
 
-	chunksCh chan *chunk.Range
-	errCh    chan error
+	resultCh chan iteratorResult
 	cancel   context.CancelFunc
 	db       *sql.DB
 
@@ -56,8 +55,14 @@ type LimitIterator struct {
 }
 
 // NewLimitIterator return a new iterator
-func NewLimitIterator(ctx context.Context, progressID string, table *common.TableDiff, dbConn *sql.DB) (*LimitIterator, error) {
-	return NewLimitIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil)
+func NewLimitIterator(
+	ctx context.Context,
+	progressID string,
+	table *common.TableDiff,
+	dbConn *sql.DB,
+	candidate *IndexCandidate,
+) (*LimitIterator, error) {
+	return NewLimitIteratorWithCheckpoint(ctx, progressID, table, dbConn, nil, candidate)
 }
 
 // NewLimitIteratorWithCheckpoint return a new iterator
@@ -67,42 +72,14 @@ func NewLimitIteratorWithCheckpoint(
 	table *common.TableDiff,
 	dbConn *sql.DB,
 	startRange *RangeInfo,
+	candidate *IndexCandidate,
 ) (*LimitIterator, error) {
 	logger := log.L().With(
 		zap.String("db", table.Schema),
 		zap.String("table", table.Table),
 	)
-
-	indices, err := utils.GetBetterIndex(ctx, dbConn, table.Schema, table.Table, table.Info)
-	if err != nil {
-		return nil, errors.Trace(err)
-	}
-
-	var indexColumns []*model.ColumnInfo
-	var indexID int64
-	var indexName string
-	for _, index := range indices {
-		if index == nil {
-			continue
-		}
-		if startRange != nil && startRange.IndexID != index.ID {
-			continue
-		}
-		indexColumns = utils.GetColumnsFromIndex(index, table.Info)
-		if len(indexColumns) < len(index.Columns) {
-			log.Debug("indexColumns empty, try next index")
-			indexColumns = nil
-			continue
-		}
-		indexID = index.ID
-		indexName = index.Name.O
-		logger.Debug("limit select index", zap.String("index", indexName))
-		break
-	}
-
-	if indexColumns == nil {
-		return nil, errors.NotFoundf("not found index")
-	}
+	indexColumns := candidate.Columns
+	logger.Debug("limit select index", zap.String("index", candidate.Index.Name.O))
 
 	columnOffset := make(map[string]int, len(indexColumns))
 	for i, indexColumn := range indexColumns {
@@ -153,7 +130,7 @@ func NewLimitIteratorWithCheckpoint(
 	remainChunks := max(totalChunks-beginBucketID, 0)
 
 	lctx, cancel := context.WithCancel(ctx)
-	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, indexName)
+	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, candidate.Index.Name.O)
 
 	batchSize := defaultLimitBatchSize
 	if table.CheckThreadCount > 0 {
@@ -165,11 +142,10 @@ func NewLimitIteratorWithCheckpoint(
 
 		queryTmpl,
 		chunkSize,
-		indexID,
+		candidate.Index.ID,
 		batchSize,
 
-		make(chan *chunk.Range, batchSize),
-		make(chan error, 1),
+		make(chan iteratorResult, batchSize),
 		cancel,
 		dbConn,
 
@@ -182,7 +158,7 @@ func NewLimitIteratorWithCheckpoint(
 
 	progress.StartTable(progressID, remainChunks, true)
 	if !unfinished {
-		close(limitIterator.chunksCh)
+		close(limitIterator.resultCh)
 	} else {
 		go limitIterator.produceChunks(lctx, tagChunk, beginBucketID)
 	}
@@ -197,29 +173,28 @@ func (lmt *LimitIterator) Close() {
 
 // Next return the next chunk
 func (lmt *LimitIterator) Next() (*chunk.Range, error) {
-	select {
-	case err := <-lmt.errCh:
-		return nil, errors.Trace(err)
-	case c, ok := <-lmt.chunksCh:
-		if !ok && c == nil {
-			return nil, nil
-		}
-		if c != nil {
-			failpoint.Inject("print-chunk-info", func() {
-				lowerBounds := make([]string, len(c.Bounds))
-				upperBounds := make([]string, len(c.Bounds))
-				for i, bound := range c.Bounds {
-					lowerBounds[i] = bound.Lower
-					upperBounds[i] = bound.Upper
-				}
-				lmt.logger.Info("failpoint print-chunk-info injected (limit splitter)",
-					zap.Strings("lowerBounds", lowerBounds),
-					zap.Strings("upperBounds", upperBounds),
-					zap.String("indexCode", c.Index.ToString()))
-			})
-		}
-		return c, nil
+	result, ok := <-lmt.resultCh
+	if !ok {
+		return nil, nil
 	}
+	if result.err != nil {
+		return nil, errors.Trace(result.err)
+	}
+	if result.chunk != nil {
+		failpoint.Inject("print-chunk-info", func() {
+			lowerBounds := make([]string, len(result.chunk.Bounds))
+			upperBounds := make([]string, len(result.chunk.Bounds))
+			for i, bound := range result.chunk.Bounds {
+				lowerBounds[i] = bound.Lower
+				upperBounds[i] = bound.Upper
+			}
+			lmt.logger.Info("failpoint print-chunk-info injected (limit splitter)",
+				zap.Strings("lowerBounds", lowerBounds),
+				zap.Strings("upperBounds", upperBounds),
+				zap.String("indexCode", result.chunk.Index.ToString()))
+		})
+	}
+	return result.chunk, nil
 }
 
 // GetIndexID get the current index id
@@ -236,7 +211,7 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, tagChunk *chunk.Ran
 		if err != nil {
 			select {
 			case <-ctx.Done():
-			case lmt.errCh <- errors.Trace(err):
+			case lmt.resultCh <- iteratorResult{err: errors.Trace(err)}:
 			}
 			return
 		}
@@ -262,9 +237,9 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, tagChunk *chunk.Ran
 				zap.Int("bucket", bucketID))
 			select {
 			case <-ctx.Done():
-			case lmt.chunksCh <- tagChunk:
+			case lmt.resultCh <- iteratorResult{chunk: tagChunk}:
 			}
-			close(lmt.chunksCh)
+			close(lmt.resultCh)
 			return
 		}
 
@@ -285,7 +260,7 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, tagChunk *chunk.Ran
 			select {
 			case <-ctx.Done():
 				return
-			case lmt.chunksCh <- chunkRange:
+			case lmt.resultCh <- iteratorResult{chunk: chunkRange}:
 			}
 			tagChunk = newTagChunk
 		}

@@ -482,7 +482,7 @@ func (c *Config) Parse(arguments []string) error {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
 	}
 
-	if err := c.normalizeSplitterStrategy(); err != nil {
+	if err := c.normalizeUseLimitIterator(); err != nil {
 		return errors.Trace(err)
 	}
 
@@ -635,7 +635,7 @@ func (c *Config) CheckConfig() bool {
 		log.Error("check-thread-count must greater than 0!")
 		return false
 	}
-	if err := c.normalizeSplitterStrategy(); err != nil {
+	if err := c.normalizeUseLimitIterator(); err != nil {
 		log.Error(err.Error())
 		return false
 	}
@@ -654,7 +654,7 @@ func (c *Config) CheckConfig() bool {
 	return true
 }
 
-func (c *Config) normalizeSplitterStrategy() error {
+func (c *Config) normalizeUseLimitIterator() error {
 	mode := strings.ToLower(strings.TrimSpace(c.SplitterStrategy))
 	switch mode {
 	case "":
