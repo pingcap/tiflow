@@ -80,6 +80,34 @@ func TestGetRandomServerID(t *testing.T) {
 	require.NotEqual(t, 101, serverID)
 }
 
+func TestGetTables(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	schema := "test_db"
+	tables := []string{"tbl1", "tbl2"}
+
+	rows := sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema), "Table_type"})
+	addRowsForTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
+
+	got, err := GetTables(context.Background(), db, schema)
+	require.NoError(t, err)
+	require.Equal(t, tables, got)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema), "Table_type", "Auto_partition", "Table_group"})
+	addRowsForPolarDBXTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
+
+	got, err = GetTables(context.Background(), db, schema)
+	require.NoError(t, err)
+	require.Equal(t, tables, got)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetMariaDBGtidDomainID(t *testing.T) {
 	t.Parallel()
 
@@ -552,6 +580,18 @@ func TestFetchAllDoTables(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, []string{"tbl1", "tbl2"}, got[doSchema])
 	require.NoError(t, mock.ExpectationsWereMet())
+
+	rows = sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", doSchema), "Table_type", "Auto_partition", "Table_group"})
+	addRowsForPolarDBXTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", doSchema)).WillReturnRows(rows)
+	got, err = FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, []string{"tbl1", "tbl2"}, got[doSchema])
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestFetchTargetDoTables(t *testing.T) {
@@ -625,6 +665,12 @@ func addRowsForSchemas(rows *sqlmock.Rows, schemas []string) {
 func addRowsForTables(rows *sqlmock.Rows, tables []string) {
 	for _, table := range tables {
 		rows.AddRow(table, "BASE TABLE")
+	}
+}
+
+func addRowsForPolarDBXTables(rows *sqlmock.Rows, tables []string) {
+	for _, table := range tables {
+		rows.AddRow(table, "BASE TABLE", "NO", "single_tg")
 	}
 }
 
