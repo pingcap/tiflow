@@ -32,7 +32,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const defaultLimitBatchSize int64 = 32
+const defaultBoundsPerBatch int64 = 32
 
 // LimitIterator is the iterator with limit
 type LimitIterator struct {
@@ -167,25 +167,19 @@ func NewLimitIteratorWithCheckpoint(
 	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, indexName)
 
 	limitIterator := &LimitIterator{
-		table,
-		tagChunk,
-		queryTmpl,
-
-		chunkSize * defaultLimitBatchSize,
-
-		indexID,
-		utils.GetColumnNames(indexColumns),
-
-		chunksCh,
-		errCh,
-
-		cancel,
-		dbConn,
-
-		progressID,
-		columnOffset,
-
-		logger,
+		table:            table,
+		tagChunk:         tagChunk,
+		queryTmpl:        queryTmpl,
+		queryRowLimit:    chunkSize * defaultBoundsPerBatch,
+		indexID:          indexID,
+		indexColumnNames: utils.GetColumnNames(indexColumns),
+		chunksCh:         chunksCh,
+		errCh:            errCh,
+		cancel:           cancel,
+		dbConn:           dbConn,
+		progressID:       progressID,
+		columnOffset:     columnOffset,
+		logger:           logger,
 	}
 
 	progress.StartTable(progressID, 0, false)

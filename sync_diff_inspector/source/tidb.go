@@ -49,8 +49,10 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	originTable.Schema = matchedSource.OriginSchema
 	originTable.Table = matchedSource.OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
-
-	// Try bucket splitter first.
+	// if we decide to use bucket to split chunks
+	// we always use bucksIter even we load from checkpoint is not bucketNode
+	// TODO check whether we can use bucket for this table to split chunks.
+	// NOTICE: If checkpoint use random splitter, it will also fail the next time build bucket splitter.
 	bucketIter, err := splitter.NewBucketIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange, a.bucketSpliterPool)
 	if err == nil {
 		return bucketIter, nil

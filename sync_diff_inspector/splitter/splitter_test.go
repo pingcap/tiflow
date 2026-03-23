@@ -876,11 +876,8 @@ func TestLimitSpliter(t *testing.T) {
 }
 
 func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
-	for start := int64(0); start < int64(len(aValues)); start += defaultLimitBatchSize {
-		end := start + defaultLimitBatchSize
-		if end > int64(len(aValues)) {
-			end = int64(len(aValues))
-		}
+	for start := int64(0); start < int64(len(aValues)); start += defaultBoundsPerBatch {
+		end := min(start+defaultBoundsPerBatch, int64(len(aValues)))
 		limitRows := sqlmock.NewRows([]string{"a", "b"})
 		for i := start; i < end; i++ {
 			limitRows.AddRow(aValues[i], bValues[i])
