@@ -15,6 +15,7 @@ package retry
 
 import (
 	"database/sql/driver"
+	"strings"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	dmysql "github.com/go-sql-driver/mysql"
@@ -99,4 +100,20 @@ func IsUnretryableConnectionError(err error) bool {
 	// Can't ensure whether the last write has reached the downstream or not.
 	// If the last write isn't idempotent, retry it may cause problems.
 	return errors.Cause(err) == dmysql.ErrInvalidConn
+}
+
+// IsRetryableConnectionErrorOnBeginOrSafeMode checks whether an invalid connection error occurred
+// on a transaction begin statement, when there are no operations that may need to be rolled back,
+// or in safe mode, where statements are idempotent.
+func IsRetryableConnectionErrorOnBeginOrSafeMode(safeMode bool, err error) bool {
+	return (safeMode || terror.ErrDBExecuteFailedBegin.Equal(err)) && errors.Cause(err) == dmysql.ErrInvalidConn
+}
+
+func IsRetryableErrorOnResetConn(err error) bool {
+	err = errors.Cause(err)
+	switch err {
+	case driver.ErrBadConn, tmysql.ErrBadConn, gmysql.ErrBadConn, dmysql.ErrInvalidConn:
+		return true
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "connect: connection refused")
 }
