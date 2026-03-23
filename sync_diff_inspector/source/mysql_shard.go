@@ -52,7 +52,11 @@ func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.
 	originTable.Schema = matchedSources[0].OriginSchema
 	originTable.Table = matchedSources[0].OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
+	if table.SplitterStrategy != "" && table.SplitterStrategy != config.SplitterStrategyRandom {
+		log.Warn("splitter-strategy is not supported for MySQL shard source, using random",
+			zap.String("table", progressID),
+			zap.String("strategy", table.SplitterStrategy))
+	}
 	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, matchedSources[0].DBConn, startRange)
 	if err != nil {
 		return nil, errors.Trace(err)

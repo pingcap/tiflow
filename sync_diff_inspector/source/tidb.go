@@ -58,10 +58,11 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 		return bucketIter, nil
 	}
 	log.Info("failed to build bucket iterator, falling back", zap.Error(err))
-	if originTable.SplitterStrategy == "limit" {
+	if originTable.SplitterStrategy == config.SplitterStrategyLimit {
 		log.Info("choose limit splitter", zap.String("table", progressID))
 		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 	}
+	log.Info("choose random splitter", zap.String("table", progressID))
 	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 

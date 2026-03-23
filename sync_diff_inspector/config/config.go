@@ -43,6 +43,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Supported values for SplitterStrategy.
+const (
+	SplitterStrategyLimit  = "limit"
+	SplitterStrategyRandom = "random"
+)
+
 const (
 	// LocalFilePerm is the permission for local files
 	LocalFilePerm os.FileMode = 0o644
@@ -652,12 +658,13 @@ func (c *Config) CheckConfig() bool {
 func (c *Config) normalizeSplitterStrategy() error {
 	mode := strings.ToLower(strings.TrimSpace(c.SplitterStrategy))
 	switch mode {
-	case "", "random":
-		c.SplitterStrategy = "random"
-	case "limit":
+	case "", SplitterStrategyRandom:
+		c.SplitterStrategy = SplitterStrategyRandom
+	case SplitterStrategyLimit:
 		c.SplitterStrategy = mode
 	default:
-		return errors.Errorf("splitter-strategy must be limit or random")
+		return errors.Errorf("splitter-strategy must be %s or %s",
+			SplitterStrategyLimit, SplitterStrategyRandom)
 	}
 	return nil
 }
