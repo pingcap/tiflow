@@ -150,7 +150,7 @@ type Checkpoint struct {
 	hp *nodeHeap
 }
 
-// ChecksumSourceState stores one source's checksum progress in checksum-only mode.
+// ChecksumSourceState stores one source's checksum progress in global-checksum mode.
 type ChecksumSourceState struct {
 	LastRange *chunk.Range `json:"last-range,omitempty"`
 	Checksum  uint64       `json:"checksum"`
@@ -158,11 +158,11 @@ type ChecksumSourceState struct {
 	Done      bool         `json:"done"`
 }
 
-// ChecksumState stores checkpoint progress for checksum-only mode.
+// ChecksumState stores checkpoint progress for global-checksum mode.
 type ChecksumState struct {
 	TableIndex int                  `json:"table-index"`
-	Upstream   *ChecksumSourceState `json:"upstream"`
-	Downstream *ChecksumSourceState `json:"downstream"`
+	Upstream   *ChecksumSourceState `json:"upstream,omitempty"`
+	Downstream *ChecksumSourceState `json:"downstream,omitempty"`
 }
 
 // NewChecksumState returns an initialized checksum state for one table index.
@@ -185,7 +185,7 @@ func (s *ChecksumState) init() {
 
 // SavedState stores mode-dependent checkpoint state plus report state for resume.
 // Depending on the execution mode, it contains either Chunk (chunk diff mode)
-// or Checksum (checksum-only mode).
+// or Checksum (global-checksum mode).
 type SavedState struct {
 	Chunk    *Node          `json:"chunk-info,omitempty"`
 	Checksum *ChecksumState `json:"checksum-info,omitempty"`
@@ -293,7 +293,7 @@ func (cp *Checkpoint) SaveChunk(ctx context.Context, fileName string, cur *Node,
 	return cur.GetID(), nil
 }
 
-// SaveChecksumState saves checksum-only checkpoint state to file.
+// SaveChecksumState saves global-checksum checkpoint state to file.
 func (cp *Checkpoint) SaveChecksumState(
 	ctx context.Context,
 	fileName string,

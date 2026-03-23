@@ -121,8 +121,8 @@ type Source interface {
 // ChecksumCapableSource is an optional interface that Sources may implement
 // to support the global-checksum fast path (used when export-fix-sql is false).
 type ChecksumCapableSource interface {
-	// GetChecksumOnlyIterator returns a chunk iterator and total number of chunks.
-	GetChecksumOnlyIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, int, error)
+	// GetGlobalChecksumIterator returns a chunk iterator and total number of chunks.
+	GetGlobalChecksumIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, int, error)
 }
 
 // NewSources returns a new source

@@ -12,9 +12,9 @@ mkdir -p $OUT_DIR
 mysql -uroot -h 127.0.0.1 -P 4000 <./data_clustered.sql
 mysql -uroot -h 127.0.0.1 -P 4001 <./data_clustered.sql
 
-echo "run checksum-only mode on clustered PK table"
+echo "run global-checksum mode on clustered PK table"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered.output
+	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/global_checksum_clustered.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -25,10 +25,10 @@ check_not_contains "_tidb_rowid" $CHECKPOINT_FILE
 
 rm -rf $OUT_DIR/*
 
-echo "introduce mismatch, checksum-only mode should fail on clustered PK table"
+echo "introduce mismatch, global-checksum mode should fail on clustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_clustered.t SET v='z' WHERE id=1;"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/checksum_only_clustered_fail.output || true
+	sync_diff_inspector --config=./config_clustered.toml >$OUT_DIR/global_checksum_clustered_fail.output || true
 
 check_contains "check failed" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -46,9 +46,9 @@ mysql -uroot -h 127.0.0.1 -P 4001 <./data_nonclustered.sql
 # Ensure _tidb_rowid exists for NONCLUSTERED PK table.
 mysql -uroot -h 127.0.0.1 -P 4000 -e "SELECT _tidb_rowid FROM checksum_mode_nonclustered.t LIMIT 1;" >$OUT_DIR/nonclustered_rowid.output
 
-echo "run checksum-only mode on nonclustered PK table"
+echo "run global-checksum mode on nonclustered PK table"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-	sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered.output
+	sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/global_checksum_nonclustered.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -58,10 +58,10 @@ check_contains "_tidb_rowid" $CHECKPOINT_FILE
 
 rm -rf $OUT_DIR/*
 
-echo "introduce mismatch, checksum-only mode should fail on nonclustered PK table"
+echo "introduce mismatch, global-checksum mode should fail on nonclustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_nonclustered.t SET v='z' WHERE id=1;"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
-	sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/checksum_only_nonclustered_fail.output || true
+	sync_diff_inspector --config=./config_nonclustered.toml >$OUT_DIR/global_checksum_nonclustered_fail.output || true
 
 check_contains "check failed" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
@@ -98,4 +98,4 @@ check_not_contains "\"done\":false" $CHECKPOINT_FILE
 
 rm -rf $OUT_DIR/*
 
-echo "checksum_only test passed"
+echo "global_checksum test passed"

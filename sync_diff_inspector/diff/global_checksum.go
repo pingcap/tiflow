@@ -297,9 +297,9 @@ func createChecksumIterator(
 	}
 	checksumSrc, ok := src.(source.ChecksumCapableSource)
 	if !ok {
-		return nil, 0, errors.New("source does not support checksum-only mode")
+		return nil, 0, errors.New("source does not support global-checksum mode")
 	}
-	return checksumSrc.GetChecksumOnlyIterator(ctx, tableIndex, startRange)
+	return checksumSrc.GetGlobalChecksumIterator(ctx, tableIndex, startRange)
 }
 
 // createChecksumIterators builds chunk iterators for both sources.

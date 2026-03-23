@@ -103,10 +103,10 @@ type TiDBSource struct {
 	version *semver.Version
 }
 
-// GetChecksumOnlyIterator builds chunk iterator for checksum-only mode.
+// GetGlobalChecksumIterator builds chunk iterator for global-checksum mode.
 // It prefers _tidb_rowid or clustered PK, then falls back to the regular
 // splitter configuration when ignore-columns removes the checksum-specific handle.
-func (s *TiDBSource) GetChecksumOnlyIterator(
+func (s *TiDBSource) GetGlobalChecksumIterator(
 	ctx context.Context,
 	tableIndex int,
 	startRange *splitter.RangeInfo,
@@ -136,7 +136,7 @@ func (s *TiDBSource) GetChecksumOnlyIterator(
 	return iter, iter.Len(), nil
 }
 
-// prepareChecksumSplitFields returns the split fields for checksum-only mode.
+// prepareChecksumSplitFields returns the split fields for global-checksum mode.
 // It may append a synthetic _tidb_rowid column to tableInfo when no handle is available.
 func prepareChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
 	switch {

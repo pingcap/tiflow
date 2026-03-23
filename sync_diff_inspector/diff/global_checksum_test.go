@@ -153,7 +153,7 @@ func (m *mockChecksumSource) GetSnapshot() string {
 
 func (m *mockChecksumSource) Close() {}
 
-func (m *mockChecksumSource) GetChecksumOnlyIterator(
+func (m *mockChecksumSource) GetGlobalChecksumIterator(
 	_ context.Context,
 	tableIndex int,
 	startRange *splitter.RangeInfo,
@@ -195,7 +195,7 @@ func TestGetSourceGlobalChecksumKeepsCheckpointOrder(t *testing.T) {
 		},
 	}
 
-	iter, _, err := src.GetChecksumOnlyIterator(context.Background(), 0, nil)
+	iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, nil)
 	require.NoError(t, err)
 
 	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "")
@@ -223,7 +223,7 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	}
 	df := &Diff{checkThreadCount: 1}
 
-	iter, _, err := src.GetChecksumOnlyIterator(context.Background(), 0, &splitter.RangeInfo{ChunkRange: lastRange.Clone()})
+	iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, &splitter.RangeInfo{ChunkRange: lastRange.Clone()})
 	require.NoError(t, err)
 
 	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "")

@@ -111,7 +111,7 @@ func TestPrepareChecksumSplitFieldsOnRowID(t *testing.T) {
 	require.Equal(t, "_tidb_rowid", clonedIndices[0].Columns[0].Name.O)
 }
 
-func TestGetChecksumOnlyIteratorFallsBackToRegularFields(t *testing.T) {
+func TestGetGlobalChecksumIteratorFallsBackToRegularFields(t *testing.T) {
 	tableInfo, err := utils.GetTableInfoBySQL(
 		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT, KEY `idx_v`(`v`))",
 		parser.New(),
@@ -142,13 +142,13 @@ func TestGetChecksumOnlyIteratorFallsBackToRegularFields(t *testing.T) {
 			},
 		},
 	}
-	iter, chunkCount, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
+	iter, chunkCount, err := src.GetGlobalChecksumIterator(context.Background(), 0, startRange)
 	require.NoError(t, err)
 	require.NotNil(t, iter)
 	require.GreaterOrEqual(t, chunkCount, 0)
 }
 
-func TestGetChecksumOnlyIteratorReturnsErrorForInvalidConfiguredFallbackFields(t *testing.T) {
+func TestGetGlobalChecksumIteratorReturnsErrorForInvalidConfiguredFallbackFields(t *testing.T) {
 	tableInfo, err := utils.GetTableInfoBySQL(
 		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT, KEY `idx_v`(`v`))",
 		parser.New(),
@@ -180,7 +180,7 @@ func TestGetChecksumOnlyIteratorReturnsErrorForInvalidConfiguredFallbackFields(t
 			},
 		},
 	}
-	iter, _, err := src.GetChecksumOnlyIterator(context.Background(), 0, startRange)
+	iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, startRange)
 	require.Error(t, err)
 	require.Nil(t, iter)
 	require.Contains(t, err.Error(), "column id")
