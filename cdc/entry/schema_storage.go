@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/sink/dispatcher"
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
@@ -82,6 +83,8 @@ type schemaStorage struct {
 
 	id   model.ChangeFeedID
 	role util.Role
+
+	sinkRouter *dispatcher.SinkRouter
 }
 
 // NewSchemaStorage creates a new schema storage
@@ -89,6 +92,7 @@ func NewSchemaStorage(
 	storage tidbkv.Storage, startTs uint64,
 	forceReplicate bool, id model.ChangeFeedID,
 	role util.Role, filter filter.Filter,
+	sinkRouter *dispatcher.SinkRouter,
 ) (SchemaStorage, error) {
 	var (
 		snap *schema.Snapshot
@@ -107,6 +111,14 @@ func NewSchemaStorage(
 			return nil, errors.Trace(err)
 		}
 	}
+
+	// Apply sink routing to all tables in the initial snapshot
+	// This ensures DML events for pre-existing tables (tables that existed before start-ts)
+	// also get the routed schema/table for SQL generation
+	if sinkRouter != nil {
+		applySinkRoutingToSnapshot(snap, sinkRouter)
+	}
+
 	return &schemaStorage{
 		snaps:          []*schema.Snapshot{snap},
 		resolvedTs:     startTs,
@@ -114,6 +126,7 @@ func NewSchemaStorage(
 		filter:         filter,
 		id:             id,
 		role:           role,
+		sinkRouter:     sinkRouter,
 	}, nil
 }
 
@@ -227,6 +240,19 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			zap.Error(err))
 		return errors.Trace(err)
 	}
+
+	// Apply sink routing to the TableInfo if sinkRouter is configured
+	// This ensures DML events get the routed schema/table for SQL generation
+	if s.sinkRouter != nil && job.TableID > 0 {
+		tableIDForRouting := job.TableID
+		// For TRUNCATE TABLE, job.TableID is the OLD table ID which no longer exists
+		// in the snapshot. We need to use the NEW table ID from BinlogInfo.TableInfo.
+		if job.Type == timodel.ActionTruncateTable && job.BinlogInfo.TableInfo != nil {
+			tableIDForRouting = job.BinlogInfo.TableInfo.ID
+		}
+		applySinkRoutingToTable(snap, tableIDForRouting, s.sinkRouter)
+	}
+
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
 	log.Info("schemaStorage: update snapshot by the DDL job",
@@ -410,7 +436,9 @@ func (s *schemaStorage) BuildDDLEvents(
 				newTableInfo := model.WrapTableInfo(job.SchemaID, job.SchemaName, job.BinlogInfo.FinishedTS, tableInfo)
 				job.Query = querys[index]
 				event := new(model.DDLEvent)
-				event.FromJob(job, nil, newTableInfo)
+				if err := event.FromJob(job, nil, newTableInfo, s.sinkRouter); err != nil {
+					return nil, errors.Trace(err)
+				}
 				ddlEvents = append(ddlEvents, event)
 			}
 		} else {
@@ -459,7 +487,9 @@ func (s *schemaStorage) BuildDDLEvents(
 			}
 		}
 		event := new(model.DDLEvent)
-		event.FromJob(job, preTableInfo, tableInfo)
+		if err := event.FromJob(job, preTableInfo, tableInfo, s.sinkRouter); err != nil {
+			return nil, errors.Trace(err)
+		}
 		ddlEvents = append(ddlEvents, event)
 	}
 	return ddlEvents, nil
@@ -518,7 +548,9 @@ func (s *schemaStorage) buildRenameEvents(
 
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
-		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
+		if err := event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName, s.sinkRouter); err != nil {
+			return nil, errors.Trace(err)
+		}
 		event.Seq = uint64(i)
 		ddlEvents = append(ddlEvents, event)
 	}
@@ -580,4 +612,28 @@ func (s *MockSchemaStorage) ResolvedTs() uint64 {
 // DoGC implements SchemaStorage.
 func (s *MockSchemaStorage) DoGC(ts uint64) uint64 {
 	return atomic.LoadUint64(&s.Resolved)
+}
+
+// applySinkRoutingToTable applies sink routing to a single table in a snapshot.
+// This ensures the TableInfo has TargetSchema and TargetTable set for SQL generation in sinks.
+func applySinkRoutingToTable(snap *schema.Snapshot, tableID int64, sinkRouter *dispatcher.SinkRouter) {
+	if tableInfo, ok := snap.PhysicalTableByID(tableID); ok {
+		routedSchema, routedTable := sinkRouter.Route(tableInfo.TableName.Schema, tableInfo.TableName.Table)
+		if routedSchema != tableInfo.TableName.Schema || routedTable != tableInfo.TableName.Table {
+			tableInfo.TableName.TargetSchema = routedSchema
+			tableInfo.TableName.TargetTable = routedTable
+		}
+	}
+}
+
+// applySinkRoutingToSnapshot applies sink routing to all tables in a snapshot.
+// This ensures pre-existing tables (loaded from initial snapshot) also get routed schemas and tables.
+func applySinkRoutingToSnapshot(snap *schema.Snapshot, sinkRouter *dispatcher.SinkRouter) {
+	snap.IterTables(true, func(tblInfo *model.TableInfo) {
+		routedSchema, routedTable := sinkRouter.Route(tblInfo.TableName.Schema, tblInfo.TableName.Table)
+		if routedSchema != tblInfo.TableName.Schema || routedTable != tblInfo.TableName.Table {
+			tblInfo.TableName.TargetSchema = routedSchema
+			tblInfo.TableName.TargetTable = routedTable
+		}
+	})
 }

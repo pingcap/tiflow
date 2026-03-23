@@ -384,7 +384,32 @@ func (info *ChangeFeedInfo) rmMQOnlyFields() {
 	log.Info("since the downstream is not a MQ, remove MQ only fields",
 		zap.String("namespace", info.Namespace),
 		zap.String("changefeed", info.ID))
-	info.Config.Sink.DispatchRules = nil
+	// DispatchRules is shared across multiple sink types:
+	// - MQ sinks (Kafka, Pulsar): use TopicRule, PartitionRule, DispatcherRule
+	// - MySQL/TiDB sinks: use SchemaRule, TableRule for schema/table routing
+	// For non-MQ sinks, we filter out MQ-specific rules and clear MQ fields from retained rules.
+	if info.Config.Sink.DispatchRules != nil {
+		var filteredRules []*config.DispatchRule
+		for _, rule := range info.Config.Sink.DispatchRules {
+			// Keep the rule if it has schema or table routing configured
+			if rule.SchemaRule != "" || rule.TableRule != "" {
+				log.Info("keeping dispatch rule with schema/table routing for non-MQ sink",
+					zap.String("namespace", info.Namespace),
+					zap.String("changefeed", info.ID),
+					zap.Strings("matcher", rule.Matcher),
+					zap.String("schemaRule", rule.SchemaRule),
+					zap.String("tableRule", rule.TableRule))
+				// Clear MQ-specific fields from rules we're keeping
+				rule.TopicRule = ""
+				rule.PartitionRule = ""
+				rule.DispatcherRule = ""
+				rule.IndexName = ""
+				rule.Columns = nil
+				filteredRules = append(filteredRules, rule)
+			}
+		}
+		info.Config.Sink.DispatchRules = filteredRules
+	}
 	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil
 	info.Config.Sink.EnableKafkaSinkV2 = nil
