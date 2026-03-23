@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.25.5
+go 1.25.8
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -131,7 +131,7 @@ require (
 
 require (
 	cloud.google.com/go/kms v1.15.8 // indirect
-	filippo.io/edwards25519 v1.1.0 // indirect
+	filippo.io/edwards25519 v1.1.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0 // indirect
 	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
