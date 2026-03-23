@@ -148,7 +148,7 @@ func NewLimitIteratorWithCheckpoint(
 
 	chunkSize := table.ChunkSize
 	if chunkSize <= 0 {
-		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, table.Range, nil)
+		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, "", nil)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
@@ -236,9 +236,6 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 	for {
 		where, args := lmt.tagChunk.ToString(lmt.table.Collation)
-		if !utils.IsRangeTrivial(lmt.table.Range) {
-			where = fmt.Sprintf("(%s) AND (%s)", where, lmt.table.Range)
-		}
 		query := fmt.Sprintf(lmt.queryTmpl, where)
 		bounds, err := lmt.batchGetBounds(ctx, query, append(args, lmt.queryRowLimit)...)
 		if err != nil {
@@ -286,9 +283,6 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
 			if ignoreLastN > 0 {
-				// Inflate ChunkCnt so the checkpoint system treats remaining chunks
-				// as incomplete, preventing checkpoint advancement past this boundary.
-				// See checkpoint/run.sh "test limit checkpoint" for the invariant.
 				chunkRange.Index.ChunkCnt = chunkRange.Index.ChunkIndex + 1 + ignoreLastN
 			}
 			bucketID++
