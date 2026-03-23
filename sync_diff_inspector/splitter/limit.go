@@ -100,7 +100,7 @@ func NewLimitIteratorWithCheckpoint(
 		if startRange != nil && startRange.IndexID != index.ID {
 			continue
 		}
-		logger.Debug("Limit select index", zap.String("index", index.Name.O))
+		log.Debug("Limit select index", zap.String("index", index.Name.O))
 
 		indexColumns = utils.GetColumnsFromIndex(index, table.Info)
 
@@ -321,10 +321,8 @@ func (lmt *LimitIterator) batchGetBounds(
 }
 
 func generateBoundQueryTemplate(
-	indexColumns []*model.ColumnInfo,
-	table *common.TableDiff,
-	chunkSize int64,
-	indexName string,
+	indexColumns []*model.ColumnInfo, table *common.TableDiff,
+	chunkSize int64, indexName string,
 ) string {
 	fields := make([]string, 0, len(indexColumns))
 	for _, columnInfo := range indexColumns {
@@ -338,11 +336,6 @@ func generateBoundQueryTemplate(
 
 	return fmt.Sprintf(
 		"SELECT %s FROM (SELECT %s %s, ROW_NUMBER() OVER (ORDER BY %s) AS rn FROM %s WHERE %%s LIMIT ?) AS t WHERE MOD(rn, %d) = 0 ORDER BY rn",
-		columns,
-		indexHint,
-		columns,
-		orderBy,
-		tableName,
-		chunkSize,
+		columns, indexHint, columns, orderBy, tableName, chunkSize,
 	)
 }

@@ -399,8 +399,6 @@ type Config struct {
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
 	// SplitterStrategy controls the fallback splitter when bucket stats are unavailable.
-	// "limit": fall back to the limit iterator.
-	// "random" (default): fall back to the random iterator.
 	SplitterStrategy string `toml:"splitter-strategy" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
@@ -481,10 +479,6 @@ func (c *Config) Parse(arguments []string) error {
 
 	if len(c.FlagSet.Args()) != 0 {
 		return errors.Errorf("'%s' is an invalid flag", c.FlagSet.Arg(0))
-	}
-
-	if err := c.normalizeSplitterStrategy(); err != nil {
-		return errors.Trace(err)
 	}
 
 	// Set default value when output is empty
