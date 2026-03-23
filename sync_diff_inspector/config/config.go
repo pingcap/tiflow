@@ -663,8 +663,7 @@ func (c *Config) normalizeSplitterStrategy() error {
 	case SplitterStrategyLimit:
 		c.SplitterStrategy = mode
 	default:
-		return errors.Errorf("splitter-strategy must be %s or %s",
-			SplitterStrategyLimit, SplitterStrategyRandom)
+		return errors.Errorf("splitter-strategy must be limit or random")
 	}
 	return nil
 }

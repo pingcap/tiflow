@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
-	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
@@ -42,8 +41,7 @@ type LimitIterator struct {
 
 	queryRowLimit int64
 
-	indexID          int64
-	indexColumnNames []ast.CIStr
+	indexID int64
 
 	chunksCh chan *chunk.Range
 	errCh    chan error
@@ -143,8 +141,7 @@ func NewLimitIteratorWithCheckpoint(
 		return nil, errors.NotFoundf("not found index")
 	}
 
-	indexColumnNames := utils.GetColumnNames(indexColumns)
-	tagChunk.IndexColumnNames = indexColumnNames
+	tagChunk.IndexColumnNames = utils.GetColumnNames(indexColumns)
 
 	chunkSize := table.ChunkSize
 	if chunkSize <= 0 {
@@ -170,19 +167,18 @@ func NewLimitIteratorWithCheckpoint(
 	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, indexName)
 
 	limitIterator := &LimitIterator{
-		table:            table,
-		tagChunk:         tagChunk,
-		queryTmpl:        queryTmpl,
-		queryRowLimit:    chunkSize * defaultBoundsPerBatch,
-		indexID:          indexID,
-		indexColumnNames: indexColumnNames,
-		chunksCh:         chunksCh,
-		errCh:            errCh,
-		cancel:           cancel,
-		dbConn:           dbConn,
-		progressID:       progressID,
-		columnOffset:     columnOffset,
-		logger:           logger,
+		table:         table,
+		tagChunk:      tagChunk,
+		queryTmpl:     queryTmpl,
+		queryRowLimit: chunkSize * defaultBoundsPerBatch,
+		indexID:       indexID,
+		chunksCh:      chunksCh,
+		errCh:         errCh,
+		cancel:        cancel,
+		dbConn:        dbConn,
+		progressID:    progressID,
+		columnOffset:  columnOffset,
+		logger:        logger,
 	}
 
 	progress.StartTable(progressID, 0, false)
@@ -275,7 +271,7 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 
 		for _, dataMap := range bounds {
 			newTagChunk := chunk.NewChunkRangeOffset(lmt.columnOffset, lmt.table.Info)
-			newTagChunk.IndexColumnNames = lmt.indexColumnNames
+			newTagChunk.IndexColumnNames = chunkRange.IndexColumnNames
 			for column, data := range dataMap {
 				newTagChunk.Update(column, string(data.Data), "", !data.IsNull, false)
 				chunkRange.Update(column, "", string(data.Data), false, !data.IsNull)
