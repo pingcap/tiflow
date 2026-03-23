@@ -20,8 +20,10 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
@@ -30,13 +32,18 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultLimitBatchSize int64 = 32
+
 // LimitIterator is the iterator with limit
 type LimitIterator struct {
 	table     *common.TableDiff
 	tagChunk  *chunk.Range
 	queryTmpl string
 
-	indexID int64
+	queryRange int64
+
+	indexID          int64
+	indexColumnNames []ast.CIStr
 
 	chunksCh chan *chunk.Range
 	errCh    chan error
@@ -45,6 +52,8 @@ type LimitIterator struct {
 
 	progressID   string
 	columnOffset map[string]int
+
+	logger *zap.Logger
 }
 
 // NewLimitIterator return a new iterator
@@ -60,18 +69,30 @@ func NewLimitIteratorWithCheckpoint(
 	dbConn *sql.DB,
 	startRange *RangeInfo,
 ) (*LimitIterator, error) {
+	logger := log.L().With(
+		zap.String("db", table.Schema),
+		zap.String("table", table.Table),
+	)
+
 	indices, err := utils.GetBetterIndex(ctx, dbConn, table.Schema, table.Table, table.Info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var indexColumns []*model.ColumnInfo
-	var tagChunk *chunk.Range
-	columnOffset := make(map[string]int)
-	chunksCh := make(chan *chunk.Range, DefaultChannelBuffer)
-	errCh := make(chan error)
-	undone := startRange == nil
-	beginBucketID := 0
-	var indexID int64
+
+	var (
+		indexColumns []*model.ColumnInfo
+		indexID      int64
+		indexName    string
+
+		tagChunk *chunk.Range
+		chunksCh = make(chan *chunk.Range, DefaultChannelBuffer)
+		errCh    = make(chan error)
+
+		columnOffset  = make(map[string]int)
+		undone        = startRange == nil
+		beginBucketID int
+	)
+
 	for _, index := range indices {
 		if index == nil {
 			continue
@@ -79,7 +100,7 @@ func NewLimitIteratorWithCheckpoint(
 		if startRange != nil && startRange.IndexID != index.ID {
 			continue
 		}
-		log.Debug("Limit select index", zap.String("index", index.Name.O))
+		logger.Debug("Limit select index", zap.String("index", index.Name.O))
 
 		indexColumns = utils.GetColumnsFromIndex(index, table.Info)
 
@@ -91,6 +112,7 @@ func NewLimitIteratorWithCheckpoint(
 		}
 
 		indexID = index.ID
+		indexName = index.Name.O
 		for i, indexColumn := range indexColumns {
 			columnOffset[indexColumn.Name.O] = i
 		}
@@ -99,7 +121,7 @@ func NewLimitIteratorWithCheckpoint(
 			tagChunk = chunk.NewChunkRange(table.Info)
 			bounds := startRange.ChunkRange.Bounds
 			if len(bounds) != len(indexColumns) {
-				log.Warn("checkpoint node columns are not equal to selected index columns, skip checkpoint.")
+				logger.Warn("checkpoint node columns are not equal to selected index columns, skip checkpoint.")
 				break
 			}
 
@@ -136,18 +158,28 @@ func NewLimitIteratorWithCheckpoint(
 			chunkSize = cnt
 		}
 	}
-	log.Info("get chunk size for table", zap.Int64("chunk size", chunkSize),
-		zap.String("db", table.Schema), zap.String("table", table.Table))
+	logger.Info("get chunk size and count for table",
+		zap.Int64("chunk size", chunkSize),
+		zap.Int("finished chunks", beginBucketID),
+	)
 
 	lctx, cancel := context.WithCancel(ctx)
-	queryTmpl := generateLimitQueryTemplate(indexColumns, table, chunkSize)
+	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, indexName)
+
+	batchSize := defaultLimitBatchSize
+	if table.CheckThreadCount > 0 {
+		batchSize = int64(table.CheckThreadCount * 2)
+	}
 
 	limitIterator := &LimitIterator{
 		table,
 		tagChunk,
 		queryTmpl,
 
+		chunkSize * batchSize,
+
 		indexID,
+		utils.GetColumnNames(indexColumns),
 
 		chunksCh,
 		errCh,
@@ -157,6 +189,8 @@ func NewLimitIteratorWithCheckpoint(
 
 		progressID,
 		columnOffset,
+
+		logger,
 	}
 
 	progress.StartTable(progressID, 0, false)
@@ -184,6 +218,20 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 		if !ok && c == nil {
 			return nil, nil
 		}
+		if c != nil {
+			failpoint.Inject("print-chunk-info", func() {
+				lowerBounds := make([]string, len(c.Bounds))
+				upperBounds := make([]string, len(c.Bounds))
+				for i, bound := range c.Bounds {
+					lowerBounds[i] = bound.Lower
+					upperBounds[i] = bound.Upper
+				}
+				lmt.logger.Info("failpoint print-chunk-info injected (limit splitter)",
+					zap.Strings("lowerBounds", lowerBounds),
+					zap.Strings("upperBounds", upperBounds),
+					zap.String("indexCode", c.Index.ToString()))
+			})
+		}
 		return c, nil
 	}
 }
@@ -197,7 +245,7 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 	for {
 		where, args := lmt.tagChunk.ToString(lmt.table.Collation)
 		query := fmt.Sprintf(lmt.queryTmpl, where)
-		dataMap, err := lmt.getLimitRow(ctx, query, args)
+		bounds, err := lmt.batchGetBounds(ctx, query, append(args, lmt.queryRange)...)
 		if err != nil {
 			select {
 			case <-ctx.Done():
@@ -206,9 +254,23 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 			return
 		}
 
+		ignoreLastN := 0
+		failpoint.Inject("ignore-last-n-chunk-in-bucket", func(v failpoint.Value) {
+			ignoreLastN = v.(int)
+			lmt.logger.Info("failpoint ignore-last-n-chunk-in-bucket injected (limit splitter)", zap.Int("n", ignoreLastN))
+			if ignoreLastN > 0 && len(bounds) > ignoreLastN {
+				bounds = bounds[:len(bounds)-ignoreLastN]
+			}
+		})
+
+		lmt.logger.Debug("limit iterator fetched bounds",
+			zap.Int("count", len(bounds)),
+			zap.Int64("query-range", lmt.queryRange),
+			zap.Int("bucket", bucketID))
+
 		chunkRange := lmt.tagChunk
 		lmt.tagChunk = nil
-		if dataMap == nil {
+		if len(bounds) == 0 {
 			// there is no row in result set
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
 			progress.UpdateTotal(lmt.progressID, 1, true)
@@ -220,51 +282,79 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 			return
 		}
 
-		newTagChunk := chunk.NewChunkRangeOffset(lmt.columnOffset, lmt.table.Info)
-		for column, data := range dataMap {
-			newTagChunk.Update(column, string(data.Data), "", !data.IsNull, false)
-			chunkRange.Update(column, "", string(data.Data), false, !data.IsNull)
-		}
+		for _, dataMap := range bounds {
+			chunkRange := lmt.tagChunk
+			newTagChunk := chunk.NewChunkRangeOffset(lmt.columnOffset, lmt.table.Info)
+			newTagChunk.IndexColumnNames = lmt.indexColumnNames
+			for column, data := range dataMap {
+				newTagChunk.Update(column, string(data.Data), "", !data.IsNull, false)
+				chunkRange.Update(column, "", string(data.Data), false, !data.IsNull)
+			}
 
-		chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
-		bucketID++
-		progress.UpdateTotal(lmt.progressID, 1, false)
-		select {
-		case <-ctx.Done():
-			return
-		case lmt.chunksCh <- chunkRange:
+			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
+			if ignoreLastN > 0 {
+				chunkRange.Index.ChunkCnt = chunkRange.Index.ChunkIndex + 1 + ignoreLastN
+			}
+			bucketID++
+			progress.UpdateTotal(lmt.progressID, 1, false)
+			select {
+			case <-ctx.Done():
+				return
+			case lmt.chunksCh <- chunkRange:
+			}
+			lmt.tagChunk = newTagChunk
 		}
-		lmt.tagChunk = newTagChunk
 	}
 }
 
-func (lmt *LimitIterator) getLimitRow(ctx context.Context, query string, args []interface{}) (map[string]*dbutil.ColumnData, error) {
+func (lmt *LimitIterator) batchGetBounds(
+	ctx context.Context, query string, args ...any,
+) ([]map[string]*dbutil.ColumnData, error) {
 	rows, err := lmt.dbConn.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	if !rows.Next() {
-		if err := rows.Err(); err != nil {
+
+	dataMaps := make([]map[string]*dbutil.ColumnData, 0)
+	for rows.Next() {
+		dataMap, err := dbutil.ScanRow(rows)
+		if err != nil {
 			return nil, err
 		}
-		return nil, nil
+		dataMaps = append(dataMaps, dataMap)
 	}
-	dataMap, err := dbutil.ScanRow(rows)
-	if err != nil {
+	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	return dataMap, nil
+	lmt.logger.Debug("limit iterator query bounds done",
+		zap.Int("count", len(dataMaps)))
+	return dataMaps, nil
 }
 
-func generateLimitQueryTemplate(indexColumns []*model.ColumnInfo, table *common.TableDiff, chunkSize int64) string {
+func generateBoundQueryTemplate(
+	indexColumns []*model.ColumnInfo,
+	table *common.TableDiff,
+	chunkSize int64,
+	indexName string,
+) string {
 	fields := make([]string, 0, len(indexColumns))
 	for _, columnInfo := range indexColumns {
 		fields = append(fields, dbutil.ColumnName(columnInfo.Name.O))
 	}
 	columns := strings.Join(fields, ", ")
+	orderBy := utils.BuildOrderByClause(indexColumns, table.Collation)
+	tableName := dbutil.TableName(table.Schema, table.Table)
+	indexHint := fmt.Sprintf("/*+ USE_INDEX(%s, %s) */",
+		tableName, dbutil.ColumnName(indexName))
 
-	// TODO: the limit splitter has not been used yet.
-	// once it is used, need to add `collation` after `ORDER BY`.
-	return fmt.Sprintf("SELECT %s FROM %s WHERE %%s ORDER BY %s LIMIT %d,1", columns, dbutil.TableName(table.Schema, table.Table), columns, chunkSize)
+	return fmt.Sprintf(
+		"SELECT %s FROM (SELECT %s %s, ROW_NUMBER() OVER (ORDER BY %s) AS rn FROM %s WHERE %%s LIMIT ?) AS t WHERE MOD(rn, %d) = 0",
+		columns,
+		indexHint,
+		columns,
+		orderBy,
+		tableName,
+		chunkSize,
+	)
 }
