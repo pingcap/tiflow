@@ -166,17 +166,12 @@ func NewLimitIteratorWithCheckpoint(
 	lctx, cancel := context.WithCancel(ctx)
 	queryTmpl := generateBoundQueryTemplate(indexColumns, table, chunkSize, indexName)
 
-	batchSize := defaultLimitBatchSize
-	if table.CheckThreadCount > 0 {
-		batchSize = int64(table.CheckThreadCount * 2)
-	}
-
 	limitIterator := &LimitIterator{
 		table,
 		tagChunk,
 		queryTmpl,
 
-		chunkSize * batchSize,
+		chunkSize * defaultLimitBatchSize,
 
 		indexID,
 		utils.GetColumnNames(indexColumns),
