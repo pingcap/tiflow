@@ -399,7 +399,8 @@ type Config struct {
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
 	// SplitterStrategy controls the fallback splitter when bucket stats are unavailable.
-	// Supported values: "limit" or "random".
+	// "limit": fall back to the limit iterator.
+	// "random" (default): fall back to the random iterator.
 	SplitterStrategy string `toml:"splitter-strategy" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`

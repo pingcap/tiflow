@@ -50,31 +50,20 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	originTable.Table = matchedSource.OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
 
-	if originTable.SplitterStrategy == "limit" {
-		limitIter, err := splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
-		if err != nil {
-			return nil, errors.Trace(err)
-		}
-		return limitIter, nil
-	}
-
-	// if we decide to use bucket to split chunks
-	// we always use bucksIter even we load from checkpoint is not bucketNode
-	// TODO check whether we can use bucket for this table to split chunks.
-	// NOTICE: If checkpoint use random splitter, it will also fail the next time build bucket splitter.
+	// Try bucket splitter first.
 	bucketIter, err := splitter.NewBucketIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange, a.bucketSpliterPool)
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, fall back to use random iterator", zap.Error(err))
-	// fall back to random splitter
+	log.Info("failed to build bucket iterator, falling back",
+		zap.String("strategy", originTable.SplitterStrategy),
+		zap.Error(err))
 
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
-	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
-	if err != nil {
-		return nil, errors.Trace(err)
+	if originTable.SplitterStrategy == "limit" {
+		log.Info("choose limit splitter", zap.String("table", progressID))
+		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 	}
-	return randIter, nil
+	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 
 // TiDBRowsIterator is used to iterate rows in TiDB

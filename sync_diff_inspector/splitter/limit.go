@@ -40,7 +40,7 @@ type LimitIterator struct {
 	tagChunk  *chunk.Range
 	queryTmpl string
 
-	queryRange int64
+	queryRowLimit int64
 
 	indexID          int64
 	indexColumnNames []ast.CIStr
@@ -240,7 +240,7 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 	for {
 		where, args := lmt.tagChunk.ToString(lmt.table.Collation)
 		query := fmt.Sprintf(lmt.queryTmpl, where)
-		bounds, err := lmt.batchGetBounds(ctx, query, append(args, lmt.queryRange)...)
+		bounds, err := lmt.batchGetBounds(ctx, query, append(args, lmt.queryRowLimit)...)
 		if err != nil {
 			select {
 			case <-ctx.Done():
@@ -260,11 +260,10 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 
 		lmt.logger.Debug("limit iterator fetched bounds",
 			zap.Int("count", len(bounds)),
-			zap.Int64("query-range", lmt.queryRange),
+			zap.Int64("query-row-limit", lmt.queryRowLimit),
 			zap.Int("bucket", bucketID))
 
 		chunkRange := lmt.tagChunk
-		lmt.tagChunk = nil
 		if len(bounds) == 0 {
 			// there is no row in result set
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
@@ -278,7 +277,6 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		}
 
 		for _, dataMap := range bounds {
-			chunkRange := lmt.tagChunk
 			newTagChunk := chunk.NewChunkRangeOffset(lmt.columnOffset, lmt.table.Info)
 			newTagChunk.IndexColumnNames = lmt.indexColumnNames
 			for column, data := range dataMap {
@@ -297,8 +295,9 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 				return
 			case lmt.chunksCh <- chunkRange:
 			}
-			lmt.tagChunk = newTagChunk
+			chunkRange = newTagChunk
 		}
+		lmt.tagChunk = chunkRange
 	}
 }
 
@@ -344,7 +343,7 @@ func generateBoundQueryTemplate(
 		tableName, dbutil.ColumnName(indexName))
 
 	return fmt.Sprintf(
-		"SELECT %s FROM (SELECT %s %s, ROW_NUMBER() OVER (ORDER BY %s) AS rn FROM %s WHERE %%s LIMIT ?) AS t WHERE MOD(rn, %d) = 0",
+		"SELECT %s FROM (SELECT %s %s, ROW_NUMBER() OVER (ORDER BY %s) AS rn FROM %s WHERE %%s LIMIT ?) AS t WHERE MOD(rn, %d) = 0 ORDER BY rn",
 		columns,
 		indexHint,
 		columns,
