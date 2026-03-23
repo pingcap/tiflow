@@ -370,7 +370,8 @@ func (r *Report) SetTableMeetError(schema, table string, err error) {
 	r.Result = Error
 }
 
-// ClearTableMeetError clears a transient table error after a later retry succeeds.
+// ClearTableMeetError resets any previous error for the given table and recomputes
+// the aggregate report result.
 func (r *Report) ClearTableMeetError(schema, table string) {
 	r.Lock()
 	defer r.Unlock()
