@@ -26,6 +26,15 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	// These constructor seams let unit tests inject partial-init failures without
+	// spinning up a real Kafka cluster.
+	newSaramaClientImpl                  = sarama.NewClient
+	newSaramaClusterAdminFromClientImpl  = sarama.NewClusterAdminFromClient
+	newSaramaSyncProducerFromClientImpl  = sarama.NewSyncProducerFromClient
+	newSaramaAsyncProducerFromClientImpl = sarama.NewAsyncProducerFromClient
+)
+
 type saramaFactory struct {
 	changefeedID model.ChangeFeedID
 	option       *Options
@@ -45,6 +54,14 @@ func NewSaramaFactory(
 	}, nil
 }
 
+func closeSaramaClientOnFailure(changefeedID model.ChangeFeedID, client sarama.Client, reason string) {
+	if closeErr := client.Close(); closeErr != nil && closeErr != sarama.ErrClosedClient {
+		log.Warn(reason,
+			zap.Stringer("changefeedID", changefeedID),
+			zap.Error(closeErr))
+	}
+}
+
 func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, error) {
 	start := time.Now()
 	config, err := NewSaramaConfig(ctx, f.option)
@@ -57,7 +74,7 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	}
 
 	start = time.Now()
-	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
+	client, err := newSaramaClientImpl(f.option.BrokerEndpoints, config)
 	duration = time.Since(start).Seconds()
 	if duration > 2 {
 		log.Warn("new sarama client cost too much time", zap.Any("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
@@ -67,12 +84,13 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	}
 
 	start = time.Now()
-	admin, err := sarama.NewClusterAdminFromClient(client)
+	admin, err := newSaramaClusterAdminFromClientImpl(client)
 	duration = time.Since(start).Seconds()
 	if duration > 2 {
 		log.Warn("new sarama cluster admin cost too much time", zap.Any("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
 	}
 	if err != nil {
+		closeSaramaClientOnFailure(f.changefeedID, client, "close sarama client after admin init failed")
 		return nil, errors.Trace(err)
 	}
 
@@ -92,12 +110,13 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	}
 	config.MetricRegistry = f.registry
 
-	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
+	client, err := newSaramaClientImpl(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	p, err := sarama.NewSyncProducerFromClient(client)
+	p, err := newSaramaSyncProducerFromClientImpl(client)
 	if err != nil {
+		closeSaramaClientOnFailure(f.changefeedID, client, "close sarama client after sync producer init failed")
 		return nil, errors.Trace(err)
 	}
 
@@ -122,12 +141,13 @@ func (f *saramaFactory) AsyncProducer(
 	}
 	config.MetricRegistry = f.registry
 
-	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
+	client, err := newSaramaClientImpl(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	p, err := sarama.NewAsyncProducerFromClient(client)
+	p, err := newSaramaAsyncProducerFromClientImpl(client)
 	if err != nil {
+		closeSaramaClientOnFailure(f.changefeedID, client, "close sarama client after async producer init failed")
 		return nil, errors.Trace(err)
 	}
 	return &saramaAsyncProducer{
