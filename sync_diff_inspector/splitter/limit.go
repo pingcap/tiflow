@@ -253,6 +253,11 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		case lmt.chunksCh <- chunkRange:
 		}
 		lmt.tagChunk = newTagChunk
+
+		failpoint.Inject("check-one-chunk", func() {
+			log.Info("failpoint check-one-chunk injected, stop producing new chunks.")
+			failpoint.Return()
+		})
 	}
 }
 

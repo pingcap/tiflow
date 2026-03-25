@@ -101,7 +101,8 @@ echo "================test limit checkpoint================="
 echo "------1. checkpoint and resume with limit---------"
 rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
+export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/check-one-chunk=return();\
+github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
