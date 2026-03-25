@@ -1,15 +1,14 @@
 source-id: mysql-replica-01
 flavor: ''
 enable-gtid: false
-enable-relay: true
-relay-binlog-name: ''
-relay-binlog-gtid: ''
 from:
   host: 127.0.0.1
   user: root
   password: '123456'
   port: 3306
 checker:
-  check-enable: true
+  # This case validates the FK safe-mode guard itself; disable the checker so
+  # auto-resume does not race with the expected paused state.
+  check-enable: false
   backoff-rollback: 5m
   backoff-max: 5m

@@ -828,8 +828,7 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		return res, nil
 	}
 
-	tableID := utils.GenTableID(targetTable)
-	downstreamTableInfo, err := v.syncer.getDownStreamTableInfo(v.tctx, tableID, tableInfo)
+	downstreamTableInfo, err := v.syncer.getDownStreamTableInfo(v.tctx, sourceTable, targetTable, tableInfo)
 	if err != nil {
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
@@ -926,6 +925,19 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			beforeImage = ev.Rows[i]
 		}
 
+		if beforeImage != nil {
+			beforeImage, err = adjustValueFromBinlogData(beforeImage, tableInfo)
+			if err != nil {
+				return terror.Annotate(err, "failed to adjust row before image")
+			}
+		}
+		if afterImage != nil {
+			afterImage, err = adjustValueFromBinlogData(afterImage, tableInfo)
+			if err != nil {
+				return terror.Annotate(err, "failed to adjust row after image")
+			}
+		}
+
 		rowChange := sqlmodel.NewRowChange(
 			&cdcmodel.TableName{Schema: sourceTable.Schema, Table: sourceTable.Name},
 			&cdcmodel.TableName{Schema: targetTable.Schema, Table: targetTable.Name},
@@ -934,6 +946,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			nil,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()

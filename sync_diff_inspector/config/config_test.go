@@ -108,3 +108,47 @@ func TestNoSecretLeak(t *testing.T) {
 	json.Unmarshal(sourceJSON, &s)
 	require.Equal(t, string(s.Password), "meow~~~")
 }
+
+func TestComputeConfigHashIgnoresTLSName(t *testing.T) {
+	task := &TaskConfig{
+		SourceInstances: []*DataSource{
+			{
+				Host: "127.0.0.1",
+				Port: 4000,
+				User: "root",
+				Security: &Security{
+					TLSName: "source-tls-1",
+					CAPath:  "/tmp/source-ca.pem",
+				},
+			},
+		},
+		TargetInstance: &DataSource{
+			Host: "127.0.0.1",
+			Port: 4001,
+			User: "root",
+			Security: &Security{
+				TLSName: "target-tls-1",
+				CAPath:  "/tmp/target-ca.pem",
+			},
+		},
+		TargetTableConfigs: []*TableConfig{
+			{TargetTables: []string{"test.t1"}},
+		},
+		CheckTables: []string{"test.t1"},
+	}
+
+	hash1, err := task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	task.SourceInstances[0].Security.TLSName = "source-tls-2"
+	task.TargetInstance.Security.TLSName = "target-tls-2"
+
+	hash2, err := task.ComputeConfigHash()
+	require.NoError(t, err)
+	require.Equal(t, hash1, hash2)
+
+	task.TargetInstance.Security.CAPath = "/tmp/target-ca-new.pem"
+	hash3, err := task.ComputeConfigHash()
+	require.NoError(t, err)
+	require.NotEqual(t, hash2, hash3)
+}

@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tidb/pkg/util/sqlexec"
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
@@ -83,8 +84,11 @@ type downstreamTracker struct {
 
 // DownstreamTableInfo contains tableinfo and index cache.
 type DownstreamTableInfo struct {
-	TableInfo   *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
-	WhereHandle *sqlmodel.WhereHandle
+	TableInfo           *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
+	WhereHandle         *sqlmodel.WhereHandle
+	ForeignKeyRelations []sqlmodel.ForeignKeyCausalityRelation
+	foreignKeyInitOnce  sync.Once
+	foreignKeyInitErr   error
 }
 
 type executorContext struct {
@@ -396,7 +400,41 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 // GetDownStreamTableInfo gets downstream table info.
 // note. this function will init downstreamTrack's table info.
 func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
+	targetTable := utils.UnpackTableID(tableID)
+	dti, err := tr.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dti.initForeignKeyRelations(tr, tctx, tableID, targetTable, targetTable, originTI); err != nil {
+		return nil, err
+	}
+
+	return dti, nil
+}
+
+// GetDownStreamTableInfoWithoutForeignKey gets downstream table info without initializing FK relations.
+func (tr *Tracker) GetDownStreamTableInfoWithoutForeignKey(tctx *tcontext.Context, tableID string, originTI *model.TableInfo) (*DownstreamTableInfo, error) {
 	return tr.downstreamTracker.getOrInit(tctx, tableID, originTI)
+}
+
+// InitDownStreamForeignKeyRelations initializes FK relations for a routed source/target table pair.
+func (tr *Tracker) InitDownStreamForeignKeyRelations(
+	tctx *tcontext.Context,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	originTI *model.TableInfo,
+) (*DownstreamTableInfo, error) {
+	tableID := utils.GenTableID(targetTable)
+	dti, err := tr.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI); err != nil {
+		return nil, err
+	}
+	return dti, nil
 }
 
 // RemoveDownstreamSchema just remove schema or table in downstreamTrack.
@@ -437,6 +475,35 @@ func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, o
 		dt.tableInfos[tableID] = dti
 	}
 	return dti, nil
+}
+
+func (dti *DownstreamTableInfo) initForeignKeyRelations(
+	tr *Tracker,
+	tctx *tcontext.Context,
+	tableID string,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	originTI *model.TableInfo,
+) error {
+	dti.foreignKeyInitOnce.Do(func() {
+		relations, err := tr.buildForeignKeyRelations(
+			tctx,
+			tableID,
+			sourceTable,
+			targetTable,
+			dti.TableInfo,
+			originTI,
+			make(map[string][]sqlmodel.ForeignKeyCausalityRelation),
+			make(map[string]struct{}),
+		)
+		if err != nil {
+			dti.foreignKeyInitErr = err
+			return
+		}
+		dti.ForeignKeyRelations = relations
+	})
+
+	return dti.foreignKeyInitErr
 }
 
 func (dt *downstreamTracker) remove(tctx *tcontext.Context, targetTable *filter.Table) {
@@ -495,6 +562,293 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 	}
 	ti.State = model.StatePublic
 	return ti, nil
+}
+
+// buildForeignKeyRelations builds causality relations for the current child table.
+// It walks parent tables recursively so a child row can be lifted into the same
+// causality key domain as the root/ultimate parent row, not only its direct parent.
+func (tr *Tracker) buildForeignKeyRelations(
+	tctx *tcontext.Context,
+	tableID string,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	downstreamTI *model.TableInfo,
+	originTI *model.TableInfo,
+	cache map[string][]sqlmodel.ForeignKeyCausalityRelation,
+	visiting map[string]struct{},
+) ([]sqlmodel.ForeignKeyCausalityRelation, error) {
+	if relations, ok := cache[tableID]; ok {
+		return relations, nil
+	}
+
+	if _, ok := visiting[tableID]; ok {
+		return nil, nil
+	}
+	visiting[tableID] = struct{}{}
+	defer delete(visiting, tableID)
+
+	if sourceTable == nil {
+		sourceTable = utils.UnpackTableID(tableID)
+	}
+	if targetTable == nil {
+		targetTable = utils.UnpackTableID(tableID)
+	}
+
+	if len(downstreamTI.ForeignKeys) > 0 && !sameTableIdentity(sourceTable, targetTable) {
+		return nil, newForeignKeyRouteUnsupportedError(
+			fmt.Sprintf(
+				"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
+				sourceTable,
+				targetTable,
+			),
+		)
+	}
+
+	childNameToIdx := buildColumnIndexMap(originTI)
+
+	relations := make([]sqlmodel.ForeignKeyCausalityRelation, 0, len(downstreamTI.ForeignKeys))
+	for i, fk := range downstreamTI.ForeignKeys {
+		if len(fk.Cols) == 0 || len(fk.Cols) != len(fk.RefCols) {
+			tctx.L().Debug("skip foreign key causality relation with unexpected foreign key metadata",
+				zap.String("table", tableID),
+				zap.String("foreignKey", fk.Name.O),
+				zap.Int("childColumnCount", len(fk.Cols)),
+				zap.Int("parentColumnCount", len(fk.RefCols)))
+			continue
+		}
+
+		// childIdxs are the current child row value indexes (after hidden columns are
+		// skipped) for this direct FK, and are reused by both direct and lifted relations.
+		childIdxs := make([]int, 0, len(fk.Cols))
+		for _, col := range fk.Cols {
+			idx, ok := childNameToIdx[col.L]
+			if !ok {
+				return nil, newForeignKeySchemaAlignmentError(
+					tableID,
+					fmt.Sprintf("downstream FK column %s was not found in the tracked schema", col.L),
+				)
+			}
+			childIdxs = append(childIdxs, idx)
+		}
+
+		sourceFK := findMatchingForeignKey(originTI, fk, i)
+		if sourceFK == nil {
+			return nil, newForeignKeyRouteUnsupportedError(
+				fmt.Sprintf(
+					"foreign key causality under foreign_key_checks=1 and worker_count>1 requires aligned source and downstream FK metadata; failed to match source foreign key metadata for table %s and downstream FK %s; please align the schema metadata first, and if route is enabled for this table, please use worker_count=1",
+					sourceTable,
+					fk.Name.O,
+				),
+			)
+		}
+
+		sourceParentSchema := sourceFK.RefSchema.O
+		if sourceParentSchema == "" {
+			sourceParentSchema = sourceTable.Schema
+		}
+		sourceParentTable := &filter.Table{Schema: sourceParentSchema, Name: sourceFK.RefTable.O}
+
+		targetParentSchema := fk.RefSchema.O
+		if targetParentSchema == "" {
+			targetParentSchema = targetTable.Schema
+		}
+		targetParentTable := &filter.Table{Schema: targetParentSchema, Name: fk.RefTable.O}
+		if !sameTableIdentity(sourceParentTable, targetParentTable) {
+			return nil, newForeignKeyRouteUnsupportedError(
+				fmt.Sprintf(
+					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; upstream parent table %s and downstream parent table %s do not align for FK %s on table %s; please use worker_count=1",
+					sourceParentTable,
+					targetParentTable,
+					fk.Name.O,
+					sourceTable,
+				),
+			)
+		}
+
+		parentTableID := utils.GenTableID(targetParentTable)
+		parentTableName := (&cdcmodel.TableName{Schema: targetParentSchema, Table: fk.RefTable.O}).String()
+
+		parentOriginTI, err := tr.GetTableInfo(sourceParentTable)
+		if err != nil {
+			return nil, err
+		}
+		parentDTI, err := tr.downstreamTracker.getOrInit(tctx, parentTableID, parentOriginTI)
+		if err != nil {
+			return nil, err
+		}
+		parentColumns, err := getColumnsByNames(parentDTI.TableInfo, fk.RefCols)
+		if err != nil {
+			return nil, err
+		}
+		appendDirectRelation := func() {
+			relations = append(relations, sqlmodel.ForeignKeyCausalityRelation{
+				ParentTable:    parentTableName,
+				ParentColumns:  parentColumns,
+				ChildColumnIdx: childIdxs,
+			})
+		}
+
+		parentNameToIdx := buildColumnIndexMap(parentOriginTI)
+		parentRelations, err := tr.buildForeignKeyRelations(
+			tctx,
+			parentTableID,
+			sourceParentTable,
+			targetParentTable,
+			parentDTI.TableInfo,
+			parentOriginTI,
+			cache,
+			visiting,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(parentRelations) == 0 {
+			appendDirectRelation()
+			continue
+		}
+
+		// Map the direct parent column positions referenced by the current FK back to
+		// the current child row's visible-column indexes.
+		parentIndexToChild := make(map[int]int, len(fk.RefCols))
+		for i, refCol := range fk.RefCols {
+			if idx, ok := parentNameToIdx[refCol.L]; ok {
+				parentIndexToChild[idx] = childIdxs[i]
+			}
+		}
+
+		mappedCount := 0
+		for _, parentRelation := range parentRelations {
+			// Reuse the already-lifted parent relation by projecting each parent-side
+			// column index in that relation back onto the current child row. If a lifted
+			// relation cannot be fully projected through the current direct FK, skip it
+			// and keep looking for other lifted relations that still match.
+			mappedChildIdxs := make([]int, len(parentRelation.ChildColumnIdx))
+			skip := false
+			for i, parentIdx := range parentRelation.ChildColumnIdx {
+				childIdx, ok := parentIndexToChild[parentIdx]
+				if !ok {
+					skip = true
+					break
+				}
+				mappedChildIdxs[i] = childIdx
+			}
+			if skip {
+				continue
+			}
+
+			relations = append(relations, sqlmodel.ForeignKeyCausalityRelation{
+				ParentTable:    parentRelation.ParentTable,
+				ParentColumns:  parentRelation.ParentColumns,
+				ChildColumnIdx: mappedChildIdxs,
+			})
+			mappedCount++
+		}
+
+		// Preserve direct child->parent causality when lifted parent relations don't map.
+		if mappedCount == 0 {
+			appendDirectRelation()
+		}
+	}
+
+	cache[tableID] = relations
+	return relations, nil
+}
+
+// findMatchingForeignKey maps a downstream FK back to source-side metadata.
+// It matches by FK name first, then by the same ordinal position if the child/ref
+// columns still align, and finally falls back to a linear scan by FK columns.
+func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInfo, idx int) *model.FKInfo {
+	if originTI == nil || len(originTI.ForeignKeys) == 0 || downstreamFK == nil {
+		return nil
+	}
+
+	if downstreamFK.Name.L != "" {
+		if fk := model.FindFKInfoByName(originTI.ForeignKeys, downstreamFK.Name.L); fk != nil {
+			return fk
+		}
+	}
+
+	if idx < len(originTI.ForeignKeys) {
+		candidate := originTI.ForeignKeys[idx]
+		if sameColumns(candidate.Cols, downstreamFK.Cols) && sameColumns(candidate.RefCols, downstreamFK.RefCols) {
+			return candidate
+		}
+	}
+
+	for _, fk := range originTI.ForeignKeys {
+		if sameColumns(fk.Cols, downstreamFK.Cols) && sameColumns(fk.RefCols, downstreamFK.RefCols) {
+			return fk
+		}
+	}
+
+	return nil
+}
+
+func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].L != b[i].L {
+			return false
+		}
+	}
+	return true
+}
+
+func sameTableIdentity(a *filter.Table, b *filter.Table) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Schema == b.Schema && a.Name == b.Name
+}
+
+func newForeignKeyRouteUnsupportedError(msg string) error {
+	return dmterror.ErrSyncerUnitNotSupportedOperate.Generatef(msg)
+}
+
+func newForeignKeySchemaAlignmentError(tableName string, detail string) error {
+	return dmterror.ErrSchemaTrackerCannotFetchDownstreamCreateTableStmt.Generatef(
+		"foreign key causality initialization failed for table %s: %s; this usually means the schema metadata used for FK causality are out of sync (for example, the tracked schema and downstream table schema differ, or the schema was repaired only partially). Please align the schema first; if the tracked schema is stale, use `dmctl binlog-schema update` (or the old `operate-schema set`) and then resume the task",
+		tableName,
+		detail,
+	)
+}
+
+func buildColumnIndexMap(ti *model.TableInfo) map[string]int {
+	nameToIdx := make(map[string]int)
+	valueIdx := 0
+	for _, col := range ti.Columns {
+		if col.Hidden {
+			continue
+		}
+		nameToIdx[col.Name.L] = valueIdx
+		valueIdx++
+	}
+	return nameToIdx
+}
+
+func getColumnsByNames(ti *model.TableInfo, names []ast.CIStr) ([]*model.ColumnInfo, error) {
+	columns := make([]*model.ColumnInfo, 0, len(names))
+	for _, name := range names {
+		found := false
+		for _, col := range ti.Columns {
+			if col.Name.L == name.L {
+				columns = append(columns, col)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, newForeignKeySchemaAlignmentError(
+				ti.Name.O,
+				fmt.Sprintf("downstream referenced column %s was not found in the parent table schema", name.O),
+			)
+		}
+	}
+
+	return columns, nil
 }
 
 // initDownStreamTrackerParser init downstream tracker parser by default sql_mode.

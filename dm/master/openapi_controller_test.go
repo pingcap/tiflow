@@ -269,11 +269,12 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		server.Close()
 	}()
 
+	worker1Name := "worker1"
+	worker1Addr := "172.16.10.72:8262"
+
 	// create source for task
 	{
 		// add a mock worker
-		worker1Name := "worker1"
-		worker1Addr := "172.16.10.72:8262"
 		s.Nil(server.scheduler.AddWorker(worker1Name, worker1Addr))
 		worker1 := server.scheduler.GetWorkerByName(worker1Name)
 		worker1.ToFree()
@@ -332,6 +333,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.Len(statusList, 1)
 		s.NotNil(statusList[0].ErrorMsg) // no true worker, will get an error msg
 		s.Contains(*statusList[0].ErrorMsg, "code=38008")
+		s.Equal(worker1Name, statusList[0].WorkerName)
 	}
 
 	// get status
@@ -341,6 +343,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.Len(statusList, 1)
 		s.NotNil(statusList[0].ErrorMsg) // no worker, will get an error msg
 		s.Contains(*statusList[0].ErrorMsg, "code=38008")
+		s.Equal(worker1Name, statusList[0].WorkerName)
 	}
 
 	// list and with status
@@ -359,6 +362,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.NotNil(taskList[0].StatusList)
 		statusList := *taskList[0].StatusList
 		s.Contains(*statusList[0].ErrorMsg, "code=38008")
+		s.Equal(worker1Name, statusList[0].WorkerName)
 	}
 
 	// start and stop
@@ -451,6 +455,115 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		}
 		s.EqualValues(task4, task3)
 		s.Equal(taskCfg4.String(), taskCfg3.String())
+	}
+}
+
+func (s *OpenAPIControllerSuite) TestTaskStatusSourceErrorFallback() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	worker1Name := "worker1"
+	worker1Addr := "172.16.10.72:8262"
+	s.NoError(server.scheduler.AddWorker(worker1Name, worker1Addr))
+	worker1 := server.scheduler.GetWorkerByName(worker1Name)
+	worker1.ToFree()
+
+	// create source and task bound to worker1
+	_, err := server.createSource(ctx, openapi.CreateSourceRequest{Source: *s.testSource, WorkerName: &worker1Name})
+	s.NoError(err)
+	_, err = server.createTask(ctx, openapi.CreateTaskRequest{Task: *s.testTask})
+	s.NoError(err)
+
+	// case 1: no subtask error, should fallback to SourceStatus.Result.Errors
+	{
+		ctrl := gomock.NewController(s.T())
+		defer ctrl.Finish()
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		queryResp := &pb.QueryStatusResponse{
+			Result: true,
+			SourceStatus: &pb.SourceStatus{
+				Source: s.testSource.SourceName,
+				Worker: worker1Name,
+				Result: &pb.ProcessResult{
+					Errors: []*pb.ProcessError{{
+						ErrCode:    10001,
+						ErrClass:   "database",
+						ErrScope:   "upstream",
+						ErrLevel:   "high",
+						Message:    "database driver error",
+						RawCause:   "dial tcp 127.0.0.1:3306: i/o timeout",
+						Workaround: "Please check the database connection and the database config in configuration file.",
+					}},
+				},
+			},
+			SubTaskStatus: []*pb.SubTaskStatus{{
+				Name:  s.testTask.Name,
+				Stage: pb.Stage_Running,
+				Unit:  pb.UnitType_Sync,
+			}},
+		}
+		mockWorkerClient.EXPECT().QueryStatus(gomock.Any(), gomock.Any()).Return(queryResp, nil).MaxTimes(maxRetryNum)
+		server.scheduler.SetWorkerClientForTest(worker1Name, newMockRPCClient(mockWorkerClient))
+
+		statusList, err := server.getTaskStatus(ctx, s.testTask.Name)
+		s.NoError(err)
+		s.Len(statusList, 1)
+		s.Equal(worker1Name, statusList[0].WorkerName)
+		s.NotNil(statusList[0].ErrorMsg)
+		s.Contains(*statusList[0].ErrorMsg, "code=10001")
+		s.Contains(*statusList[0].ErrorMsg, "scope=upstream")
+	}
+
+	// case 2: subtask error should take precedence over source error
+	{
+		ctrl := gomock.NewController(s.T())
+		defer ctrl.Finish()
+		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+		queryResp := &pb.QueryStatusResponse{
+			Result: true,
+			SourceStatus: &pb.SourceStatus{
+				Source: s.testSource.SourceName,
+				Worker: worker1Name,
+				Result: &pb.ProcessResult{
+					Errors: []*pb.ProcessError{{
+						ErrCode:  10001,
+						ErrClass: "database",
+						ErrScope: "upstream",
+						ErrLevel: "high",
+						Message:  "database driver error",
+						RawCause: "dial tcp 127.0.0.1:3306: i/o timeout",
+					}},
+				},
+			},
+			SubTaskStatus: []*pb.SubTaskStatus{{
+				Name:  s.testTask.Name,
+				Stage: pb.Stage_Paused,
+				Unit:  pb.UnitType_Sync,
+				Result: &pb.ProcessResult{
+					Errors: []*pb.ProcessError{{
+						ErrCode:  12345,
+						ErrClass: "syncer",
+						ErrScope: "internal",
+						ErrLevel: "high",
+						Message:  "subtask failed",
+						RawCause: "subtask-raw-cause",
+					}},
+				},
+			}},
+		}
+		mockWorkerClient.EXPECT().QueryStatus(gomock.Any(), gomock.Any()).Return(queryResp, nil).MaxTimes(maxRetryNum)
+		server.scheduler.SetWorkerClientForTest(worker1Name, newMockRPCClient(mockWorkerClient))
+
+		statusList, err := server.getTaskStatus(ctx, s.testTask.Name)
+		s.NoError(err)
+		s.Len(statusList, 1)
+		s.NotNil(statusList[0].ErrorMsg)
+		s.Contains(*statusList[0].ErrorMsg, "subtask-raw-cause")
+		s.NotContains(*statusList[0].ErrorMsg, "dial tcp 127.0.0.1:3306")
 	}
 }
 

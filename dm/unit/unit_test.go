@@ -87,6 +87,9 @@ func TestIsResumableError(t *testing.T) {
 		{errors.New("unknown error"), true},
 		{terror.ErrNotSet.Delegate(&tmysql.SQLError{Code: 1236, Message: "Could not find first log file name in binary log index file", State: tmysql.DefaultMySQLState}), false},
 		{terror.ErrNotSet.Delegate(&tmysql.SQLError{Code: 1236, Message: "The slave is connecting using CHANGE MASTER TO MASTER_AUTO_POSITION = 1, but the master has purged binary logs containing GTIDs that the slave requires", State: tmysql.DefaultMySQLState}), false},
+		{terror.ErrLoadLightningRuntime.Delegate(errors.New("Table t1 is in mode Import")), true},
+		{terror.ErrLoadLightningRuntime.Delegate(errors.New("table t1 is in mode import")), true},
+		{terror.ErrLoadLightningRuntime.Delegate(errors.New("Table t1 IS IN MODE IMPORT")), true},
 		{terror.ErrLoadLightningRuntime.Delegate(common.ErrDBConnect), false},
 	}
 

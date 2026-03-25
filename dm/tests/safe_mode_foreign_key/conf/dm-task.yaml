@@ -41,4 +41,4 @@ syncers:
     worker-count: 1
     batch: 100
     safe-mode: true
-    safe-mode-duration: "60s"
+    safe-mode-duration: "10m"

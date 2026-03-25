@@ -29,7 +29,7 @@ groups=(
 	# G05
 	"load_interrupt many_tables online_ddl foreign_key full_mode gbk gtid ha_cases http_proxies"
 	# G06
-	"relay_interrupt safe_mode safe_mode_foreign_key sequence_safe_mode lightning_load_task lightning_mode metrics"
+	"relay_interrupt safe_mode safe_mode_foreign_key foreign_key_multi_worker foreign_key_route_single_worker foreign_key_schema_repair sequence_safe_mode lightning_load_task lightning_mode metrics"
 	# G07
 	"shardddl1 shardddl1_1 shardddl2 shardddl2_1"
 	# G08
@@ -37,7 +37,7 @@ groups=(
 	# G09
 	"import_v10x sharding2 ha new_collation_off only_dml openapi s3_dumpling_lightning sequence_sharding_optimistic"
 	# G10
-	"start_task print_status http_apis new_relay all_mode"
+	"start_task print_status http_apis new_relay all_mode import_into_mode"
 	# `others others_2 others_3` tests of old pipeline
 	# G11
 	"validator_basic dm_syncer shardddl_optimistic slow_relay_writer sql_mode sync_collation"

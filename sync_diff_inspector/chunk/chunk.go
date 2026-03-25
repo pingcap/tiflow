@@ -21,7 +21,11 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"go.uber.org/zap"
 )
@@ -155,14 +159,41 @@ type Range struct {
 	IsFirst bool     `json:"is-first"`
 	IsLast  bool     `json:"is-last"`
 
-	Where string        `json:"where"`
-	Args  []interface{} `json:"args"`
+	Where string `json:"where"`
+	Args  []any  `json:"args"`
 
 	// IndexColumnNames store column names of index splitting chunks.
 	// It's used to find index name and generate index hint in checksum query.
 	IndexColumnNames []ast.CIStr `json:"index-column-names,omitempty"`
 
-	columnOffset map[string]int
+	// Filled during runtime
+	columnOffset map[string]int   `json:"-"`
+	tableInfo    *model.TableInfo `json:"-"`
+}
+
+func (r *Range) buildColumnName(colName string, collation string) string {
+	nameWithCollate := dbutil.ColumnName(colName)
+	if collation == "" {
+		return nameWithCollate
+	}
+
+	// In test, we may not have table info
+	var columns []*model.ColumnInfo
+	if r.tableInfo != nil {
+		columns = r.tableInfo.Columns
+	}
+
+	// It's ok to do some brute force search.
+	for _, col := range columns {
+		if col.Name.L == strings.ToLower(colName) {
+			if col.FieldType.GetCharset() != charset.CharsetBin {
+				nameWithCollate = fmt.Sprintf("%s COLLATE '%s'", nameWithCollate, collation)
+			}
+			break
+		}
+	}
+
+	return nameWithCollate
 }
 
 // IsFirstChunkForBucket return true if it's the first chunk
@@ -176,16 +207,19 @@ func (r *Range) IsLastChunkForBucket() bool {
 }
 
 // NewChunkRange return a Range.
-func NewChunkRange() *Range {
+// tableInfo is used to check charset of column when build SQL.
+func NewChunkRange(tableInfo *model.TableInfo) *Range {
 	return &Range{
 		Bounds:       make([]*Bound, 0, 2),
 		columnOffset: make(map[string]int),
 		Index:        &CID{},
+		tableInfo:    tableInfo,
 	}
 }
 
 // NewChunkRangeOffset return a Range in sequence
-func NewChunkRangeOffset(columnOffset map[string]int) *Range {
+// tableInfo is used to check charset of column when build SQL.
+func NewChunkRangeOffset(columnOffset map[string]int, tableInfo *model.TableInfo) *Range {
 	bounds := make([]*Bound, len(columnOffset))
 	for column, offset := range columnOffset {
 		bounds[offset] = &Bound{
@@ -197,6 +231,7 @@ func NewChunkRangeOffset(columnOffset map[string]int) *Range {
 	return &Range{
 		Bounds:       bounds,
 		columnOffset: columnOffset,
+		tableInfo:    tableInfo,
 	}
 }
 
@@ -240,11 +275,7 @@ func (r *Range) String() string {
 }
 
 // ToString return string for range
-func (r *Range) ToString(collation string) (string, []interface{}) {
-	if collation != "" {
-		collation = fmt.Sprintf(" COLLATE '%s'", collation)
-	}
-
+func (r *Range) ToString(collation string) (string, []any) {
 	/* for example:
 	there is a bucket in TiDB, and the lowerbound and upperbound are (A, B1, C1), (A, B2, C2), and the columns are `a`, `b` and `c`,
 	this bucket's data range is (a = A) AND (b > B1 or (b == B1 and c > C1)) AND (b < B2 or (b == B2 and c <= C2))
@@ -273,7 +304,7 @@ func (r *Range) ToString(collation string) (string, []interface{}) {
 			break
 		}
 
-		sameCondition = append(sameCondition, fmt.Sprintf("%s%s = ?", dbutil.ColumnName(bound.Column), collation))
+		sameCondition = append(sameCondition, fmt.Sprintf("%s = ?", r.buildColumnName(bound.Column, collation)))
 		sameArgs = append(sameArgs, bound.Lower)
 	}
 
@@ -292,25 +323,26 @@ func (r *Range) ToString(collation string) (string, []interface{}) {
 
 		if bound.HasLower {
 			if len(preConditionForLower) > 0 {
-				lowerCondition = append(lowerCondition, fmt.Sprintf("(%s AND %s%s %s ?)", strings.Join(preConditionForLower, " AND "), dbutil.ColumnName(bound.Column), collation, lowerSymbol))
+				lowerCondition = append(lowerCondition, fmt.Sprintf("(%s AND %s %s ?)", strings.Join(preConditionForLower, " AND "), r.buildColumnName(bound.Column, collation), lowerSymbol))
 				lowerArgs = append(append(lowerArgs, preConditionArgsForLower...), bound.Lower)
 			} else {
-				lowerCondition = append(lowerCondition, fmt.Sprintf("(%s%s %s ?)", dbutil.ColumnName(bound.Column), collation, lowerSymbol))
+				lowerCondition = append(lowerCondition, fmt.Sprintf("(%s %s ?)", r.buildColumnName(bound.Column, collation), lowerSymbol))
+
 				lowerArgs = append(lowerArgs, bound.Lower)
 			}
-			preConditionForLower = append(preConditionForLower, fmt.Sprintf("%s%s = ?", dbutil.ColumnName(bound.Column), collation))
+			preConditionForLower = append(preConditionForLower, fmt.Sprintf("%s = ?", r.buildColumnName(bound.Column, collation)))
 			preConditionArgsForLower = append(preConditionArgsForLower, bound.Lower)
 		}
 
 		if bound.HasUpper {
 			if len(preConditionForUpper) > 0 {
-				upperCondition = append(upperCondition, fmt.Sprintf("(%s AND %s%s %s ?)", strings.Join(preConditionForUpper, " AND "), dbutil.ColumnName(bound.Column), collation, upperSymbol))
+				upperCondition = append(upperCondition, fmt.Sprintf("(%s AND %s %s ?)", strings.Join(preConditionForUpper, " AND "), r.buildColumnName(bound.Column, collation), upperSymbol))
 				upperArgs = append(append(upperArgs, preConditionArgsForUpper...), bound.Upper)
 			} else {
-				upperCondition = append(upperCondition, fmt.Sprintf("(%s%s %s ?)", dbutil.ColumnName(bound.Column), collation, upperSymbol))
+				upperCondition = append(upperCondition, fmt.Sprintf("(%s %s ?)", r.buildColumnName(bound.Column, collation), upperSymbol))
 				upperArgs = append(upperArgs, bound.Upper)
 			}
-			preConditionForUpper = append(preConditionForUpper, fmt.Sprintf("%s%s = ?", dbutil.ColumnName(bound.Column), collation))
+			preConditionForUpper = append(preConditionForUpper, fmt.Sprintf("%s = ?", r.buildColumnName(bound.Column, collation)))
 			preConditionArgsForUpper = append(preConditionArgsForUpper, bound.Upper)
 		}
 	}
@@ -405,7 +437,7 @@ func (r *Range) Update(column, lower, upper string, updateLower, updateUpper boo
 
 // Copy return a new range
 func (r *Range) Copy() *Range {
-	newChunk := NewChunkRange()
+	newChunk := NewChunkRange(r.tableInfo)
 	newChunk.IndexColumnNames = r.IndexColumnNames
 	for _, bound := range r.Bounds {
 		newChunk.addBound(&Bound{
@@ -422,7 +454,7 @@ func (r *Range) Copy() *Range {
 
 // Clone return a new range
 func (r *Range) Clone() *Range {
-	newChunk := NewChunkRange()
+	newChunk := NewChunkRange(r.tableInfo)
 	newChunk.IndexColumnNames = r.IndexColumnNames
 	for _, bound := range r.Bounds {
 		newChunk.addBound(&Bound{
@@ -487,4 +519,23 @@ func InitChunk(chunk *Range, t Type, firstBucketID, lastBucketID int, collation,
 		ChunkCnt:         1,
 	}
 	chunk.Type = t
+}
+
+// GenFakeTableInfo is used to generate fake table info in unit test
+// export for test
+func GenFakeTableInfo(cols ...string) *model.TableInfo {
+	tp := types.NewFieldType(mysql.TypeLong)
+	tp.SetCharset(charset.CharsetGBK)
+
+	info := &model.TableInfo{}
+	for _, name := range cols {
+		info.Columns = append(info.Columns,
+			&model.ColumnInfo{
+				FieldType: *tp,
+				Name:      ast.NewCIStr(name),
+			},
+		)
+	}
+
+	return info
 }

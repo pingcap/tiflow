@@ -1,0 +1,59 @@
+# Diff Configuration.
+
+######################### Global config #########################
+
+# how many goroutines are created to check data
+check-thread-count = 4
+
+# set false if just want compare data by checksum, will skip select data when checksum is not equal.
+# set true if want compare all different rows, will slow down the total compare time.
+export-fix-sql = true
+
+# ignore check table's data
+check-struct-only = false
+
+######################### Databases config #########################
+[data-sources]
+[data-sources.mysql0]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = ""
+    route-rules = ["rule0"]
+
+[data-sources.mysql1]
+    host = "127.0.0.1"
+    port = 3306
+    user = "root"
+    password = ""
+    route-rules = ["rule1"]
+
+[data-sources.tidb]
+    host = "127.0.0.1"
+    port = 4000
+    user = "root"
+    password = ""
+
+########################### Routes ###########################
+[routes.rule0]
+schema-pattern = "collation_test"
+table-pattern  = "shard0"
+target-schema  = "collation_test"
+target-table   = "shards"
+
+[routes.rule1]
+schema-pattern = "collation_test"
+table-pattern  = "shard1"
+target-schema  = "collation_test"
+target-table   = "shards"
+
+######################### Task config #########################
+[task]
+    output-dir = "/tmp/tidb_tools_test/sync_diff_inspector/output"
+
+    source-instances = ["mysql0", "mysql1"]
+
+    target-instance = "tidb"
+
+    # tables need to check.
+	target-check-tables = ["collation_test.shards"]

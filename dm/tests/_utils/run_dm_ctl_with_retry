@@ -33,7 +33,10 @@ for ((k = 0; k < retry_times; k++)); do
 		j=$((i + 1))
 		value=${!i}
 		expected=${!j}
-		got=$(sed "s/$value/$value\n/g" $dmctl_log | grep -c "$value")
+		# Count regex matches directly so existing assertions keep their grep
+		# semantics, while avoiding the old sed-based escaping issues for values
+		# containing "/".
+		got=$(grep -o -- "$value" "$dmctl_log" | wc -l | tr -d '[:space:]')
 		echo "got=$got expected=$expected"
 		if [ "$expected" == "1+" ]; then
 			if [ "$got" == "0" ]; then
