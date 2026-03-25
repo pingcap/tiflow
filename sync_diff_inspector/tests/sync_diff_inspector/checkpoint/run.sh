@@ -98,34 +98,33 @@ check_contains_regex ".:${bucket_index_left}-${bucket_index_right}:$((${last_chu
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_limit.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
 
 echo "================test limit checkpoint================="
-echo "--------------1. chunk is in the middle----------------"
+echo "------1. checkpoint and resume with limit---------"
 rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
-export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/ignore-last-n-chunk-in-bucket=return(1);\
-github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
+export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
 sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 check_contains "choose limit splitter" $OUT_DIR/sync_diff.log
-# For limit iterator with ignore-last-n-chunk-in-bucket, ChunkCnt > 1 makes
-# chunks non-adjacent, so checkpoint stays at the first chunk in bucket order.
-checkpoint_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'upperBounds=' '{print $2}' | sed 's/[]["]//g' | awk '$1 ~ /^[0-9]+$/ {print}' | sort -n | awk 'NR==1')
-echo "$checkpoint_chunk_info" # e.g. 9 indexCode=0:0-0:0:2
-checkpoint_chunk_bound=$(echo $checkpoint_chunk_info | awk -F ' ' '{print $1}')
-echo "$checkpoint_chunk_bound"
-checkpoint_chunk_index=$(echo $checkpoint_chunk_info | awk -F '=' '{print $2}')
-echo "$checkpoint_chunk_index"
+# Save the last chunk's info to verify continuation.
+# With limit, each chunk is a single row query, so chunkIndex+1 == chunkCnt.
+last_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'upperBounds=' '{print $2}' | sed 's/[]["]//g' | sort -n | awk 'END {print}')
+echo "$last_chunk_info" # e.g. 9 indexCode=0:0-0:0:1
+last_chunk_bound=$(echo $last_chunk_info | awk -F ' ' '{print $1}')
+echo "$last_chunk_bound"
+last_chunk_index=$(echo $last_chunk_info | awk -F '=' '{print $2}')
+echo "$last_chunk_index"
 OLD_IFS="$IFS"
 IFS=":"
-checkpoint_chunk_index_array=($checkpoint_chunk_index)
+last_chunk_index_array=($last_chunk_index)
 IFS="$OLD_IFS"
-for s in ${checkpoint_chunk_index_array[@]}; do
+for s in ${last_chunk_index_array[@]}; do
 	echo "$s"
 done
 # chunkIndex should be the last Index
-[[ $((${checkpoint_chunk_index_array[2]} + 2)) -eq ${checkpoint_chunk_index_array[3]} ]] || exit 1
+[[ $((${last_chunk_index_array[2]} + 1)) -eq ${last_chunk_index_array[3]} ]] || exit 1
 # Save bucketIndexRight, which should be equal to bucketIndexLeft of the chunk first created in the next running.
-bucket_index_right=$(($(echo ${checkpoint_chunk_index_array[1]} | awk -F '-' '{print $2}') + 1))
+bucket_index_right=$(($(echo ${last_chunk_index_array[1]} | awk -F '-' '{print $2}') + 1))
 echo $bucket_index_right
 
 rm -f $OUT_DIR/sync_diff.log
@@ -137,8 +136,8 @@ cat $OUT_DIR/first_chunk_bound
 echo $first_chunk_info | awk -F '=' '{print $3}' >$OUT_DIR/first_chunk_index
 cat $OUT_DIR/first_chunk_index
 # Notice: when chunk is created paralleling, the least chunk may not appear in the first line. so we sort it as before.
-check_contains "${checkpoint_chunk_bound}" $OUT_DIR/first_chunk_bound
-check_contains_regex ".*:${bucket_index_right}-${bucket_index_right}:0:.*" $OUT_DIR/first_chunk_index
+check_contains "${last_chunk_bound}" $OUT_DIR/first_chunk_bound
+check_contains_regex ".*:${bucket_index_right}-.*:0:.*" $OUT_DIR/first_chunk_index
 
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_rand.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
 
