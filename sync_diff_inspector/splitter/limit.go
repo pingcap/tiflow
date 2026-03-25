@@ -65,7 +65,6 @@ func NewLimitIteratorWithCheckpoint(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	var indexName string
 	var indexColumns []*model.ColumnInfo
 	var tagChunk *chunk.Range
 	columnOffset := make(map[string]int)
@@ -93,7 +92,6 @@ func NewLimitIteratorWithCheckpoint(
 		}
 
 		indexID = index.ID
-		indexName = index.Name.O
 		for i, indexColumn := range indexColumns {
 			columnOffset[indexColumn.Name.O] = i
 		}
@@ -145,7 +143,7 @@ func NewLimitIteratorWithCheckpoint(
 		zap.String("db", table.Schema), zap.String("table", table.Table))
 
 	lctx, cancel := context.WithCancel(ctx)
-	queryTmpl := generateLimitQueryTemplate(indexColumns, table, chunkSize, indexName)
+	queryTmpl := generateLimitQueryTemplate(indexColumns, table, chunkSize)
 
 	limitIterator := &LimitIterator{
 		table,
@@ -277,10 +275,7 @@ func (lmt *LimitIterator) getLimitRow(ctx context.Context, query string, args []
 	return dataMap, nil
 }
 
-func generateLimitQueryTemplate(
-	indexColumns []*model.ColumnInfo, table *common.TableDiff,
-	chunkSize int64, indexName string,
-) string {
+func generateLimitQueryTemplate(indexColumns []*model.ColumnInfo, table *common.TableDiff, chunkSize int64) string {
 	fields := make([]string, 0, len(indexColumns))
 	for _, columnInfo := range indexColumns {
 		fields = append(fields, dbutil.ColumnName(columnInfo.Name.O))
@@ -288,9 +283,7 @@ func generateLimitQueryTemplate(
 	columns := strings.Join(fields, ", ")
 	orderBy := utils.BuildOrderByClause(indexColumns, table.Collation)
 	tableName := dbutil.TableName(table.Schema, table.Table)
-	indexHint := fmt.Sprintf("/*+ USE_INDEX(%s, %s) */",
-		tableName, dbutil.ColumnName(indexName))
 
-	return fmt.Sprintf("SELECT %s %s FROM %s WHERE %%s ORDER BY %s LIMIT %d,1",
-		indexHint, columns, tableName, orderBy, chunkSize)
+	return fmt.Sprintf("SELECT %s FROM %s WHERE %%s ORDER BY %s LIMIT %d,1",
+		columns, tableName, orderBy, chunkSize)
 }
