@@ -462,6 +462,3 @@ replace golang.org/x/text => golang.org/x/text v0.28.0
 
 // tls10server=1
 godebug tlsrsakex=1
-
-// copy from TiDB
-replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.0.0-20250911101656-62c34c9a3b82
