@@ -108,6 +108,27 @@ func TestGetTables(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestGetTablesErrors(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	schema := "test_db"
+	query := fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)
+
+	mock.ExpectQuery(query).WillReturnError(errors.New("query failed"))
+	_, err = GetTables(context.Background(), db, schema)
+	require.ErrorContains(t, err, "query failed")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	rows := sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema)}).AddRow("tbl1")
+	mock.ExpectQuery(query).WillReturnRows(rows)
+	_, err = GetTables(context.Background(), db, schema)
+	require.ErrorContains(t, err, "unexpected SHOW FULL TABLES result column count 1")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetMariaDBGtidDomainID(t *testing.T) {
 	t.Parallel()
 

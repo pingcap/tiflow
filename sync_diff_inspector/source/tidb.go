@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -280,7 +281,7 @@ func NewTiDBSource(
 			// ignore system schema
 			continue
 		}
-		allTables, err := dbutil.GetTables(ctx, ds.Conn, schema)
+		allTables, err := conn.GetTables(ctx, ds.Conn, schema)
 		if err != nil {
 			return nil, errors.Annotatef(err, "get tables from %s", schema)
 		}
