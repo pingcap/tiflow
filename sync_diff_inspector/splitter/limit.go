@@ -46,8 +46,6 @@ type LimitIterator struct {
 
 	progressID   string
 	columnOffset map[string]int
-
-	logger *zap.Logger
 }
 
 // NewLimitIterator return a new iterator
@@ -63,30 +61,19 @@ func NewLimitIteratorWithCheckpoint(
 	dbConn *sql.DB,
 	startRange *RangeInfo,
 ) (*LimitIterator, error) {
-	logger := log.L().With(
-		zap.String("db", table.Schema),
-		zap.String("table", table.Table),
-	)
-
 	indices, err := utils.GetBetterIndex(ctx, dbConn, table.Schema, table.Table, table.Info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-
-	var (
-		indexColumns []*model.ColumnInfo
-		indexID      int64
-		indexName    string
-
-		tagChunk *chunk.Range
-		chunksCh = make(chan *chunk.Range, DefaultChannelBuffer)
-		errCh    = make(chan error)
-
-		columnOffset  = make(map[string]int)
-		undone        = startRange == nil
-		beginBucketID int
-	)
-
+	var indexName string
+	var indexColumns []*model.ColumnInfo
+	var tagChunk *chunk.Range
+	columnOffset := make(map[string]int)
+	chunksCh := make(chan *chunk.Range, DefaultChannelBuffer)
+	errCh := make(chan error)
+	undone := startRange == nil
+	beginBucketID := 0
+	var indexID int64
 	for _, index := range indices {
 		if index == nil {
 			continue
@@ -115,7 +102,7 @@ func NewLimitIteratorWithCheckpoint(
 			tagChunk = chunk.NewChunkRange(table.Info)
 			bounds := startRange.ChunkRange.Bounds
 			if len(bounds) != len(indexColumns) {
-				logger.Warn("checkpoint node columns are not equal to selected index columns, skip checkpoint.")
+				log.Warn("checkpoint node columns are not equal to selected index columns, skip checkpoint.")
 				break
 			}
 
@@ -154,26 +141,27 @@ func NewLimitIteratorWithCheckpoint(
 			chunkSize = cnt
 		}
 	}
-	logger.Info("get chunk size and count for table",
-		zap.Int64("chunk size", chunkSize),
-		zap.Int("finished chunks", beginBucketID),
-	)
+	log.Info("get chunk size for table", zap.Int64("chunk size", chunkSize),
+		zap.String("db", table.Schema), zap.String("table", table.Table))
 
 	lctx, cancel := context.WithCancel(ctx)
 	queryTmpl := generateLimitQueryTemplate(indexColumns, table, chunkSize, indexName)
 
 	limitIterator := &LimitIterator{
-		table:         table,
-		tagChunk:      tagChunk,
-		queryTmpl:     queryTmpl,
-		indexID:       indexID,
-		chunksCh:      chunksCh,
-		errCh:         errCh,
-		cancel:        cancel,
-		dbConn:        dbConn,
-		progressID:    progressID,
-		columnOffset:  columnOffset,
-		logger:        logger,
+		table,
+		tagChunk,
+		queryTmpl,
+
+		indexID,
+
+		chunksCh,
+		errCh,
+
+		cancel,
+		dbConn,
+
+		progressID,
+		columnOffset,
 	}
 
 	progress.StartTable(progressID, 0, false)
@@ -209,7 +197,7 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 					lowerBounds[i] = bound.Lower
 					upperBounds[i] = bound.Upper
 				}
-				lmt.logger.Info("failpoint print-chunk-info injected (limit splitter)",
+				log.Info("failpoint print-chunk-info injected (limit splitter)",
 					zap.Strings("lowerBounds", lowerBounds),
 					zap.Strings("upperBounds", upperBounds),
 					zap.String("indexCode", c.Index.ToString()))
