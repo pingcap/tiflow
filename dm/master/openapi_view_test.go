@@ -706,7 +706,8 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 	s.NoError(err)
 	tableName := "CHARACTER_SETS"
 	mockDB.ExpectQuery("SHOW FULL TABLES IN `information_schema` WHERE Table_Type != 'VIEW';").WillReturnRows(
-		sqlmock.NewRows([]string{"Tables_in_information_schema", "Table_type"}).AddRow(tableName, "BASE TABLE"))
+		sqlmock.NewRows([]string{"Tables_in_information_schema", "Table_type", "Auto_partition", "Table_group"}).
+			AddRow(tableName, "BASE TABLE", "NO", "single_tg"))
 	tableURL := fmt.Sprintf("%s/%s/schemas/%s", baseURL, source1.SourceName, schemaName)
 	result = testutil.NewRequest().Get(tableURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())

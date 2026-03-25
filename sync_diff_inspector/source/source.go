@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -327,7 +328,7 @@ func initTables(ctx context.Context, cfg *config.Config) (cfgTables []*config.Ta
 		if filter.IsSystemSchema(strings.ToLower(schema)) {
 			continue
 		}
-		allTables, err := dbutil.GetTables(ctx, downStreamConn, schema)
+		allTables, err := conn.GetTables(ctx, downStreamConn, schema)
 		if err != nil {
 			return nil, errors.Annotatef(err, "get tables from target source %s", schema)
 		}

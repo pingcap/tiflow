@@ -863,7 +863,10 @@ func initMockDB(t *testing.T) sqlmock.Sqlmock {
 	mock, err := conn.MockDefaultDBProvider()
 	require.NoError(t, err)
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"DATABASE"}).AddRow(schema))
-	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type"}).AddRow(tb1, "BASE TABLE").AddRow(tb2, "BASE TABLE"))
+	mock.ExpectQuery("SHOW FULL TABLES").WillReturnRows(
+		sqlmock.NewRows([]string{"Tables_in_" + schema, "Table_type", "Auto_partition", "Table_group"}).
+			AddRow(tb1, "BASE TABLE", "NO", "single_tg").
+			AddRow(tb2, "BASE TABLE", "NO", "single_tg"))
 	return mock
 }
 
