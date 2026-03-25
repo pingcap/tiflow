@@ -67,6 +67,10 @@ type TableDiff struct {
 
 	ChunkSize int64 `json:"chunk-size"`
 
+	CheckThreadCount int `json:"-"`
+
+	SplitterStrategy string `json:"-"`
+
 	// TableLack = 1: the table only exists downstream,
 	// TableLack = -1: the table only exists upstream,
 	// TableLack = 0: the table exists both upstream and downstream.
