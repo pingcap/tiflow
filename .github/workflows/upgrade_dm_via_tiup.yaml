@@ -32,11 +32,6 @@ jobs:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
 
     steps:
-      - name: Set up Go env
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-
       - name: Check out code
         uses: actions/checkout@v6
         with:
@@ -48,6 +43,11 @@ jobs:
         with:
           path: go/src/github.com/pingcap/tiflow
           ref: refs/pull/${{ github.event.inputs.pr }}/head
+
+      - name: Set up Go env
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
 
       - name: Setup containers
         working-directory: ${{ env.working-directory }}

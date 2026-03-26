@@ -36,13 +36,6 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Set up Go for building DM
-      - name: Set up Go env
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: 'go.mod'
-      - name: Print Go version
-        run: go version
 
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Check out code
@@ -53,6 +46,15 @@ jobs:
         uses: actions/checkout@v6
         with:
           ref: refs/pull/${{ github.event.inputs.pr }}/head
+
+      # Set up Go for building DM
+      - name: Set up Go env
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+
+      - name: Print Go version
+        run: go version
 
       - name: Cache go modules
         uses: actions/cache@v5

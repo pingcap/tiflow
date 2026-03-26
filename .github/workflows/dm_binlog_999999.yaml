@@ -21,13 +21,13 @@ jobs:
           --privileged
 
     steps:
+      - name: Check out code
+        uses: actions/checkout@v6
+
       - name: Set up Go env
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-
-      - name: Check out code
-        uses: actions/checkout@v6
 
       - name: Check out code by workflow dispatch
         if: ${{ github.event.inputs.pr != '' }}
