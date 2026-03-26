@@ -211,6 +211,10 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
+	defer func() {
+		progress.UpdateTotal(lmt.progressID, 0, true)
+		close(lmt.chunksCh)
+	}()
 	for {
 		where, args := lmt.tagChunk.ToString(lmt.table.Collation)
 		query := fmt.Sprintf(lmt.queryTmpl, where)
@@ -228,12 +232,10 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		if dataMap == nil {
 			// there is no row in result set
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
-			progress.UpdateTotal(lmt.progressID, 1, true)
 			select {
 			case <-ctx.Done():
 			case lmt.chunksCh <- chunkRange:
 			}
-			close(lmt.chunksCh)
 			return
 		}
 

@@ -637,7 +637,7 @@ func (c *Config) CheckConfig() bool {
 		return false
 	}
 	if err := c.normalizeSplitterStrategy(); err != nil {
-		log.Error(err.Error())
+		log.Warn("invalid splitter strategy", zap.Error(err))
 		return false
 	}
 	if len(c.DMAddr) != 0 {
