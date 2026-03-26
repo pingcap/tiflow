@@ -484,10 +484,7 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	released = true
 	sourceNameList := s.getTaskSourceNameList(taskName)
 	// delete subtask on worker
-	if err := s.scheduler.RemoveSubTasks(taskName, sourceNameList...); err != nil {
-		return err
-	}
-	return nil
+	return s.scheduler.RemoveSubTasks(taskName, sourceNameList...)
 }
 
 func (s *Server) getTask(ctx context.Context, taskName string, req openapi.DMAPIGetTaskParams) (*openapi.Task, error) {
