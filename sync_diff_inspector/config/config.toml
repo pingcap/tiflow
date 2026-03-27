@@ -5,8 +5,11 @@
 # how many goroutines are created to check data
 check-thread-count = 4
 
-# set false if just want compare data by checksum, will skip select data when checksum is not equal.
-# set true if want compare all different rows, will slow down the total compare time.
+# When set to false, only checksums are compared and no fix SQL is generated.
+# If both upstream and downstream are TiDB, a faster global-checksum mode is
+# used automatically. When set to true, sync-diff-inspector compares rows chunk by chunk and
+# generates fix SQL for any differences found, which is slower.
+# Changing this value between runs invalidates existing checkpoints.
 export-fix-sql = true
 
 # ignore check table's data

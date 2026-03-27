@@ -238,6 +238,8 @@ type TaskConfig struct {
 	TargetTableConfigs []*TableConfig
 	TargetCheckTables  filter.Filter
 
+	ExportFixSQL bool `json:"-"`
+
 	FixDir        string
 	CheckpointDir string
 	HashFile      string
@@ -352,6 +354,7 @@ func (t *TaskConfig) Init(
 // we think the second sync diff can use the checkpoint.
 func (t *TaskConfig) ComputeConfigHash() (string, error) {
 	hash := make([]byte, 0)
+	hash = append(hash, []byte(strconv.FormatBool(t.ExportFixSQL))...)
 	// compute sources
 	for _, c := range t.SourceInstances {
 		configBytes, err := json.Marshal(c)
@@ -598,6 +601,7 @@ func (c *Config) Init() (err error) {
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
 		}
+		c.Task.ExportFixSQL = c.ExportFixSQL
 		err = c.Task.Init(c.DataSources, c.TableConfigs)
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
@@ -623,6 +627,7 @@ func (c *Config) Init() (err error) {
 		}
 	}
 
+	c.Task.ExportFixSQL = c.ExportFixSQL
 	err = c.Task.Init(c.DataSources, c.TableConfigs)
 	if err != nil {
 		return errors.Annotate(err, "failed to init Task")
