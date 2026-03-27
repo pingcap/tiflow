@@ -401,7 +401,14 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 
 	// delete
 	{
-		s.Nil(server.deleteTask(ctx, s.testTask.Name, true)) // delete with fore
+		s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData"))
+		s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError", `return(true)`))
+
+		s.NoError(server.deleteTask(ctx, s.testTask.Name, true))
+
+		s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError"))
+		s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData", `return(true)`))
+
 		taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
 		s.Nil(err)
 		s.Len(taskList, 0)

@@ -815,11 +815,8 @@ function test_delete_task_with_stopped_downstream() {
 	# stop downstream
 	cleanup_tidb_server
 
-	# delete task failed because downstream is stopped.
-	openapi_task_check "delete_task_failed" "$task_name"
-
-	# delete task success with force
-	openapi_task_check "delete_task_with_force_success" "$task_name"
+	# delete task success even if downstream is stopped.
+	openapi_task_check "delete_task_success" "$task_name"
 	openapi_task_check "get_task_list" 0
 
 	# restart downstream
@@ -827,6 +824,41 @@ function test_delete_task_with_stopped_downstream() {
 	sleep 2
 	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK WITH STOPPED DOWNSTREAM SUCCESS"
+}
+
+function test_delete_task_with_downstream_meta_cleanup_error() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: DELETE TASK WITH DOWNSTREAM META CLEANUP ERROR"
+	cleanup_data openapi
+	cleanup_process
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError=return(true)"
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $cur/conf/dm-master2.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	prepare_database
+
+	task_name="test-no-shard-openapi-delete-failpoint"
+	target_table_name=""
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "create_source2_success"
+	openapi_source_check "list_source_success" 2
+
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+
+	openapi_task_check "delete_task_success" "$task_name"
+
+	export GO_FAILPOINTS=""
+	cleanup_process
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK WITH DOWNSTREAM META CLEANUP ERROR SUCCESS"
 }
 
 function test_start_task_with_condition() {
@@ -1300,8 +1332,8 @@ function run() {
 	test_full_mode_task
 	test_tls
 
-	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
+	test_delete_task_with_downstream_meta_cleanup_error
 }
 
 cleanup_data openapi

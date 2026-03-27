@@ -1434,6 +1434,10 @@ func GetLatestMeta(ctx context.Context, flavor string, dbConfig *dbconfig.DBConf
 }
 
 func AdjustTargetDBSessionCfg(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
+	return AdjustTargetDBSessionCfgWithTimeout(ctx, dbConfig, conn.DefaultDBTimeout)
+}
+
+func AdjustTargetDBSessionCfgWithTimeout(ctx context.Context, dbConfig *dbconfig.DBConfig, timeout time.Duration) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1443,7 +1447,7 @@ func AdjustTargetDBSessionCfg(ctx context.Context, dbConfig *dbconfig.DBConfig) 
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.GetDownstreamDB(&cfg)
+	toDB, err := conn.GetDownstreamDBWithTimeout(&cfg, timeout)
 	if err != nil {
 		return err
 	}
@@ -1774,11 +1778,30 @@ func withHost(addr string) string {
 }
 
 func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *dbconfig.DBConfig) error {
+	return s.removeMetaDataWithTimeout(ctx, taskName, metaSchema, toDBCfg, conn.DefaultDBTimeout)
+}
+
+func (s *Server) removeMetaDataWithTimeout(
+	ctx context.Context,
+	taskName,
+	metaSchema string,
+	toDBCfg *dbconfig.DBConfig,
+	dbTimeout time.Duration,
+) error {
 	failpoint.Inject("MockSkipRemoveMetaData", func() {
 		failpoint.Return(nil)
 	})
 	toDBCfg.Adjust()
 
+	err := s.removeInternalMetaData(taskName)
+	if err != nil {
+		return err
+	}
+
+	return s.removeDownstreamMetaData(ctx, taskName, metaSchema, toDBCfg, dbTimeout)
+}
+
+func (s *Server) removeInternalMetaData(taskName string) error {
 	// clear shard meta data for pessimistic/optimist
 	err := s.pessimist.RemoveMetaData(taskName)
 	if err != nil {
@@ -1792,9 +1815,25 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (s *Server) removeDownstreamMetaData(
+	ctx context.Context,
+	taskName,
+	metaSchema string,
+	toDBCfg *dbconfig.DBConfig,
+	dbTimeout time.Duration,
+) error {
+	failpoint.Inject("MockRemoveDownstreamMetaDataError", func() {
+		failpoint.Return(terror.WithScope(
+			terror.ErrDBDriverError.Generate("mock remove downstream metadata failed"),
+			terror.ScopeDownstream,
+		))
+	})
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.GetDownstreamDB(toDBCfg)
+	baseDB, err := conn.GetDownstreamDBWithTimeout(toDBCfg, dbTimeout)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
