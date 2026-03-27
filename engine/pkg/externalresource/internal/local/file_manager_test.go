@@ -279,9 +279,13 @@ func TestPreCheckConfig(t *testing.T) {
 	require.NoError(t, err)
 
 	// Directory exists but not writable
-	baseDir = filepath.Join(dir, "not-writable")
-	require.NoError(t, os.MkdirAll(baseDir, 0o400))
-	err = PreCheckConfig(resModel.LocalFileConfig{BaseDir: baseDir})
-	require.Error(t, err)
-	require.Regexp(t, ".*ErrLocalFileDirNotWritable.*", err)
+	// Skip this check when running as root, because root bypasses filesystem
+	// permission checks and can write to any directory regardless of its mode.
+	if os.Getuid() != 0 {
+		baseDir = filepath.Join(dir, "not-writable")
+		require.NoError(t, os.MkdirAll(baseDir, 0o400))
+		err = PreCheckConfig(resModel.LocalFileConfig{BaseDir: baseDir})
+		require.Error(t, err)
+		require.Regexp(t, ".*ErrLocalFileDirNotWritable.*", err)
+	}
 }
