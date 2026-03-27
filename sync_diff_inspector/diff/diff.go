@@ -607,9 +607,9 @@ func (df *Diff) compareChecksumAndGetCount(ctx context.Context, tableRange *spli
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		upstreamInfo = df.upstream.GetCountAndMD5(ctx, tableRange)
+		upstreamInfo = df.upstream.GetCountAndChecksum(ctx, tableRange)
 	}()
-	downstreamInfo = df.downstream.GetCountAndMD5(ctx, tableRange)
+	downstreamInfo = df.downstream.GetCountAndChecksum(ctx, tableRange)
 	wg.Wait()
 
 	if upstreamInfo.Err != nil {

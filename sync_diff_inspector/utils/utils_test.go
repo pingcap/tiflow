@@ -83,7 +83,7 @@ func TestBasicTableUtilOperation(t *testing.T) {
 	require.NoError(t, err)
 
 	query, orderKeyCols := GetTableRowsQueryFormat("test", "test", tableInfo, "123")
-	require.Equal(t, query, "SELECT /*!40001 SQL_NO_CACHE */ `a`, `b`, round(`c`, 5-floor(log10(abs(`c`)))) as `c`, `d` FROM `test`.`test` WHERE %s ORDER BY `a`,`b` COLLATE '123'")
+	require.Equal(t, query, "SELECT /*!40001 SQL_NO_CACHE */ `a`, `b`, cast(`c` as decimal(65, 30)) as `c`, `d` FROM `test`.`test` WHERE %s ORDER BY `a`,`b` COLLATE '123'")
 	expectName := []string{"a", "b"}
 	for i, col := range orderKeyCols {
 		require.Equal(t, col.Name.O, expectName[i])
@@ -256,7 +256,7 @@ func TestBasicTableUtilOperation(t *testing.T) {
 	require.Equal(t, tableInfo.Indices[0].Columns[1].Offset, 1)
 }
 
-func TestGetCountAndMD5Checksum(t *testing.T) {
+func TestGetCountAndChecksumMD5(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
@@ -270,10 +270,31 @@ func TestGetCountAndMD5Checksum(t *testing.T) {
 
 	mock.ExpectQuery("SELECT COUNT.*FROM `test_schema`\\.`test_table` WHERE \\[23 45\\].*").WithArgs("123", "234").WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456))
 
-	count, checksum, err := GetCountAndMD5Checksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", "", []any{"123", "234"})
+	count, checksum, err := GetCountAndChecksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", "", []any{"123", "234"}, "md5")
 	require.NoError(t, err)
 	require.Equal(t, count, int64(123))
 	require.Equal(t, checksum, uint64(0x1c8))
+}
+
+func TestGetCountAndChecksumSHA256(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	conn, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	createTableSQL := "create table `test`.`test`(`a` int, `c` float, `b` varchar(10), `d` datetime, primary key(`a`, `b`), key(`c`, `d`))"
+	tableInfo, err := GetTableInfoBySQL(createTableSQL, parser.New())
+	require.NoError(t, err)
+
+	// Verify that SHA2 is used in the query
+	mock.ExpectQuery("SELECT COUNT.*SHA2.*FROM `test_schema`\\.`test_table` WHERE \\[23 45\\].*").WithArgs("123", "234").WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(456, 789))
+
+	count, checksum, err := GetCountAndChecksum(ctx, conn, "test_schema", "test_table", tableInfo, "[23 45]", "", []any{"123", "234"}, "sha256")
+	require.NoError(t, err)
+	require.Equal(t, count, int64(456))
+	require.Equal(t, checksum, uint64(789))
 }
 
 func TestGetApproximateMid(t *testing.T) {
