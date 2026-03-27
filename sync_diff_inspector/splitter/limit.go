@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
@@ -121,6 +122,8 @@ func NewLimitIteratorWithCheckpoint(
 		return nil, errors.NotFoundf("not found index")
 	}
 
+	tagChunk.IndexColumnNames = utils.GetColumnNames(indexColumns)
+
 	chunkSize := table.ChunkSize
 	if chunkSize <= 0 {
 		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, "", nil)
@@ -184,6 +187,20 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 		if !ok && c == nil {
 			return nil, nil
 		}
+		if c != nil {
+			failpoint.Inject("print-chunk-info", func() {
+				lowerBounds := make([]string, len(c.Bounds))
+				upperBounds := make([]string, len(c.Bounds))
+				for i, bound := range c.Bounds {
+					lowerBounds[i] = bound.Lower
+					upperBounds[i] = bound.Upper
+				}
+				log.Info("failpoint print-chunk-info injected (limit splitter)",
+					zap.Strings("lowerBounds", lowerBounds),
+					zap.Strings("upperBounds", upperBounds),
+					zap.String("indexCode", c.Index.ToString()))
+			})
+		}
 		return c, nil
 	}
 }
@@ -194,6 +211,10 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
+	defer func() {
+		progress.UpdateTotal(lmt.progressID, 0, true)
+		close(lmt.chunksCh)
+	}()
 	for {
 		where, args := lmt.tagChunk.ToString(lmt.table.Collation)
 		query := fmt.Sprintf(lmt.queryTmpl, where)
@@ -211,16 +232,15 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		if dataMap == nil {
 			// there is no row in result set
 			chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
-			progress.UpdateTotal(lmt.progressID, 1, true)
 			select {
 			case <-ctx.Done():
 			case lmt.chunksCh <- chunkRange:
 			}
-			close(lmt.chunksCh)
 			return
 		}
 
 		newTagChunk := chunk.NewChunkRangeOffset(lmt.columnOffset, lmt.table.Info)
+		newTagChunk.IndexColumnNames = chunkRange.IndexColumnNames
 		for column, data := range dataMap {
 			newTagChunk.Update(column, string(data.Data), "", !data.IsNull, false)
 			chunkRange.Update(column, "", string(data.Data), false, !data.IsNull)
@@ -235,6 +255,11 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 		case lmt.chunksCh <- chunkRange:
 		}
 		lmt.tagChunk = newTagChunk
+
+		failpoint.Inject("check-one-chunk", func() {
+			log.Info("failpoint check-one-chunk injected, stop producing new chunks.")
+			failpoint.Return()
+		})
 	}
 }
 
@@ -263,8 +288,9 @@ func generateLimitQueryTemplate(indexColumns []*model.ColumnInfo, table *common.
 		fields = append(fields, dbutil.ColumnName(columnInfo.Name.O))
 	}
 	columns := strings.Join(fields, ", ")
+	orderBy := utils.BuildOrderByClause(indexColumns, table.Collation)
+	tableName := dbutil.TableName(table.Schema, table.Table)
 
-	// TODO: the limit splitter has not been used yet.
-	// once it is used, need to add `collation` after `ORDER BY`.
-	return fmt.Sprintf("SELECT %s FROM %s WHERE %%s ORDER BY %s LIMIT %d,1", columns, dbutil.TableName(table.Schema, table.Table), columns, chunkSize)
+	return fmt.Sprintf("SELECT %s FROM %s WHERE %%s ORDER BY %s LIMIT %d,1",
+		columns, tableName, orderBy, chunkSize)
 }

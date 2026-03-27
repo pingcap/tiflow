@@ -58,15 +58,13 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, fall back to use random iterator", zap.Error(err))
-	// fall back to random splitter
-
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
-	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
-	if err != nil {
-		return nil, errors.Trace(err)
+	log.Info("failed to build bucket iterator, falling back", zap.Error(err))
+	if originTable.SplitterStrategy == config.SplitterStrategyLimit {
+		log.Info("choose limit splitter", zap.String("table", progressID))
+		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 	}
-	return randIter, nil
+	log.Info("choose random splitter", zap.String("table", progressID))
+	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 
 // TiDBRowsIterator is used to iterate rows in TiDB

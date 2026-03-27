@@ -145,6 +145,7 @@ func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, ups
 			NeedUnifiedTimeZone: needUnifiedTimeZone,
 			Collation:           tableConfig.Collation,
 			ChunkSize:           tableConfig.ChunkSize,
+			SplitterStrategy:    cfg.SplitterStrategy,
 		})
 
 		// When the router set case-sensitive false,

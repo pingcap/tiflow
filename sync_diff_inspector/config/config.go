@@ -43,6 +43,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Supported values for SplitterStrategy.
+const (
+	SplitterStrategyLimit  = "limit"
+	SplitterStrategyRandom = "random"
+)
+
 const (
 	// LocalFilePerm is the permission for local files
 	LocalFilePerm os.FileMode = 0o644
@@ -398,6 +404,8 @@ type Config struct {
 	CheckDataOnly bool `toml:"check-data-only" json:"-"`
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
+	// SplitterStrategy controls the fallback splitter when bucket stats are unavailable.
+	SplitterStrategy string `toml:"splitter-strategy" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
 	// DMTask string `toml:"dm-task" json:"dm-task"`
@@ -628,6 +636,10 @@ func (c *Config) CheckConfig() bool {
 		log.Error("check-thread-count must greater than 0!")
 		return false
 	}
+	if err := c.normalizeSplitterStrategy(); err != nil {
+		log.Warn("invalid splitter strategy", zap.Error(err))
+		return false
+	}
 	if len(c.DMAddr) != 0 {
 		u, err := url.Parse(c.DMAddr)
 		if err != nil || u.Scheme == "" || u.Host == "" {
@@ -641,6 +653,19 @@ func (c *Config) CheckConfig() bool {
 		}
 	}
 	return true
+}
+
+func (c *Config) normalizeSplitterStrategy() error {
+	mode := strings.ToLower(strings.TrimSpace(c.SplitterStrategy))
+	switch mode {
+	case "", SplitterStrategyRandom:
+		c.SplitterStrategy = SplitterStrategyRandom
+	case SplitterStrategyLimit:
+		c.SplitterStrategy = mode
+	default:
+		return errors.Errorf("splitter-strategy must be limit or random")
+	}
+	return nil
 }
 
 func timestampOutputDir() string {
