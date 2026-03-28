@@ -314,7 +314,7 @@ func (v *DataValidator) initialize() error {
 		return err
 	}
 
-	v.syncCfg, err = subtaskCfg2BinlogSyncerCfg(v.cfg, v.timezone, v.syncer.baList)
+	v.syncCfg, err = subtaskCfg2BinlogSyncerCfg(v.cfg, v.timezone, v.syncer.baList, v.cfg.ValidatorCfg.EventCacheCount)
 	if err != nil {
 		return err
 	}

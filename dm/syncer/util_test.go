@@ -19,10 +19,12 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver"
 	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -126,6 +128,19 @@ func TestRecordSourceTbls(t *testing.T) {
 
 	recordSourceTbls(sourceTbls, &ast.DropDatabaseStmt{}, &filter.Table{Schema: "a", Name: ""})
 	require.Len(t, sourceTbls, 0)
+}
+
+func TestSubtaskCfg2BinlogSyncerCfgEventCacheCount(t *testing.T) {
+	cfg := &config.SubTaskConfig{
+		ServerID:   1234,
+		Flavor:     mysql.MySQLFlavor,
+		WorkerName: "worker-01",
+		From:       config.GetDBConfigForTest(),
+	}
+
+	syncCfg, err := subtaskCfg2BinlogSyncerCfg(cfg, time.UTC, nil, 2048)
+	require.NoError(t, err)
+	require.Equal(t, 2048, syncCfg.EventCacheCount)
 }
 
 func TestGetDDLStatusFromTiDB(t *testing.T) {
