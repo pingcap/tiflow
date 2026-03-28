@@ -20,7 +20,7 @@
 2. The following programs must be installed:
 
     * `mysql` (the CLI client, currently [not supported for mysql client 8.0](https://github.com/pingcap/tidb/issues/14021))
-    * `python2.7` or `python3.x`
+    * `python3.x`
 
 3. The user executing the tests must have permission to create the folder `/tmp/dm_test`. All test artifacts will be written into this folder.
 
