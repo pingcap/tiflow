@@ -232,6 +232,9 @@ type TaskConfig struct {
 	TargetTableConfigs []*TableConfig
 	TargetCheckTables  filter.Filter
 
+	// ExportFixSQL mirrors the top-level config at runtime so
+	// ComputeConfigHash can include this mode switch without changing its
+	// signature, while still omitting the derived field from JSON output.
 	ExportFixSQL bool `json:"-"`
 
 	FixDir        string
