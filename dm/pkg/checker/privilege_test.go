@@ -213,7 +213,7 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		if cs.dumpWholeInstance {
 			dumpRequiredPrivs[mysql.SelectPriv] = priv{needGlobal: true}
 		}
-		err := verifyPrivilegesWithResult(result, cs.grants, dumpRequiredPrivs)
+		err := verifyPrivilegesWithResult(result, cs.grants, dumpRequiredPrivs, "8.0.11")
 		if cs.dumpState == StateSuccess {
 			require.Nil(t, err, "grants: %v", cs.grants)
 		} else {
@@ -325,7 +325,7 @@ func TestVerifyReplicationPrivileges(t *testing.T) {
 			mysql.ReplicationSlavePriv:  {needGlobal: true},
 			mysql.ReplicationClientPriv: {needGlobal: true},
 		}
-		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs)
+		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs, "8.0.11")
 		if cs.replicationState == StateSuccess {
 			require.Nil(t, err, "grants: %v", cs.grants)
 		} else {
@@ -405,7 +405,7 @@ func TestVerifyPrivilegesWildcard(t *testing.T) {
 				dbs: genTableLevelPrivs(cs.checkTables),
 			},
 		}
-		err := verifyPrivilegesWithResult(result, cs.grants, requiredPrivs)
+		err := verifyPrivilegesWithResult(result, cs.grants, requiredPrivs, "8.0.11")
 		if cs.replicationState == StateSuccess {
 			require.Nil(t, err, "grants: %v", cs.grants)
 		} else {
@@ -469,7 +469,7 @@ func TestVerifyTargetPrivilege(t *testing.T) {
 			mysql.AlterPriv:  {needGlobal: true},
 			mysql.DropPriv:   {needGlobal: true},
 		}
-		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs)
+		err := verifyPrivilegesWithResult(result, cs.grants, replRequiredPrivs, "8.0.11")
 		if cs.checkState == StateSuccess {
 			require.Nil(t, err, "grants: %v", cs.grants)
 		} else {
