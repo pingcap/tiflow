@@ -164,12 +164,8 @@ func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, c
 		}
 
 		name := dbutil.ColumnName(col.Name.O)
-		// When col value is 0, the result is NULL.
-		// But we can use ISNULL to distinguish between null and 0.
-		if col.FieldType.GetType() == mysql.TypeFloat {
-			name = fmt.Sprintf("round(%s, 5-floor(log10(abs(%s)))) as %s", name, name, name)
-		} else if col.FieldType.GetType() == mysql.TypeDouble {
-			name = fmt.Sprintf("round(%s, 14-floor(log10(abs(%s)))) as %s", name, name, name)
+		if col.FieldType.GetType() == mysql.TypeFloat || col.FieldType.GetType() == mysql.TypeDouble {
+			name = fmt.Sprintf("cast(%s as decimal(65, 30)) as %s", name, name)
 		}
 		columnNames = append(columnNames, name)
 	}
@@ -857,21 +853,25 @@ func GetTableSize(ctx context.Context, db *sql.DB, schemaName, tableName string)
 	return dataSize.Int64, nil
 }
 
-// GetCountAndMD5Checksum returns checksum code and count of some data by given condition
-func GetCountAndMD5Checksum(
+// GetCountAndChecksum returns checksum code and count of some data by given condition
+func GetCountAndChecksum(
 	ctx context.Context,
 	db *sql.DB, schemaName, tableName string,
 	tbInfo *model.TableInfo, limitRange string, indexHint string, args []any,
+	checksumAlgorithm string,
 ) (int64, uint64, error) {
 	/*
-		calculate MD5 checksum and count example:
-		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM `a`.`t`;
+		calculate checksum and count example (MD5):
+		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(hash, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(hash, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM (SELECT MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))) as hash FROM `a`.`t` WHERE TRUE) as t;
 		+--------+----------------------
 		|  CNT   | CHECKSUM            |
 		+--------+----------------------
 		| 100000 | 3462532621352132810 |
 		+--------+----------------------
 		1 row in set (0.46 sec)
+
+		calculate checksum and count example (SHA256):
+		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(hash, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(hash, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM (SELECT SHA2(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`))), 256) as hash FROM `a`.`t` WHERE TRUE) as t;
 	*/
 	columnNames := make([]string, 0, len(tbInfo.Columns))
 	columnIsNull := make([]string, 0, len(tbInfo.Columns))
@@ -881,27 +881,33 @@ func GetCountAndMD5Checksum(
 			continue
 		}
 		name := dbutil.ColumnName(col.Name.O)
-		// When col value is 0, the result is NULL.
-		// But we can use ISNULL to distinguish between null and 0.
-		if col.FieldType.GetType() == mysql.TypeFloat {
-			name = fmt.Sprintf("round(%s, 5-floor(log10(abs(%s))))", name, name)
-		} else if col.FieldType.GetType() == mysql.TypeDouble {
-			name = fmt.Sprintf("round(%s, 14-floor(log10(abs(%s))))", name, name)
+		if col.FieldType.GetType() == mysql.TypeFloat || col.FieldType.GetType() == mysql.TypeDouble {
+			name = fmt.Sprintf("cast(%s as decimal(65, 30))", name)
 		}
 		columnNames = append(columnNames, name)
 		columnIsNull = append(columnIsNull, fmt.Sprintf("ISNULL(%s)", name))
 	}
 
-	query := fmt.Sprintf("SELECT %s COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM %s WHERE %s;",
+	var checksumFuncTemplate string
+	if checksumAlgorithm == "sha256" {
+		checksumFuncTemplate = "SHA2(%s, 256)"
+	} else {
+		checksumFuncTemplate = "MD5(%s)"
+	}
+
+	concatExpr := fmt.Sprintf("CONCAT_WS(',', %s, CONCAT(%s))",
+		strings.Join(columnNames, ", "),
+		strings.Join(columnIsNull, ", "))
+
+	checksumExpr := fmt.Sprintf(checksumFuncTemplate, concatExpr)
+
+	query := fmt.Sprintf("SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(hash, 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(hash, 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM (SELECT %s %s as hash FROM %s WHERE %s) as t;",
 		indexHint,
-		strings.Join(columnNames, ", "),
-		strings.Join(columnIsNull, ", "),
-		strings.Join(columnNames, ", "),
-		strings.Join(columnIsNull, ", "),
+		checksumExpr,
 		dbutil.TableName(schemaName, tableName),
 		limitRange,
 	)
-	log.Debug("count and checksum", zap.String("sql", query), zap.Reflect("args", args))
+	log.Debug("count and checksum", zap.String("sql", query), zap.Reflect("args", args), zap.String("checksum-algorithm", checksumAlgorithm))
 
 	var count sql.NullInt64
 	var checksum uint64
