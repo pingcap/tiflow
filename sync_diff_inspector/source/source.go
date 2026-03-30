@@ -119,6 +119,13 @@ type Source interface {
 	Close()
 }
 
+// ChecksumCapableSource is an optional interface that Sources may implement
+// to support the global-checksum fast path (used when export-fix-sql is false).
+type ChecksumCapableSource interface {
+	// GetGlobalChecksumIterator returns a chunk iterator and total number of chunks.
+	GetGlobalChecksumIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, int, error)
+}
+
 // NewSources returns a new source
 func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, upstream Source, err error) {
 	// init db connection for upstream / downstream.

@@ -876,6 +876,7 @@ func TestInitTables(t *testing.T) {
 	cfg := config.NewConfig()
 	// Test case 1: test2.t2 will parse after filter.
 	require.NoError(t, cfg.Parse([]string{"--config", "../config/config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
 	require.NoError(t, cfg.Init())
 
 	conn, mock, err := sqlmock.New()
@@ -909,6 +910,7 @@ func TestInitTables(t *testing.T) {
 	// Test case 2: init failed due to conflict table config point to one table.
 	cfg = config.NewConfig()
 	require.NoError(t, cfg.Parse([]string{"--config", "../config/config_conflict.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
 	require.NoError(t, cfg.Init())
 	cfg.Task.TargetInstance.Conn = conn
 
