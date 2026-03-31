@@ -40,7 +40,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const openAPIDeleteTaskDownstreamTimeout = 10 * time.Second
+var openAPIDeleteTaskDownstreamTimeout = 10 * time.Second
 
 // nolint:unparam
 func (s *Server) getClusterInfo(ctx context.Context) (*openapi.GetClusterInfoResponse, error) {
@@ -475,9 +475,12 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 	}
 
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustErr := AdjustTargetDBSessionCfgWithTimeout(ctx, toDBCfg, openAPIDeleteTaskDownstreamTimeout); adjustErr != nil {
+	// Bound the entire downstream cleanup flow, not just the initial connection setup.
+	cleanupCtx, cleanupCancel := context.WithTimeout(ctx, openAPIDeleteTaskDownstreamTimeout)
+	defer cleanupCancel()
+	if adjustErr := AdjustTargetDBSessionCfgWithTimeout(cleanupCtx, toDBCfg, openAPIDeleteTaskDownstreamTimeout); adjustErr != nil {
 		log.L().Warn("skip downstream metadata cleanup when deleting task", zap.String("task", taskName), zap.Error(adjustErr))
-	} else if err = s.removeDownstreamMetaData(ctx, taskName, metaSchema, toDBCfg, openAPIDeleteTaskDownstreamTimeout); err != nil {
+	} else if err = s.removeDownstreamMetaData(cleanupCtx, taskName, metaSchema, toDBCfg, openAPIDeleteTaskDownstreamTimeout); err != nil {
 		log.L().Warn("failed to remove downstream metadata when deleting task", zap.String("task", taskName), zap.Error(err))
 	}
 	release()

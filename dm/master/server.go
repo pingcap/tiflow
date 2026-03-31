@@ -1831,6 +1831,17 @@ func (s *Server) removeDownstreamMetaData(
 			terror.ScopeDownstream,
 		))
 	})
+	failpoint.Inject("MockBlockOnDownstreamMetaDataCleanup", func(val failpoint.Value) {
+		wait := time.Duration(val.(int)) * time.Millisecond
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			failpoint.Return(ctx.Err())
+		case <-timer.C:
+			failpoint.Return(nil)
+		}
+	})
 
 	// set up db and clear meta data in downstream db
 	baseDB, err := conn.GetDownstreamDBWithTimeout(toDBCfg, dbTimeout)
