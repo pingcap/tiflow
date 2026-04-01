@@ -62,6 +62,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 var _ = check.Suite(&testSyncerSuite{})
@@ -217,6 +218,34 @@ func (s *testSyncerSuite) resetEventsGenerator(c *check.C) {
 
 func (s *testSyncerSuite) TearDownSuite(c *check.C) {
 	os.RemoveAll(s.cfg.Dir)
+}
+
+func (s *testSyncerSuite) TestFlushUnhandledEvents(c *check.C) {
+	core, logs := observer.New(zap.WarnLevel)
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.FrameworkLogger = zap.New(core)
+	syncer := NewSyncer(cfg, nil, nil)
+
+	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
+	syncer.flushUnhandledEvents()
+
+	entries := logs.All()
+	c.Assert(entries, check.HasLen, 2)
+
+	seen := make(map[string]map[string]interface{}, len(entries))
+	for _, entry := range entries {
+		seen[entry.Message] = entry.ContextMap()
+	}
+
+	c.Assert(seen["unhandled event"]["type"], check.Equals, "*replication.RowsQueryEvent")
+	c.Assert(seen["unhandled event"]["count"], check.Equals, int64(2))
+	c.Assert(seen["unhandled event from transaction payload"]["type"], check.Equals, "*replication.QueryEvent")
+	c.Assert(seen["unhandled event from transaction payload"]["count"], check.Equals, int64(1))
+
+	syncer.flushUnhandledEvents()
+	c.Assert(logs.All(), check.HasLen, 2)
 }
 
 func mockGetServerUnixTS(mock sqlmock.Sqlmock) {

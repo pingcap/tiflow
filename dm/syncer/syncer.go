@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -97,6 +98,8 @@ const (
 	skipJobIdx = iota
 	ddlJobIdx
 	workerJobTSArrayInitSize // size = skip + ddl
+
+	unhandledEventFlushInterval = 5 * time.Minute
 )
 
 // waitXIDStatus represents the status for waiting XID event when pause/stop task.
@@ -107,6 +110,11 @@ const (
 	waiting
 	waitComplete
 )
+
+type unhandledEventLogKey struct {
+	message   string
+	eventType string
+}
 
 // Syncer can sync your MySQL data to another MySQL database.
 type Syncer struct {
@@ -256,6 +264,11 @@ type Syncer struct {
 	idAndCollationMap          map[int]string
 
 	ddlWorker *DDLWorker
+
+	unhandledEvents struct {
+		sync.Mutex
+		counts map[unhandledEventLogKey]int
+	}
 }
 
 // NewSyncer creates a new Syncer.
@@ -307,6 +320,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.safeMode = sm.NewSafeMode()
+	syncer.unhandledEvents.counts = make(map[unhandledEventLogKey]int)
 
 	return syncer
 }
@@ -341,6 +355,70 @@ func (s *Syncer) closeJobChans() {
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
 	s.jobsClosed.Store(true)
+}
+
+func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
+	s.unhandledEvents.Lock()
+	s.unhandledEvents.counts[unhandledEventLogKey{
+		message:   message,
+		eventType: fmt.Sprintf("%T", ev),
+	}]++
+	s.unhandledEvents.Unlock()
+}
+
+func (s *Syncer) flushUnhandledEvents() {
+	s.unhandledEvents.Lock()
+	if len(s.unhandledEvents.counts) == 0 {
+		s.unhandledEvents.Unlock()
+		return
+	}
+
+	entries := make([]struct {
+		key   unhandledEventLogKey
+		count int
+	}, 0, len(s.unhandledEvents.counts))
+	for key, count := range s.unhandledEvents.counts {
+		entries = append(entries, struct {
+			key   unhandledEventLogKey
+			count int
+		}{
+			key:   key,
+			count: count,
+		})
+	}
+	clear(s.unhandledEvents.counts)
+	s.unhandledEvents.Unlock()
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].key.message != entries[j].key.message {
+			return entries[i].key.message < entries[j].key.message
+		}
+		return entries[i].key.eventType < entries[j].key.eventType
+	})
+
+	for _, entry := range entries {
+		s.tctx.L().Warn(entry.key.message,
+			zap.String("type", entry.key.eventType),
+			zap.Int("count", entry.count),
+		)
+	}
+}
+
+func (s *Syncer) logUnhandledEventsCronJob(ctx context.Context) {
+	defer s.runWg.Done()
+
+	ticker := time.NewTicker(unhandledEventFlushInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.flushUnhandledEvents()
+			return
+		case <-ticker.C:
+			s.flushUnhandledEvents()
+		}
+	}
 }
 
 // Type implements Unit.Type.
@@ -1822,6 +1900,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	go s.updateLagCronJob(s.runCtx.Ctx)
 	s.runWg.Add(1)
 	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
+	s.runWg.Add(1)
+	go s.logUnhandledEventsCronJob(s.runCtx.Ctx)
 
 	// some prepare work before the binlog event loop:
 	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
@@ -2443,7 +2523,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.TableMapEvent:
 				case *replication.FormatDescriptionEvent:
 				default:
-					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
+					s.recordUnhandledEvent("unhandled event from transaction payload", tpevt)
 				}
 			}
 			if needContinue {
@@ -2452,7 +2532,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.TableMapEvent:
 		case *replication.FormatDescriptionEvent:
 		default:
-			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
+			s.recordUnhandledEvent("unhandled event", ev)
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, endLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {
