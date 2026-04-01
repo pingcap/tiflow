@@ -965,9 +965,11 @@ func (s *testSyncerSuite) TestRun(c *check.C) {
 	resultCh = make(chan pb.ProcessResult)
 	// simulate `syncer.Resume` here, but doesn't reset database conns
 	syncer.secondsBehindMaster.Store(100)
+	syncer.lastNonZeroMinTS.Store(100)
 	syncer.workerJobTSArray[ddlJobIdx].Store(100)
 	syncer.reset()
 	c.Assert(syncer.secondsBehindMaster.Load(), check.Equals, int64(0))
+	c.Assert(syncer.lastNonZeroMinTS.Load(), check.Equals, int64(0))
 	c.Assert(syncer.workerJobTSArray[ddlJobIdx].Load(), check.Equals, int64(0))
 	mockStreamerProducer = &MockStreamProducer{s.generateEvents(events2, c)}
 	mockStreamer, err = mockStreamerProducer.GenerateStreamFrom(binlog.MustZeroLocation(mysql.MySQLFlavor))
@@ -2002,4 +2004,57 @@ func TestCheckCanUpdateCfg(t *testing.T) {
 	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
 	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
 	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+}
+
+// TestUpdateReplicationLagMetric verifies the secondsBehindMaster calculation,
+// specifically that it does not drop spuriously to 0 between DML batches when
+// all workerJobTSArray entries are temporarily reset to 0.
+func TestUpdateReplicationLagMetric(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 2
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
+
+	// Use tsOffset=0 so lag = time.Now().Unix() - eventTS.
+	syncer.tsOffset.Store(0)
+
+	// --- case 1: no events processed yet, all TSes are 0 → lag should be 0.
+	syncer.updateReplicationLagMetric()
+	require.Equal(t, int64(0), syncer.secondsBehindMaster.Load(),
+		"lag should be 0 before any events are processed")
+	require.Equal(t, int64(0), syncer.lastNonZeroMinTS.Load(),
+		"lastNonZeroMinTS should remain 0 when no events have been seen")
+
+	// --- case 2: a worker has an active TS → lag is computed from that TS.
+	eventTS := time.Now().Unix() - 10 // simulates an event 10 seconds old
+	syncer.workerJobTSArray[dmlWorkerJobIdx(0)].Store(eventTS)
+
+	syncer.updateReplicationLagMetric()
+	lag := syncer.secondsBehindMaster.Load()
+	require.Greater(t, lag, int64(0),
+		"lag should be positive when a worker has an active event TS")
+	require.Equal(t, eventTS, syncer.lastNonZeroMinTS.Load(),
+		"lastNonZeroMinTS should be updated to the active worker's TS")
+
+	// --- case 3: all workers reset to 0 (between batches) → lag must NOT drop to 0.
+	// This is the bug scenario: successFunc calls updateReplicationJobTS(nil, idx)
+	// after each batch, briefly making all TSes 0 before the next batch starts.
+	syncer.workerJobTSArray[dmlWorkerJobIdx(0)].Store(0)
+
+	syncer.updateReplicationLagMetric()
+	lagAfterReset := syncer.secondsBehindMaster.Load()
+	require.Greater(t, lagAfterReset, int64(0),
+		"lag must not spuriously drop to 0 when workers are idle between batches")
+	require.Equal(t, eventTS, syncer.lastNonZeroMinTS.Load(),
+		"lastNonZeroMinTS should be unchanged when workers are idle")
+
+	// --- case 4: a newer worker TS arrives → lastNonZeroMinTS advances.
+	newerEventTS := time.Now().Unix() - 3
+	syncer.workerJobTSArray[dmlWorkerJobIdx(1)].Store(newerEventTS)
+
+	syncer.updateReplicationLagMetric()
+	require.Equal(t, newerEventTS, syncer.lastNonZeroMinTS.Load(),
+		"lastNonZeroMinTS should update when a newer active TS is present")
+	require.Less(t, syncer.secondsBehindMaster.Load(), lag,
+		"lag should decrease as newer events are processed")
 }
