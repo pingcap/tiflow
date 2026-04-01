@@ -358,10 +358,11 @@ func (s *Syncer) closeJobChans() {
 }
 
 func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
+	eventType := fmt.Sprintf("%T", ev)
 	s.unhandledEvents.Lock()
 	s.unhandledEvents.counts[unhandledEventLogKey{
 		message:   message,
-		eventType: fmt.Sprintf("%T", ev),
+		eventType: eventType,
 	}]++
 	s.unhandledEvents.Unlock()
 }
