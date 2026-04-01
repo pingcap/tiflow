@@ -234,6 +234,10 @@ type Syncer struct {
 	// the minimal timestamp of currently processing binlog events.
 	// this lag will consider time difference between upstream and DM nodes
 	secondsBehindMaster atomic.Int64
+	// lastNonZeroMinTS is the last known minimum event timestamp across all workers
+	// when at least one worker was active. Used as a fallback in updateReplicationLagMetric
+	// to avoid spurious drops to 0 between DML batches when all worker TSes are reset to 0.
+	lastNonZeroMinTS atomic.Int64
 	// stores the last job TS(binlog event timestamp) of each worker,
 	// if there's no active job, the corresponding worker's TS is reset to 0.
 	// since DML worker runs jobs in batch, the TS is the TS of the first job in the batch.
@@ -626,6 +630,7 @@ func (s *Syncer) reset() {
 		s.streamerController.Close()
 	}
 	s.secondsBehindMaster.Store(0)
+	s.lastNonZeroMinTS.Store(0)
 	for _, jobTS := range s.workerJobTSArray {
 		jobTS.Store(0)
 	}
@@ -965,7 +970,13 @@ func (s *Syncer) updateReplicationLagMetric() {
 		}
 	}
 	if minTS != int64(0) {
+		s.lastNonZeroMinTS.Store(minTS)
 		lag = s.calcReplicationLag(minTS)
+	} else if lastTS := s.lastNonZeroMinTS.Load(); lastTS != int64(0) {
+		// All workers are between batches (their TSes were reset to 0 after the
+		// last batch completed). Use the most recent known event timestamp so we
+		// don't emit a spurious drop to 0 while no worker is actively processing.
+		lag = s.calcReplicationLag(lastTS)
 	}
 
 	s.metricsProxies.Metrics.ReplicationLagHistogram.Observe(float64(lag))
