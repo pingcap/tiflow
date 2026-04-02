@@ -28,7 +28,7 @@ function exec_tidb() {
 }
 
 function install_sync_diff() {
-	curl https://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
+	curl https://download.pingcap.com/tidb-enterprise-tools-nightly-linux-amd64.tar.gz | tar xz
 	mkdir -p bin
 	mv tidb-enterprise-tools-nightly-linux-amd64/bin/sync_diff_inspector bin/
 }
