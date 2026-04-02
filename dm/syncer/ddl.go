@@ -14,7 +14,6 @@
 package syncer
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -1080,7 +1079,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	// Let TiDB build the post-DDL column definition so we stay compatible with its internal
 	// modify-column handling even when lower-level helpers stop being exported.
 	jobW, err := tidbddl.GetModifiableColumnJob(
-		context.Background(),
+		qec.tctx.Ctx,
 		tidbmock.NewContext(),
 		nil,
 		ast.Ident{Schema: di.Name, Name: ti.Name},
