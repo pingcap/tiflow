@@ -243,14 +243,28 @@ func (s *testSyncerSuite) TestSampleUnhandledEvents(c *check.C) {
 	}
 
 	c.Assert(seen["unhandled event"], check.HasLen, 1)
-	c.Assert(seen["unhandled event"][0]["type"], check.Equals, "*replication.RowsQueryEvent")
+	c.Assert(seen["unhandled event"][0]["events"], check.DeepEquals, map[string]int{
+		"*replication.RowsQueryEvent": 1,
+	})
 	c.Assert(seen["unhandled event from transaction payload"], check.HasLen, 1)
-	c.Assert(seen["unhandled event from transaction payload"][0]["type"], check.Equals, "*replication.QueryEvent")
+	c.Assert(seen["unhandled event from transaction payload"][0]["events"], check.DeepEquals, map[string]int{
+		"*replication.QueryEvent": 1,
+	})
 
 	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
 	syncer.recordUnhandledEvent("unhandled event", &replication.QueryEvent{})
 	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
 	c.Assert(logs.All(), check.HasLen, 2)
+
+	syncer.unhandledEvents.Lock()
+	defer syncer.unhandledEvents.Unlock()
+	c.Assert(syncer.unhandledEvents.counts["unhandled event"], check.DeepEquals, map[string]int{
+		"*replication.QueryEvent":     2,
+		"*replication.RowsQueryEvent": 3,
+	})
+	c.Assert(syncer.unhandledEvents.counts["unhandled event from transaction payload"], check.DeepEquals, map[string]int{
+		"*replication.QueryEvent": 2,
+	})
 }
 
 func mockGetServerUnixTS(mock sqlmock.Sqlmock) {

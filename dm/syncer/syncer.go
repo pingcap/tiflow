@@ -261,6 +261,10 @@ type Syncer struct {
 
 	ddlWorker            *DDLWorker
 	unhandledEventLogger *zap.Logger
+	unhandledEvents      struct {
+		sync.Mutex
+		counts map[string]map[string]int
+	}
 }
 
 // NewSyncer creates a new Syncer.
@@ -317,6 +321,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 		unhandledEventSampleFirst,
 		logFields...,
 	)()
+	syncer.unhandledEvents.counts = make(map[string]map[string]int)
 
 	return syncer
 }
@@ -354,7 +359,23 @@ func (s *Syncer) closeJobChans() {
 }
 
 func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
-	s.unhandledEventLogger.Warn(message, zap.String("type", fmt.Sprintf("%T", ev)))
+	eventType := fmt.Sprintf("%T", ev)
+
+	s.unhandledEvents.Lock()
+	eventCounts, ok := s.unhandledEvents.counts[message]
+	if !ok {
+		eventCounts = make(map[string]int)
+		s.unhandledEvents.counts[message] = eventCounts
+	}
+	eventCounts[eventType]++
+
+	snapshot := make(map[string]int, len(eventCounts))
+	for event, count := range eventCounts {
+		snapshot[event] = count
+	}
+	s.unhandledEvents.Unlock()
+
+	s.unhandledEventLogger.Warn(message, zap.Any("events", snapshot))
 }
 
 // Type implements Unit.Type.
