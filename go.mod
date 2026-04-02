@@ -35,11 +35,11 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
-	github.com/go-mysql-org/go-mysql v1.13.0
+	github.com/go-mysql-org/go-mysql v1.15.0
 	github.com/go-oauth2/oauth2/v4 v4.5.4
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.8.1
-	github.com/goccy/go-json v0.10.5
+	github.com/goccy/go-json v0.10.6
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
@@ -58,9 +58,9 @@ require (
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.2.0
 	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/jmoiron/sqlx v1.3.3
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/klauspost/compress v1.18.5
+	github.com/klauspost/compress v1.18.6
 	github.com/labstack/gommon v0.4.0
 	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/mailru/easyjson v0.7.7
@@ -71,9 +71,9 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.26
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20260508054701-306e305bcf41
-	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
+	github.com/pingcap/failpoint v0.0.0-20260406204437-bbc9d102c19e
 	github.com/pingcap/kvproto v0.0.0-20260602101655-f8184e7702eb
-	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
+	github.com/pingcap/log v1.1.1-0.20260227082333-572e590d08f1
 	github.com/pingcap/tidb v1.1.0-beta.0.20260616034257-3adc8ec71ef3
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20260616034257-3adc8ec71ef3
@@ -84,7 +84,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/shopspring/decimal v1.3.0
+	github.com/shopspring/decimal v1.4.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -111,7 +111,7 @@ require (
 	go.uber.org/mock v0.5.2
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/net v0.54.0
 	golang.org/x/oauth2 v0.34.0
@@ -391,7 +391,7 @@ require (
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spkg/bom v1.0.0 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2 // indirect
 	github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
