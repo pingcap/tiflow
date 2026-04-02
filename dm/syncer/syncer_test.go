@@ -220,7 +220,7 @@ func (s *testSyncerSuite) TearDownSuite(c *check.C) {
 	os.RemoveAll(s.cfg.Dir)
 }
 
-func (s *testSyncerSuite) TestFlushUnhandledEvents(c *check.C) {
+func (s *testSyncerSuite) TestSampleUnhandledEvents(c *check.C) {
 	core, logs := observer.New(zap.WarnLevel)
 	cfg := genDefaultSubTaskConfig4Test()
 	cfg.FrameworkLogger = zap.New(core)
@@ -228,24 +228,27 @@ func (s *testSyncerSuite) TestFlushUnhandledEvents(c *check.C) {
 
 	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
 	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event", &replication.QueryEvent{})
 	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
-	syncer.flushUnhandledEvents()
 
 	entries := logs.All()
-	c.Assert(entries, check.HasLen, 2)
+	c.Assert(entries, check.HasLen, 3)
 
-	seen := make(map[string]map[string]interface{}, len(entries))
+	seen := make(map[string][]map[string]interface{}, len(entries))
 	for _, entry := range entries {
-		seen[entry.Message] = entry.ContextMap()
+		seen[entry.Message] = append(seen[entry.Message], entry.ContextMap())
 	}
 
-	c.Assert(seen["unhandled event"]["type"], check.Equals, "*replication.RowsQueryEvent")
-	c.Assert(seen["unhandled event"]["count"], check.Equals, int64(2))
-	c.Assert(seen["unhandled event from transaction payload"]["type"], check.Equals, "*replication.QueryEvent")
-	c.Assert(seen["unhandled event from transaction payload"]["count"], check.Equals, int64(1))
+	c.Assert(seen["unhandled event"], check.HasLen, 2)
+	c.Assert(seen["unhandled event"][0]["type"], check.Equals, "*replication.RowsQueryEvent")
+	c.Assert(seen["unhandled event"][1]["type"], check.Equals, "*replication.QueryEvent")
+	c.Assert(seen["unhandled event from transaction payload"], check.HasLen, 1)
+	c.Assert(seen["unhandled event from transaction payload"][0]["type"], check.Equals, "*replication.QueryEvent")
 
-	syncer.flushUnhandledEvents()
-	c.Assert(logs.All(), check.HasLen, 2)
+	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event", &replication.QueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
+	c.Assert(logs.All(), check.HasLen, 3)
 }
 
 func mockGetServerUnixTS(mock sqlmock.Sqlmock) {

@@ -21,7 +21,6 @@ import (
 	"os"
 	"path"
 	"reflect"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -75,6 +74,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -99,7 +99,8 @@ const (
 	ddlJobIdx
 	workerJobTSArrayInitSize // size = skip + ddl
 
-	unhandledEventFlushInterval = 5 * time.Minute
+	unhandledEventSampleInterval = 5 * time.Minute
+	unhandledEventSampleFirst    = 1
 )
 
 // waitXIDStatus represents the status for waiting XID event when pause/stop task.
@@ -263,12 +264,8 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	ddlWorker *DDLWorker
-
-	unhandledEvents struct {
-		sync.Mutex
-		counts map[unhandledEventLogKey]int
-	}
+	ddlWorker             *DDLWorker
+	unhandledEventLoggers sync.Map
 }
 
 // NewSyncer creates a new Syncer.
@@ -320,7 +317,6 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.safeMode = sm.NewSafeMode()
-	syncer.unhandledEvents.counts = make(map[unhandledEventLogKey]int)
 
 	return syncer
 }
@@ -357,69 +353,36 @@ func (s *Syncer) closeJobChans() {
 	s.jobsClosed.Store(true)
 }
 
-func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
-	eventType := fmt.Sprintf("%T", ev)
-	s.unhandledEvents.Lock()
-	s.unhandledEvents.counts[unhandledEventLogKey{
-		message:   message,
-		eventType: eventType,
-	}]++
-	s.unhandledEvents.Unlock()
+// This uses the same zap sampler that tidb/pkg/util/logutil.SampleLoggerFactory wraps,
+// but keeps the syncer-scoped logger fields and test logger wiring intact.
+func newSampleLogger(base log.Logger, tick time.Duration, first int) log.Logger {
+	sampleCore := zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+		return zapcore.NewSamplerWithOptions(core, tick, first, 0)
+	})
+
+	return log.Logger{
+		Logger: base.Logger.With(zap.String("sampled", "")).WithOptions(sampleCore),
+	}
 }
 
-func (s *Syncer) flushUnhandledEvents() {
-	s.unhandledEvents.Lock()
-	if len(s.unhandledEvents.counts) == 0 {
-		s.unhandledEvents.Unlock()
+func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
+	eventType := fmt.Sprintf("%T", ev)
+	key := unhandledEventLogKey{
+		message:   message,
+		eventType: eventType,
+	}
+	if cached, ok := s.unhandledEventLoggers.Load(key); ok {
+		cached.(log.Logger).Warn(message)
 		return
 	}
 
-	entries := make([]struct {
-		key   unhandledEventLogKey
-		count int
-	}, 0, len(s.unhandledEvents.counts))
-	for key, count := range s.unhandledEvents.counts {
-		entries = append(entries, struct {
-			key   unhandledEventLogKey
-			count int
-		}{
-			key:   key,
-			count: count,
-		})
-	}
-	clear(s.unhandledEvents.counts)
-	s.unhandledEvents.Unlock()
-
-	sort.Slice(entries, func(i, j int) bool {
-		if entries[i].key.message != entries[j].key.message {
-			return entries[i].key.message < entries[j].key.message
-		}
-		return entries[i].key.eventType < entries[j].key.eventType
-	})
-
-	for _, entry := range entries {
-		s.tctx.L().Warn(entry.key.message,
-			zap.String("type", entry.key.eventType),
-			zap.Int("count", entry.count),
-		)
-	}
-}
-
-func (s *Syncer) logUnhandledEventsCronJob(ctx context.Context) {
-	defer s.runWg.Done()
-
-	ticker := time.NewTicker(unhandledEventFlushInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.flushUnhandledEvents()
-			return
-		case <-ticker.C:
-			s.flushUnhandledEvents()
-		}
-	}
+	logger := newSampleLogger(
+		s.tctx.L().WithFields(zap.String("type", eventType)),
+		unhandledEventSampleInterval,
+		unhandledEventSampleFirst,
+	)
+	actual, _ := s.unhandledEventLoggers.LoadOrStore(key, logger)
+	actual.(log.Logger).Warn(message)
 }
 
 // Type implements Unit.Type.
@@ -1901,8 +1864,6 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	go s.updateLagCronJob(s.runCtx.Ctx)
 	s.runWg.Add(1)
 	go s.updateTSOffsetCronJob(s.runCtx.Ctx)
-	s.runWg.Add(1)
-	go s.logUnhandledEventsCronJob(s.runCtx.Ctx)
 
 	// some prepare work before the binlog event loop:
 	// 1. first we flush checkpoint as needed, so in next resume we won't go to Load unit.
