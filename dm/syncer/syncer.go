@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
+	tidblogutil "github.com/pingcap/tidb/pkg/util/logutil"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
@@ -97,6 +98,9 @@ const (
 	skipJobIdx = iota
 	ddlJobIdx
 	workerJobTSArrayInitSize // size = skip + ddl
+
+	unhandledEventSampleInterval = 5 * time.Minute
+	unhandledEventSampleFirst    = 1
 )
 
 // waitXIDStatus represents the status for waiting XID event when pause/stop task.
@@ -255,7 +259,8 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	ddlWorker *DDLWorker
+	ddlWorker            *DDLWorker
+	unhandledEventLogger *zap.Logger
 }
 
 // NewSyncer creates a new Syncer.
@@ -307,6 +312,11 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.safeMode = sm.NewSafeMode()
+	syncer.unhandledEventLogger = tidblogutil.SampleLoggerFactory(
+		unhandledEventSampleInterval,
+		unhandledEventSampleFirst,
+		logFields...,
+	)()
 
 	return syncer
 }
@@ -341,6 +351,10 @@ func (s *Syncer) closeJobChans() {
 	close(s.dmlJobCh)
 	close(s.ddlJobCh)
 	s.jobsClosed.Store(true)
+}
+
+func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
+	s.unhandledEventLogger.Warn(message, zap.String("type", fmt.Sprintf("%T", ev)))
 }
 
 // Type implements Unit.Type.
@@ -2443,7 +2457,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				case *replication.TableMapEvent:
 				case *replication.FormatDescriptionEvent:
 				default:
-					s.tctx.L().Warn("unhandled event from transaction payload", zap.String("type", fmt.Sprintf("%T", tpevt)))
+					s.recordUnhandledEvent("unhandled event from transaction payload", tpevt)
 				}
 			}
 			if needContinue {
@@ -2452,7 +2466,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		case *replication.TableMapEvent:
 		case *replication.FormatDescriptionEvent:
 		default:
-			s.tctx.L().Warn("unhandled event", zap.String("type", fmt.Sprintf("%T", ev)))
+			s.recordUnhandledEvent("unhandled event", ev)
 		}
 		if err2 != nil {
 			if err := s.handleEventError(err2, startLocation, endLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {
