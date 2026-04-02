@@ -18,16 +18,16 @@
    * [bin/minio](https://github.com/minio/minio)
 
    > You can also download the binaries. `sync_diff_inspector` can be downloaded 
-   > from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz), 
+   > from [tidb-community-toolkit](https://download.pingcap.com/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz),
    > `tidb-server` related binaries can be downloaded 
-   > from [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz):
+   > from [tidb-community-server](https://download.pingcap.com/tidb-community-server-v6.0.0-linux-amd64.tar.gz):
 
    > If you are running tests on MacOS, tidb related binaries can be downloaded from tiup mirrors, such as 
    > https://tiup-mirrors.pingcap.com/tidb-v4.0.2-darwin-amd64.tar.gz. And `sync_diff_inspector` can be compiled by 
    > yourself from source [tidb-tools](https://github.com/pingcap/tidb-tools)
    
    > All Tiflash required files can be found in 
-   > [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz) packages. 
+   > [tidb-community-server](https://download.pingcap.com/tidb-community-server-v6.0.0-linux-amd64.tar.gz) packages.
    > You should put `flash_cluster_manager`, `libtiflash_proxy.so` and `tiflash` into `bin` directory in TiCDC code base.
 
    > Old versions of Minio may cause the integration test cases to fail. You can get a newer version by installing it from source
