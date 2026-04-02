@@ -19,7 +19,7 @@ If you need to specify a version, os or arch, you can use, for example: `make pr
    * [jq](https://stedolan.github.io/jq/)
    * [minio](https://github.com/minio/minio)
 
-   > You could download these binaries by yourself from [tidb-community-toolkit](https://download.pingcap.org/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz) and [tidb-community-server](https://download.pingcap.org/tidb-community-server-v6.0.0-linux-amd64.tar.gz).
+   > You could download these binaries by yourself from [tidb-community-toolkit](https://download.pingcap.com/tidb-community-toolkit-v6.0.0-linux-amd64.tar.gz) and [tidb-community-server](https://download.pingcap.com/tidb-community-server-v6.0.0-linux-amd64.tar.gz).
 
 2. These are programs/packages need be installed manually.
    * [mysql](https://dev.mysql.com/doc/mysql-installation-excerpt/5.7/en/) (the MySQL cli client,
