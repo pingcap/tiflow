@@ -31,6 +31,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	pclog "github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -222,8 +223,10 @@ func (s *testSyncerSuite) TearDownSuite(c *check.C) {
 
 func (s *testSyncerSuite) TestSampleUnhandledEvents(c *check.C) {
 	core, logs := observer.New(zap.WarnLevel)
+	restoreGlobal := pclog.ReplaceGlobals(zap.New(core), nil)
+	defer restoreGlobal()
+
 	cfg := genDefaultSubTaskConfig4Test()
-	cfg.FrameworkLogger = zap.New(core)
 	syncer := NewSyncer(cfg, nil, nil)
 
 	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
@@ -232,23 +235,22 @@ func (s *testSyncerSuite) TestSampleUnhandledEvents(c *check.C) {
 	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
 
 	entries := logs.All()
-	c.Assert(entries, check.HasLen, 3)
+	c.Assert(entries, check.HasLen, 2)
 
 	seen := make(map[string][]map[string]interface{}, len(entries))
 	for _, entry := range entries {
 		seen[entry.Message] = append(seen[entry.Message], entry.ContextMap())
 	}
 
-	c.Assert(seen["unhandled event"], check.HasLen, 2)
+	c.Assert(seen["unhandled event"], check.HasLen, 1)
 	c.Assert(seen["unhandled event"][0]["type"], check.Equals, "*replication.RowsQueryEvent")
-	c.Assert(seen["unhandled event"][1]["type"], check.Equals, "*replication.QueryEvent")
 	c.Assert(seen["unhandled event from transaction payload"], check.HasLen, 1)
 	c.Assert(seen["unhandled event from transaction payload"][0]["type"], check.Equals, "*replication.QueryEvent")
 
 	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
 	syncer.recordUnhandledEvent("unhandled event", &replication.QueryEvent{})
 	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
-	c.Assert(logs.All(), check.HasLen, 3)
+	c.Assert(logs.All(), check.HasLen, 2)
 }
 
 func mockGetServerUnixTS(mock sqlmock.Sqlmock) {

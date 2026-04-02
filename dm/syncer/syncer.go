@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
+	tidblogutil "github.com/pingcap/tidb/pkg/util/logutil"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
@@ -74,7 +75,6 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 var (
@@ -111,11 +111,6 @@ const (
 	waiting
 	waitComplete
 )
-
-type unhandledEventLogKey struct {
-	message   string
-	eventType string
-}
 
 // Syncer can sync your MySQL data to another MySQL database.
 type Syncer struct {
@@ -264,8 +259,8 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	ddlWorker             *DDLWorker
-	unhandledEventLoggers sync.Map
+	ddlWorker            *DDLWorker
+	unhandledEventLogger *zap.Logger
 }
 
 // NewSyncer creates a new Syncer.
@@ -317,6 +312,11 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.lastCheckpointFlushedTime = time.Time{}
 	syncer.relay = relay
 	syncer.safeMode = sm.NewSafeMode()
+	syncer.unhandledEventLogger = tidblogutil.SampleLoggerFactory(
+		unhandledEventSampleInterval,
+		unhandledEventSampleFirst,
+		logFields...,
+	)()
 
 	return syncer
 }
@@ -353,36 +353,8 @@ func (s *Syncer) closeJobChans() {
 	s.jobsClosed.Store(true)
 }
 
-// This uses the same zap sampler that tidb/pkg/util/logutil.SampleLoggerFactory wraps,
-// but keeps the syncer-scoped logger fields and test logger wiring intact.
-func newSampleLogger(base log.Logger, tick time.Duration, first int) log.Logger {
-	sampleCore := zap.WrapCore(func(core zapcore.Core) zapcore.Core {
-		return zapcore.NewSamplerWithOptions(core, tick, first, 0)
-	})
-
-	return log.Logger{
-		Logger: base.Logger.With(zap.String("sampled", "")).WithOptions(sampleCore),
-	}
-}
-
 func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
-	eventType := fmt.Sprintf("%T", ev)
-	key := unhandledEventLogKey{
-		message:   message,
-		eventType: eventType,
-	}
-	if cached, ok := s.unhandledEventLoggers.Load(key); ok {
-		cached.(log.Logger).Warn(message)
-		return
-	}
-
-	logger := newSampleLogger(
-		s.tctx.L().WithFields(zap.String("type", eventType)),
-		unhandledEventSampleInterval,
-		unhandledEventSampleFirst,
-	)
-	actual, _ := s.unhandledEventLoggers.LoadOrStore(key, logger)
-	actual.(log.Logger).Warn(message)
+	s.unhandledEventLogger.Warn(message, zap.String("type", fmt.Sprintf("%T", ev)))
 }
 
 // Type implements Unit.Type.
