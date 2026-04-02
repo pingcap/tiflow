@@ -14,6 +14,7 @@
 package syncer
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -21,7 +22,6 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
-	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -1076,27 +1076,30 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	if oldCol == nil {
 		return bf.AlterTable, nil
 	}
-	newCol := table.ToColumn(&model.ColumnInfo{
-		ID:                    oldCol.ID,
-		Offset:                oldCol.Offset,
-		State:                 oldCol.State,
-		OriginDefaultValue:    oldCol.OriginDefaultValue,
-		OriginDefaultValueBit: oldCol.OriginDefaultValueBit,
-		FieldType:             *spec.NewColumns[0].Tp,
-		Name:                  spec.NewColumns[0].Name.Name,
-		Version:               oldCol.Version,
-	})
 
-	// handle charset and collation
-	if err := tidbddl.ProcessColumnCharsetAndCollation(metabuild.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
-		ddl.logger.Warn("process column charset and collation failed", zap.Error(err))
+	// Let TiDB build the post-DDL column definition so we stay compatible with its internal
+	// modify-column handling even when lower-level helpers stop being exported.
+	jobW, err := tidbddl.GetModifiableColumnJob(
+		context.Background(),
+		tidbmock.NewContext(),
+		nil,
+		ast.Ident{Schema: di.Name, Name: ti.Name},
+		oldColumnName.Name,
+		di,
+		tbl,
+		spec,
+	)
+	if err != nil {
+		ddl.logger.Warn("build modifiable column job failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
-	// handle column options
-	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
-		ddl.logger.Warn("process column options failed", zap.Error(err))
+	args, ok := jobW.JobArgs.(*model.ModifyColumnArgs)
+	if !ok || args.Column == nil {
+		err := fmt.Errorf("unexpected modify column job args: %T", jobW.JobArgs)
+		ddl.logger.Warn("get modifiable column failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
+	newCol := table.ToColumn(args.Column)
 
 	if et := ddl.needChangeColumnData(oldCol, newCol); et != bf.AlterTable {
 		return et, nil
