@@ -28,9 +28,6 @@ type DebugConfig struct {
 	// Scheduler is the configuration of the two-phase scheduler.
 	Scheduler *SchedulerConfig `toml:"scheduler" json:"scheduler"`
 
-	// CDCV2 enables ticdc version 2 implementation with new metastore
-	CDCV2 *CDCV2 `toml:"cdc-v2" json:"cdc-v2"`
-
 	// Puller is the configuration of the puller.
 	Puller *PullerConfig `toml:"puller" json:"puller"`
 }
@@ -44,9 +41,6 @@ func (c *DebugConfig) ValidateAndAdjust() error {
 		return errors.Trace(err)
 	}
 	if err := c.Scheduler.ValidateAndAdjust(); err != nil {
-		return errors.Trace(err)
-	}
-	if err := c.CDCV2.ValidateAndAdjust(); err != nil {
 		return errors.Trace(err)
 	}
 
