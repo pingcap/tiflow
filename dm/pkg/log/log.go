@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tiflow/dm/pkg/helper"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -204,12 +205,18 @@ func init() {
 
 // IsRedactLogEnabled indicates whether the log desensitization is enabled.
 func IsRedactLogEnabled() bool {
-	return enabledRedactLog.Load()
+	return enabledRedactLog.Load() || redact.IsRedactionEnabled()
 }
 
-// SetRedactLog sets enabledRedactLog.
+// SetRedactLog sets enabledRedactLog for backward compatibility.
+// Also updates the unified redaction system.
 func SetRedactLog(enabled bool) {
 	enabledRedactLog.Store(enabled)
+	if enabled {
+		redact.SetRedactionMode(redact.RedactionModeOn)
+	} else {
+		redact.SetRedactionMode(redact.RedactionModeOff)
+	}
 }
 
 // RedactString receives string argument and return omitted information if redact log enabled.

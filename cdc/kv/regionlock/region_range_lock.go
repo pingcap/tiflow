@@ -26,6 +26,7 @@ import (
 	"github.com/google/btree"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
@@ -183,8 +184,8 @@ func (l *RangeLock) UnlockRange(
 		log.Panic("unlocking a not locked range",
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)),
-			zap.String("endKey", hex.EncodeToString(endKey)),
+			logutil.ZapRedactKey("startKey", startKey),
+			logutil.ZapRedactKey("endKey", endKey),
 			zap.Uint64("version", version))
 	}
 	if entry.regionID != regionID {
@@ -209,8 +210,8 @@ func (l *RangeLock) UnlockRange(
 		log.Panic("unlocking region doesn't match the locked region",
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)),
-			zap.String("endKey", hex.EncodeToString(endKey)),
+			logutil.ZapRedactKey("startKey", startKey),
+			logutil.ZapRedactKey("endKey", endKey),
 			zap.Uint64("version", version),
 			zap.String("foundLockEntry", entry.String()))
 	}
@@ -235,8 +236,8 @@ func (l *RangeLock) UnlockRange(
 		zap.String("changefeed", l.changefeed),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
 		zap.Uint64("resolvedTs", newResolvedTs),
-		zap.String("startKey", hex.EncodeToString(startKey)),
-		zap.String("endKey", hex.EncodeToString(endKey)))
+		logutil.ZapRedactKey("startKey", startKey),
+		logutil.ZapRedactKey("endKey", endKey))
 	return
 }
 
@@ -471,8 +472,8 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 		log.Info("try lock range staled",
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
-			zap.String("startKey", hex.EncodeToString(startKey)),
-			zap.String("endKey", hex.EncodeToString(endKey)),
+			logutil.ZapRedactKey("startKey", startKey),
+			logutil.ZapRedactKey("endKey", endKey),
 			zap.Strings("allOverlapping", overlapStr)) // DEBUG
 
 		for _, r := range overlappedRangeLocks {
@@ -512,8 +513,8 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 	log.Info("lock range blocked",
 		zap.String("changefeed", l.changefeed),
 		zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
-		zap.String("startKey", hex.EncodeToString(startKey)),
-		zap.String("endKey", hex.EncodeToString(endKey)),
+		logutil.ZapRedactKey("startKey", startKey),
+		logutil.ZapRedactKey("endKey", endKey),
 		zap.Strings("blockedBy", overlapStr)) // DEBUG
 
 	return LockRangeResult{
