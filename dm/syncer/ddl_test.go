@@ -892,6 +892,65 @@ func TestNormalizeModifyColumnEventPrefersDropUniqueOverDefault(t *testing.T) {
 	require.Equal(t, bf.DropUniqueKey, eventType)
 }
 
+func TestClassifyUnsupportedModifyColumnEventAsModifyCharset(t *testing.T) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestClassifyUnsupportedModifyColumnEventAsModifyCharset")))
+
+	tableInfo := &model.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("t"),
+		Charset: "utf8mb4",
+		Collate: "utf8mb4_bin",
+		State:   model.StatePublic,
+		Columns: []*model.ColumnInfo{
+			{
+				ID:        1,
+				Name:      pmodel.NewCIStr("c_char"),
+				Offset:    0,
+				State:     model.StatePublic,
+				FieldType: *fieldtypes.NewFieldType(tmysql.TypeString),
+			},
+		},
+	}
+	tableInfo.Columns[0].SetCharset("utf8mb4")
+	tableInfo.Columns[0].SetCollate("utf8mb4_bin")
+
+	dbInfo := &model.DBInfo{
+		Name:    pmodel.NewCIStr("test"),
+		Charset: "utf8mb4",
+		Collate: "utf8mb4_bin",
+	}
+
+	ddlWorker := &DDLWorker{
+		logger: tctx.Logger,
+		getTableInfo: func(_ *tcontext.Context, _, _ *filter.Table) (*model.TableInfo, error) {
+			return tableInfo.Clone(), nil
+		},
+		getDBInfoFromDownstream: func(_ *tcontext.Context, _, _ *filter.Table) (*model.DBInfo, error) {
+			return dbInfo, nil
+		},
+	}
+
+	p := parser.New()
+	stmt, err := p.ParseOneStmt("alter table test.t modify c_char char(4) character set latin1", "", "")
+	require.NoError(t, err)
+	alterStmt, ok := stmt.(*ast.AlterTableStmt)
+	require.True(t, ok)
+	require.Len(t, alterStmt.Specs, 1)
+
+	qec := &queryEventContext{
+		eventContext: &eventContext{tctx: tctx},
+	}
+	info := &ddlInfo{
+		originDDL:    "alter table test.t modify c_char char(4) character set latin1",
+		sourceTables: []*filter.Table{{Schema: "test", Name: "t"}},
+		targetTables: []*filter.Table{{Schema: "test", Name: "t"}},
+	}
+
+	eventType, err := ddlWorker.handleModifyColumn(qec, info, alterStmt.Specs[0])
+	require.NoError(t, err)
+	require.Equal(t, bf.ModifyCharset, eventType)
+}
+
 type mockOnlinePlugin struct {
 	toFinish map[string]struct{}
 }

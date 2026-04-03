@@ -19,8 +19,10 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -28,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
@@ -1091,6 +1094,9 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		spec,
 	)
 	if err != nil {
+		if et, ok := ddl.classifyUnsupportedModifyColumnEvent(info, oldCol, ti, di, spec.NewColumns[0], err); ok {
+			return et, nil
+		}
 		ddl.logger.Warn("build modifiable column job failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
@@ -1124,6 +1130,50 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		return bf.RenameColumn, nil
 	default:
 		return bf.AlterTable, nil
+	}
+}
+
+func (ddl *DDLWorker) classifyUnsupportedModifyColumnEvent(
+	info *ddlInfo,
+	oldCol *table.Column,
+	ti *model.TableInfo,
+	di *model.DBInfo,
+	specNewColumn *ast.ColumnDef,
+	jobErr error,
+) (bf.EventType, bool) {
+	cause := errors.Cause(jobErr)
+	if !dbterror.ErrUnsupportedModifyCharset.Equal(cause) && !dbterror.ErrUnsupportedModifyCollation.Equal(cause) {
+		return bf.AlterTable, false
+	}
+
+	// Newer TiDB rejects some MODIFY/CHANGE COLUMN charset transitions while DM still
+	// needs the historical event type so binlog-filter can block them before tracker/execution.
+	newCol := table.ToColumn(&model.ColumnInfo{
+		ID:                    oldCol.ID,
+		Offset:                oldCol.Offset,
+		State:                 oldCol.State,
+		OriginDefaultValue:    oldCol.OriginDefaultValue,
+		OriginDefaultValueBit: oldCol.OriginDefaultValueBit,
+		FieldType:             *specNewColumn.Tp,
+		Name:                  specNewColumn.Name.Name,
+		Version:               oldCol.Version,
+	})
+	if err := tidbddl.ProcessColumnCharsetAndCollation(metabuild.NewContext(), oldCol, newCol, ti, specNewColumn, di); err != nil {
+		ddl.logger.Warn("fallback classify modify column charset/collation failed",
+			zap.String("origin_sql", info.originDDL),
+			zap.Error(jobErr),
+			zap.Error(err),
+		)
+		return bf.AlterTable, false
+	}
+
+	switch {
+	case oldCol.GetCharset() != newCol.GetCharset():
+		return bf.ModifyCharset, true
+	case oldCol.GetCollate() != newCol.GetCollate():
+		return bf.ModifyCollation, true
+	default:
+		return bf.AlterTable, false
 	}
 }
 
