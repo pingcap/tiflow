@@ -1078,9 +1078,11 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 
 	// Let TiDB build the post-DDL column definition so we stay compatible with its internal
 	// modify-column handling even when lower-level helpers stop being exported.
+	mockCtx := tidbmock.NewContext()
+	mockCtx.GetSessionVars().AllowRemoveAutoInc = true
 	jobW, err := tidbddl.GetModifiableColumnJob(
 		qec.tctx.Ctx,
-		tidbmock.NewContext(),
+		mockCtx,
 		nil,
 		ast.Ident{Schema: di.Name, Name: ti.Name},
 		oldColumnName.Name,
