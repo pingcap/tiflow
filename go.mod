@@ -98,13 +98,13 @@ require (
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v1.0.5
-	go.etcd.io/etcd/api/v3 v3.5.15
-	go.etcd.io/etcd/client/pkg/v3 v3.5.15
-	go.etcd.io/etcd/client/v3 v3.5.15
-	go.etcd.io/etcd/pkg/v3 v3.5.15
-	go.etcd.io/etcd/raft/v3 v3.5.15
-	go.etcd.io/etcd/server/v3 v3.5.15
-	go.etcd.io/etcd/tests/v3 v3.5.12
+	go.etcd.io/etcd/api/v3 v3.5.18
+	go.etcd.io/etcd/client/pkg/v3 v3.5.18
+	go.etcd.io/etcd/client/v3 v3.5.18
+	go.etcd.io/etcd/pkg/v3 v3.5.18
+	go.etcd.io/etcd/raft/v3 v3.5.18
+	go.etcd.io/etcd/server/v3 v3.5.18
+	go.etcd.io/etcd/tests/v3 v3.5.18
 	go.uber.org/atomic v1.11.0
 	go.uber.org/dig v1.13.0
 	go.uber.org/goleak v1.3.0
@@ -413,8 +413,8 @@ require (
 	github.com/xdg/stringprep v1.0.3 // indirect
 	github.com/xiang90/probing v0.0.0-20221125231312-a49e3df8f510 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
-	go.etcd.io/bbolt v1.3.10 // indirect
-	go.etcd.io/etcd/client/v2 v2.305.15 // indirect
+	go.etcd.io/bbolt v1.3.11 // indirect
+	go.etcd.io/etcd/client/v2 v2.305.18 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.60.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
