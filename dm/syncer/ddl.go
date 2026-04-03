@@ -1100,7 +1100,7 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 		ddl.logger.Warn("get modifiable column failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
-	newCol := table.ToColumn(args.Column)
+	newCol := ddl.normalizeModifyColumnEvent(info, oldCol, args.Column, spec.NewColumns[0])
 
 	if et := ddl.needChangeColumnData(oldCol, newCol); et != bf.AlterTable {
 		return et, nil
@@ -1125,6 +1125,51 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	default:
 		return bf.AlterTable, nil
 	}
+}
+
+func (ddl *DDLWorker) normalizeModifyColumnEvent(
+	info *ddlInfo,
+	oldCol *table.Column,
+	jobCol *model.ColumnInfo,
+	specNewColumn *ast.ColumnDef,
+) *table.Column {
+	eventCol := table.ToColumn(jobCol.Clone())
+
+	// TiDB's modify-column job builder preserves existing key flags so the DDL can
+	// execute correctly. DM's incompatible-DDL classification is historical and
+	// spec-based: omitted key attributes in CHANGE/MODIFY COLUMN should still be
+	// treated as removals for event typing.
+	const indexFlagMask = mysql.PriKeyFlag | mysql.UniqueKeyFlag | mysql.MultipleKeyFlag
+	eventCol.DelFlag(indexFlagMask)
+	eventCol.AddFlag(specNewColumn.Tp.GetFlag() & indexFlagMask)
+
+	hasExplicitDefault := false
+	for _, opt := range specNewColumn.Options {
+		if opt.Tp == ast.ColumnOptionDefaultValue {
+			hasExplicitDefault = true
+			break
+		}
+	}
+	if !hasExplicitDefault {
+		// Preserve the tracked schema's default when the statement does not specify
+		// one. This matches DM's previous event classification semantics and avoids
+		// misclassifying a key drop as a default-value change after earlier skipped DDLs.
+		eventCol.DefaultValue = oldCol.DefaultValue
+		eventCol.DefaultValueBit = oldCol.DefaultValueBit
+		eventCol.DefaultIsExpr = oldCol.DefaultIsExpr
+	}
+
+	ddl.logger.Debug("normalized modify column event",
+		zap.String("origin_sql", info.originDDL),
+		zap.Uint64("old_flags", uint64(oldCol.GetFlag())),
+		zap.Uint64("job_flags", uint64(jobCol.GetFlag())),
+		zap.Uint64("event_flags", uint64(eventCol.GetFlag())),
+		zap.Any("old_default", oldCol.GetDefaultValue()),
+		zap.Any("job_default", jobCol.GetDefaultValue()),
+		zap.Any("event_default", eventCol.GetDefaultValue()),
+	)
+
+	return eventCol
 }
 
 // AstToDDLEvent returns filter.DDLEvent.
