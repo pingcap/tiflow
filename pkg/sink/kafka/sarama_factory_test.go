@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"context"
+	stdErrors "errors"
 	"sync"
 	"testing"
 	"time"
@@ -245,4 +246,145 @@ func TestSaramaAsyncProducerHeartbeat(t *testing.T) {
 		}
 	}()
 	drainWg.Wait()
+}
+
+type testSaramaClient struct {
+	sarama.Client
+	closeCalls int
+	closed     bool
+	closeErr   error
+	callOrder  *[]string
+	callLabel  string
+}
+
+func (c *testSaramaClient) Close() error {
+	c.closeCalls++
+	c.closed = true
+	if c.callOrder != nil {
+		*c.callOrder = append(*c.callOrder, c.callLabel)
+	}
+	return c.closeErr
+}
+
+func (c *testSaramaClient) Closed() bool {
+	return c.closed
+}
+
+type testSaramaClusterAdmin struct {
+	sarama.ClusterAdmin
+	closeCalls int
+	closeErr   error
+	callOrder  *[]string
+	callLabel  string
+}
+
+func (a *testSaramaClusterAdmin) Close() error {
+	a.closeCalls++
+	if a.callOrder != nil {
+		*a.callOrder = append(*a.callOrder, a.callLabel)
+	}
+	return a.closeErr
+}
+
+// TestSaramaFactoryAdminClientClosesClientOnAdminInitFailure verifies the
+// factory closes the raw sarama client when admin construction fails before any
+// wrapper takes ownership.
+func TestSaramaFactoryAdminClientClosesClientOnAdminInitFailure(t *testing.T) {
+	o := NewOptions()
+	o.Version = "2.0.0"
+	o.IsAssignedVersion = true
+	o.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	o.ClientID = "sarama-test"
+
+	factory, err := NewSaramaFactory(o, model.DefaultChangeFeedID("sarama-test"))
+	require.NoError(t, err)
+	saramaFactory, ok := factory.(*saramaFactory)
+	require.True(t, ok)
+
+	client := &testSaramaClient{}
+	oldClientCreator := newSaramaClientImpl
+	oldAdminCreator := newSaramaClusterAdminFromClientImpl
+	newSaramaClientImpl = func([]string, *sarama.Config) (sarama.Client, error) {
+		return client, nil
+	}
+	newSaramaClusterAdminFromClientImpl = func(sarama.Client) (sarama.ClusterAdmin, error) {
+		return nil, stdErrors.New("injected admin init failure")
+	}
+	defer func() {
+		newSaramaClientImpl = oldClientCreator
+		newSaramaClusterAdminFromClientImpl = oldAdminCreator
+	}()
+
+	_, err = saramaFactory.AdminClient(context.Background())
+	require.Error(t, err)
+	require.Equal(t, 1, client.closeCalls)
+	require.True(t, client.closed)
+}
+
+// TestSaramaFactorySyncProducerClosesClientOnInitFailure verifies the factory
+// releases the shared sarama client when sync producer construction fails.
+func TestSaramaFactorySyncProducerClosesClientOnInitFailure(t *testing.T) {
+	o := NewOptions()
+	o.Version = "2.0.0"
+	o.IsAssignedVersion = true
+	o.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	o.ClientID = "sarama-test"
+
+	factory, err := NewSaramaFactory(o, model.DefaultChangeFeedID("sarama-test"))
+	require.NoError(t, err)
+	saramaFactory, ok := factory.(*saramaFactory)
+	require.True(t, ok)
+
+	client := &testSaramaClient{}
+	oldClientCreator := newSaramaClientImpl
+	oldSyncCreator := newSaramaSyncProducerFromClientImpl
+	newSaramaClientImpl = func([]string, *sarama.Config) (sarama.Client, error) {
+		return client, nil
+	}
+	newSaramaSyncProducerFromClientImpl = func(sarama.Client) (sarama.SyncProducer, error) {
+		return nil, stdErrors.New("injected sync producer init failure")
+	}
+	defer func() {
+		newSaramaClientImpl = oldClientCreator
+		newSaramaSyncProducerFromClientImpl = oldSyncCreator
+	}()
+
+	_, err = saramaFactory.SyncProducer(context.Background())
+	require.Error(t, err)
+	require.Equal(t, 1, client.closeCalls)
+	require.True(t, client.closed)
+}
+
+// TestSaramaFactoryAsyncProducerClosesClientOnInitFailure verifies the factory
+// releases the shared sarama client when async producer construction fails.
+func TestSaramaFactoryAsyncProducerClosesClientOnInitFailure(t *testing.T) {
+	o := NewOptions()
+	o.Version = "2.0.0"
+	o.IsAssignedVersion = true
+	o.BrokerEndpoints = []string{"127.0.0.1:9092"}
+	o.ClientID = "sarama-test"
+
+	factory, err := NewSaramaFactory(o, model.DefaultChangeFeedID("sarama-test"))
+	require.NoError(t, err)
+	saramaFactory, ok := factory.(*saramaFactory)
+	require.True(t, ok)
+
+	client := &testSaramaClient{}
+	oldClientCreator := newSaramaClientImpl
+	oldAsyncCreator := newSaramaAsyncProducerFromClientImpl
+	newSaramaClientImpl = func([]string, *sarama.Config) (sarama.Client, error) {
+		return client, nil
+	}
+	newSaramaAsyncProducerFromClientImpl = func(sarama.Client) (sarama.AsyncProducer, error) {
+		return nil, stdErrors.New("injected async producer init failure")
+	}
+	defer func() {
+		newSaramaClientImpl = oldClientCreator
+		newSaramaAsyncProducerFromClientImpl = oldAsyncCreator
+	}()
+
+	_, err = saramaFactory.AsyncProducer(context.Background(), make(chan error, 1))
+	require.Error(t, err)
+	require.Equal(t, 1, client.closeCalls)
+	require.True(t, client.closed)
 }
