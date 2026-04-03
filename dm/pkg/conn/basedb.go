@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/go-sql-driver/mysql"
@@ -78,15 +79,35 @@ func DownstreamDBConfig(cfg *dbconfig.DBConfig) ScopedDBConfig {
 }
 
 func GetUpstreamDB(cfg *dbconfig.DBConfig) (*BaseDB, error) {
-	return DefaultDBProvider.Apply(UpstreamDBConfig(cfg))
+	return getDBWithTimeout(UpstreamDBConfig(cfg), netTimeout)
 }
 
 func GetDownstreamDB(cfg *dbconfig.DBConfig) (*BaseDB, error) {
-	return DefaultDBProvider.Apply(DownstreamDBConfig(cfg))
+	return getDBWithTimeout(DownstreamDBConfig(cfg), netTimeout)
+}
+
+func GetDownstreamDBWithTimeout(cfg *dbconfig.DBConfig, timeout time.Duration) (*BaseDB, error) {
+	return getDBWithTimeout(DownstreamDBConfig(cfg), timeout)
+}
+
+func getDBWithTimeout(config ScopedDBConfig, timeout time.Duration) (*BaseDB, error) {
+	type timeoutDBProvider interface {
+		ApplyWithPingTimeout(config ScopedDBConfig, timeout time.Duration) (*BaseDB, error)
+	}
+
+	if provider, ok := DefaultDBProvider.(timeoutDBProvider); ok {
+		return provider.ApplyWithPingTimeout(config, timeout)
+	}
+	return DefaultDBProvider.Apply(config)
 }
 
 // Apply will build BaseDB with DBConfig.
 func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
+	return d.ApplyWithPingTimeout(config, netTimeout)
+}
+
+// ApplyWithPingTimeout will build BaseDB with DBConfig and a custom ping timeout.
+func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, pingTimeout time.Duration) (*BaseDB, error) {
 	// maxAllowedPacket=0 can be used to automatically fetch the max_allowed_packet variable from server on every connection.
 	// https://github.com/go-sql-driver/mysql#maxallowedpacket
 	hostPort := net.JoinHostPort(config.Host, strconv.Itoa(config.Port))
@@ -158,7 +179,7 @@ func (d *DefaultDBProviderImpl) Apply(config ScopedDBConfig) (*BaseDB, error) {
 		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), netTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), pingTimeout)
 	defer cancel()
 	err = db.PingContext(ctx)
 	failpoint.Inject("failDBPing", func(_ failpoint.Value) {

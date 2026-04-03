@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/failpoint"
@@ -401,7 +402,14 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 
 	// delete
 	{
-		s.Nil(server.deleteTask(ctx, s.testTask.Name, true)) // delete with fore
+		s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData"))
+		s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError", `return(true)`))
+
+		s.NoError(server.deleteTask(ctx, s.testTask.Name, true))
+
+		s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError"))
+		s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData", `return(true)`))
+
 		taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
 		s.Nil(err)
 		s.Len(taskList, 0)
@@ -565,6 +573,48 @@ func (s *OpenAPIControllerSuite) TestTaskStatusSourceErrorFallback() {
 		s.Contains(*statusList[0].ErrorMsg, "subtask-raw-cause")
 		s.NotContains(*statusList[0].ErrorMsg, "dial tcp 127.0.0.1:3306")
 	}
+}
+
+func (s *OpenAPIControllerSuite) TestDeleteTaskUsesTimeoutForWholeDownstreamCleanup() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	worker1Name := "worker1"
+	worker1Addr := "172.16.10.72:8262"
+	s.NoError(server.scheduler.AddWorker(worker1Name, worker1Addr))
+	worker1 := server.scheduler.GetWorkerByName(worker1Name)
+	worker1.ToFree()
+
+	_, err := server.createSource(ctx, openapi.CreateSourceRequest{Source: *s.testSource, WorkerName: &worker1Name})
+	s.NoError(err)
+
+	task := *s.testTask
+	task.Name = "test-delete-task-timeout"
+	_, err = server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
+	s.NoError(err)
+
+	oldTimeout := openAPIDeleteTaskDownstreamTimeout
+	openAPIDeleteTaskDownstreamTimeout = 50 * time.Millisecond
+	defer func() {
+		openAPIDeleteTaskDownstreamTimeout = oldTimeout
+	}()
+
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockBlockOnDownstreamMetaDataCleanup", `return(200)`))
+	defer func() {
+		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockBlockOnDownstreamMetaDataCleanup"))
+	}()
+
+	start := time.Now()
+	s.NoError(server.deleteTask(context.Background(), task.Name, true))
+	s.Less(time.Since(start), 150*time.Millisecond)
+
+	taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
+	s.NoError(err)
+	s.Len(taskList, 0)
 }
 
 func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
