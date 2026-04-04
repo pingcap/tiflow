@@ -130,6 +130,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, job.BinlogInfo.TableInfo.Name.O, tableInfos[0].TableName.Table)
 	// add normal table
 	job = helper.DDL2Job("create table test.t1(id int primary key)")
+	tableIDT1 := job.BinlogInfo.TableInfo.ID
 	require.Nil(t, schema.HandleDDLJob(job))
 	tableInfos, err = schema.AllTables(context.Background(), job.BinlogInfo.FinishedTS)
 	require.Nil(t, err)
@@ -138,7 +139,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 112,
+		TableID: tableIDT1,
 	}, tableName)
 	// add ineligible table
 	job = helper.DDL2Job("create table test.t2(id int)")
@@ -150,7 +151,7 @@ func TestAllTables(t *testing.T) {
 	require.Equal(t, model.TableName{
 		Schema:  "test",
 		Table:   "t1",
-		TableID: 112,
+		TableID: tableIDT1,
 	}, tableName)
 }
 

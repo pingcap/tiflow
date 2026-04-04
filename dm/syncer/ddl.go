@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
@@ -29,6 +30,7 @@ import (
 	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
@@ -1076,27 +1078,35 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	if oldCol == nil {
 		return bf.AlterTable, nil
 	}
-	newCol := table.ToColumn(&model.ColumnInfo{
-		ID:                    oldCol.ID,
-		Offset:                oldCol.Offset,
-		State:                 oldCol.State,
-		OriginDefaultValue:    oldCol.OriginDefaultValue,
-		OriginDefaultValueBit: oldCol.OriginDefaultValueBit,
-		FieldType:             *spec.NewColumns[0].Tp,
-		Name:                  spec.NewColumns[0].Name.Name,
-		Version:               oldCol.Version,
-	})
 
-	// handle charset and collation
-	if err := tidbddl.ProcessColumnCharsetAndCollation(metabuild.NewContext(), oldCol, newCol, ti, spec.NewColumns[0], di); err != nil {
-		ddl.logger.Warn("process column charset and collation failed", zap.Error(err))
+	// Let TiDB build the post-DDL column definition so we stay compatible with its internal
+	// modify-column handling even when lower-level helpers stop being exported.
+	mockCtx := tidbmock.NewContext()
+	mockCtx.GetSessionVars().AllowRemoveAutoInc = true
+	jobW, err := tidbddl.GetModifiableColumnJob(
+		qec.tctx.Ctx,
+		mockCtx,
+		nil,
+		ast.Ident{Schema: di.Name, Name: ti.Name},
+		oldColumnName.Name,
+		di,
+		tbl,
+		spec,
+	)
+	if err != nil {
+		if et, ok := ddl.classifyUnsupportedModifyColumnEvent(info, oldCol, ti, di, spec.NewColumns[0], err); ok {
+			return et, nil
+		}
+		ddl.logger.Warn("build modifiable column job failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
-	// handle column options
-	if err := tidbddl.ProcessModifyColumnOptions(tidbmock.NewContext(), newCol, spec.NewColumns[0].Options); err != nil {
-		ddl.logger.Warn("process column options failed", zap.Error(err))
+	args, ok := jobW.JobArgs.(*model.ModifyColumnArgs)
+	if !ok || args.Column == nil {
+		err := fmt.Errorf("unexpected modify column job args: %T", jobW.JobArgs)
+		ddl.logger.Warn("get modifiable column failed", zap.Error(err))
 		return bf.AlterTable, err
 	}
+	newCol := ddl.normalizeModifyColumnEvent(info, oldCol, args.Column, spec.NewColumns[0])
 
 	if et := ddl.needChangeColumnData(oldCol, newCol); et != bf.AlterTable {
 		return et, nil
@@ -1121,6 +1131,95 @@ func (ddl *DDLWorker) handleModifyColumn(qec *queryEventContext, info *ddlInfo, 
 	default:
 		return bf.AlterTable, nil
 	}
+}
+
+func (ddl *DDLWorker) classifyUnsupportedModifyColumnEvent(
+	info *ddlInfo,
+	oldCol *table.Column,
+	ti *model.TableInfo,
+	di *model.DBInfo,
+	specNewColumn *ast.ColumnDef,
+	jobErr error,
+) (bf.EventType, bool) {
+	cause := errors.Cause(jobErr)
+	if !dbterror.ErrUnsupportedModifyCharset.Equal(cause) && !dbterror.ErrUnsupportedModifyCollation.Equal(cause) {
+		return bf.AlterTable, false
+	}
+
+	// Newer TiDB rejects some MODIFY/CHANGE COLUMN charset transitions while DM still
+	// needs the historical event type so binlog-filter can block them before tracker/execution.
+	newCol := table.ToColumn(&model.ColumnInfo{
+		ID:                    oldCol.ID,
+		Offset:                oldCol.Offset,
+		State:                 oldCol.State,
+		OriginDefaultValue:    oldCol.OriginDefaultValue,
+		OriginDefaultValueBit: oldCol.OriginDefaultValueBit,
+		FieldType:             *specNewColumn.Tp,
+		Name:                  specNewColumn.Name.Name,
+		Version:               oldCol.Version,
+	})
+	if err := tidbddl.ProcessColumnCharsetAndCollation(metabuild.NewContext(), oldCol, newCol, ti, specNewColumn, di); err != nil {
+		ddl.logger.Warn("fallback classify modify column charset/collation failed",
+			zap.String("origin_sql", info.originDDL),
+			zap.Error(jobErr),
+			zap.Error(err),
+		)
+		return bf.AlterTable, false
+	}
+
+	switch {
+	case oldCol.GetCharset() != newCol.GetCharset():
+		return bf.ModifyCharset, true
+	case oldCol.GetCollate() != newCol.GetCollate():
+		return bf.ModifyCollation, true
+	default:
+		return bf.AlterTable, false
+	}
+}
+
+func (ddl *DDLWorker) normalizeModifyColumnEvent(
+	info *ddlInfo,
+	oldCol *table.Column,
+	jobCol *model.ColumnInfo,
+	specNewColumn *ast.ColumnDef,
+) *table.Column {
+	eventCol := table.ToColumn(jobCol.Clone())
+
+	// TiDB's modify-column job builder preserves existing key flags so the DDL can
+	// execute correctly. DM's incompatible-DDL classification is historical and
+	// spec-based: omitted key attributes in CHANGE/MODIFY COLUMN should still be
+	// treated as removals for event typing.
+	const indexFlagMask = mysql.PriKeyFlag | mysql.UniqueKeyFlag | mysql.MultipleKeyFlag
+	eventCol.DelFlag(indexFlagMask)
+	eventCol.AddFlag(specNewColumn.Tp.GetFlag() & indexFlagMask)
+
+	hasExplicitDefault := false
+	for _, opt := range specNewColumn.Options {
+		if opt.Tp == ast.ColumnOptionDefaultValue {
+			hasExplicitDefault = true
+			break
+		}
+	}
+	if !hasExplicitDefault {
+		// Preserve the tracked schema's default when the statement does not specify
+		// one. This matches DM's previous event classification semantics and avoids
+		// misclassifying a key drop as a default-value change after earlier skipped DDLs.
+		eventCol.DefaultValue = oldCol.DefaultValue
+		eventCol.DefaultValueBit = oldCol.DefaultValueBit
+		eventCol.DefaultIsExpr = oldCol.DefaultIsExpr
+	}
+
+	ddl.logger.Debug("normalized modify column event",
+		zap.String("origin_sql", info.originDDL),
+		zap.Uint64("old_flags", uint64(oldCol.GetFlag())),
+		zap.Uint64("job_flags", uint64(jobCol.GetFlag())),
+		zap.Uint64("event_flags", uint64(eventCol.GetFlag())),
+		zap.Any("old_default", oldCol.GetDefaultValue()),
+		zap.Any("job_default", jobCol.GetDefaultValue()),
+		zap.Any("event_default", eventCol.GetDefaultValue()),
+	)
+
+	return eventCol
 }
 
 // AstToDDLEvent returns filter.DDLEvent.

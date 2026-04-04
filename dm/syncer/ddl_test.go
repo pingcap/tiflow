@@ -22,8 +22,13 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/check"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	fieldtypes "github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/table"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
@@ -36,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
@@ -839,6 +845,110 @@ func TestAdjustCollation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedSQLs[i], routedDDL)
 	}
+}
+
+func TestNormalizeModifyColumnEventPrefersDropUniqueOverDefault(t *testing.T) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestNormalizeModifyColumnEventPrefersDropUniqueOverDefault")))
+	ddlWorker := &DDLWorker{logger: tctx.Logger}
+
+	p := parser.New()
+	stmt, err := p.ParseOneStmt("alter table test.t change c_int c_int int", "", "")
+	require.NoError(t, err)
+	alterStmt, ok := stmt.(*ast.AlterTableStmt)
+	require.True(t, ok)
+	require.Len(t, alterStmt.Specs, 1)
+	spec := alterStmt.Specs[0]
+
+	oldCol := table.ToColumn(&model.ColumnInfo{
+		ID:                 1,
+		Name:               pmodel.NewCIStr("c_int"),
+		Offset:             0,
+		DefaultValue:       int64(1),
+		OriginDefaultValue: int64(1),
+		FieldType:          *fieldtypes.NewFieldType(tmysql.TypeLong),
+	})
+	oldCol.AddFlag(tmysql.UniqueKeyFlag)
+
+	jobCol := oldCol.ColumnInfo.Clone()
+	jobCol.DefaultValue = nil
+
+	eventCol := ddlWorker.normalizeModifyColumnEvent(&ddlInfo{originDDL: "alter table test.t change c_int c_int int"}, oldCol, jobCol, spec.NewColumns[0])
+	require.Equal(t, oldCol.GetDefaultValue(), eventCol.GetDefaultValue())
+	require.False(t, tmysql.HasUniKeyFlag(eventCol.GetFlag()))
+
+	eventType := ddlWorker.needChangeColumnData(oldCol, eventCol)
+	if eventType == bf.AlterTable {
+		switch {
+		case tmysql.HasAutoIncrementFlag(oldCol.GetFlag()) && !tmysql.HasAutoIncrementFlag(eventCol.GetFlag()):
+			eventType = bf.RemoveAutoIncrement
+		case tmysql.HasPriKeyFlag(oldCol.GetFlag()) && !tmysql.HasPriKeyFlag(eventCol.GetFlag()):
+			eventType = bf.DropPrimaryKey
+		case tmysql.HasUniKeyFlag(oldCol.GetFlag()) && !tmysql.HasUniKeyFlag(eventCol.GetFlag()):
+			eventType = bf.DropUniqueKey
+		case oldCol.GetDefaultValue() != eventCol.GetDefaultValue():
+			eventType = bf.ModifyDefaultValue
+		}
+	}
+	require.Equal(t, bf.DropUniqueKey, eventType)
+}
+
+func TestClassifyUnsupportedModifyColumnEventAsModifyCharset(t *testing.T) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestClassifyUnsupportedModifyColumnEventAsModifyCharset")))
+
+	tableInfo := &model.TableInfo{
+		ID:      1,
+		Name:    pmodel.NewCIStr("t"),
+		Charset: "utf8mb4",
+		Collate: "utf8mb4_bin",
+		State:   model.StatePublic,
+		Columns: []*model.ColumnInfo{
+			{
+				ID:        1,
+				Name:      pmodel.NewCIStr("c_char"),
+				Offset:    0,
+				State:     model.StatePublic,
+				FieldType: *fieldtypes.NewFieldType(tmysql.TypeString),
+			},
+		},
+	}
+	tableInfo.Columns[0].SetCharset("utf8mb4")
+	tableInfo.Columns[0].SetCollate("utf8mb4_bin")
+
+	dbInfo := &model.DBInfo{
+		Name:    pmodel.NewCIStr("test"),
+		Charset: "utf8mb4",
+		Collate: "utf8mb4_bin",
+	}
+
+	ddlWorker := &DDLWorker{
+		logger: tctx.Logger,
+		getTableInfo: func(_ *tcontext.Context, _, _ *filter.Table) (*model.TableInfo, error) {
+			return tableInfo.Clone(), nil
+		},
+		getDBInfoFromDownstream: func(_ *tcontext.Context, _, _ *filter.Table) (*model.DBInfo, error) {
+			return dbInfo, nil
+		},
+	}
+
+	p := parser.New()
+	stmt, err := p.ParseOneStmt("alter table test.t modify c_char char(4) character set latin1", "", "")
+	require.NoError(t, err)
+	alterStmt, ok := stmt.(*ast.AlterTableStmt)
+	require.True(t, ok)
+	require.Len(t, alterStmt.Specs, 1)
+
+	qec := &queryEventContext{
+		eventContext: &eventContext{tctx: tctx},
+	}
+	info := &ddlInfo{
+		originDDL:    "alter table test.t modify c_char char(4) character set latin1",
+		sourceTables: []*filter.Table{{Schema: "test", Name: "t"}},
+		targetTables: []*filter.Table{{Schema: "test", Name: "t"}},
+	}
+
+	eventType, err := ddlWorker.handleModifyColumn(qec, info, alterStmt.Specs[0])
+	require.NoError(t, err)
+	require.Equal(t, bf.ModifyCharset, eventType)
 }
 
 type mockOnlinePlugin struct {
