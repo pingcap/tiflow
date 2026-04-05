@@ -25,76 +25,14 @@ import (
 	"go.uber.org/zap"
 )
 
-const timeout = 5 * time.Second
-
-// TODO: Use the flollowing SQL to check the ddl job status after tidb optimize
-// the information_schema.ddl_jobs table. Ref: https://github.com/pingcap/tidb/issues/55725
-//
-// SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
-// FROM information_schema.ddl_jobs
 var checkRunningAddIndexSQL = `
-ADMIN SHOW DDL JOBS 1
+SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY
+FROM information_schema.ddl_jobs
 WHERE DB_NAME = "%s"
     AND TABLE_NAME = "%s"
     AND JOB_TYPE LIKE "add index%%"
     AND (STATE = "running" OR STATE = "queueing");
 `
-
-func (m *DDLSink) shouldAsyncExecDDL(ddl *model.DDLEvent) bool {
-	return m.cfg.IsTiDB && ddl.Type == timodel.ActionAddIndex
-}
-
-// asyncExecDDL executes ddl in async mode.
-// this function only works in TiDB, because TiDB will save ddl jobs
-// and execute them asynchronously even if ticdc crashed.
-func (m *DDLSink) asyncExecDDL(ctx context.Context, ddl *model.DDLEvent) error {
-	done := make(chan error, 1)
-	// Use a longer timeout to ensure the add index ddl is sent to tidb before executing the next ddl.
-	tick := time.NewTimer(10 * time.Second)
-	defer tick.Stop()
-	log.Info("async exec add index ddl start",
-		zap.String("changefeedID", m.id.String()),
-		zap.Uint64("commitTs", ddl.CommitTs),
-		zap.String("ddl", ddl.Query))
-	go func() {
-		if err := m.execDDLWithMaxRetries(ctx, ddl); err != nil {
-			log.Error("async exec add index ddl failed",
-				zap.String("changefeedID", m.id.String()),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("ddl", ddl.Query))
-			done <- err
-			return
-		}
-		log.Info("async exec add index ddl done",
-			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("ddl", ddl.Query))
-		done <- nil
-	}()
-
-	select {
-	case <-ctx.Done():
-		// if the ddl is canceled, we just return nil, if the ddl is not received by tidb,
-		// the downstream ddl is lost, because the checkpoint ts is forwarded.
-		log.Info("async add index ddl exits as canceled",
-			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("ddl", ddl.Query))
-		return nil
-	case err := <-done:
-		// if the ddl is executed within 2 seconds, we just return the result to the caller.
-		return err
-	case <-tick.C:
-		// if the ddl is still running, we just return nil,
-		// then if the ddl is failed, the downstream ddl is lost.
-		// because the checkpoint ts is forwarded.
-		log.Info("async add index ddl is still running",
-			zap.String("changefeedID", m.id.String()),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("ddl", ddl.Query))
-		return nil
-	}
-}
 
 func (m *DDLSink) needWaitAsyncExecDone(t timodel.ActionType) bool {
 	if !m.cfg.IsTiDB {
@@ -110,7 +48,7 @@ func (m *DDLSink) needWaitAsyncExecDone(t timodel.ActionType) bool {
 	}
 }
 
-// Should always wait for async ddl done before executing the next ddl.
+// wait for the previous asynchronous DDL to finish before executing the next ddl.
 func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 	if !m.needWaitAsyncExecDone(ddl.Type) {
 		return
@@ -124,10 +62,11 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		tables[ddl.PreTableInfo.TableName] = struct{}{}
 	}
 
-	log.Debug("wait async exec ddl done",
+	log.Debug("Wait for the previous asynchronous DDL to finish",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
-		zap.Any("tables", tables),
+		zap.Any("tableInfo", ddl.TableInfo),
+		zap.Any("preTableInfo", ddl.PreTableInfo),
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("ddl", ddl.Query))
 	if len(tables) == 0 || m.checkAsyncExecDDLDone(ctx, tables) {
@@ -150,7 +89,7 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 }
 
 func (m *DDLSink) checkAsyncExecDDLDone(ctx context.Context, tables map[model.TableName]struct{}) bool {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	for table := range tables {
 		done := m.doCheck(ctx, table)
@@ -163,16 +102,6 @@ func (m *DDLSink) checkAsyncExecDDLDone(ctx context.Context, tables map[model.Ta
 
 func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool) {
 	start := time.Now()
-	if v, ok := m.lastExecutedNormalDDLCache.Get(table); ok {
-		ddlType := v.(timodel.ActionType)
-		if ddlType == timodel.ActionAddIndex {
-			log.Panic("invalid ddl type in lastExecutedNormalDDLCache",
-				zap.String("namespace", m.id.Namespace),
-				zap.String("changefeed", m.id.ID),
-				zap.String("ddlType", ddlType.String()))
-		}
-		return true
-	}
 
 	rows, err := m.db.QueryContext(ctx, fmt.Sprintf(checkRunningAddIndexSQL, table.Schema, table.Table))
 	defer func() {
@@ -181,7 +110,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 		}
 	}()
 	if err != nil {
-		log.Error("check async exec ddl failed",
+		log.Error("check previous asynchronous ddl failed",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
 			zap.Error(err))
@@ -189,7 +118,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 	}
 	rets, err := export.GetSpecifiedColumnValuesAndClose(rows, "JOB_ID", "JOB_TYPE", "SCHEMA_STATE", "STATE")
 	if err != nil {
-		log.Error("check async exec ddl failed",
+		log.Error("check previous asynchronous ddl failed",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
 			zap.Error(err))
@@ -201,7 +130,7 @@ func (m *DDLSink) doCheck(ctx context.Context, table model.TableName) (done bool
 	}
 	ret := rets[0]
 	jobID, jobType, schemaState, state := ret[0], ret[1], ret[2], ret[3]
-	log.Info("async ddl is still running",
+	log.Info("The previous asynchronous ddl is still running",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
 		zap.Duration("checkDuration", time.Since(start)),
