@@ -160,14 +160,6 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	}
 	t.replicateTs.Store(ts)
 
-	log.Info("Sink is started",
-		zap.String("namespace", t.changefeed.Namespace),
-		zap.String("changefeed", t.changefeed.ID),
-		zap.Stringer("span", &t.span),
-		zap.Uint64("startTs", startTs),
-		zap.Uint64("replicateTs", ts),
-	)
-
 	// This start ts maybe greater than the initial start ts of the table sink.
 	// Because in two phase scheduling, the table sink may be advanced to a later ts.
 	// And we can just continue to replicate the table sink from the new start ts.

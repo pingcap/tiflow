@@ -908,9 +908,8 @@ func (r *ReplicationSet) handleAddTable(
 func (r *ReplicationSet) handleMoveTable(
 	dest model.CaptureID,
 ) ([]*schedulepb.Message, error) {
-	// Ignore move table if it has been removed already.
 	if r.hasRemoved() {
-		log.Warn("schedulerv3: move table is ignored",
+		log.Warn("schedulerv3: move table is ignored, since it removed already",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Int64("tableID", r.Span.TableID),
@@ -921,7 +920,7 @@ func (r *ReplicationSet) handleMoveTable(
 	// 1) it's not in Replicating state or
 	// 2) the dest capture is the primary.
 	if r.State != ReplicationSetStateReplicating || r.Primary == dest {
-		log.Warn("schedulerv3: move table is ignored",
+		log.Warn("schedulerv3: move table is ignored, since it's not replicating or the primary is the same as the move destination",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Int64("tableID", r.Span.TableID),
