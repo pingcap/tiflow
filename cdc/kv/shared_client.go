@@ -832,13 +832,10 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		log.Info("event feed starts to check locked regions",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID))
 
 		currTime := s.pdClock.CurrentTime()
-		s.totalSpans.RLock()
 		var slowInitializeRegionCount int
+		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.IterAll(nil)
 			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
