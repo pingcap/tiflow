@@ -176,11 +176,21 @@ func (a *saramaAdminClient) CreateTopic(
 }
 
 func (a *saramaAdminClient) Close() {
-	if err := a.admin.Close(); err != nil {
-		log.Warn("close admin client meet error",
-			zap.String("namespace", a.changefeed.Namespace),
-			zap.String("changefeed", a.changefeed.ID),
-			zap.Error(err))
+	if a.admin != nil {
+		if err := a.admin.Close(); err != nil {
+			log.Warn("close admin client meet error",
+				zap.String("namespace", a.changefeed.Namespace),
+				zap.String("changefeed", a.changefeed.ID),
+				zap.Error(err))
+		}
+	}
+	if a.client != nil {
+		if err := a.client.Close(); err != nil && err != sarama.ErrClosedClient {
+			log.Warn("close admin client connection meet error",
+				zap.String("namespace", a.changefeed.Namespace),
+				zap.String("changefeed", a.changefeed.ID),
+				zap.Error(err))
+		}
 	}
 }
 

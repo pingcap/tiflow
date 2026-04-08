@@ -60,19 +60,18 @@ type SyncProducer interface {
 	// HeartbeatBrokers sends heartbeat to all brokers to keep the connection alive.
 	HeartbeatBrokers()
 
-	// Close shuts down the producer; you must call this function before a producer
-	// object passes out of scope, as it may otherwise leak memory.
-	// You must call this before calling Close on the underlying client.
+	// Close shuts down the producer and releases the client owned by this wrapper.
+	// You must call this function before the producer passes out of scope, as it
+	// may otherwise leak memory.
 	Close()
 }
 
 // AsyncProducer is the kafka async producer
 type AsyncProducer interface {
-	// Close shuts down the producer and waits for any buffered messages to be
-	// flushed. You must call this function before a producer object passes out of
+	// Close shuts down the producer and releases the client owned by this
+	// wrapper. You must call this function before the producer passes out of
 	// scope, as it may otherwise leak memory. You must call this before process
-	// shutting down, or you may lose messages. You must call this before calling
-	// Close on the underlying client.
+	// shutting down, or you may lose messages.
 	Close()
 
 	// AsyncSend is the input channel for the user to write messages to that they
@@ -133,6 +132,7 @@ func (p *saramaSyncProducer) HeartbeatBrokers() {
 }
 
 func (p *saramaSyncProducer) Close() {
+<<<<<<< HEAD
 	go func() {
 		// We need to close it asynchronously. Otherwise, we might get stuck
 		// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
@@ -172,6 +172,37 @@ func (p *saramaSyncProducer) Close() {
 				zap.Duration("duration", time.Since(start)))
 		}
 	}()
+=======
+	start := time.Now()
+	err := p.producer.Close()
+	if err != nil {
+		log.Error("Close Kafka DDL producer with error",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
+	} else {
+		log.Info("Kafka DDL producer closed",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.Duration("duration", time.Since(start)))
+	}
+
+	start = time.Now()
+	err = p.client.Close()
+	if err != nil && err != sarama.ErrClosedClient {
+		log.Error("Close Kafka DDL producer client with error",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.Duration("duration", time.Since(start)),
+			zap.Error(err))
+	} else {
+		log.Info("Kafka DDL producer client closed",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.Duration("duration", time.Since(start)))
+	}
+>>>>>>> 9fbde6ebeb (kafka(ticdc): close sarama clients on init failures (#12573))
 }
 
 type saramaAsyncProducer struct {
