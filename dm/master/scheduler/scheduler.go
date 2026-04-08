@@ -96,7 +96,8 @@ const (
 type Scheduler struct {
 	mu sync.RWMutex
 
-	logger log.Logger
+	logger      log.Logger
+	retryLogger *zap.Logger
 
 	started atomic.Bool // whether the scheduler already started for work.
 	cancel  context.CancelFunc
@@ -203,8 +204,10 @@ type Scheduler struct {
 
 // NewScheduler creates a new scheduler instance.
 func NewScheduler(pLogger *log.Logger, securityCfg security.Security) *Scheduler {
+	logger := pLogger.WithFields(zap.String("component", "scheduler"))
 	return &Scheduler{
-		logger:            pLogger.WithFields(zap.String("component", "scheduler")),
+		logger:            logger,
+		retryLogger:       log.NewRetrySampleLogger(logger),
 		subtaskLatch:      newLatches(),
 		sourceCfgs:        make(map[string]*config.SourceConfig),
 		workers:           make(map[string]*Worker),
@@ -2108,7 +2111,7 @@ func (s *Scheduler) observeWorkerEvent(ctx context.Context, rev int64) error {
 				case <-time.After(500 * time.Millisecond):
 					rev, err = s.resetWorkerEv()
 					if err != nil {
-						log.L().Error("resetWorkerEv is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+						s.retryLogger.Error("resetWorkerEv is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
 				}
 				retryNum++
@@ -2563,7 +2566,7 @@ func (s *Scheduler) observeLoadTask(ctx context.Context, rev int64) error {
 				case <-time.After(500 * time.Millisecond):
 					rev, err = s.recoverLoadTasks(true)
 					if err != nil {
-						log.L().Error("resetLoadTask is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+						s.retryLogger.Error("resetLoadTask is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
 				}
 				retryNum++

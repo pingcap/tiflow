@@ -66,6 +66,8 @@ type SourceWorker struct {
 
 	l log.Logger
 
+	retryLogger *zap.Logger
+
 	sourceStatus atomic.Value // stores a pointer to SourceStatus
 	// sourceStatusErr stores latest error when updating sourceStatus (if any).
 	sourceStatusErr atomic.Pointer[sourceStatusErrState]
@@ -108,10 +110,12 @@ func NewSourceWorker(
 	name string,
 	relayDir string,
 ) (w *SourceWorker, err error) {
+	logger := log.With(zap.String("component", "worker controller"))
 	w = &SourceWorker{
 		cfg:           cfg,
 		subTaskHolder: newSubTaskHolder(),
-		l:             log.With(zap.String("component", "worker controller")),
+		l:             logger,
+		retryLogger:   log.NewRetrySampleLogger(logger, zap.String("worker", name), zap.String("sourceID", cfg.SourceID)),
 		etcdClient:    etcdClient,
 		name:          name,
 		relayDir:      relayDir,
@@ -833,7 +837,7 @@ func (w *SourceWorker) observeSubtaskStage(ctx context.Context, etcdCli *clientv
 				case <-time.After(500 * time.Millisecond):
 					rev, err = w.resetSubtaskStage()
 					if err != nil {
-						log.L().Error("resetSubtaskStage is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+						w.retryLogger.Error("resetSubtaskStage is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
 				}
 				retryNum++
@@ -973,7 +977,7 @@ func (w *SourceWorker) observeRelayStage(ctx context.Context, etcdCli *clientv3.
 				case <-time.After(500 * time.Millisecond):
 					stage, rev1, err1 := ha.GetRelayStage(etcdCli, w.cfg.SourceID)
 					if err1 != nil {
-						log.L().Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
+						w.retryLogger.Error("get relay stage from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						break
 					}
 					rev = rev1
@@ -1252,7 +1256,7 @@ func (w *SourceWorker) observeValidatorStage(ctx context.Context, lastUsedRev in
 					w.RUnlock()
 					startRevision, err = w.getCurrentValidatorRevision(sourceID)
 					if err != nil {
-						log.L().Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+						w.retryLogger.Error("reset validator stage failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					}
 				}
 				retryNum++

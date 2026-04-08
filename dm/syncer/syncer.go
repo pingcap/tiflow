@@ -260,6 +260,7 @@ type Syncer struct {
 	idAndCollationMap          map[int]string
 
 	ddlWorker            *DDLWorker
+	fetchBinlogLogger    *zap.Logger
 	unhandledEventLogger *zap.Logger
 }
 
@@ -296,6 +297,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	syncer.checkpoint = NewRemoteCheckPoint(syncer.tctx, cfg, syncer.metricsProxies, syncer.checkpointID())
 
 	syncer.binlogType = binlogstream.RelayToBinlogType(relay)
+	syncer.fetchBinlogLogger = log.NewRetrySampleLogger(logger, zap.String("binlogType", syncer.binlogType.String()))
 	syncer.readerHub = streamer.GetReaderHub()
 
 	if cfg.ShardMode == config.ShardPessimistic {
@@ -2214,7 +2216,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		if err != nil {
-			s.tctx.L().Error("fail to fetch binlog", log.ShortError(err))
+			s.fetchBinlogLogger.Error("fail to fetch binlog", log.ShortError(err))
 
 			if isConnectionRefusedError(err) {
 				return err

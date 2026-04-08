@@ -92,12 +92,19 @@ type Server struct {
 	worker *SourceWorker
 	// relay status will never be put in server.sourceStatus
 	sourceStatus pb.SourceStatus
+
+	retryLogger *zap.Logger
 }
 
 // NewServer creates a new Server.
 func NewServer(cfg *Config) *Server {
+	retryLogger := log.With(
+		zap.String("component", "worker server"),
+		zap.String("worker", cfg.Name),
+	)
 	s := Server{
-		cfg: cfg,
+		cfg:         cfg,
+		retryLogger: log.NewRetrySampleLogger(retryLogger),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.closed.Store(true) // not start yet
@@ -323,7 +330,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 				case <-time.After(500 * time.Millisecond):
 					relaySource, rev1, err1 := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
 					if err1 != nil {
-						log.L().Error("get relay config from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
+						s.retryLogger.Error("get relay config from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++
 						if retryNum > retryGetRelayConfig && etcdutil.IsLimitedRetryableError(err1) {
 							return err1
@@ -416,7 +423,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 				case <-time.After(500 * time.Millisecond):
 					bound, cfg, rev1, err1 := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
 					if err1 != nil {
-						log.L().Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
+						s.retryLogger.Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++
 						if retryNum > retryGetSourceBoundConfig && etcdutil.IsLimitedRetryableError(err1) {
 							return err1
