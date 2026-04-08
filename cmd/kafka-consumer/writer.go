@@ -99,13 +99,10 @@ func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Of
 			zap.Uint64("watermark", newWatermark))
 		return
 	}
-	if offset > p.watermarkOffset {
-		log.Panic("partition resolved ts fallback",
-			zap.Int32("partition", p.partition),
-			zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
-	}
-	log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+	// TiCDC only guarantees at-least-once delivery. A replayed resolved event can
+	// be appended to Kafka again with a newer offset, so any fallback watermark
+	// must be treated as a duplicate instead of a fatal ordering bug.
+	log.Warn("partition resolved ts fall back, ignore it since duplicate delivery may replay an old resolved ts",
 		zap.Int32("partition", p.partition),
 		zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
 		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
@@ -127,6 +124,21 @@ type writer struct {
 	progresses  []*partitionProgress
 
 	eventRouter *dispatcher.EventRouter
+}
+
+// isEquivalentDDLEvent checks whether two DDL events represent the same logical
+// DDL, even if they were decoded from different replayed Kafka messages.
+// Seq keeps split DDLs with the same commitTs distinct.
+func isEquivalentDDLEvent(left, right *model.DDLEvent) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.StartTs == right.StartTs &&
+		left.CommitTs == right.CommitTs &&
+		left.Query == right.Query &&
+		left.Seq == right.Seq &&
+		left.Type == right.Type &&
+		left.IsBootstrap == right.IsBootstrap
 }
 
 func newWriter(ctx context.Context, o *option) *writer {
@@ -204,7 +216,7 @@ func (w *writer) appendDDL(ddl *model.DDLEvent, offset kafka.Offset) {
 	// A rename tables DDL job contains multiple DDL events with same CommitTs.
 	// So to tell if a DDL is redundant or not, we must check the equivalence of
 	// the current DDL and the DDL with max CommitTs.
-	if ddl == w.ddlWithMaxCommitTs {
+	if isEquivalentDDLEvent(ddl, w.ddlWithMaxCommitTs) {
 		log.Warn("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
