@@ -52,6 +52,13 @@ type ClusterAdminClient interface {
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
 
+<<<<<<< HEAD
 	// Close shuts down the admin client.
+=======
+	// HeartbeatBroker sends a heartbeat to all brokers to keep the kafka connection alive.
+	HeartbeatBrokers()
+
+	// Close shuts down the admin client and releases any owned underlying client connections.
+>>>>>>> 9fbde6ebeb (kafka(ticdc): close sarama clients on init failures (#12573))
 	Close()
 }
