@@ -1266,3 +1266,48 @@ func TestMariaDBCompatConfigAdjustRejectsConflictingRuleDirectives(t *testing.T)
 	err := cfg.Adjust()
 	require.ErrorContains(t, err, `mariadb-compat rule "Collation" cannot be both enabled and disabled`)
 }
+
+func TestMariaDBCompatConfigEnabledForFlavor(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		mode   string
+		flavor string
+		want   bool
+	}{
+		{
+			name:   "auto-mariadb-enabled",
+			mode:   MariaDBCompatModeAuto,
+			flavor: "mariadb",
+			want:   true,
+		},
+		{
+			name:   "auto-mysql-disabled",
+			mode:   MariaDBCompatModeAuto,
+			flavor: "mysql",
+			want:   false,
+		},
+		{
+			name:   "on-mysql-enabled",
+			mode:   MariaDBCompatModeOn,
+			flavor: "mysql",
+			want:   true,
+		},
+		{
+			name:   "off-mariadb-disabled",
+			mode:   MariaDBCompatModeOff,
+			flavor: "mariadb",
+			want:   false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := MariaDBCompatConfig{Mode: tc.mode}
+			require.NoError(t, cfg.Adjust())
+			require.Equal(t, tc.want, cfg.EnabledForFlavor(tc.flavor))
+		})
+	}
+}

@@ -25,7 +25,7 @@ import (
 )
 
 func (l *LightningLoader) maybeTransformSchemaFiles(ctx context.Context) error {
-	if l.cfg == nil || !mariadbcompat.EnabledForFlavor(l.cfg.Flavor) {
+	if l.cfg == nil || !l.cfg.MariaDBCompat.EnabledForFlavor(l.cfg.Flavor) {
 		return nil
 	}
 

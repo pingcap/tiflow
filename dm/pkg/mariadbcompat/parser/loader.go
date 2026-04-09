@@ -284,14 +284,18 @@ func (l *Loader) applyCharsetMappings(sql string) string {
 }
 
 func stripIndexOptions(sql string) string {
-	sql = notIgnoredIndexRegex.ReplaceAllString(sql, " ")
-	sql = ignoredIndexRegex.ReplaceAllString(sql, " ")
-	sql = withoutOverlapsRegex.ReplaceAllString(sql, " ")
-	return sql
+	return rules.TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		segment = notIgnoredIndexRegex.ReplaceAllString(segment, " ")
+		segment = ignoredIndexRegex.ReplaceAllString(segment, " ")
+		segment = withoutOverlapsRegex.ReplaceAllString(segment, " ")
+		return segment
+	})
 }
 
 func stripSpatialIndexKeywords(sql string) string {
-	return spatialIndexRegex.ReplaceAllString(sql, "$1")
+	return rules.TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		return spatialIndexRegex.ReplaceAllString(segment, "$1")
+	})
 }
 
 // isSpace reports whether b is an ASCII whitespace character.

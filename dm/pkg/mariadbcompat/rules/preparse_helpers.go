@@ -27,6 +27,11 @@ type rawStatement struct {
 	originPos int
 }
 
+type sqlSegment struct {
+	text   string
+	isCode bool
+}
+
 func newRawStatement(text string) *rawStatement {
 	return &rawStatement{text: text}
 }
@@ -140,61 +145,116 @@ var (
 )
 
 func hasVersionMacros(sql string) bool {
-	return versionMacroRegex.MatchString(sql)
+	return MatchOutsideQuotedAndComments(sql, versionMacroRegex.MatchString)
 }
 
 func stripVersionMacros(sql string) string {
-	return versionMacroRegex.ReplaceAllString(sql, "$1")
+	return TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		return versionMacroRegex.ReplaceAllString(segment, "$1")
+	})
 }
 
 func hasSystemVersioning(sql string) bool {
-	return withSystemVersioningRegex.MatchString(sql) ||
-		withoutSystemVersioningRegex.MatchString(sql) ||
-		periodSystemTimeRegex.MatchString(sql) ||
-		rowStartRegex.MatchString(sql) ||
-		rowEndRegex.MatchString(sql) ||
-		alterSystemVersioningRegex.MatchString(sql)
+	return MatchOutsideQuotedAndComments(sql, func(segment string) bool {
+		return withSystemVersioningRegex.MatchString(segment) ||
+			withoutSystemVersioningRegex.MatchString(segment) ||
+			periodSystemTimeRegex.MatchString(segment) ||
+			rowStartRegex.MatchString(segment) ||
+			rowEndRegex.MatchString(segment) ||
+			alterSystemVersioningRegex.MatchString(segment)
+	})
 }
 
 func stripSystemVersioning(sql string) string {
-	sql = withSystemVersioningRegex.ReplaceAllString(sql, " ")
-	sql = withoutSystemVersioningRegex.ReplaceAllString(sql, " ")
-	sql = periodSystemTimeRegex.ReplaceAllString(sql, " ")
-	sql = rowStartRegex.ReplaceAllString(sql, " ")
-	sql = rowEndRegex.ReplaceAllString(sql, " ")
-	sql = alterSystemVersioningRegex.ReplaceAllString(sql, " ")
-	return sql
+	return TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		segment = withSystemVersioningRegex.ReplaceAllString(segment, " ")
+		segment = withoutSystemVersioningRegex.ReplaceAllString(segment, " ")
+		segment = periodSystemTimeRegex.ReplaceAllString(segment, " ")
+		segment = rowStartRegex.ReplaceAllString(segment, " ")
+		segment = rowEndRegex.ReplaceAllString(segment, " ")
+		segment = alterSystemVersioningRegex.ReplaceAllString(segment, " ")
+		return segment
+	})
 }
 
 func hasColumnAttributes(sql string) bool {
-	return columnAttributeRegex.MatchString(sql)
+	return MatchOutsideQuotedAndComments(sql, columnAttributeRegex.MatchString)
 }
 
 func stripColumnAttributes(sql string) string {
-	return columnAttributeRegex.ReplaceAllString(sql, " ")
+	return TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		return columnAttributeRegex.ReplaceAllString(segment, " ")
+	})
 }
 
 func hasSequenceType(sql string) bool {
-	return sequenceTypeRegex.MatchString(sql) || alterSequenceTypeRegex.MatchString(sql)
+	return MatchOutsideQuotedAndComments(sql, func(segment string) bool {
+		return sequenceTypeRegex.MatchString(segment) || alterSequenceTypeRegex.MatchString(segment)
+	})
 }
 
 func stripSequenceType(sql string) string {
-	sql = sequenceTypeRegex.ReplaceAllString(sql, "$1")
-	sql = alterSequenceTypeRegex.ReplaceAllString(sql, "$1")
-	return sql
+	return TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		segment = sequenceTypeRegex.ReplaceAllString(segment, "$1")
+		segment = alterSequenceTypeRegex.ReplaceAllString(segment, "$1")
+		return segment
+	})
 }
 
 func hasCreateOrReplace(sql string) bool {
-	return createOrReplaceIndexRegex.MatchString(sql) ||
-		createOrReplaceTableRegex.MatchString(sql) ||
-		createOrReplaceSequenceRegex.MatchString(sql)
+	return MatchOutsideQuotedAndComments(sql, func(segment string) bool {
+		return createOrReplaceIndexRegex.MatchString(segment) ||
+			createOrReplaceTableRegex.MatchString(segment) ||
+			createOrReplaceSequenceRegex.MatchString(segment)
+	})
 }
 
 func rewriteCreateOrReplace(sql string) string {
-	sql = createOrReplaceIndexRegex.ReplaceAllString(sql, "DROP INDEX IF EXISTS $1 ON $2; CREATE INDEX $1 ON $2")
-	sql = createOrReplaceTableRegex.ReplaceAllString(sql, "DROP TABLE IF EXISTS $1; CREATE TABLE $1")
-	sql = createOrReplaceSequenceRegex.ReplaceAllString(sql, "DROP SEQUENCE IF EXISTS $1; CREATE SEQUENCE $1")
-	return sql
+	return TransformOutsideQuotedAndComments(sql, func(segment string) string {
+		segment = createOrReplaceIndexRegex.ReplaceAllString(segment, "DROP INDEX IF EXISTS $1 ON $2; CREATE INDEX $1 ON $2")
+		segment = createOrReplaceTableRegex.ReplaceAllString(segment, "DROP TABLE IF EXISTS $1; CREATE TABLE $1")
+		segment = createOrReplaceSequenceRegex.ReplaceAllString(segment, "DROP SEQUENCE IF EXISTS $1; CREATE SEQUENCE $1")
+		return segment
+	})
+}
+
+// TransformOutsideQuotedAndComments applies transform only to SQL code segments,
+// skipping string literals and non-version comments.
+func TransformOutsideQuotedAndComments(sql string, transform func(segment string) string) string {
+	if transform == nil || sql == "" {
+		return sql
+	}
+
+	segments := splitSQLSegments(sql)
+	var out strings.Builder
+	out.Grow(len(sql))
+	for _, seg := range segments {
+		if seg.isCode {
+			out.WriteString(transform(seg.text))
+			continue
+		}
+		out.WriteString(seg.text)
+	}
+	return out.String()
+}
+
+// MatchOutsideQuotedAndComments reports whether match returns true on any SQL
+// code segment, skipping string literals and non-version comments.
+func MatchOutsideQuotedAndComments(sql string, match func(segment string) bool) bool {
+	if match == nil || sql == "" {
+		return false
+	}
+
+	segments := splitSQLSegments(sql)
+	for _, seg := range segments {
+		if !seg.isCode {
+			continue
+		}
+		if match(seg.text) {
+			return true
+		}
+	}
+	return false
 }
 
 func hasTrailingCommas(sql string) bool {
@@ -381,6 +441,112 @@ func skipBlockComment(sql string, i int) int {
 	for i < len(sql) {
 		if sql[i] == '*' && i+1 < len(sql) && sql[i+1] == '/' {
 			return i + 2
+		}
+		i++
+	}
+	return len(sql)
+}
+
+func splitSQLSegments(sql string) []sqlSegment {
+	if len(sql) == 0 {
+		return nil
+	}
+
+	segs := make([]sqlSegment, 0, 8)
+	last := 0
+
+	for i := 0; i < len(sql); i++ {
+		var end int
+		switch {
+		case sql[i] == '\'':
+			end = skipSingleQuotedString(sql, i)
+		case sql[i] == '"':
+			end = skipDoubleQuotedString(sql, i)
+		case sql[i] == '`':
+			end = skipBacktickQuotedIdentifier(sql, i)
+		case isLineCommentStart(sql, i):
+			end = skipLineComment(sql, i)
+			if end < len(sql) {
+				end++
+			}
+		case sql[i] == '#':
+			end = skipLineComment(sql, i)
+			if end < len(sql) {
+				end++
+			}
+		case isBlockCommentStart(sql, i) && !isVersionMacroCommentStart(sql, i):
+			end = skipBlockComment(sql, i)
+		default:
+			continue
+		}
+
+		if last < i {
+			segs = append(segs, sqlSegment{text: sql[last:i], isCode: true})
+		}
+		if end > i {
+			segs = append(segs, sqlSegment{text: sql[i:end], isCode: false})
+			last = end
+			i = end - 1
+		}
+	}
+
+	if last < len(sql) {
+		segs = append(segs, sqlSegment{text: sql[last:], isCode: true})
+	}
+	return segs
+}
+
+func isVersionMacroCommentStart(sql string, i int) bool {
+	return i+2 < len(sql) && sql[i] == '/' && sql[i+1] == '*' && sql[i+2] == '!'
+}
+
+func skipSingleQuotedString(sql string, i int) int {
+	i++
+	for i < len(sql) {
+		if sql[i] == '\\' && i+1 < len(sql) {
+			i += 2
+			continue
+		}
+		if sql[i] == '\'' {
+			if i+1 < len(sql) && sql[i+1] == '\'' {
+				i += 2
+				continue
+			}
+			return i + 1
+		}
+		i++
+	}
+	return len(sql)
+}
+
+func skipDoubleQuotedString(sql string, i int) int {
+	i++
+	for i < len(sql) {
+		if sql[i] == '\\' && i+1 < len(sql) {
+			i += 2
+			continue
+		}
+		if sql[i] == '"' {
+			if i+1 < len(sql) && sql[i+1] == '"' {
+				i += 2
+				continue
+			}
+			return i + 1
+		}
+		i++
+	}
+	return len(sql)
+}
+
+func skipBacktickQuotedIdentifier(sql string, i int) int {
+	i++
+	for i < len(sql) {
+		if sql[i] == '`' {
+			if i+1 < len(sql) && sql[i+1] == '`' {
+				i += 2
+				continue
+			}
+			return i + 1
 		}
 		i++
 	}

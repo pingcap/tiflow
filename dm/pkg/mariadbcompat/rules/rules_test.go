@@ -486,6 +486,14 @@ func TestStripColumnAttributes(t *testing.T) {
 	require.NotContains(t, strings.ToLower(out), "compressed")
 }
 
+func TestStripColumnAttributes_DoesNotTouchStringOrComment(t *testing.T) {
+	input := "CREATE TABLE t (a VARCHAR(64) DEFAULT 'INVISIBLE', b INT INVISIBLE) -- COMPRESSED\n"
+	out := stripColumnAttributes(input)
+	require.Contains(t, out, "'INVISIBLE'")
+	require.Contains(t, out, "-- COMPRESSED")
+	require.NotContains(t, out, "b INT INVISIBLE")
+}
+
 func TestRewriteCreateOrReplace_Table(t *testing.T) {
 	input := "CREATE OR REPLACE TABLE t (id INT)"
 	out := rewriteCreateOrReplace(input)
@@ -507,10 +515,22 @@ func TestRewriteCreateOrReplace_Sequence(t *testing.T) {
 	require.Contains(t, out, "CREATE SEQUENCE s")
 }
 
+func TestRewriteCreateOrReplace_DoesNotTouchStringOrComment(t *testing.T) {
+	input := "CREATE TABLE t (note VARCHAR(64) DEFAULT 'CREATE OR REPLACE TABLE fake (id INT)'); -- CREATE OR REPLACE TABLE c\n"
+	out := rewriteCreateOrReplace(input)
+	require.Equal(t, input, out)
+}
+
 func TestStripSequenceType(t *testing.T) {
 	input := "CREATE SEQUENCE s AS BIGINT"
 	out := stripSequenceType(input)
 	require.NotContains(t, strings.ToLower(out), "as bigint")
+}
+
+func TestStripSequenceType_DoesNotTouchStringOrComment(t *testing.T) {
+	input := "CREATE TABLE t (note VARCHAR(64) DEFAULT 'CREATE SEQUENCE s AS BIGINT'); -- CREATE SEQUENCE s AS BIGINT\n"
+	out := stripSequenceType(input)
+	require.Equal(t, input, out)
 }
 
 func TestApplyPreparseRules_EmptyList(t *testing.T) {
