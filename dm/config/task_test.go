@@ -1311,3 +1311,20 @@ func TestMariaDBCompatConfigEnabledForFlavor(t *testing.T) {
 		})
 	}
 }
+
+func TestMariaDBCompatConfigNewRewriterForFlavor(t *testing.T) {
+	t.Parallel()
+
+	cfg := DefaultMariaDBCompatConfig()
+
+	rewriter := cfg.NewRewriterForFlavor("mariadb")
+	require.NotNil(t, rewriter)
+
+	cfg.Mode = MariaDBCompatModeOff
+	require.NoError(t, cfg.Adjust())
+	require.Nil(t, cfg.NewRewriterForFlavor("mariadb"))
+
+	cfg.Mode = MariaDBCompatModeOn
+	require.NoError(t, cfg.Adjust())
+	require.NotNil(t, cfg.NewRewriterForFlavor("mysql"))
+}

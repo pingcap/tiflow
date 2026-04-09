@@ -102,6 +102,24 @@ func TestSubTask(t *testing.T) {
 	require.True(t, terror.ErrConfigValidationMode.Equal(err))
 }
 
+func TestSubTaskConfigMariaDBCompatRewriter(t *testing.T) {
+	t.Parallel()
+
+	var nilCfg *SubTaskConfig
+	require.Nil(t, nilCfg.MariaDBCompatRewriter())
+
+	cfg := NewSubTaskConfig()
+	cfg.Flavor = "mysql"
+	require.Nil(t, cfg.MariaDBCompatRewriter())
+
+	cfg.Flavor = "mariadb"
+	require.NotNil(t, cfg.MariaDBCompatRewriter())
+
+	cfg.MariaDBCompat.Mode = MariaDBCompatModeOff
+	require.NoError(t, cfg.MariaDBCompat.Adjust())
+	require.Nil(t, cfg.MariaDBCompatRewriter())
+}
+
 func TestSubTaskAdjustFail(t *testing.T) {
 	newSubTaskConfig := func() *SubTaskConfig {
 		return &SubTaskConfig{

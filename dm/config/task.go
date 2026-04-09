@@ -514,6 +514,14 @@ func (c MariaDBCompatConfig) RewriterConfig() *mariadbcompatconfig.Config {
 	return cfg
 }
 
+// NewRewriterForFlavor returns a MariaDB compatibility rewriter when enabled for the given flavor.
+func (c MariaDBCompatConfig) NewRewriterForFlavor(flavor string) *mariadbcompat.Rewriter {
+	if !c.EnabledForFlavor(flavor) {
+		return nil
+	}
+	return mariadbcompat.NewRewriter(c.RewriterConfig())
+}
+
 // DefaultSyncerConfig return default syncer config for task.
 func DefaultSyncerConfig() SyncerConfig {
 	return SyncerConfig{

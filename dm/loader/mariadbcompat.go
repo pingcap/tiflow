@@ -19,13 +19,13 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/objstore/storeapi"
-	"github.com/pingcap/tiflow/dm/pkg/mariadbcompat"
 	dmstorage "github.com/pingcap/tiflow/dm/pkg/storage"
 	"go.uber.org/zap"
 )
 
 func (l *LightningLoader) maybeTransformSchemaFiles(ctx context.Context) error {
-	if l.cfg == nil || !l.cfg.MariaDBCompat.EnabledForFlavor(l.cfg.Flavor) {
+	rewriter := l.cfg.MariaDBCompatRewriter()
+	if rewriter == nil {
 		return nil
 	}
 
@@ -50,8 +50,6 @@ func (l *LightningLoader) maybeTransformSchemaFiles(ctx context.Context) error {
 		return nil
 	}
 	sort.Strings(schemaFiles)
-
-	rewriter := mariadbcompat.NewRewriter(l.cfg.MariaDBCompat.RewriterConfig())
 
 	l.logger.Info("transforming MariaDB schema files for TiDB compatibility",
 		zap.String("dir", l.cfg.LoaderConfig.Dir),

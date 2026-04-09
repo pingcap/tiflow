@@ -21,7 +21,8 @@ import (
 )
 
 func newDDLRewriter(cfg *config.SubTaskConfig, logger log.Logger) *mariadbcompat.Rewriter {
-	if cfg == nil || !cfg.MariaDBCompat.EnabledForFlavor(cfg.Flavor) {
+	rewriter := cfg.MariaDBCompatRewriter()
+	if rewriter == nil {
 		return nil
 	}
 
@@ -29,5 +30,5 @@ func newDDLRewriter(cfg *config.SubTaskConfig, logger log.Logger) *mariadbcompat
 		zap.String("source", cfg.SourceID),
 		zap.Bool("strict", cfg.MariaDBCompat.Strict()),
 	)
-	return mariadbcompat.NewRewriter(cfg.MariaDBCompat.RewriterConfig())
+	return rewriter
 }

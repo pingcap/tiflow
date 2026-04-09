@@ -36,6 +36,7 @@ import (
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadbcompat"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -226,6 +227,14 @@ func (c *SubTaskConfig) InitIOCounters() {
 	c.DumpIOTotalBytes = atomic.NewUint64(0)
 	c.UUID = uuid.NewString()
 	c.DumpUUID = uuid.NewString()
+}
+
+// MariaDBCompatRewriter returns a MariaDB compatibility rewriter when enabled for this subtask.
+func (c *SubTaskConfig) MariaDBCompatRewriter() *mariadbcompat.Rewriter {
+	if c == nil {
+		return nil
+	}
+	return c.MariaDBCompat.NewRewriterForFlavor(c.Flavor)
 }
 
 // String returns the config's json string.
