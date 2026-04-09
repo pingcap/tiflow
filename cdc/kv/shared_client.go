@@ -824,7 +824,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 }
 
 func (s *SharedClient) logSlowRegions(ctx context.Context) error {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {

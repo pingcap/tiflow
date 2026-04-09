@@ -865,10 +865,10 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
-		log.Panic("Table sink not found when starting table stats",
+		log.Panic("table sink not found when start it",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span))
+			zap.Int64("tableID", span.TableID))
 	}
 
 	t := tableSink.(*tableSinkWrapper)
@@ -888,14 +888,6 @@ func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
 			version:           t.version,
 		})
 	}
-
-	log.Info("Sink is started",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Stringer("span", &span),
-		zap.Uint64("startTs", startTs),
-		zap.Uint64("replicateTs", t.GetReplicaTs()),
-	)
 	return nil
 }
 

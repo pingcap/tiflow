@@ -160,7 +160,6 @@ func (s *server) prepare(ctx context.Context) error {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("create etcdCli", zap.Strings("endpoints", s.pdEndpoints))
 	// we do not pass a `context` to create a the etcd client,
 	// to prevent it's cancelled when the server is closing.
 	// For example, when the non-owner node goes offline,

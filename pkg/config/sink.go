@@ -845,10 +845,6 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	log.Info("succeed to parse parameter from sink uri",
-		zap.String("protocol", util.GetOrZero(s.Protocol)),
-		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
-
 	// Check that protocol config is compatible with the scheme.
 	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+

@@ -389,8 +389,6 @@ func newClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints 
 // CreateRawEtcdClient creates etcd v3 client with detecting endpoints.
 // It will check the health of endpoints periodically, and update endpoints if needed.
 func CreateRawEtcdClient(securityConf *security.Credential, grpcDialOption grpc.DialOption, endpoints ...string) (*clientv3.Client, error) {
-	log.Info("create etcdCli", zap.Strings("endpoints", endpoints))
-
 	tlsConfig, err := securityConf.ToTLSConfig()
 	if err != nil {
 		return nil, err

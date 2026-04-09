@@ -303,7 +303,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Stringer("span", &span),
+		zap.Int64("tableID", span.TableID),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
