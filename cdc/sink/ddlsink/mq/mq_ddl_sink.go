@@ -16,7 +16,6 @@ package mq
 import (
 	"context"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
@@ -27,7 +26,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
-	"go.uber.org/zap"
 )
 
 // DDLDispatchRule is the dispatch rule for DDL event.
@@ -106,21 +104,11 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		return err
 	}
 	if msg == nil {
-		log.Info("Skip ddl event", zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("query", ddl.Query),
-			zap.String("protocol", k.protocol.String()),
-			zap.String("namespace", k.id.Namespace),
-			zap.String("changefeed", k.id.ID))
 		return nil
 	}
 
 	topic := k.eventRouter.GetTopicForDDL(ddl)
 	partitionRule := getDDLDispatchRule(k.protocol)
-	log.Debug("Emit ddl event",
-		zap.Uint64("commitTs", ddl.CommitTs),
-		zap.String("query", ddl.Query),
-		zap.String("namespace", k.id.Namespace),
-		zap.String("changefeed", k.id.ID))
 	// Notice: We must call GetPartitionNum here,
 	// which will be responsible for automatically creating topics when they don't exist.
 	// If it is not called here and kafka has `auto.create.topics.enable` turned on,
@@ -174,8 +162,6 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 		if err != nil {
 			return err
 		}
-		log.Debug("Emit checkpointTs to default topic",
-			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
 		return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 	}
 	var tableNames []model.TableName

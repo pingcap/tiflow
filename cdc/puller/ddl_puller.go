@@ -68,6 +68,7 @@ type DDLJobPuller interface {
 // be called in the same one goroutine.
 type ddlJobPullerImpl struct {
 	changefeedID model.ChangeFeedID
+	role         util.Role
 	mp           *MultiplexingPuller
 	// memorysorter is used to sort the DDL events.
 	sorter        *memorysorter.EntrySorter
@@ -91,6 +92,7 @@ func NewDDLJobPuller(
 	checkpointTs uint64,
 	cfg *config.ServerConfig,
 	changefeed model.ChangeFeedID,
+	role util.Role,
 	schemaStorage entry.SchemaStorage,
 	filter filter.Filter,
 ) DDLJobPuller {
@@ -107,6 +109,7 @@ func NewDDLJobPuller(
 
 	ddlJobPuller := &ddlJobPullerImpl{
 		changefeedID:  changefeed,
+		role:          role,
 		schemaStorage: schemaStorage,
 		kvStorage:     kvStorage,
 		filter:        filter,
@@ -302,35 +305,33 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			"discard the ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
+			zap.Int64("jobID", job.ID),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("query", job.Query),
 			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
 		return true, nil
 	}
 
 	defer func() {
 		if skip && err == nil {
-			log.Info("ddl job schema or table does not match, discard it",
+			log.Debug("ddl job schema or table does not match, discard it",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("jobID", job.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
-				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		}
 		if err != nil {
 			log.Warn("handle ddl job failed",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("jobID", job.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.String("query", job.Query),
 				zap.Error(err))
 		}
 	}()
@@ -340,11 +341,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		log.Info("failed to fill schema name for ddl job",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("jobID", job.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+			zap.String("query", job.Query),
 			zap.Error(err))
 		if p.filter.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS) {
 			return true, nil
@@ -360,11 +362,12 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			log.Warn("handle rename tables ddl job failed",
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
+				zap.Int64("jobID", job.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
+				zap.String("query", job.Query),
 				zap.Error(err))
 			return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
 				errors.Trace(err), job.Query, job.StartTS, job.StartTS)
@@ -438,14 +441,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			}
 			return true, nil
 		}
-		log.Info("ddl puller receive rename table ddl job",
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
-			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
 	default:
 		// nil means it is a schema ddl job, it's no need to fill the table name.
 		if job.BinlogInfo.TableInfo != nil {
@@ -457,6 +452,13 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 	if skip {
 		return true, nil
 	}
+
+	log.Info("ddl job received by ddl puller",
+		zap.String("namespace", p.changefeedID.Namespace),
+		zap.String("changefeed", p.changefeedID.ID),
+		zap.String("role", p.role.String()),
+		zap.Int64("jobID", job.ID),
+		zap.Any("job", job))
 
 	err = p.schemaStorage.HandleDDLJob(job)
 	if err != nil {
@@ -518,7 +520,11 @@ func (p *ddlJobPullerImpl) checkIneligibleTableDDL(snapBefore *schema.Snapshot, 
 	isIneligibleBefore := snapBefore.IsIneligibleTableID(oldTableID)
 	if isIneligibleBefore {
 		log.Warn("Ignore the DDL event of ineligible table",
-			zap.String("changefeed", p.changefeedID.ID), zap.Any("ddl", job))
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("jobID", job.ID),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return true, nil
 	}
 
@@ -643,9 +649,8 @@ func NewDDLPuller(
 	var puller DDLJobPuller
 	// storage can be nil only in the test
 	if up.KVStorage != nil {
-		changefeed.ID += "_owner_ddl_puller"
 		puller = NewDDLJobPuller(up, startTs, config.GetGlobalServerConfig(),
-			changefeed, schemaStorage, filter)
+			changefeed, util.RoleOwner, schemaStorage, filter)
 	}
 
 	return &ddlPullerImpl{
@@ -664,28 +669,15 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 		log.Warn("ignore duplicated DDL job",
 			zap.String("namespace", h.changefeedID.Namespace),
 			zap.String("changefeed", h.changefeedID.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
-
-			zap.String("query", job.Query),
+			zap.Int64("jobID", job.ID),
 			zap.Uint64("startTs", job.StartTS),
-			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-			zap.Int64("jobID", job.ID))
+			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		return
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
 	h.lastDDLJobID = job.ID
-	log.Info("ddl puller receives new pending job",
-		zap.String("namespace", h.changefeedID.Namespace),
-		zap.String("changefeed", h.changefeedID.ID),
-		zap.String("schema", job.SchemaName),
-		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
-		zap.Uint64("startTs", job.StartTS),
-		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-		zap.Int64("jobID", job.ID))
 }
 
 // Run the ddl puller to receive DDL events

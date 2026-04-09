@@ -200,15 +200,6 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		// already-executed DDL could filted by finishedTs.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
-			log.Info("schemaStorage: ignore foregone DDL",
-				zap.String("namespace", s.id.Namespace),
-				zap.String("changefeed", s.id.ID),
-				zap.String("DDL", job.Query),
-				zap.String("state", job.State.String()),
-				zap.Int64("jobID", job.ID),
-				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
-				zap.Int64("jobSchemaVersion", job.BinlogInfo.SchemaVersion),
-				zap.String("role", s.role.String()))
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -220,6 +211,7 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),
 			zap.String("role", s.role.String()),
+			zap.Int64("jobID", job.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
@@ -229,14 +221,15 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	}
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
-	log.Info("schemaStorage: update snapshot by the DDL job",
+	log.Info("ddl job applied to schema storage",
 		zap.String("namespace", s.id.Namespace),
 		zap.String("changefeed", s.id.ID),
 		zap.String("role", s.role.String()),
+		zap.Int64("jobID", job.ID),
+		zap.String("type", job.Type.String()),
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
-		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-		zap.String("query", job.Query))
+		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
 	return nil
 }
 
@@ -262,11 +255,6 @@ func (s *schemaStorage) AllPhysicalTables(ctx context.Context, ts model.Ts) ([]m
 			res = append(res, tblInfo.ID)
 		}
 	})
-	log.Debug("get new schema snapshot",
-		zap.Uint64("ts", ts),
-		zap.Uint64("snapTs", snap.CurrentTs()),
-		zap.Any("tables", res))
-
 	return res, nil
 }
 
@@ -380,11 +368,6 @@ func (s *schemaStorage) DoGC(ts uint64) (lastSchemaTs uint64) {
 // job is changed to *done* (before change to *synced*)
 // At state *done*, it will be always and only changed to *synced*.
 func (s *schemaStorage) skipJob(job *timodel.Job) bool {
-	log.Debug("handle DDL new commit",
-		zap.String("DDL", job.Query), zap.Stringer("job", job),
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("role", s.role.String()))
 	return !job.IsDone()
 }
 
@@ -431,7 +414,6 @@ func (s *schemaStorage) BuildDDLEvents(
 		var tableInfo *model.TableInfo
 		err = preSnap.FillSchemaName(job)
 		if err != nil {
-			log.Error("build DDL event fail", zap.Any("job", job), zap.Error(err))
 			return nil, errors.Trace(err)
 		}
 		// TODO: find a better way to refactor this. For example, drop table job should not

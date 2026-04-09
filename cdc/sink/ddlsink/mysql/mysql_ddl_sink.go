@@ -138,22 +138,30 @@ func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent
 			if errorutil.IsIgnorableMySQLDDLError(err) {
 				// NOTE: don't change the log, some tests depend on it.
 				log.Info("Execute DDL failed, but error can be ignored",
-					zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 					zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("query", ddl.Query),
 					zap.Error(err))
 				// If the error is ignorable, we will ignore the error directly.
 				return nil
 			}
 			if m.cfg.IsTiDB && ddlCreateTime != "" && errors.Cause(err) == mysql.ErrInvalidConn {
-				log.Warn("Wait the asynchronous ddl to synchronize", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime),
-					zap.String("readTimeout", m.cfg.ReadTimeout), zap.Error(err))
+				log.Warn("Wait the asynchronous ddl to synchronize",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("query", ddl.Query),
+					zap.String("ddlCreateTime", ddlCreateTime),
+					zap.String("readTimeout", m.cfg.ReadTimeout),
+					zap.Error(err))
 				return m.waitDDLDone(ctx, ddl, ddlCreateTime)
 			}
 			log.Warn("Execute DDL with error, retry later",
-				zap.Uint64("startTs", ddl.StartTs), zap.String("ddl", ddl.Query),
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
 				zap.Error(err))
 			return err
 		}
@@ -171,7 +179,14 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	// Convert vector type to string type for unsupport database
 	if m.needFormat {
 		if newQuery := formatQuery(ddl.Query); newQuery != ddl.Query {
-			log.Warn("format ddl query", zap.String("newQuery", newQuery), zap.String("query", ddl.Query), zap.String("collate", ddl.Collate), zap.String("charset", ddl.Charset))
+			log.Info("format ddl query",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("newQuery", newQuery),
+				zap.String("query", ddl.Query),
+				zap.String("collate", ddl.Collate),
+				zap.String("charset", ddl.Charset))
 			ddl.Query = newQuery
 		}
 	}
@@ -186,8 +201,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	})
 
 	start := time.Now()
-	log.Info("Start exec DDL", zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
-		zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -242,6 +255,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		log.Warn("Skip setting session timestamp due to failpoint",
 			zap.String("namespace", m.id.Namespace),
 			zap.String("changefeed", m.id.ID),
+			zap.Uint64("commitTs", ddl.CommitTs),
 			zap.String("query", ddl.Query))
 	}
 	if useSessionTimestamp && !skipSetTimestamp {
@@ -249,7 +263,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
 			log.Error("Fail to set session timestamp for DDL",
 				zap.Float64("timestamp", ddlTimestamp),
-				zap.Uint64("startTs", ddl.StartTs),
 				zap.Uint64("commitTs", ddl.CommitTs),
 				zap.String("query", ddl.Query),
 				zap.Error(err))
@@ -261,12 +274,18 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	}
 
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
-		log.Error("Failed to ExecContext", zap.Any("err", err), zap.Any("query", ddl.Query))
+		log.Error("Failed to ExecContext",
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID),
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query),
+			zap.Error(err))
 		if useSessionTimestamp {
 			if skipResetAfterDDL {
 				log.Warn("Skip resetting session timestamp after DDL execution failure due to failpoint",
 					zap.String("namespace", m.id.Namespace),
 					zap.String("changefeed", m.id.ID),
+					zap.Uint64("commitTs", ddl.CommitTs),
 					zap.String("query", ddl.Query))
 			} else if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
 				log.Warn("Failed to reset session timestamp after DDL execution failure",
@@ -291,6 +310,7 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 			log.Warn("Skip resetting session timestamp after DDL execution due to failpoint",
 				zap.String("namespace", m.id.Namespace),
 				zap.String("changefeed", m.id.ID),
+				zap.Uint64("commitTs", ddl.CommitTs),
 				zap.String("query", ddl.Query))
 		} else if err := resetSessionTimestamp(ctx, tx); err != nil {
 			log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
@@ -308,8 +328,9 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	logFields := []zap.Field{
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
+		zap.Uint64("commitTs", ddl.CommitTs),
+		zap.String("query", ddl.Query),
 		zap.Duration("duration", time.Since(start)),
-		zap.String("sql", ddl.Query),
 	}
 
 	if useSessionTimestamp {
@@ -332,7 +353,12 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 			return ctx.Err()
 		case <-ticker.C:
 		case <-ticker1.C:
-			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
+			log.Info("DDL is still running downstream, it blocks other DDL or DML events",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.String("ddlCreateTime", ddlCreateTime))
 		}
 
 		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
@@ -341,7 +367,12 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 		}
 		switch state {
 		case timodel.JobStateDone, timodel.JobStateSynced:
-			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
+			log.Info("DDL replicate success",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.String("ddlCreateTime", ddlCreateTime))
 			return nil
 		case timodel.JobStateCancelled, timodel.JobStateRollingback, timodel.JobStateRollbackDone, timodel.JobStateCancelling:
 			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
@@ -349,11 +380,23 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 			switch ddl.Type {
 			// returned immediately if not block dml
 			case timodel.ActionAddIndex:
-				log.Info("DDL is running downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
+				log.Info("DDL is running downstream",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Uint64("commitTs", ddl.CommitTs),
+					zap.String("query", ddl.Query),
+					zap.String("ddlCreateTime", ddlCreateTime),
+					zap.Any("ddlState", state))
 				return nil
 			}
 		default:
-			log.Warn("Unexpected DDL state, may not be found downstream, retry later", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
+			log.Warn("Unexpected DDL state, may not be found downstream, retry later",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.String("ddlCreateTime", ddlCreateTime),
+				zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
 		}
 	}

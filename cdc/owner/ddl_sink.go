@@ -240,11 +240,6 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 }
 
 func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	log.Info("begin emit ddl event",
-		zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID),
-		zap.Any("DDL", ddl))
-
 	doWrite := func() (err error) {
 		if err = s.makeSinkReady(ctx); err == nil {
 			err = s.sink.WriteDDLEvent(ctx, ddl)
@@ -256,14 +251,17 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 			log.Error("Execute DDL failed",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),
-				zap.Any("DDL", ddl),
-				zap.Error(err))
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.Error(err),
+			)
 		} else {
 			ddl.Done.Store(true)
 			log.Info("Execute DDL succeeded",
 				zap.String("namespace", s.changefeedID.Namespace),
 				zap.String("changefeed", s.changefeedID.ID),
-				zap.Any("DDL", ddl))
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query))
 		}
 		return
 	}
@@ -330,10 +328,11 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 	s.mu.Lock()
 	if ddl.Done.Load() {
 		// the DDL event is executed successfully, and done is true
-		log.Info("ddl already executed, skip it",
+		log.Debug("ddl already executed, skip it",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query))
 		delete(s.ddlSentTsMap, ddl)
 		s.mu.Unlock()
 		return true, nil
@@ -344,7 +343,10 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		log.Debug("ddl is not finished yet",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Uint64("ddlSentTs", ddlSentTs), zap.Any("DDL", ddl))
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query),
+			zap.Uint64("ddlSentTs", ddlSentTs),
+		)
 		// the DDL event is executing and not finished yet, return false
 		s.mu.Unlock()
 		return false, nil
@@ -355,8 +357,10 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		log.Error("Add special comment failed",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query),
 			zap.Error(err),
-			zap.Any("ddl", ddl))
+		)
 		s.mu.Unlock()
 		return false, errors.Trace(err)
 	}
@@ -368,16 +372,14 @@ func (s *ddlSinkImpl) emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bo
 		return false, errors.Trace(ctx.Err())
 	case s.ddlCh <- ddl:
 		s.ddlSentTsMap[ddl] = ddl.CommitTs
-		log.Info("ddl is sent",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Uint64("ddlSentTs", ddl.CommitTs))
 	default:
 		log.Warn("ddl chan full, send it the next round",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query),
 			zap.Uint64("ddlSentTs", ddlSentTs),
-			zap.Any("DDL", ddl))
+		)
 		// if this hit, we think that ddlCh is full,
 		// just return false and send the ddl in the next round.
 	}
@@ -463,13 +465,16 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 	}
 
 	result := sb.String()
-	log.Info("add special comment to DDL",
-		zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID),
-		zap.String("DDL", ddl.Query),
-		zap.String("charset", ddl.Charset),
-		zap.String("collate", ddl.Collate),
-		zap.String("result", result))
+	if result != ddl.Query {
+		log.Info("add special comment to DDL",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Uint64("commitTs", ddl.CommitTs),
+			zap.String("query", ddl.Query),
+			zap.String("newQuery", result),
+			zap.String("charset", ddl.Charset),
+			zap.String("collate", ddl.Collate))
+	}
 
 	return result, nil
 }
