@@ -309,6 +309,44 @@ function test_full_mode_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: FULL MODE TASK"
 }
 
+function test_full_mode_task_with_mariadb_compat() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: FULL MODE TASK WITH MARIADB2TIDB"
+	prepare_database
+
+	task_name="test-no-shard-mariadb-compat"
+	target_table_name=""
+
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+	openapi_source_check "get_source_status_success" "mysql-01"
+
+	openapi_source_check "create_source2_success"
+	openapi_source_check "list_source_success" 2
+	openapi_source_check "get_source_status_success" "mysql-02"
+
+	openapi_task_check "create_noshard_task_with_mariadb_compat_success" $task_name "" "full"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Stopped"
+
+	init_noshard_data
+
+	openapi_task_check "start_task_success" $task_name ""
+	openapi_task_check "get_task_status_success" "$task_name" 2
+
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" 100 \
+		"\"stage\": \"Finished\"" 2
+	openapi_task_check "check_task_stage_success" $task_name 2 "Finished"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
+	openapi_task_check "check_load_task_finished_status_success" "$task_name" 107 107
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: FULL MODE TASK WITH MARIADB2TIDB"
+}
+
 function test_shard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: SHARD TASK"
 	prepare_database
@@ -1330,6 +1368,7 @@ function run() {
 	test_stop_task_with_condition
 	test_reverse_https
 	test_full_mode_task
+	test_full_mode_task_with_mariadb_compat
 	test_tls
 
 	test_cluster

@@ -149,6 +149,61 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
 
+def create_noshard_task_with_mariadb_compat_success(task_name, tartget_table_name="", task_mode="all"):
+    task = {
+        "name": task_name,
+        "task_mode": task_mode,
+        "meta_schema": "dm-meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "mariadb-compat": {
+            "mode": "on",
+            "enabled-rules": ["textblobdefaults"],
+            "disabled-rules": ["COLLATION"],
+            "strict-mode": True,
+        },
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": tartget_table_name},
+            },
+            {
+                "source": {
+                    "source_name": SOURCE2_NAME,
+                    "schema": "openapi",
+                    "table": "*",
+                },
+                "target": {"schema": "openapi", "table": tartget_table_name},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {"source_name": SOURCE1_NAME},
+                {"source_name": SOURCE2_NAME},
+            ],
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_noshard_task_with_mariadb_compat_success resp=", resp.json())
+    assert resp.status_code == 201
+
+    task_url = API_ENDPOINT + "/" + task_name
+    task_after_create = requests.get(url=task_url).json()
+    assert task_after_create["mariadb-compat"]["mode"] == "on"
+    assert task_after_create["mariadb-compat"]["enabled-rules"] == ["TextBlobDefaults"]
+    assert task_after_create["mariadb-compat"]["disabled-rules"] == ["Collation"]
+    assert task_after_create["mariadb-compat"]["strict-mode"] == True
+
 def create_noshard_task_with_db_cluster_security_success(
         task_name, target_table,
         tidb_ca_content="",tidb_cert_content="",tidb_key_content="",
@@ -1084,6 +1139,7 @@ if __name__ == "__main__":
     FUNC_MAP = {
         "create_task_failed": create_task_failed,
         "create_noshard_task_success": create_noshard_task_success,
+        "create_noshard_task_with_mariadb_compat_success": create_noshard_task_with_mariadb_compat_success,
         "create_shard_task_success": create_shard_task_success,
         "create_dump_task_success": create_dump_task_success,
         "create_dump_task_without_table_filter_success": create_dump_task_without_table_filter_success,

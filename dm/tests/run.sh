@@ -106,7 +106,7 @@ if [ "$test_case" == "*" ]; then
 else
 	for one_case in $test_case; do
 		case "$one_case" in
-			mariadb_source)
+			mariadb_source|mariadb_compat)
 				need_mariadb=1
 				;;
 			*)
