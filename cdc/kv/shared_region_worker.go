@@ -173,7 +173,7 @@ func (w *sharedRegionWorker) handleSingleRegionError(state *regionFeedState, str
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
 			zap.Uint64("streamID", stream.streamID),
-			zap.Any("subscriptionID", state.getRegionID()),
+			zap.Uint64("subscriptionID", state.getRegionID()),
 			zap.Uint64("regionID", state.region.verID.GetID()),
 			zap.Int64("tableID", state.region.span.TableID),
 			zap.Bool("reschedule", stepsToRemoved),
@@ -427,7 +427,7 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 		log.Debug("region worker get a ResolvedTs",
 			zap.String("namespace", w.changefeed.Namespace),
 			zap.String("changefeed", w.changefeed.ID),
-			zap.Any("subscriptionID", subscriptionID),
+			zap.Uint64("subscriptionID", uint64(subscriptionID)),
 			zap.Uint64("ResolvedTs", batch.ts),
 			zap.Int("spanCount", len(spansAndChan.spans)))
 		if len(spansAndChan.spans) > 0 {
