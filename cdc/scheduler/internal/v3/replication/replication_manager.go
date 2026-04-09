@@ -15,7 +15,6 @@ package replication
 
 import (
 	"bytes"
-	"container/heap"
 	"fmt"
 	"math"
 	"time"
@@ -35,9 +34,8 @@ import (
 const (
 	checkpointCannotProceed = internal.CheckpointCannotProceed
 
-	defaultSlowTableHeapSize  = 4
 	logSlowTablesLagThreshold = 30 * time.Second
-	logSlowTablesInterval     = 1 * time.Minute
+	logSlowTablesInterval     = 10 * time.Minute
 	logMissingTableInterval   = 30 * time.Second
 )
 
@@ -154,7 +152,6 @@ type Manager struct { //nolint:revive
 	acceptMoveTableTask    int
 	acceptBurstBalanceTask int
 
-	slowTableHeap         SetHeap
 	lastLogSlowTablesTime time.Time
 	lastMissTableID       tablepb.TableID
 	lastLogMissTime       time.Time
@@ -719,8 +716,7 @@ func (r *Manager) AdvanceCheckpoint(
 	}
 
 	// If changefeed's checkpoint lag is larger than 30s,
-	// log the 4 slowlest table infos every minute, which can
-	// help us find the problematic tables.
+	// log the slowest table info which can help us find the problematic table.
 	checkpointLag := currentPDTime.Sub(oracle.GetTimeFromTS(watermark.CheckpointTs))
 	if checkpointLag > logSlowTablesLagThreshold &&
 		time.Since(r.lastLogSlowTablesTime) > logSlowTablesInterval {
@@ -744,32 +740,32 @@ func (r *Manager) AdvanceCheckpoint(
 	return watermark
 }
 
-func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
-	// find the slow tables
-	r.spans.Ascend(func(span tablepb.Span, table *ReplicationSet) bool {
-		lag := currentPDTime.Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))
-		if lag > logSlowTablesLagThreshold {
-			heap.Push(&r.slowTableHeap, table)
-			if r.slowTableHeap.Len() > defaultSlowTableHeapSize {
-				heap.Pop(&r.slowTableHeap)
-			}
-		}
-		return true
-	})
-
-	num := r.slowTableHeap.Len()
-	for i := 0; i < num; i++ {
-		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)
-		log.Info("schedulerv3: slow table",
-			zap.String("namespace", r.changefeedID.Namespace),
-			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", table.Span.TableID),
-			zap.String("tableStatus", table.State.String()),
-			zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
-			zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
-			zap.Duration("checkpointLag", currentPDTime.
-				Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
+func (r *Manager) getSlowestTableForLog(currentPDTime time.Time) *ReplicationSet {
+	table, ok := r.spans.Get(r.slowestSink)
+	if !ok {
+		return nil
 	}
+	checkpointLag := currentPDTime.Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))
+	if checkpointLag <= logSlowTablesLagThreshold {
+		return nil
+	}
+	return table
+}
+
+func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
+	table := r.getSlowestTableForLog(currentPDTime)
+	if table == nil {
+		return
+	}
+	log.Info("schedulerv3: slow table",
+		zap.String("namespace", r.changefeedID.Namespace),
+		zap.String("changefeed", r.changefeedID.ID),
+		zap.Int64("tableID", table.Span.TableID),
+		zap.String("tableStatus", table.State.String()),
+		zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
+		zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),
+		zap.Duration("checkpointLag", currentPDTime.
+			Sub(oracle.GetTimeFromTS(table.Checkpoint.CheckpointTs))))
 }
 
 // CollectMetrics collects metrics.

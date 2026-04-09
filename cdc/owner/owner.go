@@ -315,7 +315,7 @@ func preflightCheck(changefeed *orchestrator.ChangefeedReactorState,
 		log.Info("changefeed preflight check failed, will skip this tick",
 			zap.String("namespace", changefeed.ID.Namespace),
 			zap.String("changefeed", changefeed.ID.ID),
-			zap.Any("status", changefeed.Status), zap.Bool("ok", ok),
+			zap.Any("status", changefeed.Status),
 		)
 	}
 
@@ -474,7 +474,6 @@ func (o *ownerImpl) cleanStaleMetrics() {
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *ownerImpl) Bootstrap(state *orchestrator.GlobalReactorState) {
-	log.Info("Start bootstrapping")
 	o.cleanStaleMetrics()
 	fixChangefeedInfos(state)
 }

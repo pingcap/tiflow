@@ -353,11 +353,6 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 		eg.Go(func() error { return p.runResolvedTsAdvancer(ctx) })
 	}
 
-	log.Info("MultiplexingPuller starts",
-		zap.String("namespace", p.changefeed.Namespace),
-		zap.String("changefeed", p.changefeed.ID),
-		zap.Int("workerConcurrent", len(p.inputChs)),
-		zap.Int("frontierConcurrent", p.resolvedTsAdvancerCount))
 	return eg.Wait()
 }
 

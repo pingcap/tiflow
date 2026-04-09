@@ -16,10 +16,8 @@ package blackhole
 import (
 	"context"
 
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
-	"go.uber.org/zap"
 )
 
 // Assert Sink implementation
@@ -37,7 +35,6 @@ func NewDDLSink() *DDLSink {
 func (d *DDLSink) WriteDDLEvent(ctx context.Context,
 	ddl *model.DDLEvent,
 ) error {
-	log.Debug("BlackHoleSink: DDL Event", zap.Any("ddl", ddl))
 	return nil
 }
 
@@ -45,7 +42,6 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context,
 func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-	log.Debug("BlackHoleSink: Checkpoint Ts Event", zap.Uint64("ts", ts), zap.Any("tables", tables))
 	return nil
 }
 

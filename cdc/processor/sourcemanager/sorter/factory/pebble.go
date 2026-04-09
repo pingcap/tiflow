@@ -79,9 +79,6 @@ func createPebbleDBs(
 			log.Error("create pebble fails", zap.String("dir", dir), zap.Int("id", id), zap.Error(err))
 			return
 		}
-		log.Info("create pebble instance success",
-			zap.Int("id", id+1),
-			zap.Uint64("sharedCacheSize", memQuotaInBytes))
 		dbs = append(dbs, db)
 	}
 	err = tableCache.Unref()

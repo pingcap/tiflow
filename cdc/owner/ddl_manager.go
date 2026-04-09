@@ -300,7 +300,9 @@ func (m *ddlManager) tick(
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int64("tableID", job.TableID),
 			zap.Int64("jobID", job.ID),
-			zap.String("query", job.Query),
+			zap.String("type", job.Type.String()),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
 		)
 		events, err := m.schema.BuildDDLEvents(ctx, job)
@@ -316,8 +318,10 @@ func (m *ddlManager) tick(
 					log.Info("table is ineligible, skip the ddl",
 						zap.String("namespace", m.changfeedID.Namespace),
 						zap.String("changefeed", m.changfeedID.ID),
-						zap.String("query", job.Query),
-						zap.Any("table", event.TableInfo))
+						zap.String("schema", event.TableInfo.TableName.Schema),
+						zap.String("table", event.TableInfo.TableName.Table),
+						zap.Uint64("commitTs", event.CommitTs),
+						zap.String("query", event.Query))
 					continue
 				}
 			}
@@ -369,10 +373,20 @@ func (m *ddlManager) tick(
 
 		if m.shouldExecDDL(nextDDL) {
 			if m.executingDDL == nil {
+				tableInfo := nextDDL.TableInfo
+				if tableInfo == nil {
+					tableInfo = nextDDL.PreTableInfo
+				}
+				schemaName, tableName := "", ""
+				if tableInfo != nil {
+					schemaName = tableInfo.TableName.Schema
+					tableName = tableInfo.TableName.Table
+				}
 				log.Info("execute a ddl event",
-					zap.String("query", nextDDL.Query),
+					zap.String("schema", schemaName),
+					zap.String("table", tableName),
 					zap.Uint64("commitTs", nextDDL.CommitTs),
-					zap.Uint64("checkpointTs", m.checkpointTs))
+					zap.String("query", nextDDL.Query))
 				m.executingDDL = nextDDL
 				skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
 				if err != nil {
@@ -481,8 +495,6 @@ func (m *ddlManager) getNextDDL() *model.DDLEvent {
 	var res *model.DDLEvent
 	for tb, ddls := range m.pendingDDLs {
 		if len(ddls) == 0 {
-			log.Debug("no more ddl event, gc the table from pendingDDLs",
-				zap.String("table", tb.String()))
 			delete(m.pendingDDLs, tb)
 			continue
 		}
@@ -589,13 +601,6 @@ func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) 
 			return nil, err
 		}
 		m.tableInfoCache = tableInfoCache
-		log.Debug("changefeed current tables updated",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Uint64("checkpointTs", m.checkpointTs),
-			zap.Uint64("snapshotTs", ts),
-			zap.Any("tables", m.tableInfoCache),
-		)
 	}
 
 	return m.tableInfoCache, nil
@@ -610,13 +615,6 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 		if err != nil {
 			return nil, err
 		}
-		log.Debug("changefeed physical tables updated",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Uint64("checkpointTs", m.checkpointTs),
-			zap.Uint64("snapshotTs", ts),
-			zap.Any("tables", m.physicalTablesCache),
-		)
 		m.physicalTablesCache = cache
 	}
 	return m.physicalTablesCache, nil
@@ -628,34 +626,35 @@ func (m *ddlManager) allPhysicalTables(ctx context.Context) ([]model.TableID, er
 // otherwise we use the checkpointTs.
 func (m *ddlManager) getSnapshotTs() (ts uint64) {
 	ts = m.checkpointTs
-
 	if m.ddlResolvedTs == m.startTs {
 		// If ddlResolvedTs is equal to startTs it means that the changefeed is just started,
 		// So we need to get all tables from the snapshot at the startTs.
 		ts = m.startTs
-		log.Debug("changefeed is just started, use startTs to get snapshot",
-			zap.String("namespace", m.changfeedID.Namespace),
-			zap.String("changefeed", m.changfeedID.ID),
-			zap.Uint64("startTs", m.startTs),
-			zap.Uint64("checkpointTs", m.checkpointTs),
-			zap.Uint64("ddlResolvedTs", m.ddlResolvedTs),
-		)
-		return
 	}
-
-	log.Debug("snapshotTs", zap.Uint64("ts", ts))
 	return ts
 }
 
 // cleanCache cleans the tableInfoCache and physicalTablesCache.
 // It should be called after a DDL is skipped or sent to downstream successfully.
 func (m *ddlManager) cleanCache(msg string) {
-	tableName := m.executingDDL.TableInfo.TableName
-	log.Info(msg, zap.String("ddl", m.executingDDL.Query),
+	tableInfo := m.executingDDL.TableInfo
+	if tableInfo == nil {
+		tableInfo = m.executingDDL.PreTableInfo
+	}
+	var tableName model.TableName
+	schemaName, table := "", ""
+	if tableInfo != nil {
+		tableName = tableInfo.TableName
+		schemaName = tableInfo.TableName.Schema
+		table = tableInfo.TableName.Table
+	}
+	log.Info(msg,
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.String("bdrRole", m.executingDDL.BDRRole),
-		zap.Any("ddlEvent", m.executingDDL))
+		zap.String("schema", schemaName),
+		zap.String("table", table),
+		zap.Uint64("commitTs", m.executingDDL.CommitTs),
+		zap.String("query", m.executingDDL.Query))
 
 	// Set it to nil first to accelerate GC.
 	m.pendingDDLs[tableName][0] = nil

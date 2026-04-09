@@ -303,7 +303,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Stringer("span", &span),
+		zap.Int64("tableID", span.TableID),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
@@ -668,7 +668,6 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	log.Info("get sourceID from PD", zap.Uint64("sourceID", sourceID), zap.Stringer("changefeedID", p.changefeedID))
 	cfConfig.Sink.TiDBSourceID = sourceID
 
 	p.redo.r = redo.NewDMLManager(p.changefeedID, cfConfig.Consistent)
@@ -789,9 +788,8 @@ func (p *processor) initDDLHandler() error {
 	}
 
 	serverCfg := config.GetGlobalServerConfig()
-	changefeedID := model.DefaultChangeFeedID(p.changefeedID.ID + "_processor_ddl_puller")
 	ddlPuller := puller.NewDDLJobPuller(
-		p.upstream, ddlStartTs, serverCfg, changefeedID, schemaStorage, p.filter,
+		p.upstream, ddlStartTs, serverCfg, p.changefeedID, util.RoleProcessor, schemaStorage, p.filter,
 	)
 	p.ddlHandler.r = &ddlHandler{puller: ddlPuller, schemaStorage: schemaStorage}
 	return nil
@@ -810,11 +808,6 @@ func (p *processor) updateBarrierTs(barrier *schedulepb.Barrier) {
 		// may pile up in memory, as they have to wait DDL.
 		globalBarrierTs = schemaResolvedTs
 	}
-	log.Debug("update barrierTs",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
-		zap.Any("tableBarriers", barrier.GetTableBarriers()),
-		zap.Uint64("globalBarrierTs", globalBarrierTs))
 
 	p.sinkManager.r.UpdateBarrierTs(globalBarrierTs, tableBarrier)
 }

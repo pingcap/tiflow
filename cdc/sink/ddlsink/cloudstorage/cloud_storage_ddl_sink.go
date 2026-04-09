@@ -109,8 +109,6 @@ func (d *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("write ddl event to external storage",
-			zap.String("path", path), zap.Any("ddl", ddl))
 		return d.statistics.RecordDDLExecution(func() error {
 			err1 := d.storage.WriteFile(ctx, path, encodedDef)
 			if err1 != nil {
@@ -141,9 +139,6 @@ func (d *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	if time.Since(d.lastSendCheckpointTsTime) < 2*time.Second {
-		log.Debug("skip write checkpoint ts to external storage",
-			zap.Any("changefeedID", d.id),
-			zap.Uint64("ts", ts))
 		return nil
 	}
 

@@ -87,9 +87,6 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 				zap.Error(err))
 		}
 	}()
-	log.Info("Transaction dmlSink worker starts",
-		zap.String("changefeedID", w.changefeed),
-		zap.Int("workerID", w.ID))
 
 	cleanSlowLogHistory := time.NewTicker(time.Hour)
 	defer cleanSlowLogHistory.Stop()
@@ -98,9 +95,6 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 	for {
 		select {
 		case <-w.ctx.Done():
-			log.Info("Transaction dmlSink worker exits as canceled",
-				zap.String("changefeedID", w.changefeed),
-				zap.Int("workerID", w.ID))
 			return nil
 		case <-cleanSlowLogHistory.C:
 			lastSlowConflictDetectLog := w.lastSlowConflictDetectLog

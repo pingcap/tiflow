@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestReplicationManagerHandleAddTableTask(t *testing.T) {
@@ -678,6 +679,7 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(20), watermark.ResolvedTs)
 	require.Equal(t, model.Ts(20), watermark.LastSyncedTs)
 	require.Equal(t, model.Ts(30), watermark.PullerResolvedTs)
+	require.Equal(t, span, r.slowestSink)
 
 	// some table not exist yet.
 	currentTables.UpdateTables([]model.TableID{1, 2, 3})
@@ -852,6 +854,28 @@ func TestReplicationManagerAdvanceCheckpoint(t *testing.T) {
 	require.Equal(t, model.Ts(12), watermark.LastSyncedTs)
 	require.Equal(t, model.Ts(16), watermark.PullerResolvedTs)
 	require.Equal(t, model.Ts(9), barrier.GetGlobalBarrierTs())
+
+	redoMetaManager.enable = false
+	currentPDTime := time.Now()
+	rsRedo := r.spans.GetV(spanRedo)
+	rsRedo.Checkpoint.CheckpointTs = oracle.GoTimeToTS(
+		currentPDTime.Add(-logSlowTablesLagThreshold - time.Second))
+	watermark = r.AdvanceCheckpoint(
+		currentTables, currentPDTime, schedulepb.NewBarrierWithMinTs(math.MaxUint64), redoMetaManager)
+	require.Equal(t, rsRedo.Checkpoint.CheckpointTs, watermark.CheckpointTs)
+	require.Equal(t, spanRedo, r.slowestSink)
+	require.Equal(t, rsRedo, r.getSlowestTableForLog(currentPDTime))
+
+	r.spans.Delete(spanRedo)
+	require.Nil(t, r.getSlowestTableForLog(currentPDTime))
+
+	r.spans.ReplaceOrInsert(spanRedo, rsRedo)
+	rsRedo.Checkpoint.CheckpointTs = oracle.GoTimeToTS(currentPDTime.Add(-time.Second))
+	watermark = r.AdvanceCheckpoint(
+		currentTables, currentPDTime, schedulepb.NewBarrierWithMinTs(math.MaxUint64), redoMetaManager)
+	require.Equal(t, rsRedo.Checkpoint.CheckpointTs, watermark.CheckpointTs)
+	require.Equal(t, spanRedo, r.slowestSink)
+	require.Nil(t, r.getSlowestTableForLog(currentPDTime))
 }
 
 func TestReplicationManagerAdvanceCheckpointWithRedoEnabled(t *testing.T) {
@@ -1006,65 +1030,4 @@ func TestReplicationManagerHandleCaptureChangesDuringAddTable(t *testing.T) {
 	require.Len(t, msgs, 1)
 	require.NotNil(t, r.runningTasks.Has(spanz.TableIDToComparableSpan(1)))
 	require.Equal(t, 1, <-addTableCh)
-}
-
-func TestLogSlowTableInfo(t *testing.T) {
-	t.Parallel()
-	r := NewReplicationManager(1, model.ChangeFeedID{})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(1),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
-		State:      ReplicationSetStateReplicating,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(2), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(2),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(3), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(3),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 3},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.logSlowTableInfo(time.Now())
-	// make sure all tables are will be pop out from heal after logged
-	require.Equal(t, r.slowTableHeap.Len(), 0)
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(4), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(4),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 4},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(5), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(5),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 5},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(6), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(6),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 6},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(7), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(7),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 7},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(8), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(8),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 8},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(9), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(9),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 9},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.spans.ReplaceOrInsert(spanz.TableIDToComparableSpan(1), &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(10),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 10},
-		State:      ReplicationSetStatePrepare,
-	})
-	r.logSlowTableInfo(time.Now())
-	// make sure the slowTableHeap's capacity will not extend
-	require.Equal(t, cap(r.slowTableHeap), 8)
 }

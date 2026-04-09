@@ -157,7 +157,6 @@ func (m *Manager) add(upstreamID uint64,
 		up.err.Store(err)
 	}()
 	up.resetIdleTime()
-	log.Info("new upstream is added", zap.Uint64("id", up.ID))
 	return up
 }
 

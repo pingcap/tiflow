@@ -665,7 +665,6 @@ LOOP2:
 		return errors.Trace(err)
 	}
 	cfInfo.Config.Sink.TiDBSourceID = sourceID
-	log.Info("get sourceID from PD", zap.Uint64("sourceID", sourceID), zap.Stringer("changefeedID", c.id))
 
 	c.ddlSink = c.newSink(c.id, cfInfo, c.Throw(ctx), func(err error) {
 		select {

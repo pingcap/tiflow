@@ -863,34 +863,29 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 
 // StartTable sets the table(TableSink) state to replicating.
 func (m *SinkManager) StartTable(span tablepb.Span, startTs model.Ts) error {
-	log.Info("Start table sink",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Stringer("span", &span),
-		zap.Uint64("startTs", startTs),
-	)
 	tableSink, ok := m.tableSinks.Load(span)
 	if !ok {
-		log.Panic("Table sink not found when starting table stats",
+		log.Panic("table sink not found when start it",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span))
+			zap.Int64("tableID", span.TableID))
 	}
 
-	if err := tableSink.(*tableSinkWrapper).start(m.managerCtx, startTs); err != nil {
+	t := tableSink.(*tableSinkWrapper)
+	if err := t.start(m.managerCtx, startTs); err != nil {
 		return err
 	}
 
 	m.sinkProgressHeap.push(&progress{
 		span:              span,
 		nextLowerBoundPos: sorter.Position{StartTs: 0, CommitTs: startTs + 1},
-		version:           tableSink.(*tableSinkWrapper).version,
+		version:           t.version,
 	})
 	if m.redoDMLMgr != nil {
 		m.redoProgressHeap.push(&progress{
 			span:              span,
 			nextLowerBoundPos: sorter.Position{StartTs: 0, CommitTs: startTs + 1},
-			version:           tableSink.(*tableSinkWrapper).version,
+			version:           t.version,
 		})
 	}
 	return nil
