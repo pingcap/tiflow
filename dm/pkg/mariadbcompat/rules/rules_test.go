@@ -400,25 +400,9 @@ func TestMariaDBSpecificRule_StripsOptions(t *testing.T) {
 }
 
 func TestMariaDBSpecificRule_InnoDB_NotStripped(t *testing.T) {
-	// ENGINE option is handled by EngineOptionsRule, not this rule
 	rule := &MariaDBSpecificRule{}
 	stmt := parseCreateTable(t, `CREATE TABLE t (id INT) ENGINE=InnoDB;`)
 	require.False(t, rule.ShouldApply(stmt))
-}
-
-// ---------------------------------------------------------------------------
-// EngineOptionsRule
-// ---------------------------------------------------------------------------
-
-func TestEngineOptionsRule_StripsEngine(t *testing.T) {
-	rule := &EngineOptionsRule{}
-	stmt := parseCreateTable(t, `CREATE TABLE t (id INT) ENGINE=MyISAM;`)
-	require.True(t, rule.ShouldApply(stmt))
-
-	out, err := rule.Apply(stmt)
-	require.NoError(t, err)
-	ct := out.(*ast.CreateTableStmt)
-	require.False(t, hasTblOpt(ct.Options, ast.TableOptionEngine))
 }
 
 // ---------------------------------------------------------------------------

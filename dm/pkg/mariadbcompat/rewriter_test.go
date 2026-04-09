@@ -270,7 +270,7 @@ CREATE SPATIAL INDEX sp_idx ON t (c);`
 
 	create, ok := stmts[0].(*ast.CreateTableStmt)
 	require.True(t, ok)
-	require.False(t, hasTableOption(create.Options, ast.TableOptionEngine))
+	require.Equal(t, "myisam", findTableOptionValue(create.Options, ast.TableOptionEngine))
 	require.False(t, hasTableOption(create.Options, ast.TableOptionCollate))
 
 	colA := findColumn(create, "a")

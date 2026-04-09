@@ -21,13 +21,12 @@ import (
 )
 
 func newDDLRewriter(cfg *config.SubTaskConfig, logger log.Logger) *mariadbcompat.Rewriter {
-	if cfg == nil || !cfg.MariaDBCompat.EnabledForFlavor(cfg.Flavor) {
+	if cfg == nil || !mariadbcompat.EnabledForFlavor(cfg.Flavor) {
 		return nil
 	}
 
 	logger.Info("enable MariaDB compatibility DDL rewrite",
 		zap.String("source", cfg.SourceID),
-		zap.String("mode", cfg.MariaDBCompat.Mode),
 		zap.Bool("strict", cfg.MariaDBCompat.Strict()),
 	)
 	return mariadbcompat.NewRewriter(cfg.MariaDBCompat.RewriterConfig())

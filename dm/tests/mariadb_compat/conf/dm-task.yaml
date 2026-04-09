@@ -10,9 +10,6 @@ target-database:
   user: "root"
   password: ""
 
-mariadb-compat:
-  mode: on
-
 mysql-instances:
   - source-id: "mysql-replica-01"
     black-white-list: "instance"

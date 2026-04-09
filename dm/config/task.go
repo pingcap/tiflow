@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadbcompat"
 	mariadbcompatconfig "github.com/pingcap/tiflow/dm/pkg/mariadbcompat/config"
 	mariadbcompatrules "github.com/pingcap/tiflow/dm/pkg/mariadbcompat/rules"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -492,7 +493,7 @@ func (c MariaDBCompatConfig) EnabledForFlavor(flavor string) bool {
 	case MariaDBCompatModeOff:
 		return false
 	default:
-		return strings.EqualFold(flavor, "mariadb")
+		return mariadbcompat.EnabledForFlavor(flavor)
 	}
 }
 

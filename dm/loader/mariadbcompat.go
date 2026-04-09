@@ -18,14 +18,14 @@ import (
 	"sort"
 	"strings"
 
-	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/dm/pkg/mariadbcompat"
-	"github.com/pingcap/tiflow/dm/pkg/storage"
+	dmstorage "github.com/pingcap/tiflow/dm/pkg/storage"
 	"go.uber.org/zap"
 )
 
 func (l *LightningLoader) maybeTransformSchemaFiles(ctx context.Context) error {
-	if l.cfg == nil || !l.cfg.MariaDBCompat.EnabledForFlavor(l.cfg.Flavor) {
+	if l.cfg == nil || !mariadbcompat.EnabledForFlavor(l.cfg.Flavor) {
 		return nil
 	}
 
@@ -35,7 +35,7 @@ func (l *LightningLoader) maybeTransformSchemaFiles(ctx context.Context) error {
 	}
 	defer closeFn()
 
-	files, err := storage.CollectDirFiles(ctx, l.cfg.LoaderConfig.Dir, dumpStorage)
+	files, err := dmstorage.CollectDirFiles(ctx, l.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
 		return err
 	}
@@ -79,11 +79,11 @@ func (l *LightningLoader) maybeTransformSchemaFiles(ctx context.Context) error {
 	return nil
 }
 
-func (l *LightningLoader) dumpStorage(ctx context.Context) (extstorage.ExternalStorage, func(), error) {
+func (l *LightningLoader) dumpStorage(ctx context.Context) (storeapi.Storage, func(), error) {
 	if l.cfg.ExtStorage != nil {
 		return l.cfg.ExtStorage, func() {}, nil
 	}
-	created, err := storage.CreateStorage(ctx, l.cfg.LoaderConfig.Dir)
+	created, err := dmstorage.CreateStorage(ctx, l.cfg.LoaderConfig.Dir)
 	if err != nil {
 		return nil, nil, err
 	}

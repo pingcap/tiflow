@@ -128,7 +128,7 @@ func buildMariaDBCompatRewriters(instances []*mysqlInstance) map[string]*mariadb
 		if inst == nil || inst.cfg == nil {
 			continue
 		}
-		if !inst.cfg.MariaDBCompat.EnabledForFlavor(inst.cfg.Flavor) {
+		if !mariadbcompat.EnabledForFlavor(inst.cfg.Flavor) {
 			continue
 		}
 

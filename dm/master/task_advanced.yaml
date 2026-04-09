@@ -13,7 +13,7 @@ enable-heartbeat: false  # whether to enable heartbeat for calculating lag betwe
 # available rules: Collation, ZeroTimestamp, UUIDType, MariaDBSpecific, Constraints, TrailingComma,
 # VersionMacros, AutoIncrementValues, OnUpdateCurrentTimestamp, IndexType, QualifiedNames, SystemVersioning,
 # SequenceType, ColumnAttributes, IndexOptions, FulltextIndexNormalize, SpatialIndexDrop, CreateOrReplace,
-# EngineOptions, IgnoredClauseCleanup, CollationFallback, KeyLength, IndexPrefix, IntegerWidth,
+# IgnoredClauseCleanup, CollationFallback, KeyLength, IndexPrefix, IntegerWidth,
 # TextBlobDefaults, JsonCheck, FunctionDefault, JsonGenerated
 #mariadb-compat:
 #  mode: "auto"

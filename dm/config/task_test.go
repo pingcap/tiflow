@@ -1234,12 +1234,12 @@ func TestMariaDBCompatConfigAdjustNormalizesRuleNames(t *testing.T) {
 	cfg := MariaDBCompatConfig{
 		Mode:          MariaDBCompatModeOn,
 		EnabledRules:  []string{"collation", "jsoncheck"},
-		DisabledRules: []string{"engineoptions"},
+		DisabledRules: []string{"integerwidth"},
 	}
 
 	require.NoError(t, cfg.Adjust())
 	require.Equal(t, []string{"Collation", "JsonCheck"}, cfg.EnabledRules)
-	require.Equal(t, []string{"EngineOptions"}, cfg.DisabledRules)
+	require.Equal(t, []string{"IntegerWidth"}, cfg.DisabledRules)
 }
 
 func TestMariaDBCompatConfigAdjustRejectsUnknownRule(t *testing.T) {

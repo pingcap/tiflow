@@ -121,7 +121,6 @@ func (r *Registry) registerDefaultRules(cfg *config.Config) {
 		&FulltextIndexNormalizeRule{},
 		&SpatialIndexDropRule{},
 		&CreateOrReplaceRule{},
-		&EngineOptionsRule{},
 		&IgnoredClauseCleanupRule{},
 		&CollationFallbackRule{},
 		// T-0004: KeyLength rule
