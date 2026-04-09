@@ -51,6 +51,7 @@ func TestPrimaryKeyChecker(t *testing.T) {
 			{Schema: "test-db", Name: "test-table-1"}: {{Schema: "test-db", Name: "test-table-1"}},
 		}},
 		1,
+		nil,
 	)
 	res := checker.Check(ctx)
 	require.Equal(t, StateSuccess, res.State)
@@ -77,6 +78,7 @@ func TestPrimaryKeyChecker(t *testing.T) {
 			{Schema: "test-db", Name: "test-table-1"}: {{Schema: "test-db", Name: "test-table-1"}},
 		}},
 		1,
+		nil,
 	)
 	res = checker.Check(ctx)
 	require.Equal(t, StateFailure, res.State)
@@ -102,6 +104,7 @@ func TestPrimaryKeyChecker(t *testing.T) {
 			{Schema: "test-db", Name: "test-table-1"}: {{Schema: "test-db", Name: "test-table-1"}},
 		}},
 		1,
+		nil,
 	)
 	res = checker.Check(ctx)
 	// table was deleted during checking, so no error should be produced
@@ -127,6 +130,7 @@ func TestPrimaryKeyChecker(t *testing.T) {
 			{Schema: "test-db", Name: "test-table-1"}: {{Schema: "test-db", Name: "test-table-1"}},
 		}},
 		1,
+		nil,
 	)
 	res = checker.Check(ctx)
 	require.Equal(t, StateWarning, res.State)

@@ -48,6 +48,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadbcompat"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
 	"github.com/pingcap/tiflow/dm/unit"
@@ -119,6 +120,21 @@ func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, e
 	}
 
 	return c
+}
+
+func buildMariaDBCompatRewriters(instances []*mysqlInstance) map[string]*mariadbcompat.Rewriter {
+	rewriters := make(map[string]*mariadbcompat.Rewriter)
+	for _, inst := range instances {
+		if inst == nil || inst.cfg == nil {
+			continue
+		}
+		if !inst.cfg.MariaDBCompat.EnabledForFlavor(inst.cfg.Flavor) {
+			continue
+		}
+
+		rewriters[inst.cfg.SourceID] = mariadbcompat.NewRewriter(inst.cfg.MariaDBCompat.RewriterConfig())
+	}
+	return rewriters
 }
 
 // tablePairInfo records information about a upstream-downstream(source-target) table pair.
@@ -378,6 +394,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 	}
 
 	dumpThreads := c.instances[0].cfg.MydumperConfig.Threads
+	rewriters := buildMariaDBCompatRewriters(c.instances)
 	if _, ok := c.checkingItems[config.TableSchemaChecking]; ok {
 		c.checkList = append(c.checkList, checker.NewTablesChecker(
 			upstreamDBs,
@@ -385,6 +402,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			info.sourceID2TableMap,
 			info.targetTable2ExtendedColumns,
 			dumpThreads,
+			rewriters,
 		))
 	}
 	if _, ok := c.checkingItems[config.PrimaryKeyChecking]; ok {
@@ -392,6 +410,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			upstreamDBs,
 			info.sourceID2TableMap,
 			dumpThreads,
+			rewriters,
 		))
 	}
 

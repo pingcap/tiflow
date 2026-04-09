@@ -53,6 +53,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/mariadbcompat"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
@@ -259,7 +260,9 @@ type Syncer struct {
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
 
-	ddlWorker            *DDLWorker
+	ddlWorker   *DDLWorker
+	ddlRewriter *mariadbcompat.Rewriter
+
 	unhandledEventLogger *zap.Logger
 }
 
@@ -522,6 +525,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
+	s.ddlRewriter = newDDLRewriter(s.cfg, s.tctx.L())
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
@@ -2759,6 +2763,7 @@ type queryEventContext struct {
 	p         *parser.Parser // used parser
 	ddlSchema string         // used schema
 	originSQL string         // before split
+	ddlSQL    string         // transformed SQL used for parsing
 	// split multi-schema change DDL into multiple one schema change DDL due to TiDB's limitation
 	splitDDLs      []string // after split before online ddl
 	appliedDDLs    []string // after onlineDDL apply if onlineDDL != nil
@@ -2950,21 +2955,27 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 	if err != nil {
 		s.tctx.L().Warn("found error when get sql_mode from binlog status_vars", zap.Error(err))
 	}
-	stmt, err := parseOneStmt(qec)
+	stmts, err := parseStmtNodes(qec)
 	if err != nil {
 		// originSQL can't be parsed => can't be tracked by schema tracker
 		// we can use operate-schema to set a compatible schema after this
 		return nil, err
 	}
 
-	if _, ok := stmt.(ast.DDLNode); !ok {
-		return nil, nil
+	hasDDL := false
+	for _, stmt := range stmts {
+		if _, ok := stmt.(ast.DDLNode); !ok {
+			continue
+		}
+		hasDDL = true
+		splitDDLs, err2 := parserpkg.SplitDDL(stmt, qec.ddlSchema)
+		if err2 != nil {
+			return nil, err2
+		}
+		qec.splitDDLs = append(qec.splitDDLs, splitDDLs...)
 	}
-
-	// TiDB can't handle multi schema change DDL, so we split it here.
-	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-	if err != nil {
-		return nil, err
+	if !hasDDL {
+		return nil, nil
 	}
 
 	for _, sql := range qec.splitDDLs {

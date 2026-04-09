@@ -129,6 +129,54 @@ func (s *testDDLSuite) TestCommentQuote(c *check.C) {
 	c.Assert(qec.appliedDDLs[0], check.Equals, expectedSQL)
 }
 
+func (s *testDDLSuite) TestTransformedMultiStmtDDL(c *check.C) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestTransformedMultiStmtDDL")))
+	testEC := &eventContext{
+		tctx: tctx,
+	}
+	qec := &queryEventContext{
+		eventContext: testEC,
+		ddlSchema:    "test",
+		originSQL:    "CREATE OR REPLACE TABLE t1 (id INT)",
+		ddlSQL:       "DROP TABLE IF EXISTS t1; CREATE TABLE t1 (id INT);",
+		appliedDDLs:  make([]string, 0),
+		p:            parser.New(),
+	}
+
+	stmts, err := parseStmtNodes(qec)
+	c.Assert(err, check.IsNil)
+	c.Assert(stmts, check.HasLen, 2)
+	for _, stmt := range stmts {
+		_, ok := stmt.(ast.DDLNode)
+		c.Assert(ok, check.IsTrue)
+
+		splitDDLs, err2 := parserpkg.SplitDDL(stmt, qec.ddlSchema)
+		c.Assert(err2, check.IsNil)
+		qec.splitDDLs = append(qec.splitDDLs, splitDDLs...)
+	}
+	c.Assert(qec.splitDDLs, check.DeepEquals, []string{
+		"DROP TABLE IF EXISTS `test`.`t1`",
+		"CREATE TABLE IF NOT EXISTS `test`.`t1` (`id` INT)",
+	})
+
+	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
+	syncer.tctx = tctx
+	c.Assert(syncer.genRouter(), check.IsNil)
+
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+	qec.p = parser.New()
+	for _, sql := range qec.splitDDLs {
+		sqls, err2 := ddlWorker.processOneDDL(qec, sql)
+		c.Assert(err2, check.IsNil)
+		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
+	}
+
+	c.Assert(qec.appliedDDLs, check.DeepEquals, []string{
+		"DROP TABLE IF EXISTS `test`.`t1`",
+		"CREATE TABLE IF NOT EXISTS `test`.`t1` (`id` INT)",
+	})
+}
+
 func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 	// duplicate with pkg/parser
 	sqls := []string{
