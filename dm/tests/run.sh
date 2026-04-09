@@ -7,11 +7,22 @@ export DM_MASTER_EXTRA_ARG=""
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/_utils/env_variables
 
+if [ "$#" -ge 1 ]; then
+	test_case="$*"
+else
+	test_case="*"
+fi
+
+need_mariadb=0
+need_mysql=1
+
 stop_services() {
 	echo "..."
-	# clean sql mode
-	mysql -u root -h $MYSQL_HOST1 -P $MYSQL_PORT1 -p$MYSQL_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
-	mysql -u root -h $MYSQL_HOST2 -P $MYSQL_PORT2 -p$MYSQL_PASSWORD2 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+	if [ "$need_mysql" -eq 1 ]; then
+		# clean sql mode
+		mysql -u root -h $MYSQL_HOST1 -P $MYSQL_PORT1 -p$MYSQL_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+		mysql -u root -h $MYSQL_HOST2 -P $MYSQL_PORT2 -p$MYSQL_PASSWORD2 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+	fi
 }
 
 print_worker_stacks() {
@@ -58,17 +69,16 @@ start_services() {
 
 	i=0
 
-	check_mysql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	check_mysql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	set_default_variables $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-	set_default_variables $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	if [ "$need_mysql" -eq 1 ]; then
+		check_mysql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+		check_mysql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+		set_default_variables $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+		set_default_variables $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	fi
+	if [ "$need_mariadb" -eq 1 ]; then
+		check_mysql $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
+	fi
 }
-
-if [ "$#" -ge 1 ]; then
-	test_case="$@"
-else
-	test_case="*"
-fi
 
 should_run=0
 if [ "$test_case" == "*" ]; then
@@ -86,6 +96,24 @@ else
 		fi
 	done
 	test_case=$exist_case
+fi
+
+need_mariadb=0
+need_mysql=0
+if [ "$test_case" == "*" ]; then
+	need_mariadb=1
+	need_mysql=1
+else
+	for one_case in $test_case; do
+		case "$one_case" in
+			mariadb_source)
+				need_mariadb=1
+				;;
+			*)
+				need_mysql=1
+				;;
+		esac
+	done
 fi
 
 if [ $should_run -eq 0 ]; then
