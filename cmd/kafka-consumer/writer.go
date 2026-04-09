@@ -117,7 +117,11 @@ type writer struct {
 
 	ddlList            []*model.DDLEvent
 	ddlWithMaxCommitTs *model.DDLEvent
-	ddlSink            ddlsink.Sink
+	// ddlKeysWithMaxCommitTs records every logical DDL seen at the current
+	// maximum CommitTs, so replayed prefixes of split DDL sequences can be
+	// ignored without collapsing distinct DDLs that share the same CommitTs.
+	ddlKeysWithMaxCommitTs map[ddlEventKey]struct{}
+	ddlSink                ddlsink.Sink
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
@@ -126,19 +130,23 @@ type writer struct {
 	eventRouter *dispatcher.EventRouter
 }
 
-// isEquivalentDDLEvent checks whether two DDL events represent the same logical
-// DDL, even if they were decoded from different replayed Kafka messages.
-// Seq keeps split DDLs with the same commitTs distinct.
-func isEquivalentDDLEvent(left, right *model.DDLEvent) bool {
-	if left == nil || right == nil {
-		return left == right
+// ddlEventKey identifies a logical DDL even if the Kafka replay decodes it
+// into a fresh DDLEvent object. The MQ codecs preserve StartTs/CommitTs/Query/Seq,
+// which is enough to distinguish split DDLs while still recognizing replays.
+type ddlEventKey struct {
+	startTs  uint64
+	commitTs uint64
+	query    string
+	seq      uint64
+}
+
+func newDDLEventKey(ddl *model.DDLEvent) ddlEventKey {
+	return ddlEventKey{
+		startTs:  ddl.StartTs,
+		commitTs: ddl.CommitTs,
+		query:    ddl.Query,
+		seq:      ddl.Seq,
 	}
-	return left.StartTs == right.StartTs &&
-		left.CommitTs == right.CommitTs &&
-		left.Query == right.Query &&
-		left.Seq == right.Seq &&
-		left.Type == right.Type &&
-		left.IsBootstrap == right.IsBootstrap
 }
 
 func newWriter(ctx context.Context, o *option) *writer {
@@ -213,17 +221,23 @@ func (w *writer) appendDDL(ddl *model.DDLEvent, offset kafka.Offset) {
 		return
 	}
 
-	// A rename tables DDL job contains multiple DDL events with same CommitTs.
-	// So to tell if a DDL is redundant or not, we must check the equivalence of
-	// the current DDL and the DDL with max CommitTs.
-	if isEquivalentDDLEvent(ddl, w.ddlWithMaxCommitTs) {
-		log.Warn("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
+	ddlKey := newDDLEventKey(ddl)
+	if w.ddlWithMaxCommitTs == nil || ddl.CommitTs > w.ddlWithMaxCommitTs.CommitTs {
+		w.ddlKeysWithMaxCommitTs = make(map[ddlEventKey]struct{})
+	}
+
+	// The DDL with max CommitTs may be one event in a split DDL job, so we must
+	// remember every logical DDL already seen at that CommitTs rather than only
+	// comparing against the last decoded event object.
+	if _, duplicated := w.ddlKeysWithMaxCommitTs[ddlKey]; duplicated {
+		log.Warn("ignore redundant DDL, the DDL has already been seen at max CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	w.ddlList = append(w.ddlList, ddl)
 	w.ddlWithMaxCommitTs = ddl
+	w.ddlKeysWithMaxCommitTs[ddlKey] = struct{}{}
 	log.Info("DDL message received", zap.Any("offset", offset), zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 }
 

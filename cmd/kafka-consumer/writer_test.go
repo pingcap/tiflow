@@ -84,3 +84,69 @@ func TestAppendDDLKeepsSplitDDLSequenceDistinct(t *testing.T) {
 	require.Len(t, w.ddlList, 2)
 	require.Same(t, second, w.ddlWithMaxCommitTs)
 }
+
+func TestAppendDDLIgnoresReplayedSplitDDLSequence(t *testing.T) {
+	// Scenario: Kafka replays an already queued split DDL sequence after later parts were seen.
+	// Steps: append the original split DDLs, then replay the same logical DDLs as fresh objects.
+	// Expectation: the queue keeps only the original sequence and does not append duplicates.
+	w := &writer{}
+	first := &model.DDLEvent{
+		StartTs:  300,
+		CommitTs: 320,
+		Query:    "rename table test.t1 to test.t2",
+		Seq:      0,
+	}
+	second := &model.DDLEvent{
+		StartTs:  300,
+		CommitTs: 320,
+		Query:    "rename table test.t3 to test.t4",
+		Seq:      1,
+	}
+	replayFirst := &model.DDLEvent{
+		StartTs:  300,
+		CommitTs: 320,
+		Query:    "rename table test.t1 to test.t2",
+		Seq:      0,
+	}
+	replaySecond := &model.DDLEvent{
+		StartTs:  300,
+		CommitTs: 320,
+		Query:    "rename table test.t3 to test.t4",
+		Seq:      1,
+	}
+
+	w.appendDDL(first, kafka.Offset(10))
+	w.appendDDL(second, kafka.Offset(11))
+	w.appendDDL(replayFirst, kafka.Offset(12))
+	w.appendDDL(replaySecond, kafka.Offset(13))
+
+	require.Len(t, w.ddlList, 2)
+	require.Same(t, first, w.ddlList[0])
+	require.Same(t, second, w.ddlList[1])
+	require.Same(t, second, w.ddlWithMaxCommitTs)
+}
+
+func TestAppendDDLKeepsDifferentDDLsWithSameCommitTsWithoutSeq(t *testing.T) {
+	// Scenario: a multi-DDL job can emit different DDLs that share the same commitTs while Seq stays at zero.
+	// Steps: append two distinct DDLs with the same timestamps but different queries and default Seq.
+	// Expectation: both DDLs remain queued because Query is still part of the logical DDL identity.
+	w := &writer{}
+	first := &model.DDLEvent{
+		StartTs:  400,
+		CommitTs: 420,
+		Query:    "create table test.t1(id int primary key)",
+	}
+	second := &model.DDLEvent{
+		StartTs:  400,
+		CommitTs: 420,
+		Query:    "create table test.t2(id int primary key)",
+	}
+
+	w.appendDDL(first, kafka.Offset(20))
+	w.appendDDL(second, kafka.Offset(21))
+
+	require.Len(t, w.ddlList, 2)
+	require.Same(t, first, w.ddlList[0])
+	require.Same(t, second, w.ddlList[1])
+	require.Same(t, second, w.ddlWithMaxCommitTs)
+}
