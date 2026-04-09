@@ -54,13 +54,14 @@ func TestNewRetrySampleLogger(t *testing.T) {
 	base := Logger{zap.New(core).With(zap.String("base", "logger"))}
 	logger := NewRetrySampleLogger(base, zap.String("component", "retry-unit-test"))
 
-	logger.Error("retryable operation failed", zap.Int("retryNum", 1))
-	logger.Error("retryable operation failed", zap.Int("retryNum", 2))
+	for i := 1; i <= retryLogSampleFirst+1; i++ {
+		logger.Error("retryable operation failed", zap.Int("retryNum", i))
+	}
 	logger.Warn("retryable operation failed", zap.Int("retryNum", 3))
-	logger.Error("another retryable operation failed", zap.Int("retryNum", 4))
+	logger.Error("another retryable operation failed", zap.Int("retryNum", retryLogSampleFirst+2))
 
 	entries := observed.All()
-	require.Len(t, entries, 3)
+	require.Len(t, entries, retryLogSampleFirst+2)
 
 	require.Equal(t, "retryable operation failed", entries[0].Message)
 	require.Equal(t, zap.ErrorLevel, entries[0].Level)
@@ -71,11 +72,16 @@ func TestNewRetrySampleLogger(t *testing.T) {
 		"sampled":   "",
 	}, entries[0].ContextMap())
 
-	require.Equal(t, "retryable operation failed", entries[1].Message)
-	require.Equal(t, zap.WarnLevel, entries[1].Level)
+	require.Equal(t, "retryable operation failed", entries[retryLogSampleFirst-1].Message)
+	require.Equal(t, zap.ErrorLevel, entries[retryLogSampleFirst-1].Level)
+	require.Equal(t, int64(retryLogSampleFirst), entries[retryLogSampleFirst-1].ContextMap()["retryNum"])
 
-	require.Equal(t, "another retryable operation failed", entries[2].Message)
-	require.Equal(t, zap.ErrorLevel, entries[2].Level)
+	require.Equal(t, "retryable operation failed", entries[retryLogSampleFirst].Message)
+	require.Equal(t, zap.WarnLevel, entries[retryLogSampleFirst].Level)
+
+	require.Equal(t, "another retryable operation failed", entries[retryLogSampleFirst+1].Message)
+	require.Equal(t, zap.ErrorLevel, entries[retryLogSampleFirst+1].Level)
+	require.Equal(t, int64(retryLogSampleFirst+2), entries[retryLogSampleFirst+1].ContextMap()["retryNum"])
 }
 
 // makeTestLogger creates a Logger instance which produces JSON logs.

@@ -36,8 +36,8 @@ const (
 	defaultLogMaxDays = 7
 	defaultLogMaxSize = 512 // MB
 
-	retryLogSampleInterval = 5 * time.Minute
-	retryLogSampleFirst    = 1
+	retryLogSampleInterval = time.Minute
+	retryLogSampleFirst    = 10
 )
 
 // Config serializes log related config in toml/json.
@@ -176,8 +176,8 @@ func sampleLoggerFactory(base *zap.Logger, tick time.Duration, first int, fields
 	}
 }
 
-// NewRetrySampleLogger creates a logger that only prints the first repeated
-// retry log with the same level and message during the sampling window.
+// NewRetrySampleLogger creates a logger that caps repeated retry logs with the
+// same level and message to retryLogSampleFirst entries per sampling window.
 func NewRetrySampleLogger(base Logger, fields ...zap.Field) *zap.Logger {
 	return sampleLoggerFactory(base.Logger, retryLogSampleInterval, retryLogSampleFirst, fields...)()
 }
