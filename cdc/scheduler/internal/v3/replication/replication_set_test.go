@@ -14,7 +14,6 @@
 package replication
 
 import (
-	"container/heap"
 	"encoding/json"
 	"math/rand"
 	"testing"
@@ -23,7 +22,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1593,99 +1591,6 @@ func TestReplicationSetRemoveRestart(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, msgs, 0)
 	require.True(t, r.hasRemoved())
-}
-
-func TestReplicationSetHeap_Len(t *testing.T) {
-	t.Parallel()
-
-	h := NewReplicationSetHeap(defaultSlowTableHeapSize)
-	require.Equal(t, 0, h.Len())
-
-	h = append(h, &ReplicationSet{Span: spanz.TableIDToComparableSpan(0)})
-	require.Equal(t, 1, h.Len())
-
-	h = append(h, &ReplicationSet{Span: spanz.TableIDToComparableSpan(1)})
-	require.Equal(t, 2, h.Len())
-}
-
-func TestReplicationSetHeap_Less(t *testing.T) {
-	t.Parallel()
-
-	h := NewReplicationSetHeap(defaultSlowTableHeapSize)
-	h = append(h, &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(0),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
-	})
-	h = append(h, &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(1),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2, ResolvedTs: 3},
-	})
-	h = append(h, &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(2),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2, ResolvedTs: 4},
-	})
-	require.True(t, h.Less(1, 0))
-	require.True(t, h.Less(2, 1))
-}
-
-func TestReplicationSetHeap_Basic(t *testing.T) {
-	t.Parallel()
-
-	h := NewReplicationSetHeap(defaultSlowTableHeapSize)
-	heap.Init(&h)
-	heap.Push(&h, &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(0),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 1},
-	})
-	heap.Push(&h, &ReplicationSet{
-		Span:       spanz.TableIDToComparableSpan(1),
-		Checkpoint: tablepb.Checkpoint{CheckpointTs: 2},
-	})
-	require.Equal(t, 2, h.Len())
-
-	require.Equal(t, int64(1), heap.Pop(&h).(*ReplicationSet).Span.TableID)
-	require.Equal(t, 1, h.Len())
-
-	require.Equal(t, int64(0), heap.Pop(&h).(*ReplicationSet).Span.TableID)
-	require.Equal(t, 0, h.Len())
-}
-
-// TestReplicationSetHeap_MinK tests that the heap can be
-// used to keep the min K elements.
-func TestReplicationSetHeap_MinK(t *testing.T) {
-	t.Parallel()
-
-	// K = defaultSlowTableHeapSize
-	h := NewReplicationSetHeap(defaultSlowTableHeapSize)
-	heap.Init(&h)
-
-	for i := 2 * defaultSlowTableHeapSize; i > 0; i-- {
-		replicationSet := &ReplicationSet{
-			Span:       spanz.TableIDToComparableSpan(int64(i)),
-			Checkpoint: tablepb.Checkpoint{CheckpointTs: uint64(i)},
-		}
-		heap.Push(&h, replicationSet)
-		if h.Len() > defaultSlowTableHeapSize {
-			heap.Pop(&h)
-		}
-	}
-
-	require.Equal(t, defaultSlowTableHeapSize, h.Len())
-
-	expectedTables := make([]int64, 0)
-	for i := defaultSlowTableHeapSize; i > 0; i-- {
-		expectedTables = append(expectedTables, int64(i))
-	}
-
-	tables := make([]model.TableID, 0)
-	tableCounts := h.Len()
-	for i := 0; i < tableCounts; i++ {
-		element := heap.Pop(&h).(*ReplicationSet)
-		t.Log(element.Span)
-		tables = append(tables, element.Span.TableID)
-	}
-	require.Equal(t, expectedTables, tables)
-	require.Equal(t, 0, h.Len())
 }
 
 func TestUpdateCheckpointAndStats(t *testing.T) {
