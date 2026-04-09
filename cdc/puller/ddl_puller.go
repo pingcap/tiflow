@@ -327,8 +327,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Int64("jobID", job.ID),
-				zap.String("schema", job.SchemaName),
-				zap.String("table", job.TableName),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.String("query", job.Query),
@@ -342,8 +340,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Int64("jobID", job.ID),
-			zap.String("schema", job.SchemaName),
-			zap.String("table", job.TableName),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 			zap.String("query", job.Query),
@@ -363,8 +359,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.Int64("jobID", job.ID),
-				zap.String("schema", job.SchemaName),
-				zap.String("table", job.TableName),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.String("query", job.Query),
@@ -580,8 +574,9 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 		if shouldDiscardOldTable && shouldDiscardNewTable {
 			// skip a rename table ddl only when its old table name and new table name are both filtered.
 			log.Info("RenameTables is filtered",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
 				zap.Int64("tableID", tableInfo.ID),
-				zap.String("schema", info.OldSchemaName.O),
 				zap.String("query", job.Query))
 			continue
 		}

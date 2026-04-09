@@ -318,8 +318,6 @@ func (m *ddlManager) tick(
 					log.Info("table is ineligible, skip the ddl",
 						zap.String("namespace", m.changfeedID.Namespace),
 						zap.String("changefeed", m.changfeedID.ID),
-						zap.String("schema", event.TableInfo.TableName.Schema),
-						zap.String("table", event.TableInfo.TableName.Table),
 						zap.Uint64("commitTs", event.CommitTs),
 						zap.String("query", event.Query))
 					continue
@@ -373,18 +371,9 @@ func (m *ddlManager) tick(
 
 		if m.shouldExecDDL(nextDDL) {
 			if m.executingDDL == nil {
-				tableInfo := nextDDL.TableInfo
-				if tableInfo == nil {
-					tableInfo = nextDDL.PreTableInfo
-				}
-				schemaName, tableName := "", ""
-				if tableInfo != nil {
-					schemaName = tableInfo.TableName.Schema
-					tableName = tableInfo.TableName.Table
-				}
 				log.Info("execute a ddl event",
-					zap.String("schema", schemaName),
-					zap.String("table", tableName),
+					zap.String("namespace", m.changfeedID.Namespace),
+					zap.String("changefeed", m.changfeedID.ID),
 					zap.Uint64("commitTs", nextDDL.CommitTs),
 					zap.String("query", nextDDL.Query))
 				m.executingDDL = nextDDL
@@ -642,17 +631,12 @@ func (m *ddlManager) cleanCache(msg string) {
 		tableInfo = m.executingDDL.PreTableInfo
 	}
 	var tableName model.TableName
-	schemaName, table := "", ""
 	if tableInfo != nil {
 		tableName = tableInfo.TableName
-		schemaName = tableInfo.TableName.Schema
-		table = tableInfo.TableName.Table
 	}
 	log.Info(msg,
 		zap.String("namespace", m.changfeedID.Namespace),
 		zap.String("changefeed", m.changfeedID.ID),
-		zap.String("schema", schemaName),
-		zap.String("table", table),
 		zap.Uint64("commitTs", m.executingDDL.CommitTs),
 		zap.String("query", m.executingDDL.Query))
 
