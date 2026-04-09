@@ -845,6 +845,8 @@ func TestGenAndFromSubTaskConfigs(t *testing.T) {
 	require.Equal(t, wordCount(cfg.String()), wordCount(cfg2.String())) // since rules are unordered, so use wordCount to compare
 
 	require.NoError(t, cfg.adjust())
+	stCfg1.MariaDBCompat = cfg.MariaDBCompat
+	stCfg2.MariaDBCompat = cfg.MariaDBCompat
 	stCfgs, err := TaskConfigToSubTaskConfigs(cfg, map[string]dbconfig.DBConfig{source1: source1DBCfg, source2: source2DBCfg})
 	require.NoError(t, err)
 	// revert ./dumpped_data.from-sub-tasks
@@ -1078,8 +1080,8 @@ func TestTaskConfigForDowngrade(t *testing.T) {
 	// make sure all new field were added
 	cfgReflect := reflect.Indirect(reflect.ValueOf(cfg))
 	cfgForDowngradeReflect := reflect.Indirect(reflect.ValueOf(cfgForDowngrade))
-	// without flag, collation_compatible, experimental, validator
-	require.Equal(t, cfgForDowngradeReflect.NumField()+4, cfgReflect.NumField())
+	// without flag, collation_compatible, mariadb-compat, experimental, validator
+	require.Equal(t, cfgForDowngradeReflect.NumField()+5, cfgReflect.NumField())
 
 	// make sure all field were copied
 	cfgForClone := &TaskConfigForDowngrade{}
@@ -1224,4 +1226,43 @@ func TestTaskYamlForDowngrade(t *testing.T) {
 	decryptedPass, err := utils.Decrypt(newCfg.TargetDB.Password)
 	require.NoError(t, err)
 	require.Equal(t, originCfg.TargetDB.Password, decryptedPass)
+}
+
+func TestMariaDBCompatConfigAdjustNormalizesRuleNames(t *testing.T) {
+	t.Parallel()
+
+	cfg := MariaDBCompatConfig{
+		Mode:          MariaDBCompatModeOn,
+		EnabledRules:  []string{"collation", "jsoncheck"},
+		DisabledRules: []string{"engineoptions"},
+	}
+
+	require.NoError(t, cfg.Adjust())
+	require.Equal(t, []string{"Collation", "JsonCheck"}, cfg.EnabledRules)
+	require.Equal(t, []string{"EngineOptions"}, cfg.DisabledRules)
+}
+
+func TestMariaDBCompatConfigAdjustRejectsUnknownRule(t *testing.T) {
+	t.Parallel()
+
+	cfg := MariaDBCompatConfig{
+		Mode:         MariaDBCompatModeOn,
+		EnabledRules: []string{"not-a-rule"},
+	}
+
+	err := cfg.Adjust()
+	require.ErrorContains(t, err, `unknown mariadb-compat rule "not-a-rule"`)
+}
+
+func TestMariaDBCompatConfigAdjustRejectsConflictingRuleDirectives(t *testing.T) {
+	t.Parallel()
+
+	cfg := MariaDBCompatConfig{
+		Mode:          MariaDBCompatModeOn,
+		EnabledRules:  []string{"collation"},
+		DisabledRules: []string{"Collation"},
+	}
+
+	err := cfg.Adjust()
+	require.ErrorContains(t, err, `mariadb-compat rule "Collation" cannot be both enabled and disabled`)
 }

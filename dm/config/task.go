@@ -35,6 +35,8 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	mariadbcompatconfig "github.com/pingcap/tiflow/dm/pkg/mariadbcompat/config"
+	mariadbcompatrules "github.com/pingcap/tiflow/dm/pkg/mariadbcompat/rules"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
@@ -420,6 +422,97 @@ type SyncerConfig struct {
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
 
+// MariaDBCompatMode controls whether to enable MariaDB schema conversion.
+const (
+	MariaDBCompatModeAuto = "auto"
+	MariaDBCompatModeOn   = "on"
+	MariaDBCompatModeOff  = "off"
+)
+
+// MariaDBCompatConfig controls schema conversion rules for MariaDB sources.
+type MariaDBCompatConfig struct {
+	Mode          string   `yaml:"mode" toml:"mode" json:"mode"`
+	EnabledRules  []string `yaml:"enabled-rules" toml:"enabled-rules" json:"enabled-rules"`
+	DisabledRules []string `yaml:"disabled-rules" toml:"disabled-rules" json:"disabled-rules"`
+	StrictMode    *bool    `yaml:"strict-mode" toml:"strict-mode" json:"strict-mode"`
+}
+
+// DefaultMariaDBCompatConfig returns the default config.
+func DefaultMariaDBCompatConfig() MariaDBCompatConfig {
+	strict := true
+	return MariaDBCompatConfig{
+		Mode:       MariaDBCompatModeAuto,
+		StrictMode: &strict,
+	}
+}
+
+// Adjust normalizes and validates the config.
+func (c *MariaDBCompatConfig) Adjust() error {
+	if c.Mode == "" {
+		c.Mode = MariaDBCompatModeAuto
+	}
+	c.Mode = strings.ToLower(c.Mode)
+	switch c.Mode {
+	case MariaDBCompatModeAuto, MariaDBCompatModeOn, MariaDBCompatModeOff:
+	default:
+		return fmt.Errorf("mariadb-compat.mode must be one of %q, %q, %q", MariaDBCompatModeAuto, MariaDBCompatModeOn, MariaDBCompatModeOff)
+	}
+	if c.StrictMode == nil {
+		strict := true
+		c.StrictMode = &strict
+	}
+	normalizedEnabledRules, err := mariadbcompatrules.NormalizeConfiguredRuleNames(c.EnabledRules)
+	if err != nil {
+		return err
+	}
+	normalizedDisabledRules, err := mariadbcompatrules.NormalizeConfiguredRuleNames(c.DisabledRules)
+	if err != nil {
+		return err
+	}
+	c.EnabledRules = normalizedEnabledRules
+	c.DisabledRules = normalizedDisabledRules
+
+	enabledRules := make(map[string]struct{}, len(c.EnabledRules))
+	for _, ruleName := range c.EnabledRules {
+		enabledRules[ruleName] = struct{}{}
+	}
+	for _, ruleName := range c.DisabledRules {
+		if _, ok := enabledRules[ruleName]; ok {
+			return fmt.Errorf("mariadb-compat rule %q cannot be both enabled and disabled", ruleName)
+		}
+	}
+	return nil
+}
+
+// EnabledForFlavor reports whether conversion should run for a flavor.
+func (c MariaDBCompatConfig) EnabledForFlavor(flavor string) bool {
+	switch strings.ToLower(c.Mode) {
+	case MariaDBCompatModeOn:
+		return true
+	case MariaDBCompatModeOff:
+		return false
+	default:
+		return strings.EqualFold(flavor, "mariadb")
+	}
+}
+
+// Strict reports whether conversion should fail on errors.
+func (c MariaDBCompatConfig) Strict() bool {
+	if c.StrictMode == nil {
+		return true
+	}
+	return *c.StrictMode
+}
+
+// RewriterConfig returns the internal SQL rewriter config for MariaDB compatibility.
+func (c MariaDBCompatConfig) RewriterConfig() *mariadbcompatconfig.Config {
+	cfg := mariadbcompatconfig.DefaultConfig()
+	cfg.EnabledRules = append([]string{}, c.EnabledRules...)
+	cfg.DisabledRules = append([]string{}, c.DisabledRules...)
+	cfg.StrictMode = c.Strict()
+	return cfg
+}
+
 // DefaultSyncerConfig return default syncer config for task.
 func DefaultSyncerConfig() SyncerConfig {
 	return SyncerConfig{
@@ -532,6 +625,9 @@ type TaskConfig struct {
 	// "strict" will add default collation as upstream, and downstream will occur error when downstream don't support
 	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 
+	// MariaDBCompat controls MariaDB schema conversion behavior.
+	MariaDBCompat MariaDBCompatConfig `yaml:"mariadb-compat" toml:"mariadb-compat" json:"mariadb-compat"`
+
 	TargetDB *dbconfig.DBConfig `yaml:"target-database" toml:"target-database" json:"target-database"`
 
 	MySQLInstances []*MySQLInstance `yaml:"mysql-instances" toml:"mysql-instances" json:"mysql-instances"`
@@ -595,6 +691,7 @@ func NewTaskConfig() *TaskConfig {
 		CleanDumpFile:           true,
 		OnlineDDL:               true,
 		CollationCompatible:     defaultCollationCompatible,
+		MariaDBCompat:           DefaultMariaDBCompatConfig(),
 	}
 	cfg.FlagSet = flag.NewFlagSet("task", flag.ContinueOnError)
 	return cfg
@@ -700,6 +797,9 @@ func (c *TaskConfig) adjust() error {
 		return terror.ErrConfigCollationCompatibleNotSupport.Generate(c.CollationCompatible)
 	} else if c.CollationCompatible == "" {
 		c.CollationCompatible = LooseCollationCompatible
+	}
+	if err := c.MariaDBCompat.Adjust(); err != nil {
+		return err
 	}
 
 	for _, item := range c.IgnoreCheckingItems {
