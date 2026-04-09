@@ -474,7 +474,6 @@ func (o *ownerImpl) cleanStaleMetrics() {
 
 // Bootstrap checks if the state contains incompatible or incorrect information and tries to fix it.
 func (o *ownerImpl) Bootstrap(state *orchestrator.GlobalReactorState) {
-	log.Info("Start bootstrapping")
 	o.cleanStaleMetrics()
 	fixChangefeedInfos(state)
 }

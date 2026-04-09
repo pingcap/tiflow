@@ -361,9 +361,6 @@ func (s *SharedClient) Run(ctx context.Context) error {
 	g.Go(func() error { return s.handleResolveLockTasks(ctx) })
 	g.Go(func() error { return s.logSlowRegions(ctx) })
 
-	log.Info("event feed started",
-		zap.String("namespace", s.changefeed.Namespace),
-		zap.String("changefeed", s.changefeed.ID))
 	defer log.Info("event feed exits",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID))

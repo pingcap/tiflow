@@ -238,7 +238,6 @@ func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
 		return false
 	}
 	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
-	log.Info("should send all bootstrap at start", zap.Bool("should", should))
 	return should
 }
 

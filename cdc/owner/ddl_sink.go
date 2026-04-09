@@ -277,9 +277,6 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 	s.wg.Add(1)
 	go func() {
 		var err error
-		log.Info("owner ddl sink background loop is started",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID))
 		defer func() {
 			s.wg.Done()
 			log.Info("owner ddl sink background loop exits",
