@@ -41,7 +41,8 @@ var (
 type Pessimist struct {
 	mu sync.Mutex
 
-	logger log.Logger
+	logger      log.Logger
+	retryLogger *zap.Logger
 
 	closed bool
 	cancel context.CancelFunc
@@ -58,8 +59,10 @@ type Pessimist struct {
 
 // NewPessimist creates a new Pessimist instance.
 func NewPessimist(pLogger *log.Logger, taskSources func(task string) []string) *Pessimist {
+	logger := pLogger.WithFields(zap.String("component", "shard DDL pessimist"))
 	return &Pessimist{
-		logger:      pLogger.WithFields(zap.String("component", "shard DDL pessimist")),
+		logger:      logger,
+		retryLogger: log.NewRetrySampleLogger(logger),
 		closed:      true, // mark as closed before started.
 		lk:          pessimism.NewLockKeeper(),
 		taskSources: taskSources,
@@ -107,7 +110,7 @@ func (p *Pessimist) run(ctx context.Context, etcdCli *clientv3.Client, rev1, rev
 				case <-time.After(500 * time.Millisecond):
 					rev1, rev2, err = p.buildLocks(etcdCli)
 					if err != nil {
-						log.L().Error("resetWorkerEv is failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
+						p.retryLogger.Error("build shard DDL locks failed, will retry later", zap.Error(err), zap.Int("retryNum", retryNum))
 					} else {
 						succeed = true
 					}

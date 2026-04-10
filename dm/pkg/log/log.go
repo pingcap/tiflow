@@ -17,7 +17,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
@@ -33,6 +35,9 @@ const (
 	defaultLogLevel   = "info"
 	defaultLogMaxDays = 7
 	defaultLogMaxSize = 512 // MB
+
+	retryLogSampleInterval = time.Minute
+	retryLogSampleFirst    = 10
 )
 
 // Config serializes log related config in toml/json.
@@ -148,6 +153,33 @@ func InitLogger(cfg *Config) error {
 // context to it.
 func With(fields ...zap.Field) Logger {
 	return Logger{appLogger.With(fields...)}
+}
+
+func sampleLoggerFactory(base *zap.Logger, tick time.Duration, first int, fields ...zap.Field) func() *zap.Logger {
+	if base == nil {
+		base = zap.NewNop()
+	}
+
+	var (
+		once   sync.Once
+		logger *zap.Logger
+	)
+
+	return func() *zap.Logger {
+		once.Do(func() {
+			sampleCore := zap.WrapCore(func(core zapcore.Core) zapcore.Core {
+				return zapcore.NewSamplerWithOptions(core, tick, first, 0)
+			})
+			logger = base.With(fields...).With(zap.String("sampled", "")).WithOptions(sampleCore)
+		})
+		return logger
+	}
+}
+
+// NewRetrySampleLogger creates a logger that caps repeated retry logs with the
+// same level and message to retryLogSampleFirst entries per sampling window.
+func NewRetrySampleLogger(base Logger, fields ...zap.Field) *zap.Logger {
+	return sampleLoggerFactory(base.Logger, retryLogSampleInterval, retryLogSampleFirst, fields...)()
 }
 
 // SetLevel modifies the log level of the global logger. Returns the previous

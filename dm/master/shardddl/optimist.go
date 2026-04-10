@@ -40,7 +40,8 @@ import (
 type Optimist struct {
 	mu sync.Mutex
 
-	logger log.Logger
+	logger      log.Logger
+	retryLogger *zap.Logger
 
 	closed bool
 	cancel context.CancelFunc
@@ -53,11 +54,13 @@ type Optimist struct {
 
 // NewOptimist creates a new Optimist instance.
 func NewOptimist(pLogger *log.Logger, getDownstreamMetaFunc func(string) (*dbconfig.DBConfig, string)) *Optimist {
+	logger := pLogger.WithFields(zap.String("component", "shard DDL optimist"))
 	return &Optimist{
-		logger: pLogger.WithFields(zap.String("component", "shard DDL optimist")),
-		closed: true,
-		lk:     optimism.NewLockKeeper(getDownstreamMetaFunc),
-		tk:     optimism.NewTableKeeper(),
+		logger:      logger,
+		retryLogger: log.NewRetrySampleLogger(logger),
+		closed:      true,
+		lk:          optimism.NewLockKeeper(getDownstreamMetaFunc),
+		tk:          optimism.NewTableKeeper(),
 	}
 }
 
@@ -377,7 +380,7 @@ func (o *Optimist) run(ctx context.Context, revSource, revInfo, revOperation int
 				case <-time.After(500 * time.Millisecond):
 					revSource, revInfo, revOperation, err = o.rebuildLocks()
 					if err != nil {
-						o.logger.Error("fail to rebuild shard DDL lock, will retry",
+						o.retryLogger.Error("fail to rebuild shard DDL lock, will retry",
 							zap.Int("retryNum", retryNum), zap.Error(err))
 						continue
 					}
