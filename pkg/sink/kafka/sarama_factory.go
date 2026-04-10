@@ -113,12 +113,7 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-<<<<<<< HEAD
-
-	p, err := sarama.NewSyncProducerFromClient(client)
-=======
 	p, err := newSaramaSyncProducerFromClientImpl(client)
->>>>>>> 9fbde6ebeb (kafka(ticdc): close sarama clients on init failures (#12573))
 	if err != nil {
 		closeSaramaClientOnFailure(f.changefeedID, client, "close sarama client after sync producer init failed")
 		return nil, errors.Trace(err)

@@ -17,8 +17,13 @@ import (
 	"testing"
 
 	"github.com/pingcap/tiflow/pkg/leakutil"
+	"go.uber.org/goleak"
 )
 
 func TestMain(m *testing.M) {
-	leakutil.SetUpLeakTest(m)
+	leakutil.SetUpLeakTest(m,
+		// Some auth/token libraries may connect to D-Bus for credential caching, leaving
+		// a background read loop goroutine alive for the process lifetime.
+		goleak.IgnoreAnyFunction("github.com/godbus/dbus.(*Conn).inWorker"),
+	)
 }

@@ -15,6 +15,7 @@ package kafka
 
 import (
 	"testing"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -76,10 +77,10 @@ func TestSaramaAdminClientCloseStillClosesClientWhenAdminCloseFails(t *testing.T
 	require.True(t, client.closed)
 }
 
-// TestSaramaSyncProducerCloseClosesProducerAndClient covers the normal cleanup
-// path for sync producers and verifies the wrapper closes the producer before
-// releasing the owned sarama client.
-func TestSaramaSyncProducerCloseClosesProducerAndClient(t *testing.T) {
+// TestSaramaSyncProducerCloseClosesClientAndProducer covers the release-branch
+// async close path and verifies the cleanup goroutine still closes both owned
+// resources in the branch-specific order.
+func TestSaramaSyncProducerCloseClosesClientAndProducer(t *testing.T) {
 	callOrder := make([]string, 0, 2)
 	client := &testSaramaClient{callOrder: &callOrder, callLabel: "client"}
 	producer := &testSyncProducer{callOrder: &callOrder, callLabel: "producer"}
@@ -91,14 +92,15 @@ func TestSaramaSyncProducerCloseClosesProducerAndClient(t *testing.T) {
 	}
 
 	syncProducer.Close()
-	require.Equal(t, 1, producer.closeCalls)
-	require.Equal(t, 1, client.closeCalls)
-	require.Equal(t, []string{"producer", "client"}, callOrder)
+	require.Eventually(t, func() bool {
+		return producer.closeCalls == 1 && client.closeCalls == 1
+	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, []string{"client", "producer"}, callOrder)
 }
 
 // TestSaramaSyncProducerCloseStillClosesClientWhenProducerCloseFails covers the
-// partial-close path and verifies the wrapper still releases the owned client
-// even if producer.Close returns an error.
+// partial-close path and verifies the release-branch cleanup goroutine still
+// releases the owned client even if producer.Close returns an error.
 func TestSaramaSyncProducerCloseStillClosesClientWhenProducerCloseFails(t *testing.T) {
 	client := &testSaramaClient{}
 	producer := &testSyncProducer{closeErr: sarama.ErrOutOfBrokers}
@@ -110,7 +112,8 @@ func TestSaramaSyncProducerCloseStillClosesClientWhenProducerCloseFails(t *testi
 	}
 
 	syncProducer.Close()
-	require.Equal(t, 1, producer.closeCalls)
-	require.Equal(t, 1, client.closeCalls)
+	require.Eventually(t, func() bool {
+		return producer.closeCalls == 1 && client.closeCalls == 1
+	}, time.Second, 10*time.Millisecond)
 	require.True(t, client.closed)
 }
