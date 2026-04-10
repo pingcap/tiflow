@@ -91,16 +91,23 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 	}
 	resolvedTs := p.tsTracker.Frontier()
 
-		if resolvedTs > 0 && p.initialized.CompareAndSwap(false, true) {
-			log.Info("puller is initialized",
-				zap.String("namespace", p.changefeed.Namespace),
-				zap.String("changefeed", p.changefeed.ID),
-				zap.String("tableName", p.tableName),
-				zap.Uint64("resolvedTs", resolvedTs),
-				zap.Duration("duration", time.Since(p.start)),
-				zap.Any("spans", p.spans),
-			)
+	if resolvedTs > 0 && p.initialized.CompareAndSwap(false, true) {
+		tableID := int64(0)
+		var startKey tablepb.Key
+		if len(p.spans) != 0 {
+			tableID = p.spans[0].TableID
+			startKey = p.spans[0].StartKey
 		}
+		log.Info("puller is initialized",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID),
+			zap.String("tableName", p.tableName),
+			zap.Int64("tableID", tableID),
+			zap.Stringer("startKey", startKey),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Duration("duration", time.Since(p.start)),
+		)
+	}
 	if resolvedTs > p.resolvedTs.Load() {
 		p.resolvedTs.Store(resolvedTs)
 		p.resolvedTsUpdated.Store(time.Now().Unix())

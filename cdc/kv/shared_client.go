@@ -297,7 +297,8 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
-		zap.String("span", rt.span.String()))
+		zap.Int64("tableID", rt.span.TableID),
+		zap.Stringer("startKey", rt.span.StartKey))
 }
 
 // Unsubscribe the given table span. All covered regions will be deregistered asynchronously.

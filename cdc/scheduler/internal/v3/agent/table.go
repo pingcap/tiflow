@@ -246,13 +246,6 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 			zap.Stringer("task.TableID", &task.Span))
 	}
 	if t.task == nil {
-		log.Info("schedulerv3: table found new task",
-			zap.String("namespace", t.changefeedID.Namespace),
-			zap.String("changefeed", t.changefeedID.ID),
-			zap.Stringer("span", &t.span),
-			zap.Uint64("checkpointTs", task.Checkpoint.CheckpointTs),
-			zap.Bool("isRemove", task.IsRemove),
-			zap.Bool("isPrepare", task.IsPrepare))
 		t.task = task
 		return
 	}
@@ -267,11 +260,12 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		"since there is one not finished yet",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
-		zap.Stringer("span", &t.span),
-		zap.Any("currentCheckpoint", t.task.Checkpoint),
+		zap.Int64("tableID", t.span.TableID),
+		zap.Stringer("startKey", t.span.StartKey),
+		zap.Uint64("currentCheckpointTs", t.task.Checkpoint.CheckpointTs),
 		zap.Bool("currentIsRemove", t.task.IsRemove),
 		zap.Bool("currentIsPrepare", t.task.IsPrepare),
-		zap.Any("ignoredCheckpoint", task.Checkpoint),
+		zap.Uint64("ignoredCheckpointTs", task.Checkpoint.CheckpointTs),
 		zap.Bool("ignoredIsRemove", task.IsRemove),
 		zap.Bool("ignoredIsPrepare", task.IsPrepare))
 }

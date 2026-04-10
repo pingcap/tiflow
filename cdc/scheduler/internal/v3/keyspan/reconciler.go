@@ -150,10 +150,10 @@ func (m *Reconciler) Reconcile(
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.Int64("tableID", tableID),
 				zap.Int("holes", len(holes)),
-				zap.String("spanStart", tableStart.String()),
-				zap.String("spanEnd", tableEnd.String()),
-				zap.String("foundStart", coveredSpans[0].String()),
-				zap.String("foundEnd", coveredSpans[len(coveredSpans)-1].String()))
+				zap.Stringer("startKey", tableStart.StartKey),
+				zap.Stringer("endKey", tableEnd.EndKey),
+				zap.Stringer("foundStartKey", coveredSpans[0].StartKey),
+				zap.Stringer("foundEndKey", coveredSpans[len(coveredSpans)-1].EndKey))
 			spans := make([]tablepb.Span, 0, len(coveredSpans)+len(holes))
 			spans = append(spans, coveredSpans...)
 			for _, s := range holes {

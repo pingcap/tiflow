@@ -482,7 +482,6 @@ func (r *ReplicationSet) pollOnAbsent(
 ) (bool, error) {
 	switch input.State {
 	case tablepb.TableStateAbsent:
-		oldState := r.State
 		r.State = ReplicationSetStatePrepare
 		err := r.setCapture(captureID, RoleSecondary)
 		if err != nil {
@@ -492,10 +491,10 @@ func (r *ReplicationSet) pollOnAbsent(
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.String("captureID", captureID),
+			zap.Int64("tableID", r.Span.TableID),
+			zap.Stringer("startKey", r.Span.StartKey),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
-			zap.Stringer("old", oldState),
-			zap.Stringer("new", r.State),
-			zap.Stringer("span", &r.Span))
+		)
 		return true, nil
 
 	case tablepb.TableStateStopped:
@@ -548,17 +547,16 @@ func (r *ReplicationSet) pollOnPrepare(
 	case tablepb.TableStatePrepared:
 		if r.isInRole(captureID, RoleSecondary) {
 			// Secondary is prepared, transit to Commit state.
-			oldState := r.State
 			r.State = ReplicationSetStateCommit
 			log.Info("schedulerv3: replication state transition, table prepared",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
 				zap.String("captureID", captureID),
+				zap.Int64("tableID", r.Span.TableID),
+				zap.Stringer("startKey", r.Span.StartKey),
 				zap.Uint64("checkpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("resolvedTs", input.Checkpoint.ResolvedTs),
-				zap.Stringer("old", oldState),
-				zap.Stringer("new", r.State),
-				zap.Stringer("span", &r.Span))
+			)
 			return nil, true, nil
 		}
 	case tablepb.TableStateReplicating:
@@ -822,18 +820,16 @@ func (r *ReplicationSet) pollOnCommit(
 			//    before the original primary receives RemoveTable request.
 			//    Transit to Replicating, and wait for the next table state of
 			//    the primary, Stopping or Stopped.
-			oldState := r.State
 			r.State = ReplicationSetStateReplicating
 			log.Info("schedulerv3: replication state transition, commit finished",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
 				zap.String("captureID", captureID),
+				zap.Int64("tableID", r.Span.TableID),
+				zap.Stringer("startKey", r.Span.StartKey),
 				zap.Uint64("checkpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("resolvedTs", input.Checkpoint.ResolvedTs),
-				zap.Stringer("old", oldState),
-				zap.Stringer("new", r.State),
-				zap.String("primary", r.Primary),
-				zap.Stringer("span", &r.Span))
+			)
 			return nil, true, nil
 		}
 		return nil, false, r.multiplePrimaryError(

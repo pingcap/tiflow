@@ -354,6 +354,23 @@ func (a *agent) handleMessageDispatchTableRequest(
 			status:     dispatchTableTaskReceived,
 		}
 		table = a.tableM.addTableSpan(span)
+		if req.AddTable.GetIsSecondary() {
+			log.Info("schedulerv3: agent received prepare table task",
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
+				zap.Uint64("checkpointTs", req.AddTable.GetCheckpoint().CheckpointTs))
+		} else {
+			log.Info("schedulerv3: agent received replicate table task",
+				zap.String("capture", a.CaptureID),
+				zap.String("namespace", a.ChangeFeedID.Namespace),
+				zap.String("changefeed", a.ChangeFeedID.ID),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
+				zap.Uint64("checkpointTs", req.AddTable.GetCheckpoint().CheckpointTs))
+		}
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		span := req.RemoveTable.GetSpan()
 		table, ok = a.tableM.getTableSpan(span)
@@ -373,6 +390,12 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:    epoch,
 			status:   dispatchTableTaskReceived,
 		}
+		log.Info("schedulerv3: agent received remove table task",
+			zap.String("capture", a.CaptureID),
+			zap.String("namespace", a.ChangeFeedID.Namespace),
+			zap.String("changefeed", a.ChangeFeedID.ID),
+			zap.Int64("tableID", span.TableID),
+			zap.Stringer("startKey", span.StartKey))
 	default:
 		log.Warn("schedulerv3: agent ignore unknown dispatch table request",
 			zap.String("capture", a.CaptureID),
