@@ -297,8 +297,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
-		zap.Any("state", state),
-		zap.Bool("isPrepare", isPrepare))
+		zap.Any("state", state))
 	return true
 }
 

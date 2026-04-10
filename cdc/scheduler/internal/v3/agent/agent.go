@@ -60,7 +60,7 @@ type agentInfo struct {
 	changefeedEpoch uint64
 }
 
-func (a agentInfo) resetEpoch() {
+func (a *agentInfo) resetEpoch() {
 	a.Epoch = schedulepb.ProcessorEpoch{Epoch: uuid.New().String()}
 }
 

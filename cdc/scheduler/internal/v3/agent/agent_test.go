@@ -305,6 +305,18 @@ func TestAgentHandleMessageDispatchTable(t *testing.T) {
 	require.False(t, a.tableM.tables.Has(spanz.TableIDToComparableSpan(1)))
 }
 
+func TestAgentInfoResetEpoch(t *testing.T) {
+	t.Parallel()
+
+	info := newAgentInfo(model.DefaultChangeFeedID("changefeed-test"), "capture-test", 0)
+	require.NotEmpty(t, info.Epoch.Epoch)
+
+	oldEpoch := info.Epoch.Epoch
+	info.resetEpoch()
+	require.NotEmpty(t, info.Epoch.Epoch)
+	require.NotEqual(t, oldEpoch, info.Epoch.Epoch)
+}
+
 func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	t.Parallel()
 

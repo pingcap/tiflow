@@ -252,18 +252,28 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 			zap.Stringer("span", &t.span),
 			zap.Any("checkpoint", task.Checkpoint),
 			zap.Bool("isRemove", task.IsRemove),
-			zap.Bool("isPrepare", task.IsPrepare),
-			zap.String("epoch", task.Epoch.Epoch))
+			zap.Bool("isPrepare", task.IsPrepare))
 		t.task = task
+		return
+	}
+	if t.task.Span.Eq(&task.Span) &&
+		t.task.Checkpoint == task.Checkpoint &&
+		t.task.IsRemove == task.IsRemove &&
+		t.task.IsPrepare == task.IsPrepare &&
+		t.task.Epoch.Epoch == task.Epoch.Epoch {
 		return
 	}
 	log.Warn("schedulerv3: table inject dispatch table task ignored,"+
 		"since there is one not finished yet",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
-		zap.Any("tableSpan", t.span),
-		zap.Any("nowTask", t.task),
-		zap.Any("ignoredTask", task))
+		zap.Stringer("span", &t.span),
+		zap.Any("currentCheckpoint", t.task.Checkpoint),
+		zap.Bool("currentIsRemove", t.task.IsRemove),
+		zap.Bool("currentIsPrepare", t.task.IsPrepare),
+		zap.Any("ignoredCheckpoint", task.Checkpoint),
+		zap.Bool("ignoredIsRemove", task.IsRemove),
+		zap.Bool("ignoredIsPrepare", task.IsPrepare))
 }
 
 func (t *tableSpan) poll(ctx context.Context) (*schedulepb.Message, error) {
