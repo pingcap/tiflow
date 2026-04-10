@@ -310,11 +310,6 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 
 	state, ok := p.sinkManager.r.GetTableState(span)
 	if !ok {
-		log.Warn("table has been stopped",
-			zap.String("captureID", p.captureInfo.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span))
 		return 0, true
 	}
 

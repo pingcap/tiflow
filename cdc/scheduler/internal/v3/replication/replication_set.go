@@ -473,13 +473,17 @@ func (r *ReplicationSet) poll(
 			msgBuf = append(msgBuf, msg)
 		}
 		if stateChanged {
+			secondary, _ := r.getRole(RoleSecondary)
 			log.Info("schedulerv3: replication state transition, poll",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
 				zap.String("captureID", captureID),
+				zap.Any("checkpoint", input.Checkpoint),
 				zap.Stringer("old", oldState),
 				zap.Stringer("new", r.State),
-				zap.Stringer("tableState", input))
+				zap.String("primary", r.Primary),
+				zap.String("secondary", secondary),
+				zap.Stringer("span", &r.Span))
 		}
 	}
 
@@ -986,7 +990,6 @@ func (r *ReplicationSet) handleAddTable(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	oldState := r.State
 	status := tablepb.TableStatus{
 		Span:       r.Span,
 		State:      tablepb.TableStateAbsent,
@@ -996,18 +999,6 @@ func (r *ReplicationSet) handleAddTable(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	secondary, _ := r.getRole(RoleSecondary)
-
-	log.Info("schedulerv3: replication state transition, add table",
-		zap.String("namespace", r.Changefeed.Namespace),
-		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
-		zap.Any("checkpoint", r.Checkpoint),
-		zap.Stringer("old", oldState),
-		zap.Stringer("new", r.State),
-		zap.String("primary", r.Primary),
-		zap.String("secondary", secondary),
-		zap.Stringer("span", &r.Span))
 	return msgs, nil
 }
 

@@ -186,11 +186,22 @@ func newBurstRemoveTables(
 			break
 		}
 		if captureID == "" {
+			secondary := ""
+			for id, role := range rep.Captures {
+				if role == replication.RoleSecondary {
+					secondary = id
+					break
+				}
+			}
 			log.Warn("schedulerv3: primary or secondary not found for removed table,"+
 				"this may happen if the capture shutdown",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
-				zap.Any("table", rep))
+				zap.Any("checkpoint", rep.Checkpoint),
+				zap.Stringer("state", rep.State),
+				zap.String("primary", rep.Primary),
+				zap.String("secondary", secondary),
+				zap.Stringer("span", &span))
 			continue
 		}
 		tables = append(tables, replication.RemoveTable{

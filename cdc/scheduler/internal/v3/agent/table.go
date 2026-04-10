@@ -249,8 +249,11 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		log.Info("schedulerv3: table found new task",
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
-			zap.Any("tableSpan", t.span),
-			zap.Any("task", task))
+			zap.Stringer("span", &t.span),
+			zap.Any("checkpoint", task.Checkpoint),
+			zap.Bool("isRemove", task.IsRemove),
+			zap.Bool("isPrepare", task.IsPrepare),
+			zap.String("epoch", task.Epoch.Epoch))
 		t.task = task
 		return
 	}
