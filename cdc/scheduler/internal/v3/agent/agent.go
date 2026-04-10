@@ -302,13 +302,6 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 		MsgType:           schedulepb.MsgHeartbeatResponse,
 		HeartbeatResponse: response,
 	}
-
-	log.Debug("schedulerv3: agent generate heartbeat response",
-		zap.String("capture", a.CaptureID),
-		zap.String("namespace", a.ChangeFeedID.Namespace),
-		zap.String("changefeed", a.ChangeFeedID.ID),
-		zap.Any("message", message))
-
 	return message, request.GetBarrier()
 }
 
@@ -442,7 +435,7 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 	}
 
 	// staled owner heartbeat, just ignore it.
-	log.Info("schedulerv3: message from staled owner",
+	log.Debug("schedulerv3: message from staled owner",
 		zap.String("capture", a.CaptureID),
 		zap.String("namespace", a.ChangeFeedID.Namespace),
 		zap.String("changefeed", a.ChangeFeedID.ID),

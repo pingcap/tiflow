@@ -273,14 +273,6 @@ func (c *coordinator) poll(
 	barrier *schedulepb.BarrierWithMinTs,
 ) (watermark schedulepb.Watermark, err error) {
 	c.maybeCollectMetrics()
-	if c.compat.UpdateCaptureInfo(aliveCaptures) {
-		spanReplicationEnabled := c.compat.CheckSpanReplicationEnabled()
-		log.Info("schedulerv3: compat update capture info",
-			zap.String("namespace", c.changefeedID.Namespace),
-			zap.String("changefeed", c.changefeedID.ID),
-			zap.Any("captures", aliveCaptures),
-			zap.Bool("spanReplicationEnabled", spanReplicationEnabled))
-	}
 
 	recvMsgs, err := c.recvMsgs(ctx)
 	if err != nil {

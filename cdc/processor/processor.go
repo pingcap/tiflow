@@ -286,16 +286,6 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		return state == tablepb.TableStateReplicating
 	}
 	if !done() {
-		log.Debug("Add Table not finished",
-			zap.String("captureID", p.captureInfo.ID),
-			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span),
-			zap.Uint64("tableResolvedTs", tableResolvedTs),
-			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
-			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
-			zap.Any("state", state),
-			zap.Bool("isPrepare", isPrepare))
 		return false
 	}
 
@@ -349,8 +339,8 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Stringer("span", &span),
-		zap.Uint64("checkpointTs", stats.CheckpointTs))
+		zap.Uint64("checkpointTs", stats.CheckpointTs)
+		zap.Stringer("span", &span))
 
 	return stats.CheckpointTs, true
 }

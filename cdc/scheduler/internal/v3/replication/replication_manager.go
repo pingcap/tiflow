@@ -284,11 +284,6 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			return nil, errors.Trace(err)
 		}
 		if table.hasRemoved() {
-			log.Info("schedulerv3: table has removed",
-				zap.String("namespace", r.changefeedID.Namespace),
-				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("from", from),
-				zap.Int64("tableID", status.Span.TableID))
 			r.spans.Delete(status.Span)
 		}
 		sentMsgs = append(sentMsgs, msgs...)
@@ -326,10 +321,6 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		return nil, errors.Trace(err)
 	}
 	if table.hasRemoved() {
-		log.Info("schedulerv3: table has removed",
-			zap.String("namespace", r.changefeedID.Namespace),
-			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", status.Span.TableID))
 		r.spans.Delete(status.Span)
 	}
 	return msgs, nil
@@ -452,10 +443,6 @@ func (r *Manager) handleRemoveTableTask(
 	r.acceptRemoveTableTask++
 	table, _ := r.spans.Get(task.Span)
 	if table.hasRemoved() {
-		log.Info("schedulerv3: table has removed",
-			zap.String("namespace", r.changefeedID.Namespace),
-			zap.String("changefeed", r.changefeedID.ID),
-			zap.Int64("tableID", task.Span.TableID))
 		r.spans.Delete(task.Span)
 		return nil, nil
 	}
@@ -481,16 +468,6 @@ func (r *Manager) handleBurstBalanceTasks(
 	for _, task := range task.RemoveTables {
 		perCapture[task.CaptureID]++
 	}
-	fields := make([]zap.Field, 0)
-	for captureID, count := range perCapture {
-		fields = append(fields, zap.Int(captureID, count))
-	}
-	fields = append(fields, zap.Int("addTable", len(task.AddTables)))
-	fields = append(fields, zap.Int("removeTable", len(task.RemoveTables)))
-	fields = append(fields, zap.Int("moveTable", len(task.MoveTables)))
-	fields = append(fields, zap.String("namespace", r.changefeedID.Namespace))
-	fields = append(fields, zap.String("changefeed", r.changefeedID.ID))
-	log.Info("schedulerv3: handle burst balance task", fields...)
 
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
 	for i := range task.AddTables {

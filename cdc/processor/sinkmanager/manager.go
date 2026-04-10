@@ -852,12 +852,6 @@ func (m *SinkManager) AddTable(span tablepb.Span, startTs model.Ts, targetTs mod
 	}
 	m.sinkMemQuota.AddTable(span)
 	m.redoMemQuota.AddTable(span)
-	log.Info("Add table sink",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Stringer("span", &span),
-		zap.Uint64("startTs", startTs),
-		zap.Uint64("version", sinkWrapper.version))
 	return sinkWrapper
 }
 
@@ -920,19 +914,13 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 	// NOTICE: It is safe to only remove the table sink from the map.
 	// Because if we found the table sink is closed, we will not add it back to the heap.
 	// Also, no need to GC the SortEngine. Because the SortEngine also removes this table.
-	value, exists := m.tableSinks.LoadAndDelete(span)
+	_, exists := m.tableSinks.LoadAndDelete(span)
 	if !exists {
 		log.Panic("Remove an unexist table sink",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span))
 	}
-	checkpointTs := value.(*tableSinkWrapper).getCheckpointTs()
-	log.Info("Remove table sink successfully",
-		zap.String("namespace", m.changefeedID.Namespace),
-		zap.String("changefeed", m.changefeedID.ID),
-		zap.Stringer("span", &span),
-		zap.Uint64("checkpointTs", checkpointTs.Ts))
 }
 
 // GetAllCurrentTableSpans returns all spans in the sinkManager.

@@ -58,12 +58,6 @@ func (t *tableSpan) getAndUpdateTableSpanState() (tablepb.TableState, bool) {
 	t.state = meta.State
 
 	if oldState != t.state {
-		log.Debug("schedulerv3: table state changed",
-			zap.String("namespace", t.changefeedID.Namespace),
-			zap.String("changefeed", t.changefeedID.ID),
-			zap.Any("tableSpan", t.span),
-			zap.Stringer("oldState", oldState),
-			zap.Stringer("state", t.state))
 		return t.state, true
 	}
 	return t.state, false
@@ -264,11 +258,6 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 			zap.Stringer("task.TableID", &task.Span))
 	}
 	if t.task == nil {
-		log.Info("schedulerv3: table found new task",
-			zap.String("namespace", t.changefeedID.Namespace),
-			zap.String("changefeed", t.changefeedID.ID),
-			zap.Any("tableSpan", t.span),
-			zap.Any("task", task))
 		t.task = task
 		return
 	}
@@ -375,11 +364,6 @@ func (tm *tableSpanManager) dropTableSpan(span tablepb.Span) {
 			zap.String("span", span.String()),
 			zap.Stringer("state", table.state))
 	}
-
-	log.Debug("schedulerv3: tableManager drop table",
-		zap.String("namespace", tm.changefeedID.Namespace),
-		zap.String("changefeed", tm.changefeedID.ID),
-		zap.String("span", span.String()))
 	tm.tables.Delete(span)
 }
 
