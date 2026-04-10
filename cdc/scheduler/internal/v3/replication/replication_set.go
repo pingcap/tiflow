@@ -488,16 +488,13 @@ func (r *ReplicationSet) pollOnAbsent(
 		if err != nil {
 			return true, errors.Trace(err)
 		}
-		secondary, _ := r.getRole(RoleSecondary)
 		log.Info("schedulerv3: replication state transition, add table",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.String("captureID", captureID),
-			zap.Any("checkpoint", r.Checkpoint),
+			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Stringer("old", oldState),
 			zap.Stringer("new", r.State),
-			zap.String("primary", r.Primary),
-			zap.String("secondary", secondary),
 			zap.Stringer("span", &r.Span))
 		return true, nil
 
@@ -553,16 +550,14 @@ func (r *ReplicationSet) pollOnPrepare(
 			// Secondary is prepared, transit to Commit state.
 			oldState := r.State
 			r.State = ReplicationSetStateCommit
-			secondary, _ := r.getRole(RoleSecondary)
 			log.Info("schedulerv3: replication state transition, table prepared",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
 				zap.String("captureID", captureID),
-				zap.Any("checkpoint", input.Checkpoint),
+				zap.Uint64("checkpointTs", input.Checkpoint.CheckpointTs),
+				zap.Uint64("resolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("old", oldState),
 				zap.Stringer("new", r.State),
-				zap.String("primary", r.Primary),
-				zap.String("secondary", secondary),
 				zap.Stringer("span", &r.Span))
 			return nil, true, nil
 		}
@@ -675,17 +670,6 @@ func (r *ReplicationSet) pollOnCommit(
 			if err != nil {
 				return nil, false, errors.Trace(err)
 			}
-
-			log.Info("schedulerv3: promote secondary, no primary",
-				zap.String("namespace", r.Changefeed.Namespace),
-				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
-				zap.Any("checkpoint", input.Checkpoint),
-				zap.Stringer("state", r.State),
-				zap.Stringer("tableState", input),
-				zap.String("primary", r.Primary),
-				zap.String("secondary", captureID),
-				zap.Stringer("span", &r.Span))
 		}
 		// Secondary has been promoted, retry AddTableRequest.
 		if r.Primary == captureID && !r.hasRole(RoleSecondary) {
@@ -844,11 +828,11 @@ func (r *ReplicationSet) pollOnCommit(
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
 				zap.String("captureID", captureID),
-				zap.Any("checkpoint", input.Checkpoint),
+				zap.Uint64("checkpointTs", input.Checkpoint.CheckpointTs),
+				zap.Uint64("resolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("old", oldState),
 				zap.Stringer("new", r.State),
 				zap.String("primary", r.Primary),
-				zap.String("secondary", ""),
 				zap.Stringer("span", &r.Span))
 			return nil, true, nil
 		}

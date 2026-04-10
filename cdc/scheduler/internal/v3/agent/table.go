@@ -250,7 +250,7 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 			zap.String("namespace", t.changefeedID.Namespace),
 			zap.String("changefeed", t.changefeedID.ID),
 			zap.Stringer("span", &t.span),
-			zap.Any("checkpoint", task.Checkpoint),
+			zap.Uint64("checkpointTs", task.Checkpoint.CheckpointTs),
 			zap.Bool("isRemove", task.IsRemove),
 			zap.Bool("isPrepare", task.IsPrepare))
 		t.task = task
