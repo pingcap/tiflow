@@ -144,6 +144,7 @@ func newBurstAddTables(
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newSpans))
+	tablesPerCapture := make(map[model.CaptureID][]int64, len(captureIDs))
 	for _, span := range newSpans {
 		targetCapture := captureIDs[idx]
 		tables = append(tables, replication.AddTable{
@@ -151,16 +152,18 @@ func newBurstAddTables(
 			CaptureID:    targetCapture,
 			CheckpointTs: checkpointTs,
 		})
-		log.Info("schedulerv3: burst add table",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
-			zap.String("captureID", targetCapture),
-			zap.Any("tableID", span.TableID))
-
+		tablesPerCapture[targetCapture] = append(tablesPerCapture[targetCapture], span.TableID)
 		idx++
 		if idx >= len(captureIDs) {
 			idx = 0
 		}
+	}
+	for captureID, tableIDs := range tablesPerCapture {
+		log.Info("schedulerv3: burst add tables",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("captureID", captureID),
+			zap.Int64s("tableIDs", tableIDs))
 	}
 	return &replication.ScheduleTask{
 		BurstBalance: &replication.BurstBalance{
@@ -174,6 +177,7 @@ func newBurstRemoveTables(
 	changefeedID model.ChangeFeedID,
 ) *replication.ScheduleTask {
 	tables := make([]replication.RemoveTable, 0, len(rmSpans))
+	tablesPerCapture := make(map[model.CaptureID][]int64)
 	for _, span := range rmSpans {
 		rep := replications.GetV(span)
 		var captureID model.CaptureID
@@ -193,15 +197,19 @@ func newBurstRemoveTables(
 			Span:      span,
 			CaptureID: captureID,
 		})
-		log.Info("schedulerv3: burst remove table",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
-			zap.String("captureID", captureID),
-			zap.Any("tableID", span.TableID))
+		tablesPerCapture[captureID] = append(tablesPerCapture[captureID], span.TableID)
 	}
 
 	if len(tables) == 0 {
 		return nil
+	}
+
+	for captureID, tableIDs := range tablesPerCapture {
+		log.Info("schedulerv3: burst remove table",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("captureID", captureID),
+			zap.Int64s("tableIDs", tableIDs))
 	}
 
 	return &replication.ScheduleTask{
