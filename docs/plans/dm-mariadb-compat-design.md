@@ -1,259 +1,324 @@
-DM MariaDB Compatibility Design Document
+DM MariaDB Compatibility Design
 
-Last updated: 2026-04-09
+Last updated: 2026-04-10  
 Related branch: `mariadbcompat-master-rebuild`
 
-1. Compatibility-First Motivation
+## 1. Abstract
 
-The starting point of this design is simple: MariaDB compatibility is a product capability, not a temporary patch set.
+This design defines how DM supports MariaDB as a documented upstream in a compatibility-first way.
 
-For DM, compatibility must satisfy three requirements at the same time:
+The target is not a one-time syntax patch. The target is a stable compatibility architecture where:
 
-- Correctness: schema and DDL statements from MariaDB should not fail on downstream TiDB for common migration paths.
-- Consistency: loader, syncer, and checker should observe the same compatibility behavior.
-- Extensibility: new compatibility gaps should be fixable by extending existing layers, not by adding ad-hoc logic in many places.
+- mainstream MariaDB schema/DDL can replicate to TiDB without manual workarounds,
+- `loader`, `syncer`, and `checker` follow one consistent behavior contract,
+- future compatibility items can be added by extending existing layers, not by copy-pasting logic across components.
 
-This document defines the architecture and branch plan using compatibility as the only top-level driver.
+## 2. Problem Statement and Scope
 
-2. Scope and Non-Scope
+### 2.1 Problem Statement
 
-2.1 In Scope
+MariaDB compatibility issues in DM are currently distributed across different execution paths:
 
-- Compatibility architecture for MariaDB schema and DDL handling in DM.
-- Unified activation and integration path across `loader`, `syncer`, and `checker`.
-- Branch-level implementation boundaries and follow-up implementation plan.
-- Integration and CI baseline for real MariaDB upstream coverage.
+- full-load schema apply,
+- incremental DDL apply,
+- checker pre-validation.
 
-2.2 Out of Scope for This Branch
+Without one shared compatibility contract, these paths can drift:
 
-- Redesign of MariaDB GTID semantics or protocol internals.
-- Redesign of relay catch-up protocol and upstream-switch behavior.
-- Closing every MariaDB-related runtime issue in one branch.
+- a statement may pass one path and fail another,
+- parser and rewriter responsibilities can become mixed,
+- each new compatibility gap tends to add local patches.
 
-3. Compatibility Architecture
+The design requirement is to turn this into a coherent compatibility system.
 
-3.1 Layered Model
+### 2.2 In Scope
 
-Compatibility is implemented as four layers with explicit responsibilities.
+- compatibility architecture for MariaDB schema and DDL in DM,
+- shared activation/constructor contract for all runtime components,
+- integration tests with MariaDB as the real upstream,
+- CI wiring that continuously runs MariaDB integration coverage.
 
-- Layer A: Parser compatibility
-  - Goal: maximize direct parseability for MariaDB syntax.
-  - Policy: if parser behavior is sufficient and safe, keep SQL as-is.
+### 2.3 Out of Scope for This Branch
 
-- Layer B: Rewriter compatibility
-  - Goal: bridge TiDB semantic gaps that parser support alone does not solve.
-  - Policy: explicit and rule-based downgrade, not implicit behavior spread across runtime paths.
+- MariaDB GTID/protocol redesign,
+- relay catch-up / upstream-switch protocol redesign,
+- full closure of all runtime incidents that are not compatibility-core issues.
 
-- Layer C: Runtime compatibility
-  - Goal: apply compatibility consistently in `full-load`, `incremental DDL`, and checker pre-validation flows.
-  - Policy: all runtime units use the same activation and constructor contract.
+## 3. Compatibility Architecture
 
-- Layer D: Verification compatibility
-  - Goal: validate behavior with deterministic integration tests and CI.
-  - Policy: include both baseline MariaDB flow and compatibility-path coverage.
+### 3.1 Design Principles
 
-3.2 Activation Contract
+The architecture follows four principles:
 
-Compatibility activation is controlled by `flavor` plus explicit mode:
+- Parser-first: if TiDB parser already supports a statement with correct semantics, keep SQL unchanged.
+- Rewriter-second: when parser support is missing or semantic mapping is incompatible, apply explicit rewrite rules.
+- One contract everywhere: activation and rewrite behavior must be shared by `loader`, `syncer`, and `checker`.
+- Deterministic behavior: same input SQL + same config must always produce same output and same failure semantics.
 
-- `flavor: mariadb` is the default user signal.
-- `mariadb-compat.mode=auto` enables compatibility for MariaDB flavor.
-- `mariadb-compat.mode=on` forces enable for debugging or controlled rollout.
-- `mariadb-compat.mode=off` forces disable for comparison and fallback.
+### 3.2 Layered Model
 
-This contract must be resolved in one place and consumed everywhere.
+The compatibility system is split into four layers with explicit boundaries.
 
-3.3 Data Flow and Execution Path
+`Layer A - Parser Compatibility`
 
-3.3.1 Full-load path
+- Responsibility: absorb MariaDB syntax support when parser can handle it.
+- Output: parsed AST or normalized SQL without compatibility rewrite.
+- Rule: parser support is preferred over rewriting when behavior is equivalent and stable.
 
-- Loader collects schema files.
-- If compatibility is enabled, loader rewrites schema SQL before applying to TiDB.
-- Rewritten output is deterministic and based on rule registry ordering.
+`Layer B - Rewriter Compatibility`
 
-3.3.2 Incremental DDL path
+- Responsibility: perform TiDB-target transformation for MariaDB syntax/semantics gaps.
+- Output: transformed SQL that can be executed or further checked by TiDB.
+- Rule: transformation must be explicit, rule-based, and independently testable.
 
-- Syncer receives upstream DDL events.
-- DDL SQL is normalized and rewritten when needed.
-- Downstream execution always uses transformed SQL, while preserving stable error handling under strict or non-strict mode.
+`Layer C - Runtime Compatibility`
 
-3.3.3 Checker path
+- Responsibility: integrate compatibility into all DM execution paths.
+- Output: aligned behavior between full-load, incremental DDL, and checker.
+- Rule: runtime code cannot duplicate flavor/mode gating logic locally.
 
-- Checker obtains upstream `CREATE TABLE` SQL.
-- Compatibility transformation is applied before AST-based structure checks.
-- This avoids checker/runtime drift where checker reports false incompatibility that runtime could already rewrite.
+`Layer D - Verification Compatibility`
 
-3.4 Rule Lifecycle and Ordering
+- Responsibility: prove compatibility using deterministic integration and CI coverage.
+- Output: stable signal that compatibility works on real MariaDB upstream.
+- Rule: baseline upstream flow and rewrite-path flow are both required.
 
-Compatibility rules must follow a managed lifecycle:
+### 3.3 Activation Contract
 
-- Add rule only for real TiDB semantic gap or MariaDB syntax gap not solved by parser.
-- Keep deterministic priority ordering in registry.
-- Allow selective enable/disable for diagnosis and controlled rollout.
-- Add unit tests for each rule and integration assertion for representative rules.
-- Remove or narrow rules when parser capability catches up, to avoid overlap and double-transform risk.
+Compatibility activation is governed by `flavor` plus compatibility mode:
 
-3.5 Failure Semantics
+- `flavor: mariadb` is the primary upstream signal.
+- `mariadb-compat.mode=auto` enables compatibility when flavor is MariaDB.
+- `mariadb-compat.mode=on` forces enablement for diagnosis and controlled rollout.
+- `mariadb-compat.mode=off` forces disablement for A/B comparison and fallback.
 
-`strict-mode` governs failure policy:
+This contract is resolved once in configuration and consumed by all runtime units.
 
-- Strict mode: rewrite errors are surfaced; task fails fast.
-- Non-strict mode: rewrite failures fall back to original SQL where possible.
+### 3.4 Rewriter Contract and Rule Lifecycle
 
-Design requirement:
+The rewriter is treated as a narrow contract:
 
-- strict/non-strict behavior must be identical across loader, syncer, and checker integration points.
+- input: one SQL statement and compatibility context,
+- output: transformed SQL (or original SQL for no-op),
+- behavior: deterministic rule ordering with transparent error boundaries.
 
-4. Branch Design and Implementation Details
+Rule lifecycle requirements:
 
-4.1 Unified Constructor and Gate (Core Refactor)
+1. Add a rule only for a confirmed compatibility gap.
+2. Register rules with deterministic priority.
+3. Cover rule behavior with unit tests and at least one integration assertion.
+4. Support disable/narrow/remove when parser support catches up.
+5. Avoid dual ownership (same behavior in parser and rewriter simultaneously).
 
-This branch introduces a single compatibility constructor path:
+### 3.5 Runtime Execution Flow
 
-- `MariaDBCompatConfig.NewRewriterForFlavor(flavor)` in `dm/config/task.go`
-- `SubTaskConfig.MariaDBCompatRewriter()` in `dm/config/subtask.go`
+`Full-load flow`
 
-Why this change is mandatory:
+- DM loader scans dumped schema files.
+- If compatibility is enabled, schema SQL is transformed before apply.
+- Transformed SQL is persisted to execution path; no hidden per-file exceptions.
 
-- Before unification, enablement decisions could be duplicated and drift over time.
-- After unification, all runtime units consume one contract, so mode/flavor behavior remains consistent by design.
-- Future compatibility features can extend this contract without touching multiple call-site gate implementations.
+`Incremental DDL flow`
 
-4.2 Loader Integration Design
+- DM syncer receives DDL events from MariaDB binlog stream.
+- DDL SQL is transformed through the same rewriter contract.
+- Downstream TiDB execution uses transformed SQL only.
 
-- Integration point: schema-file transform before load.
-- Behavior:
-  - discover schema SQL files,
-  - construct rewriter from `SubTaskConfig`,
-  - rewrite file contents when enabled,
-  - skip no-op transformations.
-- Operational property: full-load compatibility is deterministic and does not depend on manual per-file handling.
+`Checker flow`
 
-4.3 Syncer Integration Design
+- DM checker fetches upstream `CREATE TABLE` text.
+- Compatibility transformation runs before AST-level structure and PK checks.
+- Checker output matches runtime behavior and avoids false negatives caused by raw MariaDB syntax.
 
-- Integration point: DDL handling path before downstream execution.
-- Behavior:
-  - construct rewriter from unified config contract,
-  - rewrite incoming DDL SQL,
-  - preserve strict/non-strict semantics consistently.
-- Operational property: incremental compatibility follows same rule set as full-load.
+### 3.6 Failure Semantics
 
-4.4 Checker Integration Design
+Failure policy is aligned with existing `strict-mode`:
 
-- Integration point: table structure and primary key checks based on upstream `CREATE TABLE`.
-- Behavior:
-  - build per-source rewriters using unified constructor,
-  - transform upstream DDL text before parser comparison logic.
-- Operational property: checker output aligns with runtime transformed behavior.
+- strict mode: rewrite failures are surfaced immediately; task path fails fast,
+- non-strict mode: when safe, fallback to original SQL and continue with warning.
 
-4.5 Integration and CI Design
+The same strict/non-strict behavior is required in loader, syncer, and checker integration points.
 
-This branch establishes two test layers:
+### 3.7 Parser-First and "Parsed but Ignored" Policy
 
-- Baseline MariaDB upstream flow:
-  - `dm/tests/mariadb_source`
-  - purpose: validate end-to-end MariaDB source path without relying on MariaDB-specific rewrite cases.
+For MariaDB compatibility, parser upgrades can make some syntax parseable without requiring runtime behavior changes.
 
-- Compatibility-path flow:
-  - `dm/tests/mariadb_compat`
-  - purpose: validate full-load + incremental DDL compatibility transformations.
+Policy:
 
-CI foundation:
+- if a syntax is parsed and TiDB behavior is acceptable for DM migration semantics, keep it parser-owned,
+- if parseable but semantically incompatible, keep parser support and add targeted rewrite in compatibility layer,
+- if parser cannot parse yet, add rewrite only when there is a clear and testable mapping.
 
-- MariaDB service container added in DM integration pipeline draft PR:
+This policy prevents rewriter bloat and keeps long-term maintainability.
+
+## 4. Branch Design and Implementation
+
+### 4.1 Core Abstraction and Constructor Unification
+
+This branch standardizes rewriter construction behind:
+
+- `MariaDBCompatConfig.NewRewriterForFlavor(flavor)` in `dm/config/task.go`,
+- `SubTaskConfig.MariaDBCompatRewriter()` in `dm/config/subtask.go`.
+
+Why this is required:
+
+- activation logic previously risked being repeated in multiple call sites,
+- repeated gating creates behavior drift over time,
+- one constructor contract guarantees consistent flavor/mode resolution and simplifies future extension.
+
+### 4.2 Compatibility Package Responsibilities
+
+The compatibility package is responsible for:
+
+- owning rule registration and execution ordering,
+- exposing rewriter API to runtime units,
+- containing focused tests around transformation behavior,
+- avoiding leakage of component-specific state.
+
+Runtime units (`loader`, `syncer`, `checker`) only consume the contract and do not own rule details.
+
+### 4.3 Loader Integration
+
+Integration point: full-load schema apply path.
+
+Behavior:
+
+1. Collect schema SQL files generated by dump/load pipeline.
+2. Build rewriter via `SubTaskConfig.MariaDBCompatRewriter()`.
+3. Rewrite SQL when compatibility is enabled.
+4. Skip no-op rewrites to reduce unnecessary file mutation.
+5. Apply transformed SQL to downstream TiDB.
+
+Key guarantees:
+
+- deterministic file transform behavior,
+- no per-file ad-hoc compatibility branch,
+- strict/non-strict semantics consistent with global mode.
+
+### 4.4 Syncer Integration
+
+Integration point: incremental DDL handling before downstream execution.
+
+Behavior:
+
+1. Receive and normalize incoming upstream DDL SQL.
+2. Build/obtain rewriter from the same unified constructor contract.
+3. Rewrite DDL text before execution.
+4. Preserve existing DDL execution control flow and error classification.
+5. Apply strict/non-strict failure policy consistently.
+
+Key guarantees:
+
+- incremental path uses identical compatibility rules as full-load path,
+- no hidden "compatibility only in full-load" behavior.
+
+### 4.5 Checker Integration
+
+Integration point: table structure and key checks that use upstream `CREATE TABLE`.
+
+Behavior:
+
+1. Build per-source rewriters from unified constructor.
+2. Transform upstream DDL text before parser comparison.
+3. Continue with existing checker comparison logic on transformed SQL.
+
+Key guarantees:
+
+- checker result reflects what runtime can actually execute,
+- reduced false incompatibility reports for MariaDB upstream.
+
+### 4.6 Test and CI Design
+
+Compatibility validation is split into two integration layers:
+
+`Layer 1 - Baseline MariaDB upstream flow`
+
+- case: `dm/tests/mariadb_source`,
+- objective: prove DM can run end-to-end with MariaDB upstream even without MariaDB-specific syntax stress.
+
+`Layer 2 - Compatibility-path flow`
+
+- case: `dm/tests/mariadb_compat`,
+- objective: cover statements that require compatibility transformation in full-load and incremental paths.
+
+CI wiring:
+
+- MariaDB service is added in DM integration pipeline draft PR:
   - `https://github.com/PingCAP-QE/ci/pull/4496`
 
-4.6 Extensibility by Construction
+Execution strategy:
 
-The branch structure is intentionally designed to scale to uncovered compatibility work:
+- merge baseline coverage with CI first,
+- then expand compatibility-path cases incrementally with deterministic assertions.
 
-- New grammar/support gaps:
-  - parser-first attempt,
-  - then add focused rewrite rule if parser coverage is insufficient.
+### 4.7 Branch Split Strategy for Reviewability
 
-- New runtime behavior gaps:
-  - integrate in runtime layer without changing constructor contract.
+To make review focused and bisect-friendly, the branch is split in sequence:
 
-- New checker mismatches:
-  - inherit same transform contract and avoid one-off checker logic.
+1. MariaDB upstream integration baseline + CI wiring.
+2. Compatibility core and rewriter framework.
+3. Unified config activation/constructor path.
+4. Loader/syncer/checker integration.
+5. Compatibility-focused integration test expansion.
 
-This prevents compatibility development from degenerating into duplicated per-component patches.
+This ordering keeps every PR reviewable, runnable, and independently revertible.
 
-5. Current Coverage and Explicit Boundaries
+### 4.8 Compatibility Boundaries in This Branch
 
-5.1 Covered in This Branch
+Covered in this branch:
 
-- Embedded MariaDB compatibility core package and runtime integration.
-- Full-load and incremental DDL compatibility baseline coverage.
-- Unified activation and rewriter construction path.
-- Real MariaDB integration and CI foundation.
+- shared compatibility constructor and activation contract,
+- runtime integration in loader/syncer/checker,
+- baseline MariaDB integration + CI foundation,
+- initial compatibility-path tests.
 
-5.2 Partially Covered in This Branch
+Partially covered:
 
-- MariaDB data type compatibility matrix closure.
-- Temporal-table related compatibility closure.
-- Default-expression edge-case closure (for example function defaults).
+- full MariaDB type matrix closure,
+- temporal-table variations,
+- default-expression edge cases.
 
-These areas now have compatible extension points but still need issue-focused completion.
+Explicitly not in this branch:
 
-5.3 Not Included in This Branch
+- GTID/protocol redesign,
+- relay/upstream-switch protocol redesign,
+- broader runtime tracks not rooted in compatibility architecture.
 
-- GTID/protocol-level redesign work.
-- Relay catch-up and upstream-switch protocol redesign.
-- Broad runtime incident closure outside compatibility core scope.
+## 5. End-State Plan (Compatibility-Driven)
 
-6. End-State Implementation Plan
+### 5.1 Close the Remaining Compatibility Matrix
 
-6.1 Compatibility Matrix Completion
+- extend integration coverage for data types, temporal features, and default expression variants,
+- add representative rewrite/parse ownership tests for each category.
 
-- Expand integration matrix for:
-  - data types,
-  - temporal features,
-  - default-expression variants.
+### 5.2 Keep Parser and Rewriter Ownership Clean
 
-6.2 Runtime Stability Tracks
+- evaluate each existing rewrite rule after parser upgrades,
+- retire or narrow rules where parser behavior is sufficient,
+- keep only semantic-gap rewrites in compatibility layer.
 
-- Deliver dedicated runtime fixes for GTID/relay/incremental stability.
-- Each fix must include deterministic reproduction and regression tests.
+### 5.3 Improve Operator Experience Around Compatibility
 
-6.3 Operator and Checker Experience
+- ensure MariaDB version checks and guidance match real behavior,
+- avoid exposing internal implementation details (rewriter/parser split) as operational burden.
 
-- Improve MariaDB-specific version-check and user-facing guidance.
-- Keep messaging aligned with actual compatibility behavior.
+## 6. Risks and Mitigations
 
-6.4 Parser-First Cleanup Loop
+Risk: parser upgrades overlap with rewrite rules and cause double-transform behavior.  
+Mitigation: parser-first ownership policy + overlap regression tests.
 
-- Reevaluate rewrite rules after parser upgrades.
-- Remove overlap rules when parser behavior is sufficient.
+Risk: compatibility behavior drifts across runtime components.  
+Mitigation: enforce unified constructor path and ban local compatibility gate logic.
 
-7. PR Split Strategy
+Risk: CI instability after introducing MariaDB service.  
+Mitigation: readiness checks, isolated case grouping, deterministic teardown.
 
-Recommended sequence for reviewability:
+Risk: branch scope grows into unrelated runtime refactor.  
+Mitigation: keep PR split aligned to compatibility layers and explicit non-scope.
 
-- MariaDB integration baseline and CI wiring.
-- Compatibility core and rule framework.
-- Config surface and unified activation constructor.
-- Loader/syncer/checker runtime integration.
-- Compatibility integration coverage.
-- Targeted follow-up tracks for runtime stability and operator UX.
+## 7. Acceptance Criteria
 
-8. Risks and Mitigations
-
-Risk: parser improvements overlap with existing rewrite rules.
-Mitigation: parser-first cleanup policy and overlap regression checks.
-
-Risk: behavior divergence across runtime components.
-Mitigation: use only `SubTaskConfig.MariaDBCompatRewriter()` as constructor path.
-
-Risk: CI instability after introducing MariaDB service.
-Mitigation: explicit readiness checks and balanced integration grouping.
-
-Risk: compatibility scope grows into monolithic branch.
-Mitigation: strict PR split by technical layer.
-
-9. Acceptance Criteria
-
-- For `flavor: mariadb`, mainstream full-load and incremental DDL paths run without extra manual compatibility toggles.
-- Checker and runtime observe consistent transformed behavior.
-- CI continuously validates real MariaDB compatibility paths.
-- New compatibility gaps can be implemented by extending current architecture, without redesigning activation plumbing.
+- For `flavor: mariadb`, mainstream full-load and incremental DDL replication paths run without extra manual compatibility toggles.
+- `loader`, `syncer`, and `checker` consume one compatibility contract and show consistent behavior.
+- CI continuously validates MariaDB upstream baseline and compatibility-path cases.
+- New compatibility items can be implemented by extending existing layers without redesigning activation plumbing.
