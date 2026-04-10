@@ -181,20 +181,12 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 			}
 			state, changed = t.getAndUpdateTableSpanState()
 		case tablepb.TableStateReplicating:
-			log.Info("schedulerv3: table is replicating",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 			t.task = nil
 			status := t.getTableSpanStatus(false)
 			return newAddTableResponseMessage(status), nil
 		case tablepb.TableStatePrepared:
 			if t.task.IsPrepare {
 				// `prepared` is a stable state, if the task was to prepare the table.
-				log.Info("schedulerv3: table is prepared",
-					zap.String("namespace", t.changefeedID.Namespace),
-					zap.String("changefeed", t.changefeedID.ID),
-					zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 				t.task = nil
 				return newAddTableResponseMessage(t.getTableSpanStatus(false)), nil
 			}
@@ -226,10 +218,6 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 				return nil, nil
 			}
 			state, changed = t.getAndUpdateTableSpanState()
-			log.Info("schedulerv3: add table finished",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.Any("tableSpan", t.span), zap.Stringer("state", state))
 		case tablepb.TableStateStopping,
 			tablepb.TableStateStopped:
 			log.Warn("schedulerv3: ignore add table",
@@ -258,6 +246,11 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 			zap.Stringer("task.TableID", &task.Span))
 	}
 	if t.task == nil {
+		log.Info("schedulerv3: table found new task",
+			zap.String("namespace", t.changefeedID.Namespace),
+			zap.String("changefeed", t.changefeedID.ID),
+			zap.Any("tableSpan", t.span),
+			zap.Any("task", task))
 		t.task = task
 		return
 	}

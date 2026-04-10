@@ -339,7 +339,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Uint64("checkpointTs", stats.CheckpointTs)
+		zap.Uint64("checkpointTs", stats.CheckpointTs),
 		zap.Stringer("span", &span))
 
 	return stats.CheckpointTs, true
