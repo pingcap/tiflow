@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -193,9 +194,19 @@ func makeCredential4Testing(t *testing.T) *security.Credential {
 	// while the parent workspace contains the real `.git` directory. go-findroot
 	// can then resolve the parent directory as the "repo root", causing file-not-found
 	// errors when looking up `tests/integration_tests/_certificates/*`.
+	//
+	// NOTE: when builds use `-trimpath`, `runtime.Caller` may return a relative path
+	// (for example `pkg/tcpserver/tcp_server_test.go`). In that case we fall back to
+	// `os.Getwd()` which should be the package directory under `go test`.
+	repoRoot := ""
 	_, currentFile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+	if ok && filepath.IsAbs(currentFile) {
+		repoRoot = filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+	} else {
+		wd, err := os.Getwd()
+		require.NoError(t, err)
+		repoRoot = filepath.Clean(filepath.Join(wd, "..", ".."))
+	}
 	tlsPath := filepath.Join(repoRoot, "tests", "integration_tests", "_certificates")
 	return &security.Credential{
 		CAPath:        filepath.Join(tlsPath, "ca.pem"),
