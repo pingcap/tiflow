@@ -131,7 +131,10 @@ func (m *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 // If the downstream is TiDB, it will query the DDL and wait until it finishes.
 // For 'add index' ddl, it will return immediately without waiting and will query it during the next DDL execution.
 func (m *DDLSink) execDDLWithMaxRetries(ctx context.Context, ddl *model.DDLEvent) error {
-	ddlCreateTime := getDDLCreateTime(ctx, m.id, m.db)
+	ddlCreateTime := ""
+	if m.cfg.IsTiDB {
+		ddlCreateTime = getDDLCreateTime(ctx, m.id, m.db)
+	}
 	return retry.Do(ctx, func() error {
 		err := m.statistics.RecordDDLExecution(func() error { return m.execDDL(ctx, ddl) })
 		if err != nil {
@@ -200,7 +203,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		failpoint.Return(nil)
 	})
 
-	start := time.Now()
 	tx, err := m.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -341,20 +343,6 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	if err = tx.Commit(); err != nil {
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
-
-	logFields := []zap.Field{
-		zap.String("namespace", m.id.Namespace),
-		zap.String("changefeed", m.id.ID),
-		zap.Uint64("commitTs", ddl.CommitTs),
-		zap.String("query", ddl.Query),
-		zap.Duration("duration", time.Since(start)),
-	}
-
-	if useSessionTimestamp {
-		logFields = append(logFields, zap.Float64("sessionTimestamp", ddlTimestamp))
-	}
-
-	log.Info("Exec DDL succeeded", logFields...)
 
 	return nil
 }

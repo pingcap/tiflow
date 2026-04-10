@@ -382,7 +382,12 @@ func (m *ddlManager) tick(
 					return nil, nil, errors.Trace(err)
 				}
 				if skip {
-					m.cleanCache(cleanMsg)
+					log.Info(cleanMsg,
+						zap.String("namespace", m.changfeedID.Namespace),
+						zap.String("changefeed", m.changfeedID.ID),
+						zap.Uint64("commitTs", m.executingDDL.CommitTs),
+						zap.String("query", m.executingDDL.Query))
+					m.cleanCache()
 				}
 			}
 			err := m.executeDDL(ctx)
@@ -471,7 +476,12 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if done {
-		m.cleanCache("execute a ddl event successfully")
+		log.Info("execute a ddl event successfully",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Uint64("commitTs", m.executingDDL.CommitTs),
+			zap.String("query", m.executingDDL.Query))
+		m.cleanCache()
 	}
 	return nil
 }
@@ -625,7 +635,7 @@ func (m *ddlManager) getSnapshotTs() (ts uint64) {
 
 // cleanCache cleans the tableInfoCache and physicalTablesCache.
 // It should be called after a DDL is skipped or sent to downstream successfully.
-func (m *ddlManager) cleanCache(msg string) {
+func (m *ddlManager) cleanCache() {
 	tableInfo := m.executingDDL.TableInfo
 	if tableInfo == nil {
 		tableInfo = m.executingDDL.PreTableInfo
@@ -634,11 +644,6 @@ func (m *ddlManager) cleanCache(msg string) {
 	if tableInfo != nil {
 		tableName = tableInfo.TableName
 	}
-	log.Info(msg,
-		zap.String("namespace", m.changfeedID.Namespace),
-		zap.String("changefeed", m.changfeedID.ID),
-		zap.Uint64("commitTs", m.executingDDL.CommitTs),
-		zap.String("query", m.executingDDL.Query))
 
 	// Set it to nil first to accelerate GC.
 	m.pendingDDLs[tableName][0] = nil

@@ -257,11 +257,6 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 			)
 		} else {
 			ddl.Done.Store(true)
-			log.Info("Execute DDL succeeded",
-				zap.String("namespace", s.changefeedID.Namespace),
-				zap.String("changefeed", s.changefeedID.ID),
-				zap.Uint64("commitTs", ddl.CommitTs),
-				zap.String("query", ddl.Query))
 		}
 		return
 	}
@@ -464,19 +459,7 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 		return "", errors.Trace(err)
 	}
 
-	result := sb.String()
-	if result != ddl.Query {
-		log.Info("add special comment to DDL",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Uint64("commitTs", ddl.CommitTs),
-			zap.String("query", ddl.Query),
-			zap.String("newQuery", result),
-			zap.String("charset", ddl.Charset),
-			zap.String("collate", ddl.Collate))
-	}
-
-	return result, nil
+	return sb.String(), nil
 }
 
 func (s *ddlSinkImpl) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {

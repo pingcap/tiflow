@@ -200,6 +200,13 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 		lastSnap := s.snaps[len(s.snaps)-1]
 		// already-executed DDL could filted by finishedTs.
 		if job.BinlogInfo.FinishedTS <= lastSnap.CurrentTs() {
+			log.Info("ddl job already applied in schema storage, skip",
+				zap.String("namespace", s.id.Namespace),
+				zap.String("changefeed", s.id.ID),
+				zap.String("role", s.role.String()),
+				zap.Int64("jobID", job.ID),
+				zap.String("type", job.Type.String()),
+				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
 			return nil
 		}
 		snap = lastSnap.Copy()
@@ -219,15 +226,19 @@ func (s *schemaStorage) HandleDDLJob(job *timodel.Job) error {
 	}
 	s.snaps = append(s.snaps, snap)
 	s.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
-	log.Info("ddl job applied to schema storage",
-		zap.String("namespace", s.id.Namespace),
-		zap.String("changefeed", s.id.ID),
-		zap.String("role", s.role.String()),
-		zap.Int64("jobID", job.ID),
-		zap.String("type", job.Type.String()),
-		zap.String("schema", job.SchemaName),
-		zap.String("table", job.TableName),
-		zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
+	// Owner has a later, owner-specific progress log in ddlManager.
+	// Processor has no equivalent stage, so keep the shared apply log only there.
+	if s.role == util.RoleProcessor {
+		log.Info("ddl job applied to schema storage",
+			zap.String("namespace", s.id.Namespace),
+			zap.String("changefeed", s.id.ID),
+			zap.String("role", s.role.String()),
+			zap.Int64("jobID", job.ID),
+			zap.String("type", job.Type.String()),
+			zap.String("schema", job.SchemaName),
+			zap.String("table", job.TableName),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
+	}
 	return nil
 }
 

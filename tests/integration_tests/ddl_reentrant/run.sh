@@ -60,7 +60,7 @@ function check_ddl_executed() {
 	ddl=$(cat $2)
 	success="$3"
 	if [[ $success == "true" ]]; then
-		key_word="Exec DDL succeeded"
+		key_word="execute a ddl event successfully"
 	else
 		key_word="Execute DDL failed, but error can be ignored"
 	fi
@@ -92,7 +92,7 @@ function ddl_test() {
 
 	echo $restored_sql >${WORK_DIR}/ddl_temp.sql
 	ensure 10 check_ddl_executed "${WORK_DIR}/cdc.log" "${WORK_DIR}/ddl_temp.sql" true
-	ddl_finished_ts=$(grep "Execute DDL succeeded" ${WORK_DIR}/cdc.log | tail -n 1 | grep -oE '"CommitTs\\":[0-9]{18}' | awk -F: '{print $(NF)}')
+	ddl_finished_ts=$(grep "execute a ddl event successfully" ${WORK_DIR}/cdc.log | tail -n 1 | grep -oE 'commitTs=[0-9]{18}' | awk -F= '{print $(NF)}')
 	cdc cli changefeed pause --changefeed-id=${changefeedid}
 	cdc cli changefeed resume --no-confirm --changefeed-id=${changefeedid} --overwrite-checkpoint-ts=${ddl_finished_ts}
 	echo "resume changefeed ${changefeedid} from ${ddl_finished_ts}"

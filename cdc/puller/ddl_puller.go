@@ -447,13 +447,6 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		return true, nil
 	}
 
-	log.Info("ddl job received by ddl puller",
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID),
-		zap.String("role", p.role.String()),
-		zap.Int64("jobID", job.ID),
-		zap.Any("job", job))
-
 	err = p.schemaStorage.HandleDDLJob(job)
 	if err != nil {
 		return false, cerror.WrapError(cerror.ErrHandleDDLFailed,
@@ -671,6 +664,11 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	log.Info("ddl job received by ddl puller",
+		zap.String("namespace", h.changefeedID.Namespace),
+		zap.String("changefeed", h.changefeedID.ID),
+		zap.Int64("jobID", job.ID),
+		zap.Any("job", job))
 	h.pendingDDLJobs = append(h.pendingDDLJobs, job)
 	h.lastDDLJobID = job.ID
 }
