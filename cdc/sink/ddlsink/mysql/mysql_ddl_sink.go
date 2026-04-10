@@ -90,6 +90,11 @@ func NewDDLSink(
 		return nil, err
 	}
 
+	failpoint.Inject("MySQLSinkForceSingleConnection", func() {
+		db.SetMaxIdleConns(1)
+		db.SetMaxOpenConns(1)
+	})
+
 	cfg.IsTiDB = pmysql.CheckIsTiDB(ctx, db)
 
 	cfg.IsWriteSourceExisted, err = pmysql.CheckIfBDRModeIsSupported(ctx, db)
@@ -211,7 +216,65 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 
+	// Reset session timestamp before DDL to avoid leaking from pooled connections.
+	if err := resetSessionTimestamp(ctx, tx); err != nil {
+		log.Error("Failed to reset session timestamp before DDL execution",
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID),
+			zap.Error(err))
+		if rbErr := tx.Rollback(); rbErr != nil {
+			log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+		}
+		return err
+	}
+
+	ddlTimestamp, useSessionTimestamp := ddlSessionTimestampFromOriginDefault(ddl, m.cfg.Timezone)
+	skipSetTimestamp := false
+	failpoint.Inject("MySQLSinkSkipSetSessionTimestamp", func(val failpoint.Value) {
+		skipSetTimestamp = matchFailpointValue(val, ddl.Query)
+	})
+	skipResetAfterDDL := false
+	failpoint.Inject("MySQLSinkSkipResetSessionTimestampAfterDDL", func(val failpoint.Value) {
+		skipResetAfterDDL = matchFailpointValue(val, ddl.Query)
+	})
+
+	if useSessionTimestamp && skipSetTimestamp {
+		log.Warn("Skip setting session timestamp due to failpoint",
+			zap.String("namespace", m.id.Namespace),
+			zap.String("changefeed", m.id.ID),
+			zap.String("query", ddl.Query))
+	}
+	if useSessionTimestamp && !skipSetTimestamp {
+		// set the session timestamp to match upstream DDL execution time
+		if err := setSessionTimestamp(ctx, tx, ddlTimestamp); err != nil {
+			log.Error("Fail to set session timestamp for DDL",
+				zap.Float64("timestamp", ddlTimestamp),
+				zap.Uint64("startTs", ddl.StartTs),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("query", ddl.Query),
+				zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("changefeed", m.id.ID), zap.Error(rbErr))
+			}
+			return err
+		}
+	}
+
 	if _, err = tx.ExecContext(ctx, ddl.Query); err != nil {
+		log.Error("Failed to ExecContext", zap.Any("err", err), zap.Any("query", ddl.Query))
+		if useSessionTimestamp {
+			if skipResetAfterDDL {
+				log.Warn("Skip resetting session timestamp after DDL execution failure due to failpoint",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.String("query", ddl.Query))
+			} else if tsErr := resetSessionTimestamp(ctx, tx); tsErr != nil {
+				log.Warn("Failed to reset session timestamp after DDL execution failure",
+					zap.String("namespace", m.id.Namespace),
+					zap.String("changefeed", m.id.ID),
+					zap.Error(tsErr))
+			}
+		}
 		if rbErr := tx.Rollback(); rbErr != nil {
 			log.Error("Failed to rollback",
 				zap.String("namespace", m.id.Namespace),
@@ -222,13 +285,39 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 		return err
 	}
 
+	if useSessionTimestamp {
+		// reset session timestamp after DDL execution to avoid affecting subsequent operations
+		if skipResetAfterDDL {
+			log.Warn("Skip resetting session timestamp after DDL execution due to failpoint",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.String("query", ddl.Query))
+		} else if err := resetSessionTimestamp(ctx, tx); err != nil {
+			log.Error("Failed to reset session timestamp after DDL execution", zap.Error(err))
+			if rbErr := tx.Rollback(); rbErr != nil {
+				log.Error("Failed to rollback", zap.String("sql", ddl.Query), zap.Error(rbErr))
+			}
+			return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		return errors.WrapError(errors.ErrMySQLTxnError, errors.WithMessage(err, fmt.Sprintf("Query info: %s; ", ddl.Query)))
 	}
 
-	log.Info("Exec DDL succeeded",
-		zap.String("namespace", m.id.Namespace), zap.String("changefeed", m.id.ID),
-		zap.Duration("duration", time.Since(start)), zap.String("sql", ddl.Query))
+	logFields := []zap.Field{
+		zap.String("namespace", m.id.Namespace),
+		zap.String("changefeed", m.id.ID),
+		zap.Duration("duration", time.Since(start)),
+		zap.String("sql", ddl.Query),
+	}
+
+	if useSessionTimestamp {
+		logFields = append(logFields, zap.Float64("sessionTimestamp", ddlTimestamp))
+	}
+
+	log.Info("Exec DDL succeeded", logFields...)
+
 	return nil
 }
 
@@ -238,6 +327,14 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 	defer ticker.Stop()
 	defer ticker1.Stop()
 	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		case <-ticker1.C:
+			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
+		}
+
 		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
 		if err != nil {
 			log.Error("Error when getting DDL state from TiDB", zap.Error(err))
@@ -256,16 +353,8 @@ func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreat
 				return nil
 			}
 		default:
-			log.Warn("Unexpected DDL state, may not be found downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
+			log.Warn("Unexpected DDL state, may not be found downstream, retry later", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
 			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		case <-ticker1.C:
-			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
 		}
 	}
 }
@@ -344,19 +433,29 @@ func getDDLCreateTime(ctx context.Context, db *sql.DB) string {
 // getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
 func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
 	// ddlCreateTime and createTime are both based on UTC timezone of downstream
-	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs 
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs
 	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
-	//nolint:rowserrcheck
-	jobsRows, err := db.QueryContext(ctx, showJobs)
+	var jobsResults [][]string
+	err := retry.Do(ctx, func() error {
+		//nolint:rowserrcheck
+		jobsRows, err := db.QueryContext(ctx, showJobs)
+		if err != nil {
+			log.Warn("failed to query from downstream to get ddl state", zap.Error(err))
+			return err
+		}
+		jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
+		if err != nil {
+			log.Warn("get jobs results failed", zap.Error(err))
+			return err
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(pmysql.BackoffMaxDelay.Milliseconds()),
+		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
+		retry.WithMaxTries(defaultDDLMaxRetry))
 	if err != nil {
 		return timodel.JobStateNone, err
 	}
 
-	var jobsResults [][]string
-	jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
-	if err != nil {
-		return timodel.JobStateNone, err
-	}
 	if len(jobsResults) > 0 {
 		result := jobsResults[0]
 		state, jobID, jobType, schemaState := result[1], result[2], result[3], result[4]

@@ -40,6 +40,9 @@ func TestRowData(t *testing.T) {
 	rowDatas := &RowDatas{
 		Rows:         make([]RowData, 0, len(ids)),
 		OrderKeyCols: orderKeyCols,
+		Collators: GetCollatorsForTable(&TableDiff{
+			Info: tableInfo,
+		}, orderKeyCols),
 	}
 
 	heap.Init(rowDatas)

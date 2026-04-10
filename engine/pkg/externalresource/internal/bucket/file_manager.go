@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/log"
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -284,7 +284,7 @@ func (m *FileManager) removeFilesIf(
 	}
 
 	var toRemoveFiles []string
-	err = storage.WalkDir(ctx, &brStorage.WalkOption{}, func(path string, _ int64) error {
+	err = storage.WalkDir(ctx, &storeapi.WalkOption{}, func(path string, _ int64) error {
 		path = strings.TrimPrefix(path, "/")
 		if pred(path) {
 			toRemoveFiles = append(toRemoveFiles, path)
@@ -308,7 +308,7 @@ func (m *FileManager) removeFilesIf(
 	return nil
 }
 
-func createPlaceholderFile(ctx context.Context, storage brStorage.ExternalStorage) error {
+func createPlaceholderFile(ctx context.Context, storage storeapi.Storage) error {
 	exists, err := storage.FileExists(ctx, placeholderFileName)
 	if err != nil {
 		return errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("checking placeholder file")

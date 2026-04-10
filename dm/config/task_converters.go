@@ -118,6 +118,14 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig, sourceCfgMap map[string]*SourceConfig) (
 	[]*SubTaskConfig, error,
 ) {
+	// import-into does not support sharding / multi-source tasks.
+	if fullCfg := task.SourceConfig.FullMigrateConf; fullCfg != nil && fullCfg.ImportMode != nil {
+		if strings.EqualFold(string(*fullCfg.ImportMode), string(openapi.TaskFullMigrateConfImportModeImportInto)) &&
+			len(task.SourceConfig.SourceConf) > 1 {
+			return nil, terror.ErrConfigImportIntoShardingNotSupport.Generate()
+		}
+	}
+
 	// source name -> migrate rule list
 	tableMigrateRuleMap := make(map[string][]openapi.TaskTableMigrateRule)
 	for _, rule := range task.TableMigrateRule {

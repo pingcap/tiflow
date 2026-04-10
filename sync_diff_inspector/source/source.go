@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -118,6 +119,13 @@ type Source interface {
 	Close()
 }
 
+// ChecksumCapableSource is an optional interface that Sources may implement
+// to support the global-checksum fast path (used when export-fix-sql is false).
+type ChecksumCapableSource interface {
+	// GetGlobalChecksumIterator returns a chunk iterator and total number of chunks.
+	GetGlobalChecksumIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, int, error)
+}
+
 // NewSources returns a new source
 func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, upstream Source, err error) {
 	// init db connection for upstream / downstream.
@@ -144,6 +152,7 @@ func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, ups
 			NeedUnifiedTimeZone: needUnifiedTimeZone,
 			Collation:           tableConfig.Collation,
 			ChunkSize:           tableConfig.ChunkSize,
+			SplitterStrategy:    cfg.SplitterStrategy,
 		})
 
 		// When the router set case-sensitive false,
@@ -327,7 +336,7 @@ func initTables(ctx context.Context, cfg *config.Config) (cfgTables []*config.Ta
 		if filter.IsSystemSchema(strings.ToLower(schema)) {
 			continue
 		}
-		allTables, err := dbutil.GetTables(ctx, downStreamConn, schema)
+		allTables, err := conn.GetTables(ctx, downStreamConn, schema)
 		if err != nil {
 			return nil, errors.Annotatef(err, "get tables from target source %s", schema)
 		}

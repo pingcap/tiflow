@@ -486,7 +486,7 @@ func (s *Server) doClose() {
 
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
 	if w := s.getSourceWorker(true); w != nil {
-		w.Stop(true)
+		w.StopForFailover(true)
 	}
 
 	// close listener at last, so we can get status from it if worker failed to close in previous step
@@ -585,7 +585,7 @@ func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) erro
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	w.Stop(graceful)
+	w.StopForFailover(graceful)
 	return nil
 }
 
@@ -811,6 +811,13 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 
 	var err error
 	resp.SubTaskStatus, sourceStatus.RelayStatus, err = w.QueryStatus(ctx, req.Name)
+
+	if sourceErr := w.getSourceStatusErr(); sourceErr != nil {
+		if resp.SourceStatus.Result == nil {
+			resp.SourceStatus.Result = &pb.ProcessResult{}
+		}
+		resp.SourceStatus.Result.Errors = append(resp.SourceStatus.Result.Errors, sourceErr)
+	}
 
 	if err != nil {
 		resp.Msg = fmt.Sprintf("error when get master status: %v", err)

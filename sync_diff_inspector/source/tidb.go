@@ -24,9 +24,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -57,15 +62,13 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, fall back to use random iterator", zap.Error(err))
-	// fall back to random splitter
-
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
-	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
-	if err != nil {
-		return nil, errors.Trace(err)
+	log.Info("failed to build bucket iterator, falling back", zap.Error(err))
+	if originTable.SplitterStrategy == config.SplitterStrategyLimit {
+		log.Info("choose limit splitter", zap.String("table", progressID))
+		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 	}
-	return randIter, nil
+	log.Info("choose random splitter", zap.String("table", progressID))
+	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 
 // TiDBRowsIterator is used to iterate rows in TiDB
@@ -97,6 +100,91 @@ type TiDBSource struct {
 	dbConn            *sql.DB
 
 	version *semver.Version
+}
+
+// GetGlobalChecksumIterator builds chunk iterator for global-checksum mode.
+// It prefers _tidb_rowid or clustered PK, then falls back to the regular
+// splitter configuration when ignore-columns removes the checksum-specific handle.
+func (s *TiDBSource) GetGlobalChecksumIterator(
+	ctx context.Context,
+	tableIndex int,
+	startRange *splitter.RangeInfo,
+) (splitter.ChunkIterator, int, error) {
+	table := s.tableDiffs[tableIndex]
+	matchSource := getMatchSource(s.sourceTableMap, table)
+
+	originTable := *table
+	tableInfo := table.Info.Clone()
+	originTable.Info = tableInfo
+	originTable.Schema = matchSource.OriginSchema
+	originTable.Table = matchSource.OriginTable
+	fields, err := prepareChecksumSplitFields(tableInfo)
+	if err != nil {
+		log.Warn("failed to determine checksum-specific split fields, fallback to the regular splitter configuration",
+			zap.String("table", dbutil.TableName(table.Schema, table.Table)),
+			zap.Error(err))
+		fields = originTable.Fields
+	}
+	originTable.Fields = fields
+
+	iter, err := splitter.NewRandomIteratorWithCheckpoint(
+		ctx, "", &originTable, s.dbConn, startRange)
+	if err != nil {
+		return nil, 0, errors.Trace(err)
+	}
+	return iter, iter.Len(), nil
+}
+
+// prepareChecksumSplitFields returns the split fields for global-checksum mode.
+// It may append a synthetic _tidb_rowid column to tableInfo when no handle is available.
+func prepareChecksumSplitFields(tableInfo *model.TableInfo) (string, error) {
+	switch {
+	case tableInfo.PKIsHandle:
+		pkCol := tableInfo.GetPkColInfo()
+		if pkCol == nil {
+			return "", errors.New("PKIsHandle is set but PK column not found")
+		}
+		return pkCol.Name.O, nil
+	case tableInfo.IsCommonHandle:
+		pkIndex := tables.FindPrimaryIndex(tableInfo)
+		if pkIndex == nil || len(pkIndex.Columns) == 0 {
+			return "", errors.New("IsCommonHandle is set but primary index not found")
+		}
+		fieldNames := make([]string, 0, len(pkIndex.Columns))
+		for _, idxCol := range pkIndex.Columns {
+			fieldNames = append(fieldNames, tableInfo.Columns[idxCol.Offset].Name.O)
+		}
+		return strings.Join(fieldNames, ","), nil
+	default:
+		ensureChecksumSplitOnRowID(tableInfo)
+		return "_tidb_rowid", nil
+	}
+}
+
+func ensureChecksumSplitOnRowID(tableInfo *model.TableInfo) {
+	if dbutil.FindColumnByName(tableInfo.Columns, "_tidb_rowid") == nil {
+		tableInfo.Columns = append(tableInfo.Columns, &model.ColumnInfo{
+			Name:      ast.NewCIStr("_tidb_rowid"),
+			Offset:    len(tableInfo.Columns),
+			State:     model.StatePublic,
+			FieldType: *types.NewFieldType(mysql.TypeLonglong),
+		})
+	}
+
+	for _, index := range tableInfo.Indices {
+		if len(index.Columns) == 1 && strings.EqualFold(index.Columns[0].Name.O, "_tidb_rowid") {
+			return
+		}
+	}
+
+	tableInfo.Indices = append(tableInfo.Indices, &model.IndexInfo{
+		ID:      0,
+		Name:    ast.NewCIStr("_tidb_rowid"),
+		State:   model.StatePublic,
+		Unique:  true,
+		Tp:      ast.IndexTypeBtree,
+		Columns: []*model.IndexColumn{{Name: ast.NewCIStr("_tidb_rowid"), Offset: len(tableInfo.Columns) - 1, Length: types.UnspecifiedLength}},
+	})
 }
 
 // GetTableAnalyzer gets the analyzer for current source
@@ -280,7 +368,7 @@ func NewTiDBSource(
 			// ignore system schema
 			continue
 		}
-		allTables, err := dbutil.GetTables(ctx, ds.Conn, schema)
+		allTables, err := conn.GetTables(ctx, ds.Conn, schema)
 		if err != nil {
 			return nil, errors.Annotatef(err, "get tables from %s", schema)
 		}

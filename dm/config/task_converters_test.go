@@ -413,6 +413,43 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 	require.Equal(t, *newTask, task)
 }
 
+func TestOpenAPITaskImportIntoMultiSourceRejected(t *testing.T) {
+	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
+	require.NoError(t, err)
+	require.Len(t, task.SourceConfig.SourceConf, 2)
+
+	// Make this a multi-source (non-sharding) task.
+	task.ShardMode = nil
+	task.StrictOptimisticShardMode = nil
+
+	// import-into does not support multi-source tasks.
+	importMode := openapi.TaskFullMigrateConfImportModeImportInto
+	task.SourceConfig.FullMigrateConf.ImportMode = &importMode
+	dataDir := "s3://bucket/prefix"
+	task.SourceConfig.FullMigrateConf.DataDir = &dataDir
+
+	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg2, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	sourceCfg2.SourceID = task.SourceConfig.SourceConf[1].SourceName
+
+	sourceCfgMap := map[string]*SourceConfig{
+		sourceCfg1.SourceID: sourceCfg1,
+		sourceCfg2.SourceID: sourceCfg2,
+	}
+	toDBCfg := &dbconfig.DBConfig{
+		Host:     task.TargetConfig.Host,
+		Port:     task.TargetConfig.Port,
+		User:     task.TargetConfig.User,
+		Password: task.TargetConfig.Password,
+	}
+
+	_, err = OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	require.ErrorContains(t, err, "import-into mode does not support sharding")
+}
+
 func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	// one source task
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()

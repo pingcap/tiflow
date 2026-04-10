@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	brversion "github.com/pingcap/tidb/br/pkg/version"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -39,10 +39,7 @@ const (
 	defaultGCSafePointTTL = 5 * 60
 )
 
-var (
-	tidbVersionRegex       = regexp.MustCompile(`-[v]?\d+\.\d+\.\d+([0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?`)
-	autoGCSafePointVersion = semver.New("4.0.0")
-)
+var autoGCSafePointVersion = semver.New("4.0.0")
 
 func getPDDDLIDs(pCtx context.Context, cli *clientv3.Client) ([]string, error) {
 	ctx, cancel := context.WithTimeout(pCtx, 10*time.Second)
@@ -170,11 +167,15 @@ func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]strin
 	return strs, errors.Trace(rows.Err())
 }
 
-// parse versino string to semver.Version
+// parseVersion parses a version string to semver.Version.
+// It supports both classic TiDB versions (e.g. "8.0.11-TiDB-v9.0.0") and
+// TiDB-X versions (e.g. "8.0.11-TiDB-CLOUD.202603.0").
 func parseVersion(versionStr string) (*semver.Version, error) {
-	versionStr = tidbVersionRegex.FindString(versionStr)[1:]
-	versionStr = strings.TrimPrefix(versionStr, "v")
-	return semver.NewVersion(versionStr)
+	info := brversion.ParseServerInfo(versionStr)
+	if info.ServerType != brversion.ServerTypeTiDB {
+		return nil, fmt.Errorf("unrecognized TiDB version: %s", versionStr)
+	}
+	return info.ServerVersion, nil
 }
 
 // TryToGetVersion gets the version of current db.

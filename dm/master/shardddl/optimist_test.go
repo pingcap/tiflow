@@ -447,12 +447,28 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	_, err = optimism.PutSourceTables(cli, st32)
 	require.NoError(t.T(), err)
 	require.Eventually(t.T(), func() bool {
-		ready := o.Locks()[lockID].Ready()
-		return !ready[source2][i23.UpSchema][i23.UpTable]
+		lock := o.Locks()[lockID]
+		if lock == nil {
+			return false
+		}
+		ready := lock.Ready()
+		readySchemas, ok := ready[source2]
+		if !ok {
+			return false
+		}
+		readyTables, ok := readySchemas[i23.UpSchema]
+		if !ok {
+			return false
+		}
+		isReady, ok := readyTables[i23.UpTable]
+		if !ok {
+			return false
+		}
+		return !isReady
 	}, waitFor, tick)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
-	require.Equal(t.T(), remain, 2)
+	require.Equal(t.T(), 2, remain)
 	tts := o.tk.FindTables(task, downSchema, downTable)
 	require.Len(t.T(), tts, 2)
 	require.Equal(t.T(), source2, tts[1].Source)
@@ -471,7 +487,7 @@ func (t *testOptimistSuite) testOptimist(cli *clientv3.Client, restart int) {
 	require.Contains(t.T(), o.Locks(), lockID)
 	synced, remain = o.Locks()[lockID].IsSynced()
 	require.False(t.T(), synced)
-	require.Equal(t.T(), remain, 1)
+	require.Equal(t.T(), 1, remain)
 
 	// check ShowLocks.
 	expectedLock = []*pb.DDLLock{

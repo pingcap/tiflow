@@ -43,6 +43,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// Supported values for SplitterStrategy.
+const (
+	SplitterStrategyLimit  = "limit"
+	SplitterStrategyRandom = "random"
+)
+
 const (
 	// LocalFilePerm is the permission for local files
 	LocalFilePerm os.FileMode = 0o644
@@ -98,7 +104,7 @@ func (t *TableConfig) Valid() bool {
 
 // Security is the wrapper for TLS Security
 type Security struct {
-	TLSName string `json:"tls-name"`
+	TLSName string `toml:"-" json:"-"`
 
 	CAPath   string `toml:"ca-path" json:"ca-path"`
 	CertPath string `toml:"cert-path" json:"cert-path"`
@@ -232,6 +238,11 @@ type TaskConfig struct {
 	TargetTableConfigs []*TableConfig
 	TargetCheckTables  filter.Filter
 
+	// ExportFixSQL mirrors the top-level config at runtime so
+	// ComputeConfigHash can include this mode switch without changing its
+	// signature, while still omitting the derived field from JSON output.
+	ExportFixSQL bool `json:"-"`
+
 	FixDir        string
 	CheckpointDir string
 	HashFile      string
@@ -346,6 +357,7 @@ func (t *TaskConfig) Init(
 // we think the second sync diff can use the checkpoint.
 func (t *TaskConfig) ComputeConfigHash() (string, error) {
 	hash := make([]byte, 0)
+	hash = append(hash, []byte(strconv.FormatBool(t.ExportFixSQL))...)
 	// compute sources
 	for _, c := range t.SourceInstances {
 		configBytes, err := json.Marshal(c)
@@ -398,6 +410,8 @@ type Config struct {
 	CheckDataOnly bool `toml:"check-data-only" json:"-"`
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
+	// SplitterStrategy controls the fallback splitter when bucket stats are unavailable.
+	SplitterStrategy string `toml:"splitter-strategy" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
 	// DMTask string `toml:"dm-task" json:"dm-task"`
@@ -590,6 +604,7 @@ func (c *Config) Init() (err error) {
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
 		}
+		c.Task.ExportFixSQL = c.ExportFixSQL
 		err = c.Task.Init(c.DataSources, c.TableConfigs)
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
@@ -615,6 +630,7 @@ func (c *Config) Init() (err error) {
 		}
 	}
 
+	c.Task.ExportFixSQL = c.ExportFixSQL
 	err = c.Task.Init(c.DataSources, c.TableConfigs)
 	if err != nil {
 		return errors.Annotate(err, "failed to init Task")
@@ -626,6 +642,10 @@ func (c *Config) Init() (err error) {
 func (c *Config) CheckConfig() bool {
 	if c.CheckThreadCount <= 0 {
 		log.Error("check-thread-count must greater than 0!")
+		return false
+	}
+	if err := c.normalizeSplitterStrategy(); err != nil {
+		log.Warn("invalid splitter strategy", zap.Error(err))
 		return false
 	}
 	if len(c.DMAddr) != 0 {
@@ -641,6 +661,19 @@ func (c *Config) CheckConfig() bool {
 		}
 	}
 	return true
+}
+
+func (c *Config) normalizeSplitterStrategy() error {
+	mode := strings.ToLower(strings.TrimSpace(c.SplitterStrategy))
+	switch mode {
+	case "", SplitterStrategyRandom:
+		c.SplitterStrategy = SplitterStrategyRandom
+	case SplitterStrategyLimit:
+		c.SplitterStrategy = mode
+	default:
+		return errors.Errorf("splitter-strategy must be limit or random")
+	}
+	return nil
 }
 
 func timestampOutputDir() string {

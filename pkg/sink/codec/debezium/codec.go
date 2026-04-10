@@ -40,6 +40,22 @@ type dbzCodec struct {
 	nowFunc   func() time.Time
 }
 
+// truncateValueForLog truncates large values to avoid log flooding.
+// Returns the original value if it's small enough, otherwise returns a truncated string representation.
+func truncateValueForLog(value interface{}, maxLen int) interface{} {
+	switch v := value.(type) {
+	case []byte:
+		if len(v) > maxLen {
+			return fmt.Sprintf("%s... (truncated %d bytes)", string(v[:maxLen]), len(v))
+		}
+	case string:
+		if len(v) > maxLen {
+			return fmt.Sprintf("%s... (truncated %d chars)", v[:maxLen], len(v))
+		}
+	}
+	return value
+}
+
 func (c *dbzCodec) writeDebeziumFieldValues(
 	writer *util.JSONWriter,
 	fieldName string,
@@ -56,7 +72,12 @@ func (c *dbzCodec) writeDebeziumFieldValues(
 			colx := model.GetColumnDataX(col, tableInfo)
 			err = c.writeDebeziumFieldValue(writer, colx, colInfos[i].Ft)
 			if err != nil {
-				log.Error("write Debezium field value meet error", zap.Error(err))
+				log.Error("failed to write Debezium field value",
+					zap.String("schema", tableInfo.GetSchemaName()),
+					zap.String("table", tableInfo.GetTableName()),
+					zap.String("column", colx.GetName()),
+					zap.Any("value", truncateValueForLog(col.Value, 1024)),
+					zap.Error(err))
 				break
 			}
 		}

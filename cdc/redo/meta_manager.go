@@ -21,7 +21,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -65,7 +66,7 @@ type metaManager struct {
 
 	// This fields are used to process meta files and perform
 	// garbage collection of logs.
-	extStorage    storage.ExternalStorage
+	extStorage    storeapi.Storage
 	uuidGenerator uuid.Generator
 	preMetaFile   string
 
@@ -126,7 +127,7 @@ func (m *metaManager) Running() bool {
 }
 
 func (m *metaManager) preStart(ctx context.Context) error {
-	uri, err := storage.ParseRawURL(m.cfg.Storage)
+	uri, err := objstore.ParseRawURL(m.cfg.Storage)
 	if err != nil {
 		return err
 	}
@@ -134,7 +135,7 @@ func (m *metaManager) preStart(ctx context.Context) error {
 	redo.FixLocalScheme(uri)
 	// blackhole scheme is converted to "noop" scheme here, so we can use blackhole for testing
 	if redo.IsBlackholeStorage(uri.Scheme) {
-		uri, _ = storage.ParseRawURL("noop://")
+		uri, _ = objstore.ParseRawURL("noop://")
 	}
 
 	extStorage, err := redo.InitExternalStorage(ctx, *uri)
@@ -353,7 +354,7 @@ func (m *metaManager) deleteAllLogs(ctx context.Context) error {
 	// otherwise it should have already meet panic during changefeed running time.
 	// the extStorage may be nil in the unit test, so just set the external storage to make unit test happy.
 	if m.extStorage == nil {
-		uri, err := storage.ParseRawURL(m.cfg.Storage)
+		uri, err := objstore.ParseRawURL(m.cfg.Storage)
 		redo.FixLocalScheme(uri)
 		if err != nil {
 			return err

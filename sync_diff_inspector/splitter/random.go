@@ -79,7 +79,7 @@ func NewRandomIteratorWithCheckpoint(
 		return nil, errors.Trace(err)
 	}
 
-	chunkRange := chunk.NewChunkRange()
+	chunkRange := chunk.NewChunkRange(table.Info)
 
 	// Below logic is modified from BucketIterator
 	// It's used to find the index which can match the split fields in RandomIterator.
@@ -188,7 +188,9 @@ NEXTINDEX:
 		chunks = chunks[:(len(chunks) - v.(int))]
 	})
 
-	progress.StartTable(progressID, len(chunks), true)
+	if progressID != "" {
+		progress.StartTable(progressID, len(chunks), true)
+	}
 	return &RandomIterator{
 		table:     table,
 		chunkSize: chunkSize,
@@ -215,6 +217,11 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 		log.Info("failpoint print-chunk-info injected (random splitter)", zap.Strings("lowerBounds", lowerBounds), zap.Strings("upperBounds", upperBounds), zap.String("indexCode", c.Index.ToString()))
 	})
 	return c, nil
+}
+
+// Len returns the total number of chunks.
+func (s *RandomIterator) Len() int {
+	return len(s.chunks)
 }
 
 // Close close the iterator

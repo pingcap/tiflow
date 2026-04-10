@@ -27,6 +27,7 @@ import (
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tiflow/dm/pkg/cancelcause"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
@@ -141,7 +142,8 @@ func WaitSomething(backoff int, waitTime time.Duration, fn func() bool) bool {
 
 // IsContextCanceledError checks whether err is context.Canceled.
 func IsContextCanceledError(err error) bool {
-	return errors.Cause(err) == context.Canceled
+	cause := errors.Cause(err)
+	return cause == context.Canceled || cause == cancelcause.WorkerFailoverCause()
 }
 
 // IgnoreErrorCheckpoint is used in checkpoint update.

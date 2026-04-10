@@ -57,6 +57,8 @@ const (
 
 // Defines values for TaskFullMigrateConfImportMode.
 const (
+	TaskFullMigrateConfImportModeImportInto TaskFullMigrateConfImportMode = "import-into"
+
 	TaskFullMigrateConfImportModeLogical TaskFullMigrateConfImportMode = "logical"
 
 	TaskFullMigrateConfImportModePhysical TaskFullMigrateConfImportMode = "physical"
