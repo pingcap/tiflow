@@ -99,7 +99,7 @@ func (b *basicScheduler) Schedule(
 			// the changefeed cannot make progress
 			// for a cluster with n captures, n should be at least 2
 			// only n - 1 captures can be in the `stopping` at the same time.
-			log.Warn("schedulerv3: cannot found capture when add new table",
+			log.Warn("schedulerv3: cannot find capture when adding a new table",
 				zap.String("namespace", b.changefeedID.Namespace),
 				zap.String("changefeed", b.changefeedID.ID),
 				zap.Int("captureCount", len(captures)),

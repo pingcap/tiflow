@@ -101,7 +101,7 @@ func (d *drainCaptureScheduler) Schedule(
 		log.Info("schedulerv3: drain a stopping capture",
 			zap.String("namespace", d.changefeedID.Namespace),
 			zap.String("changefeed", d.changefeedID.ID),
-			zap.String("captureID", d.target))
+			zap.String("targetCapture", d.target))
 	}
 
 	// Currently, the workload is the number of tables in a capture.
@@ -115,11 +115,11 @@ func (d *drainCaptureScheduler) Schedule(
 	// this may happen when inject the target, there is at least 2 alive captures
 	// but when schedule the task, only owner alive.
 	if len(captureWorkload) == 0 {
-		log.Warn("schedulerv3: drain capture scheduler ignore drain target capture, "+
-			"since cannot found destination captures",
+		log.Warn("schedulerv3: drain capture scheduler ignored the drain target capture, "+
+			"since it cannot find destination captures",
 			zap.String("namespace", d.changefeedID.Namespace),
 			zap.String("changefeed", d.changefeedID.ID),
-			zap.String("target", d.target),
+			zap.String("targetCapture", d.target),
 			zap.Int("captureCount", len(captures)))
 		d.target = captureIDNotDraining
 		return nil
@@ -132,12 +132,12 @@ func (d *drainCaptureScheduler) Schedule(
 	replications.Ascend(func(span tablepb.Span, rep *replication.ReplicationSet) bool {
 		if rep.State != replication.ReplicationSetStateReplicating {
 			// only drain the target capture if all tables is replicating,
-			log.Debug("schedulerv3: drain capture scheduler skip this tick,"+
-				"not all table is replicating",
+			log.Debug("schedulerv3: drain capture scheduler skipped this tick, "+
+				"not all tables are replicating",
 				zap.String("namespace", d.changefeedID.Namespace),
 				zap.String("changefeed", d.changefeedID.ID),
-				zap.String("target", d.target),
-				zap.String("captureID", rep.Primary),
+				zap.String("targetCapture", d.target),
+				zap.String("primary", rep.Primary),
 				zap.Stringer("state", rep.State),
 				zap.Int64("tableID", span.TableID),
 				zap.Stringer("startKey", span.StartKey))
@@ -169,7 +169,7 @@ func (d *drainCaptureScheduler) Schedule(
 		log.Info("schedulerv3: drain capture scheduler finished, since no table",
 			zap.String("namespace", d.changefeedID.Namespace),
 			zap.String("changefeed", d.changefeedID.ID),
-			zap.String("target", d.target))
+			zap.String("targetCapture", d.target))
 		d.target = captureIDNotDraining
 		return nil
 	}
@@ -187,7 +187,7 @@ func (d *drainCaptureScheduler) Schedule(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("schedulerv3: drain capture meet unexpected min workload",
+			log.Panic("schedulerv3: drain capture encountered unexpected min workload",
 				zap.String("namespace", d.changefeedID.Namespace),
 				zap.String("changefeed", d.changefeedID.ID),
 				zap.Int("captureCount", len(captureWorkload)),

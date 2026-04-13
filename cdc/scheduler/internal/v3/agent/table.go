@@ -69,7 +69,7 @@ func (t *tableSpan) getTableSpanStatus(collectStat bool) tablepb.TableStatus {
 
 func newAddTableResponseMessage(changefeedID model.ChangeFeedID, status tablepb.TableStatus) *schedulepb.Message {
 	if status.Checkpoint.ResolvedTs < status.Checkpoint.CheckpointTs {
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+		log.Warn("schedulerv3: resolved ts should not be less than checkpoint ts",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
 			zap.Int64("tableID", status.Span.TableID),
@@ -98,7 +98,7 @@ func newRemoveTableResponseMessage(changefeedID model.ChangeFeedID, status table
 			// Advance resolved ts to checkpoint ts if table is removed.
 			status.Checkpoint.ResolvedTs = status.Checkpoint.CheckpointTs
 		} else {
-			log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+			log.Warn("schedulerv3: resolved ts should not be less than checkpoint ts",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
 				zap.Int64("tableID", status.Span.TableID),
@@ -189,7 +189,7 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 		switch state {
 		case tablepb.TableStateAbsent:
 			done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, t.task.IsPrepare)
-			if err != nil || !done {
+			if err != nil {
 				log.Warn("schedulerv3: agent add table failed",
 					zap.String("namespace", t.changefeedID.Namespace),
 					zap.String("changefeed", t.changefeedID.ID),
@@ -200,6 +200,10 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 					zap.Error(err))
 				status := t.getTableSpanStatus(false)
 				return newAddTableResponseMessage(t.changefeedID, status), errors.Trace(err)
+			}
+			if !done {
+				status := t.getTableSpanStatus(false)
+				return newAddTableResponseMessage(t.changefeedID, status), nil
 			}
 			if t.task.IsPrepare {
 				log.Info("schedulerv3: agent accepted prepare table task",
@@ -230,7 +234,7 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 
 			if t.task.status == dispatchTableTaskReceived {
 				done, err := t.executor.AddTableSpan(ctx, t.task.Span, t.task.Checkpoint, false)
-				if err != nil || !done {
+				if err != nil {
 					log.Warn("schedulerv3: agent add table failed",
 						zap.String("namespace", t.changefeedID.Namespace),
 						zap.String("changefeed", t.changefeedID.ID),
@@ -241,6 +245,10 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 						zap.Error(err))
 					status := t.getTableSpanStatus(false)
 					return newAddTableResponseMessage(t.changefeedID, status), errors.Trace(err)
+				}
+				if !done {
+					status := t.getTableSpanStatus(false)
+					return newAddTableResponseMessage(t.changefeedID, status), nil
 				}
 				log.Info("schedulerv3: agent accepted replicate table task",
 					zap.String("namespace", t.changefeedID.Namespace),

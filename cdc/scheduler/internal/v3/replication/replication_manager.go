@@ -287,7 +287,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: ignore table status no table found",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.String("captureID", from),
+				zap.String("reportingCapture", from),
 				zap.Int64("tableID", status.Span.TableID),
 				zap.Stringer("startKey", status.Span.StartKey),
 				zap.Stringer("state", status.State),
@@ -320,7 +320,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Warn("schedulerv3: ignore unknown dispatch table response",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.String("captureID", from),
+			zap.String("reportingCapture", from),
 			zap.Bool("hasAddTable", msg.GetAddTable() != nil),
 			zap.Bool("hasRemoveTable", msg.GetRemoveTable() != nil))
 		return nil, nil
@@ -331,7 +331,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Info("schedulerv3: ignore table status no table found",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.String("captureID", from),
+			zap.String("reportingCapture", from),
 			zap.Int64("tableID", status.Span.TableID),
 			zap.Stringer("startKey", status.Span.StartKey),
 			zap.Stringer("state", status.State),
@@ -389,7 +389,7 @@ func (r *Manager) HandleTasks(
 
 		// Check if accepting one more task exceeds maxTaskConcurrency.
 		if r.runningTasks.Len() == r.maxTaskConcurrency {
-			log.Debug("schedulerv3: too many running task",
+			log.Debug("schedulerv3: too many running tasks",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID))
 			// Does not use break, in case there is burst balance task
@@ -414,7 +414,7 @@ func (r *Manager) HandleTasks(
 					zap.String("namespace", r.changefeedID.Namespace),
 					zap.String("changefeed", r.changefeedID.ID),
 					zap.String("task", task.Name()),
-					zap.String("captureID", task.AddTable.CaptureID),
+					zap.String("targetCapture", task.AddTable.CaptureID),
 					zap.Int64("tableID", task.AddTable.Span.TableID),
 					zap.Stringer("startKey", task.AddTable.Span.StartKey),
 					zap.Uint64("checkpointTs", task.AddTable.CheckpointTs))
@@ -423,7 +423,7 @@ func (r *Manager) HandleTasks(
 					zap.String("namespace", r.changefeedID.Namespace),
 					zap.String("changefeed", r.changefeedID.ID),
 					zap.String("task", task.Name()),
-					zap.String("captureID", task.RemoveTable.CaptureID),
+					zap.String("targetCapture", task.RemoveTable.CaptureID),
 					zap.Int64("tableID", task.RemoveTable.Span.TableID),
 					zap.Stringer("startKey", task.RemoveTable.Span.StartKey))
 			} else if task.MoveTable != nil {
@@ -431,7 +431,7 @@ func (r *Manager) HandleTasks(
 					zap.String("namespace", r.changefeedID.Namespace),
 					zap.String("changefeed", r.changefeedID.ID),
 					zap.String("task", task.Name()),
-					zap.String("captureID", task.MoveTable.DestCapture),
+					zap.String("targetCapture", task.MoveTable.DestCapture),
 					zap.Int64("tableID", task.MoveTable.Span.TableID),
 					zap.Stringer("startKey", task.MoveTable.Span.StartKey))
 			}
@@ -443,7 +443,7 @@ func (r *Manager) HandleTasks(
 					zap.String("namespace", r.changefeedID.Namespace),
 					zap.String("changefeed", r.changefeedID.ID),
 					zap.String("task", task.Name()),
-					zap.String("captureID", task.RemoveTable.CaptureID),
+					zap.String("targetCapture", task.RemoveTable.CaptureID),
 					zap.Int64("tableID", task.RemoveTable.Span.TableID),
 					zap.Stringer("startKey", task.RemoveTable.Span.StartKey))
 			} else if task.MoveTable != nil {
@@ -451,7 +451,7 @@ func (r *Manager) HandleTasks(
 					zap.String("namespace", r.changefeedID.Namespace),
 					zap.String("changefeed", r.changefeedID.ID),
 					zap.String("task", task.Name()),
-					zap.String("captureID", task.MoveTable.DestCapture),
+					zap.String("targetCapture", task.MoveTable.DestCapture),
 					zap.Int64("tableID", task.MoveTable.Span.TableID),
 					zap.Stringer("startKey", task.MoveTable.Span.StartKey))
 			}
@@ -799,6 +799,7 @@ func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
 		zap.String("namespace", r.changefeedID.Namespace),
 		zap.String("changefeed", r.changefeedID.ID),
 		zap.Int64("tableID", table.Span.TableID),
+		zap.Stringer("startKey", table.Span.StartKey),
 		zap.String("tableStatus", table.State.String()),
 		zap.Uint64("checkpointTs", table.Checkpoint.CheckpointTs),
 		zap.Uint64("resolvedTs", table.Checkpoint.ResolvedTs),

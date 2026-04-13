@@ -115,12 +115,14 @@ func newAgent(
 		log.Info("schedulerv3: no owner found. We will wait for an owner to contact us.",
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID),
-			zap.String("ownerCaptureID", ownerCaptureID),
-			zap.Error(err))
+			zap.String("ownerCaptureID", ownerCaptureID))
 		return result, nil
 	}
 	var ownerCaptureInfo *model.CaptureInfo
 	_, captures, err := client.GetCaptures(ctx)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
 	for _, captureInfo := range captures {
 		if captureInfo.ID == ownerCaptureID {
 			ownerCaptureInfo = captureInfo
@@ -131,7 +133,7 @@ func newAgent(
 		log.Info("schedulerv3: no owner found. We will wait for an owner to contact us.",
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID),
-			zap.Error(err))
+			zap.String("ownerCaptureID", ownerCaptureID))
 		return result, nil
 	}
 	result.compat.UpdateCaptureInfo(map[model.CaptureID]*model.CaptureInfo{
@@ -256,7 +258,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (result []*schedulepb.M
 			log.Warn("schedulerv3: unknown message received",
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.String("captureID", ownerCaptureID),
+				zap.String("ownerCaptureID", ownerCaptureID),
 				zap.Stringer("type", message.GetMsgType()),
 				zap.Int64("ownerRevision", ownerRevision),
 				zap.String("processorEpoch", processorEpoch.Epoch),
@@ -328,8 +330,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 	epoch schedulepb.ProcessorEpoch,
 ) {
 	if a.Epoch != epoch {
-		log.Info("schedulerv3: agent receive dispatch table request "+
-			"epoch does not match, ignore it",
+		log.Info("schedulerv3: agent received dispatch table request with unexpected epoch, ignore it",
 			zap.String("namespace", a.ChangeFeedID.Namespace),
 			zap.String("changefeed", a.ChangeFeedID.ID),
 			zap.String("epoch", epoch.Epoch),

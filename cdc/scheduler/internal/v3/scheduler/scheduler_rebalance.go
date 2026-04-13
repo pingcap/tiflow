@@ -83,7 +83,7 @@ func (r *rebalanceScheduler) Schedule(
 			return nil
 		}
 		if rep.State != replication.ReplicationSetStateReplicating {
-			log.Debug("schedulerv3: not all table replicating, premature to rebalance tables",
+			log.Debug("schedulerv3: not all tables are replicating, premature to rebalance tables",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID))
 			return nil
@@ -186,8 +186,8 @@ func newBalanceMoveTables(
 		}
 
 		if minWorkload == math.MaxInt64 {
-			log.Panic("schedulerv3: rebalance meet unexpected min workload "+
-				"when try to the the target capture",
+			log.Panic("schedulerv3: rebalance encountered unexpected min workload "+
+				"when choosing the target capture",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID))
 		}

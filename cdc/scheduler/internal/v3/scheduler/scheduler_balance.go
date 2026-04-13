@@ -75,7 +75,7 @@ func (b *balanceScheduler) Schedule(
 
 	for _, capture := range captures {
 		if capture.State == member.CaptureStateStopping {
-			log.Debug("schedulerv3: capture is stopping, premature to balance table",
+			log.Debug("schedulerv3: capture is stopping, skip balancing tables",
 				zap.String("namespace", b.changefeedID.Namespace),
 				zap.String("changefeed", b.changefeedID.ID))
 			return nil

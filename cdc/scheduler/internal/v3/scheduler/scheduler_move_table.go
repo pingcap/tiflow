@@ -98,10 +98,10 @@ func (m *moveTableScheduler) Schedule(
 		// table may not in the all current tables
 		// if it was removed after manual move table triggered.
 		if !allSpans.Contain(span) {
-			log.Warn("schedulerv3: move table ignored, since the table cannot found",
+			log.Warn("schedulerv3: move table ignored, the table cannot be found",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("captureID", task.MoveTable.DestCapture),
+				zap.String("targetCapture", task.MoveTable.DestCapture),
 				zap.Int64("tableID", span.TableID),
 				zap.Stringer("startKey", span.StartKey))
 			toBeDeleted = append(toBeDeleted, span)
@@ -111,10 +111,10 @@ func (m *moveTableScheduler) Schedule(
 		// the target capture may offline after manual move table triggered.
 		status, ok := captures[task.MoveTable.DestCapture]
 		if !ok {
-			log.Info("schedulerv3: move table ignored, since the target capture cannot found",
+			log.Info("schedulerv3: move table ignored, the target capture cannot be found",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("captureID", task.MoveTable.DestCapture),
+				zap.String("targetCapture", task.MoveTable.DestCapture),
 				zap.Int64("tableID", span.TableID),
 				zap.Stringer("startKey", span.StartKey))
 			toBeDeleted = append(toBeDeleted, span)
@@ -124,7 +124,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Warn("schedulerv3: move table ignored, target capture is not initialized",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("captureID", task.MoveTable.DestCapture),
+				zap.String("targetCapture", task.MoveTable.DestCapture),
 				zap.Stringer("state", status.State),
 				zap.Int64("tableID", span.TableID),
 				zap.Stringer("startKey", span.StartKey))
@@ -137,7 +137,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Warn("schedulerv3: move table ignored, table not found in the replication set",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("captureID", task.MoveTable.DestCapture),
+				zap.String("targetCapture", task.MoveTable.DestCapture),
 				zap.Int64("tableID", span.TableID),
 				zap.Stringer("startKey", span.StartKey))
 			toBeDeleted = append(toBeDeleted, span)
@@ -148,7 +148,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Info("schedulerv3: move table ignored, since the table is not replicating now",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("captureID", task.MoveTable.DestCapture),
+				zap.String("targetCapture", task.MoveTable.DestCapture),
 				zap.Stringer("state", rep.State),
 				zap.String("primary", rep.Primary),
 				zap.Int64("tableID", span.TableID),

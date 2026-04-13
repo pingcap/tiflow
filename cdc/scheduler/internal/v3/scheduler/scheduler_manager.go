@@ -104,7 +104,7 @@ func (sm *Manager) MoveTable(span tablepb.Span, target model.CaptureID) {
 			zap.String("changefeed", sm.changefeedID.ID))
 	}
 	if !moveTableScheduler.addTask(span, target) {
-		log.Info("schedulerv3: manual move Table task ignored, "+
+		log.Info("schedulerv3: manual move table task ignored, "+
 			"since the last triggered task not finished",
 			zap.String("namespace", sm.changefeedID.Namespace),
 			zap.String("changefeed", sm.changefeedID.ID),

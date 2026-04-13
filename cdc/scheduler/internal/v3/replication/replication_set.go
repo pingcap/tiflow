@@ -228,10 +228,10 @@ func NewReplicationSet(
 			// We need to wait its state becomes Stopped or Absent before
 			// proceeding further scheduling.
 			secondary, _ := r.getRole(RoleSecondary)
-			log.Warn("schedulerv3: found a stopping capture during initializing",
+			log.Warn("schedulerv3: found a stopping capture during initialization",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("stoppingCapture", captureID),
 				zap.Uint64("inputCheckpointTs", table.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", table.Checkpoint.ResolvedTs),
 				zap.Stringer("state", r.State),
@@ -253,7 +253,7 @@ func NewReplicationSet(
 			log.Warn("schedulerv3: unknown table state",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("reportingCapture", captureID),
 				zap.Uint64("inputCheckpointTs", table.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", table.Checkpoint.ResolvedTs),
 				zap.Stringer("state", r.State),
@@ -333,10 +333,9 @@ func (r *ReplicationSet) clearCapture(captureID model.CaptureID, role Role) erro
 func (r *ReplicationSet) promoteSecondary(captureID model.CaptureID) error {
 	if r.Primary == captureID {
 		secondary, _ := r.getRole(RoleSecondary)
-		log.Warn("schedulerv3: capture is already promoted as the primary",
+		log.Warn("schedulerv3: capture is already the primary",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.String("captureID", captureID),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 			zap.Stringer("state", r.State),
@@ -373,7 +372,7 @@ func (r *ReplicationSet) inconsistentError(
 	fields = append(fields, []zap.Field{
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -395,7 +394,7 @@ func (r *ReplicationSet) multiplePrimaryError(
 	fields = append(fields, []zap.Field{
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -500,7 +499,7 @@ func (r *ReplicationSet) pollOnAbsent(
 		log.Info("schedulerv3: replication state transition, add table",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.String("captureID", captureID),
+			zap.String("secondary", captureID),
 			zap.Int64("tableID", r.Span.TableID),
 			zap.Stringer("startKey", r.Span.StartKey),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
@@ -519,7 +518,7 @@ func (r *ReplicationSet) pollOnAbsent(
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -563,7 +562,7 @@ func (r *ReplicationSet) pollOnPrepare(
 			log.Info("schedulerv3: replication state transition, table prepared",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("secondary", captureID),
 				zap.Int64("tableID", r.Span.TableID),
 				zap.Stringer("startKey", r.Span.StartKey),
 				zap.Uint64("checkpointTs", input.Checkpoint.CheckpointTs),
@@ -584,12 +583,11 @@ func (r *ReplicationSet) pollOnPrepare(
 			log.Info("schedulerv3: primary is stopped during Prepare",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("stoppedPrimary", captureID),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("state", r.State),
 				zap.Stringer("inputState", input.State),
-				zap.String("primary", r.Primary),
 				zap.String("secondary", secondary),
 				zap.Int64("tableID", r.Span.TableID),
 				zap.Stringer("startKey", r.Span.StartKey))
@@ -598,7 +596,6 @@ func (r *ReplicationSet) pollOnPrepare(
 		}
 		if r.isInRole(captureID, RoleSecondary) {
 			oldState := r.State
-			secondary, _ := r.getRole(RoleSecondary)
 			err := r.clearCapture(captureID, RoleSecondary)
 			if err != nil {
 				return nil, false, errors.Trace(err)
@@ -612,16 +609,15 @@ func (r *ReplicationSet) pollOnPrepare(
 				// Transit to Absent.
 				r.State = ReplicationSetStateAbsent
 			}
-			log.Info("schedulerv3: capture is stopped during Prepare",
+			log.Info("schedulerv3: secondary is stopped during Prepare",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("secondary", captureID),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("old", oldState),
 				zap.Stringer("new", r.State),
 				zap.String("primary", r.Primary),
-				zap.String("secondary", secondary),
 				zap.Int64("tableID", r.Span.TableID),
 				zap.Stringer("startKey", r.Span.StartKey))
 			return nil, true, nil
@@ -631,7 +627,7 @@ func (r *ReplicationSet) pollOnPrepare(
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -672,13 +668,12 @@ func (r *ReplicationSet) pollOnCommit(
 				log.Info("schedulerv3: there are unknown captures during commit",
 					zap.String("namespace", r.Changefeed.Namespace),
 					zap.String("changefeed", r.Changefeed.ID),
-					zap.String("captureID", captureID),
+					zap.String("secondary", captureID),
 					zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 					zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 					zap.Stringer("state", r.State),
 					zap.Stringer("inputState", input.State),
 					zap.String("primary", r.Primary),
-					zap.String("secondary", captureID),
 					zap.Int64("tableID", r.Span.TableID),
 					zap.Stringer("startKey", r.Span.StartKey))
 				return nil, false, nil
@@ -719,12 +714,11 @@ func (r *ReplicationSet) pollOnCommit(
 				log.Info("schedulerv3: primary is stopped during Commit",
 					zap.String("namespace", r.Changefeed.Namespace),
 					zap.String("changefeed", r.Changefeed.ID),
-					zap.String("captureID", captureID),
+					zap.String("stoppedPrimary", captureID),
 					zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 					zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 					zap.Stringer("old", oldState),
 					zap.Stringer("new", r.State),
-					zap.String("primary", r.Primary),
 					zap.String("secondary", secondary),
 					zap.Int64("tableID", r.Span.TableID),
 					zap.Stringer("startKey", r.Span.StartKey))
@@ -739,16 +733,12 @@ func (r *ReplicationSet) pollOnCommit(
 			log.Info("schedulerv3: replication state promote secondary",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", secondary),
+				zap.String("oldPrimary", original),
+				zap.String("newPrimary", r.Primary),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
-				zap.Stringer("state", r.State),
-				zap.Stringer("inputState", input.State),
-				zap.String("primary", r.Primary),
-				zap.String("secondary", secondary),
 				zap.Int64("tableID", r.Span.TableID),
 				zap.Stringer("startKey", r.Span.StartKey),
-				zap.String("original", original),
 			)
 			return &schedulepb.Message{
 				To:      r.Primary,
@@ -780,35 +770,33 @@ func (r *ReplicationSet) pollOnCommit(
 				log.Info("schedulerv3: secondary is stopped during Commit",
 					zap.String("namespace", r.Changefeed.Namespace),
 					zap.String("changefeed", r.Changefeed.ID),
-					zap.String("captureID", captureID),
+					zap.String("secondary", captureID),
 					zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 					zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 					zap.Stringer("old", oldState),
 					zap.Stringer("new", r.State),
 					zap.String("primary", r.Primary),
-					zap.String("secondary", captureID),
 					zap.Int64("tableID", r.Span.TableID),
 					zap.Stringer("startKey", r.Span.StartKey))
 			} else {
 				log.Info("schedulerv3: secondary is stopped during Commit",
 					zap.String("namespace", r.Changefeed.Namespace),
 					zap.String("changefeed", r.Changefeed.ID),
-					zap.String("captureID", captureID),
+					zap.String("secondary", captureID),
 					zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 					zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 					zap.Stringer("state", r.State),
 					zap.String("primary", r.Primary),
-					zap.String("secondary", captureID),
 					zap.Int64("tableID", r.Span.TableID),
 					zap.Stringer("startKey", r.Span.StartKey))
 			}
 			return nil, true, nil
 		} else if r.isInRole(captureID, RoleUndetermined) {
 			secondary, _ := r.getRole(RoleSecondary)
-			log.Info("schedulerv3: capture is stopped during Commit",
+			log.Info("schedulerv3: undetermined capture is stopped during Commit",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("undeterminedCapture", captureID),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("state", r.State),
@@ -854,7 +842,7 @@ func (r *ReplicationSet) pollOnCommit(
 			log.Info("schedulerv3: replication state transition, commit finished",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("primary", captureID),
 				zap.Int64("tableID", r.Span.TableID),
 				zap.Stringer("startKey", r.Span.StartKey),
 				zap.Uint64("checkpointTs", input.Checkpoint.CheckpointTs),
@@ -871,10 +859,10 @@ func (r *ReplicationSet) pollOnCommit(
 			return nil, false, nil
 		} else if r.isInRole(captureID, RoleUndetermined) {
 			secondary, _ := r.getRole(RoleSecondary)
-			log.Info("schedulerv3: capture is stopping during Commit",
+			log.Info("schedulerv3: undetermined capture is stopping during Commit",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("undeterminedCapture", captureID),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("state", r.State),
@@ -892,7 +880,7 @@ func (r *ReplicationSet) pollOnCommit(
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -933,12 +921,11 @@ func (r *ReplicationSet) pollOnReplicating(
 			log.Info("schedulerv3: primary is stopped during Replicating",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("stoppedPrimary", captureID),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("old", oldState),
 				zap.Stringer("new", r.State),
-				zap.String("primary", r.Primary),
 				zap.String("secondary", secondary),
 				zap.Int64("tableID", r.Span.TableID),
 				zap.Stringer("startKey", r.Span.StartKey))
@@ -949,7 +936,7 @@ func (r *ReplicationSet) pollOnReplicating(
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -994,7 +981,7 @@ func (r *ReplicationSet) pollOnRemoving(
 			log.Warn("schedulerv3: replication state remove capture with error",
 				zap.String("namespace", r.Changefeed.Namespace),
 				zap.String("changefeed", r.Changefeed.ID),
-				zap.String("captureID", captureID),
+				zap.String("removingCapture", captureID),
 				zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 				zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 				zap.Stringer("state", r.State),
@@ -1013,7 +1000,7 @@ func (r *ReplicationSet) pollOnRemoving(
 	log.Warn("schedulerv3: ignore input, unexpected replication set state",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("reportingCapture", captureID),
 		zap.Uint64("inputCheckpointTs", input.Checkpoint.CheckpointTs),
 		zap.Uint64("inputResolvedTs", input.Checkpoint.ResolvedTs),
 		zap.Stringer("state", r.State),
@@ -1040,7 +1027,7 @@ func (r *ReplicationSet) handleAddTable(
 		log.Warn("schedulerv3: add table is ignored",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.String("captureID", captureID),
+			zap.String("targetCapture", captureID),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 			zap.Stringer("state", r.State),
@@ -1074,7 +1061,7 @@ func (r *ReplicationSet) handleMoveTable(
 		log.Warn("schedulerv3: move table is ignored, table already removed",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.String("captureID", dest),
+			zap.String("targetCapture", dest),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 			zap.Stringer("state", r.State),
@@ -1090,7 +1077,7 @@ func (r *ReplicationSet) handleMoveTable(
 		log.Warn("schedulerv3: move table is ignored, table is not replicating",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.String("captureID", dest),
+			zap.String("targetCapture", dest),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 			zap.Stringer("state", r.State),
@@ -1105,7 +1092,7 @@ func (r *ReplicationSet) handleMoveTable(
 		log.Warn("schedulerv3: move table is ignored, target capture is already primary",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
-			zap.String("captureID", dest),
+			zap.String("targetCapture", dest),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 			zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 			zap.Stringer("state", r.State),
@@ -1120,15 +1107,13 @@ func (r *ReplicationSet) handleMoveTable(
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	secondary, _ := r.getRole(RoleSecondary)
 	log.Info("schedulerv3: replication state transition, move table",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", dest),
+		zap.String("targetCapture", dest),
 		zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 		zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 		zap.String("primary", r.Primary),
-		zap.String("secondary", secondary),
 		zap.Int64("tableID", r.Span.TableID),
 		zap.Stringer("startKey", r.Span.StartKey))
 	status := tablepb.TableStatus{
@@ -1175,7 +1160,6 @@ func (r *ReplicationSet) handleRemoveTable() ([]*schedulepb.Message, error) {
 	log.Info("schedulerv3: replication state transition, remove table",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", r.Primary),
 		zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 		zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 		zap.String("primary", r.Primary),
@@ -1221,7 +1205,7 @@ func (r *ReplicationSet) handleCaptureShutdown(
 	log.Info("schedulerv3: replication state transition, capture shutdown",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
-		zap.String("captureID", captureID),
+		zap.String("shutdownCapture", captureID),
 		zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),
 		zap.Uint64("resolvedTs", r.Checkpoint.ResolvedTs),
 		zap.Stringer("old", oldState),
@@ -1238,7 +1222,7 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 ) {
 	if checkpoint.ResolvedTs < checkpoint.CheckpointTs {
 		secondary, _ := r.getRole(RoleSecondary)
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+		log.Warn("schedulerv3: resolved ts should not be less than checkpoint ts",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Uint64("inputCheckpointTs", checkpoint.CheckpointTs),
@@ -1262,7 +1246,7 @@ func (r *ReplicationSet) updateCheckpointAndStats(
 	}
 	if r.Checkpoint.ResolvedTs < r.Checkpoint.CheckpointTs {
 		secondary, _ := r.getRole(RoleSecondary)
-		log.Warn("schedulerv3: resolved ts should not less than checkpoint ts",
+		log.Warn("schedulerv3: resolved ts should not be less than checkpoint ts",
 			zap.String("namespace", r.Changefeed.Namespace),
 			zap.String("changefeed", r.Changefeed.ID),
 			zap.Uint64("checkpointTs", r.Checkpoint.CheckpointTs),

@@ -89,7 +89,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 			zap.String("namespace", c.changefeedID.Namespace),
 			zap.String("changefeed", c.changefeedID.ID),
 			zap.String("captureAddr", c.Addr),
-			zap.String("capture", c.ID),
+			zap.String("captureID", c.ID),
 			zap.String("epoch", c.Epoch.Epoch),
 			zap.String("respEpoch", epoch.Epoch),
 			zap.Int64("ownerRev", c.OwnerRev.Revision))
@@ -102,7 +102,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		log.Info("schedulerv3: capture initialized",
 			zap.String("namespace", c.changefeedID.Namespace),
 			zap.String("changefeed", c.changefeedID.ID),
-			zap.String("capture", c.ID),
+			zap.String("captureID", c.ID),
 			zap.String("captureAddr", c.Addr))
 	}
 	if resp.Liveness == model.LivenessCaptureStopping {
@@ -110,7 +110,7 @@ func (c *CaptureStatus) handleHeartbeatResponse(
 		log.Info("schedulerv3: capture stopping",
 			zap.String("namespace", c.changefeedID.Namespace),
 			zap.String("changefeed", c.changefeedID.ID),
-			zap.String("capture", c.ID),
+			zap.String("captureID", c.ID),
 			zap.String("captureAddr", c.Addr))
 	}
 	c.Tables = resp.Tables
@@ -224,7 +224,7 @@ func (c *CaptureManager) HandleMessage(
 				log.Warn("schedulerv3: heartbeat response from unknown capture",
 					zap.String("namespace", c.changefeedID.Namespace),
 					zap.String("changefeed", c.changefeedID.ID),
-					zap.String("capture", msg.From))
+					zap.String("captureID", msg.From))
 				continue
 			}
 			captureStatus.handleHeartbeatResponse(
@@ -247,7 +247,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 				zap.String("namespace", c.changefeedID.Namespace),
 				zap.String("changefeed", c.changefeedID.ID),
 				zap.String("captureAddr", info.AdvertiseAddr),
-				zap.String("capture", id))
+				zap.String("captureID", id))
 			msgs = append(msgs, &schedulepb.Message{
 				To:        id,
 				MsgType:   schedulepb.MsgHeartbeat,
@@ -263,7 +263,7 @@ func (c *CaptureManager) HandleAliveCaptureUpdate(
 				zap.String("namespace", c.changefeedID.Namespace),
 				zap.String("changefeed", c.changefeedID.ID),
 				zap.String("captureAddr", capture.Addr),
-				zap.String("capture", id))
+				zap.String("captureID", id))
 			delete(c.Captures, id)
 
 			// Only update changes after initialization.

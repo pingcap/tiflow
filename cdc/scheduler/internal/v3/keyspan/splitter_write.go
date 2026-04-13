@@ -74,14 +74,15 @@ func (m *writeSplitter) split(
 
 	spansNum := getSpansNumber(len(regions), captureNum)
 	if spansNum <= 1 {
-		log.Warn("schedulerv3: only one capture and the regions number less than"+
-			" the maxSpanRegionLimit, skip split span",
+		log.Info("schedulerv3: skip split span by written keys",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Int64("tableID", span.TableID),
 			zap.Stringer("startKey", span.StartKey),
 			zap.Stringer("endKey", span.EndKey),
-			zap.Error(err))
+			zap.Int("totalCaptures", captureNum),
+			zap.Int("regionCount", len(regions)),
+			zap.Int("spanRegionLimit", spanRegionLimit))
 		return []tablepb.Span{span}
 	}
 
