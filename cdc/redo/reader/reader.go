@@ -403,7 +403,6 @@ func setColumns(columns []*model.ColumnInfo) []*timodel.ColumnInfo {
 	res := make([]*timodel.ColumnInfo, 0, len(columns))
 	for _, col := range columns {
 		colInfo := &timodel.ColumnInfo{
-			ID:      int64(len(columns)),
 			Name:    ast.NewCIStr(col.Name),
 			State:   timodel.StatePublic,
 			Version: col.Version,
