@@ -209,8 +209,8 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 			}
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
-			ddl.TableInfo.Columns = setColumns(item.data.RedoDDL.Columns)
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
+				ddl.TableInfo.Columns = setColumns(item.data.RedoDDL.Columns)
 				select {
 				case <-egCtx.Done():
 					return errors.Trace(egCtx.Err())
