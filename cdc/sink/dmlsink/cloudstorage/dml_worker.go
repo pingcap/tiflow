@@ -139,11 +139,6 @@ func newDMLWorker(
 
 // run creates a set of background goroutines.
 func (d *dmlWorker) run(ctx context.Context) error {
-	log.Debug("dml worker started",
-		zap.String("namespace", d.changeFeedID.Namespace),
-		zap.String("changefeed", d.changeFeedID.ID),
-		zap.Int("workerID", d.id))
-
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return d.flushMessages(ctx)
@@ -231,14 +226,6 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 					return errors.Trace(err)
 				}
 
-				log.Debug("write file to storage success",
-					zap.String("namespace", d.changeFeedID.Namespace),
-					zap.String("changefeed", d.changeFeedID.ID),
-					zap.Int("workerID", d.id),
-					zap.String("schema", table.TableNameWithPhysicTableID.Schema),
-					zap.String("table", table.TableNameWithPhysicTableID.Table),
-					zap.String("path", dataFilePath),
-				)
 			}
 			flushTimeSlice += time.Since(start)
 		}
@@ -341,8 +328,6 @@ func (d *dmlWorker) genAndDispatchTask(ctx context.Context,
 			case <-ctx.Done():
 				return errors.Trace(ctx.Err())
 			case d.toBeFlushedCh <- batchedTask:
-				log.Debug("flush task is emitted successfully when flush interval exceeds",
-					zap.Int("tablesLength", len(batchedTask.batch)))
 				batchedTask = newBatchedTask()
 			default:
 			}
@@ -360,9 +345,6 @@ func (d *dmlWorker) genAndDispatchTask(ctx context.Context,
 				case <-ctx.Done():
 					return errors.Trace(ctx.Err())
 				case d.toBeFlushedCh <- task:
-					log.Debug("flush task is emitted successfully when file size exceeds",
-						zap.Any("table", table),
-						zap.Int("eventsLenth", len(task.batch[table].msgs)))
 				}
 			}
 		}

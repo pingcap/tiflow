@@ -845,11 +845,6 @@ func (p *processor) doGCSchemaStorage() {
 		return
 	}
 	p.lastSchemaTs = lastSchemaTs
-
-	log.Debug("finished gc in schema storage",
-		zap.Uint64("gcTs", lastSchemaTs),
-		zap.String("namespace", p.changefeedID.Namespace),
-		zap.String("changefeed", p.changefeedID.ID))
 	lastSchemaPhysicalTs := oracle.ExtractPhysical(lastSchemaTs)
 	p.metricSchemaStorageGcTsGauge.Set(float64(lastSchemaPhysicalTs))
 }

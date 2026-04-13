@@ -310,12 +310,6 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 	s.totalSpans.Unlock()
 	if rt != nil {
 		s.setTableStopped(rt)
-		log.Debug("event feed unsubscribes table",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID),
-			zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
-			zap.Int64("tableID", rt.span.TableID),
-			zap.Stringer("startKey", rt.span.StartKey))
 		return
 	}
 	log.Warn("event feed unsubscribes table, but not found",
@@ -385,12 +379,6 @@ func (s *SharedClient) Close() {
 }
 
 func (s *SharedClient) setTableStopped(rt *subscribedTable) {
-	log.Debug("event feed starts to stop table",
-		zap.String("namespace", s.changefeed.Namespace),
-		zap.String("changefeed", s.changefeed.ID),
-		zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
-		zap.Int64("tableID", rt.span.TableID))
-
 	// Set stopped to true so we can stop handling region events from the table.
 	// Then send a special singleRegionInfo to regionRouter to deregister the table
 	// from all TiKV instances.
@@ -403,12 +391,6 @@ func (s *SharedClient) setTableStopped(rt *subscribedTable) {
 }
 
 func (s *SharedClient) onTableDrained(rt *subscribedTable) {
-	log.Debug("event feed stop table is finished",
-		zap.String("namespace", s.changefeed.Namespace),
-		zap.String("changefeed", s.changefeed.ID),
-		zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
-		zap.Int64("tableID", rt.span.TableID))
-
 	s.totalSpans.Lock()
 	defer s.totalSpans.Unlock()
 	delete(s.totalSpans.v, rt.subscriptionID)

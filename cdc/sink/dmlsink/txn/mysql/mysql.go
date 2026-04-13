@@ -225,12 +225,6 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs",
-		zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID),
-		zap.Int("rows", s.rows),
-		zap.Strings("sqls", dmls.sqls),
-		zap.Any("values", dmls.values))
 
 	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
@@ -538,13 +532,6 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// the table it belongs to been replicating by TiCDC, which means it must not be
 		// replicated before, and there is no such row in downstream MySQL.
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
-		log.Debug("translate to insert",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Bool("translateToInsert", translateToInsert),
-			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
-			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
-			zap.Bool("safeMode", s.cfg.SafeMode))
 
 		if event.Callback != nil {
 			callbacks = append(callbacks, event.Callback)
@@ -643,12 +630,6 @@ func (s *mysqlBackend) multiStmtExecute(
 	}
 	multiStmtSQL := strings.Join(dmls.sqls, ";")
 
-	log.Debug("exec row",
-		zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID),
-		zap.Int("workerID", s.workerID),
-		zap.String("sql", multiStmtSQL),
-		zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	start := time.Now()
@@ -677,12 +658,6 @@ func (s *mysqlBackend) sequenceExecute(
 	start := time.Now()
 	for i, query := range dmls.sqls {
 		args := dmls.values[i]
-		log.Debug("exec row",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Int("workerID", s.workerID),
-			zap.String("sql", query),
-			zap.Any("args", args))
 		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
 
 		var prepStmt *sql.Stmt
@@ -817,11 +792,6 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		if err != nil {
 			return errors.Trace(err)
 		}
-		log.Debug("Exec Rows succeeded",
-			zap.String("namespace", s.changefeedID.Namespace),
-			zap.String("changefeed", s.changefeedID.ID),
-			zap.Int("workerID", s.workerID),
-			zap.Int("numOfRows", dmls.rowCount))
 		return nil
 	}, retry.WithBackoffBaseDelay(pmysql.BackoffBaseDelay.Milliseconds()),
 		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),

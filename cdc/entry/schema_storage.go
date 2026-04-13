@@ -33,7 +33,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 // SchemaStorage stores the schema information with multi-version
@@ -347,13 +346,6 @@ func (s *schemaStorage) DoGC(ts uint64) (lastSchemaTs uint64) {
 	if startIdx == 0 {
 		return s.snaps[0].CurrentTs()
 	}
-	if log.GetLevel() == zapcore.DebugLevel {
-		log.Debug("Do GC in schema storage")
-		for i := 0; i < startIdx; i++ {
-			s.snaps[i].PrintStatus(log.Debug)
-		}
-	}
-
 	// NOTE: Drop must be called to remove stale versions.
 	s.snaps[startIdx-1].Drop()
 

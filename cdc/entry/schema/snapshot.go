@@ -736,7 +736,6 @@ func (s *snapshot) dropSchema(id int64, currentTs uint64) error {
 		s.doDropTable(tbInfo, currentTs)
 	}
 	s.currentTs = currentTs
-	log.Debug("drop schema success", zap.String("name", dbInfo.Name.O), zap.Int64("id", dbInfo.ID))
 	return nil
 }
 
@@ -751,7 +750,6 @@ func (s *snapshot) createSchema(dbInfo *timodel.DBInfo, currentTs uint64) error 
 	}
 	s.doCreateSchema(dbInfo, currentTs)
 	s.currentTs = currentTs
-	log.Debug("create schema success", zap.String("name", dbInfo.Name.O), zap.Int64("id", dbInfo.ID))
 	return nil
 }
 
@@ -768,7 +766,6 @@ func (s *snapshot) replaceSchema(dbInfo *timodel.DBInfo, currentTs uint64) error
 		s.schemaNameToID.ReplaceOrInsert(newVersionedEntityName(-1, old.Name.O, tag))
 	}
 	s.currentTs = currentTs
-	log.Debug("replace schema success", zap.String("name", dbInfo.Name.O), zap.Int64("id", dbInfo.ID))
 	return nil
 }
 
@@ -790,10 +787,6 @@ func (s *snapshot) dropTable(id int64, currentTs uint64) error {
 	}
 	s.doDropTable(tbInfo, currentTs)
 	s.currentTs = currentTs
-	log.Debug("drop table success",
-		zap.String("schema", tbInfo.TableName.Schema),
-		zap.String("table", tbInfo.TableName.Table),
-		zap.Int64("id", tbInfo.ID))
 	return nil
 }
 
@@ -837,10 +830,6 @@ func (s *snapshot) truncateTable(id int64, tbInfo *model.TableInfo, currentTs ui
 		s.truncatedTables.ReplaceOrInsert(newVersionedID(id, tag))
 	}
 	s.currentTs = currentTs
-	log.Debug("truncate table success",
-		zap.String("schema", tbInfo.TableName.Schema),
-		zap.String("table", tbInfo.TableName.Table),
-		zap.Int64("id", tbInfo.ID))
 	return
 }
 
@@ -854,8 +843,6 @@ func (s *snapshot) createTable(tbInfo *model.TableInfo, currentTs uint64) error 
 	}
 	s.doCreateTable(tbInfo, currentTs)
 	s.currentTs = currentTs
-	log.Debug("create table success", zap.Int64("id", tbInfo.ID),
-		zap.String("name", fmt.Sprintf("%s.%s", tbInfo.TableName.Schema, tbInfo.TableName.Table)))
 	return nil
 }
 
@@ -869,7 +856,6 @@ func (s *snapshot) replaceTable(tbInfo *model.TableInfo, currentTs uint64) error
 	}
 	s.doCreateTable(tbInfo, currentTs)
 	s.currentTs = currentTs
-	log.Debug("replace table success", zap.String("name", tbInfo.Name.O), zap.Int64("id", tbInfo.ID))
 	return nil
 }
 
@@ -951,12 +937,6 @@ func (s *snapshot) updatePartition(tbInfo *model.TableInfo, isTruncate bool, cur
 		}
 	}
 	s.currentTs = currentTs
-
-	log.Debug("adjust partition success",
-		zap.String("schema", tbInfo.TableName.Schema),
-		zap.String("table", tbInfo.TableName.Table),
-		zap.Any("partitions", newPi.Definitions),
-	)
 	return nil
 }
 

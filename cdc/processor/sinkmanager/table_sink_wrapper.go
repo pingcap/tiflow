@@ -269,11 +269,6 @@ func (t *tableSinkWrapper) markAsClosing() {
 			break
 		}
 		if t.state.CompareAndSwap(curr, tablepb.TableStateStopping) {
-			log.Debug("Sink is closing",
-				zap.String("namespace", t.changefeed.Namespace),
-				zap.String("changefeed", t.changefeed.ID),
-				zap.Int64("tableID", t.span.TableID),
-				zap.Stringer("startKey", t.span.StartKey))
 			break
 		}
 	}
@@ -286,11 +281,6 @@ func (t *tableSinkWrapper) markAsClosed() {
 			return
 		}
 		if t.state.CompareAndSwap(curr, tablepb.TableStateStopped) {
-			log.Debug("Sink is closed",
-				zap.String("namespace", t.changefeed.Namespace),
-				zap.String("changefeed", t.changefeed.ID),
-				zap.Int64("tableID", t.span.TableID),
-				zap.Stringer("startKey", t.span.StartKey))
 			return
 		}
 	}

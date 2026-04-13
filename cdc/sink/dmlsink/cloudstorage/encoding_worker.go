@@ -17,10 +17,8 @@ import (
 	"sync/atomic"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -52,11 +50,6 @@ func newEncodingWorker(
 }
 
 func (w *encodingWorker) run(ctx context.Context) error {
-	log.Debug("encoding worker started",
-		zap.String("namespace", w.changeFeedID.Namespace),
-		zap.String("changefeed", w.changeFeedID.ID),
-		zap.Int("workerID", w.id))
-
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		for {

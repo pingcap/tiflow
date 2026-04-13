@@ -387,9 +387,6 @@ func (a *agent) handleMessageDispatchTableRequest(
 
 // Close implement agent interface
 func (a *agent) Close() error {
-	log.Debug("schedulerv3: agent closed",
-		zap.String("namespace", a.ChangeFeedID.Namespace),
-		zap.String("changefeed", a.ChangeFeedID.ID))
 	return a.trans.Close()
 }
 

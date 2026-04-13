@@ -423,13 +423,7 @@ func (w *sharedRegionWorker) forwardResolvedTsToPullerFrontier(ctx context.Conte
 		spansAndChan.spans = append(spansAndChan.spans, span)
 	}
 
-	for subscriptionID, spansAndChan := range resolvedSpans {
-		log.Debug("region worker get a ResolvedTs",
-			zap.String("namespace", w.changefeed.Namespace),
-			zap.String("changefeed", w.changefeed.ID),
-			zap.Uint64("subscriptionID", uint64(subscriptionID)),
-			zap.Uint64("ResolvedTs", batch.ts),
-			zap.Int("spanCount", len(spansAndChan.spans)))
+	for _, spansAndChan := range resolvedSpans {
 		if len(spansAndChan.spans) > 0 {
 			revent := model.RegionFeedEvent{Resolved: &model.ResolvedSpans{
 				Spans: spansAndChan.spans, ResolvedTs: batch.ts,

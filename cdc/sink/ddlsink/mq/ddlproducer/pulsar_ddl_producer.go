@@ -95,12 +95,6 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 			zap.String("ddl", string(message.Value)))
 	}
 
-	log.Debug("pulsarProducers SyncSendMessage success",
-		zap.String("namespace", p.id.Namespace),
-		zap.String("changefeed", p.id.ID),
-		zap.Any("mID", mID),
-		zap.String("topic", topic))
-
 	mq.IncPublishedDDLSuccess(topic, p.id.ID, message)
 	return nil
 }

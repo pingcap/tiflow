@@ -443,15 +443,6 @@ func (c *changefeed) tick(ctx context.Context,
 		return 0, 0, errors.Trace(err)
 	}
 
-	log.Debug("owner handles barrier",
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID),
-		zap.Uint64("preCheckpointTs", preCheckpointTs),
-		zap.Uint64("preResolvedTs", c.resolvedTs.Load()),
-		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
-		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
-		zap.Int("tableBarrierCount", len(barrier.TableBarriers)))
-
 	if barrier.GlobalBarrierTs < preCheckpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
 		// which implies that it would be premature to schedule tables or to update status.
@@ -504,12 +495,6 @@ func (c *changefeed) tick(ctx context.Context,
 		return 0, 0, nil
 	}
 
-	log.Debug("owner prepares to update status",
-		zap.Uint64("prevResolvedTs", c.resolvedTs.Load()),
-		zap.Uint64("newResolvedTs", watermark.ResolvedTs),
-		zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
-		zap.String("namespace", c.id.Namespace),
-		zap.String("changefeed", c.id.ID))
 	// resolvedTs should never regress.
 	if watermark.ResolvedTs > c.resolvedTs.Load() {
 		c.resolvedTs.Store(watermark.ResolvedTs)
