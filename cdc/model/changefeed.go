@@ -219,7 +219,8 @@ func (info *ChangeFeedInfo) NeedBlockGC() bool {
 func (info *ChangeFeedInfo) isFailedByGC() bool {
 	if info.Error == nil {
 		log.Panic("changefeed info is not consistent",
-			zap.Any("state", info.State), zap.Any("error", info.Error))
+			zap.String("state", string(info.State)),
+			zap.Bool("errorNil", info.Error == nil))
 	}
 	return cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }

@@ -811,7 +811,7 @@ func (p *processor) getTableName(ctx context.Context, tableID model.TableID) str
 		log.Warn("failed to get table name for metric",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Any("tableID", tableID))
+			zap.Int64("tableID", tableID))
 		return strconv.Itoa(int(tableID))
 	}
 

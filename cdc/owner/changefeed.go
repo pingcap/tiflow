@@ -450,7 +450,7 @@ func (c *changefeed) tick(ctx context.Context,
 		zap.Uint64("preResolvedTs", c.resolvedTs.Load()),
 		zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs),
 		zap.Uint64("minTableBarrierTs", barrier.MinTableBarrierTs),
-		zap.Any("tableBarrier", barrier.TableBarriers))
+		zap.Int("tableBarrierCount", len(barrier.TableBarriers)))
 
 	if barrier.GlobalBarrierTs < preCheckpointTs {
 		// This condition implies that the DDL resolved-ts has not yet reached checkpointTs,
@@ -889,10 +889,17 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context, cfInfo *model.Chang
 	if c.isRemoved {
 		if cfInfo == nil || cfInfo.Config == nil ||
 			cfInfo.Config.Consistent == nil {
+			state := ""
+			if cfInfo != nil {
+				state = string(cfInfo.State)
+			}
 			log.Warn("changefeed is removed, but state is not complete",
 				zap.String("namespace", c.id.Namespace),
 				zap.String("changefeed", c.id.ID),
-				zap.Any("info", cfInfo))
+				zap.String("state", state),
+				zap.Bool("changefeedInfoNil", cfInfo == nil),
+				zap.Bool("configNil", cfInfo != nil && cfInfo.Config == nil),
+				zap.Bool("consistentNil", cfInfo != nil && cfInfo.Config != nil && cfInfo.Config.Consistent == nil))
 			return
 		}
 		if !redoCfg.IsConsistentEnabled(cfInfo.Config.Consistent.Level) {

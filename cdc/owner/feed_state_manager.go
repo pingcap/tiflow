@@ -417,16 +417,6 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 		}
 	}
 
-	// Changing changefeed state from stopped to failed is allowed
-	// but changing changefeed state from stopped to error or normal is not allowed.
-	if m.state.GetChangefeedInfo() != nil && m.state.GetChangefeedInfo().State == model.StateStopped {
-		log.Warn("changefeed is stopped, ignore errors",
-			zap.String("namespace", m.state.GetID().Namespace),
-			zap.String("changefeed", m.state.GetID().ID),
-			zap.Any("errors", errs))
-		return
-	}
-
 	var lastError *model.RunningError
 	// find the last non nil error
 	// BTW, there shouldn't be any nil error in errs
@@ -436,6 +426,15 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 			lastError = errs[i]
 			break
 		}
+	}
+	// Changing changefeed state from stopped to failed is allowed
+	// but changing changefeed state from stopped to error or normal is not allowed.
+	if m.state.GetChangefeedInfo() != nil && m.state.GetChangefeedInfo().State == model.StateStopped {
+		log.Warn("changefeed is stopped, ignore errors",
+			zap.String("namespace", m.state.GetID().Namespace),
+			zap.String("changefeed", m.state.GetID().ID),
+			zap.Any("errors", errs))
+		return
 	}
 	// if any error is occurred in this tick, we should set the changefeed state to warning
 	// and stop the changefeed

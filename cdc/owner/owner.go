@@ -604,7 +604,17 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 		changefeedID := job.ChangefeedID
 		cfReactor, exist := o.changefeeds[changefeedID]
 		if !exist && (job.Tp != ownerJobTypeQuery && job.Tp != ownerJobTypeDrainCapture) {
-			log.Warn("changefeed not found when handle a job", zap.Any("job", job))
+			adminJobType := ""
+			if job.AdminJob != nil {
+				adminJobType = job.AdminJob.Type.String()
+			}
+			log.Warn("changefeed not found when handle a job",
+				zap.String("namespace", job.ChangefeedID.Namespace),
+				zap.String("changefeed", job.ChangefeedID.ID),
+				zap.Int("jobType", int(job.Tp)),
+				zap.Int64("tableID", job.TableID),
+				zap.String("targetCaptureID", job.TargetCaptureID),
+				zap.String("adminJobType", adminJobType))
 			job.done <- cerror.ErrChangeFeedNotExists.FastGenByArgs(job.ChangefeedID)
 			close(job.done)
 			continue
@@ -787,7 +797,7 @@ func (o *ownerImpl) isHealthy() bool {
 			log.Warn("isHealthy: changefeed not normal",
 				zap.String("namespace", changefeed.id.Namespace),
 				zap.String("changefeed", changefeed.id.ID),
-				zap.Any("state", changefeed.latestInfo.State))
+				zap.String("state", string(changefeed.latestInfo.State)))
 			continue
 		}
 

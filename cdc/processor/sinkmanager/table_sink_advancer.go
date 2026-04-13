@@ -302,7 +302,9 @@ func advanceTableSinkWithBatchID(
 		zap.String("namespace", t.tableSink.changefeed.Namespace),
 		zap.String("changefeed", t.tableSink.changefeed.ID),
 		zap.Stringer("span", &t.span),
-		zap.Any("resolvedTs", resolvedTs),
+		zap.Uint64("resolvedTs", resolvedTs.Ts),
+		zap.Int("resolvedMode", int(resolvedTs.Mode)),
+		zap.Uint64("resolvedBatchID", resolvedTs.BatchID),
 		zap.Uint64("size", size))
 	if size > 0 {
 		sinkMemQuota.Record(t.span, resolvedTs, size)
@@ -321,7 +323,9 @@ func advanceTableSink(
 		zap.String("namespace", t.tableSink.changefeed.Namespace),
 		zap.String("changefeed", t.tableSink.changefeed.ID),
 		zap.Stringer("span", &t.span),
-		zap.Any("resolvedTs", resolvedTs),
+		zap.Uint64("resolvedTs", resolvedTs.Ts),
+		zap.Int("resolvedMode", int(resolvedTs.Mode)),
+		zap.Uint64("resolvedBatchID", resolvedTs.BatchID),
 		zap.Uint64("size", size))
 	if size > 0 {
 		sinkMemQuota.Record(t.span, resolvedTs, size)

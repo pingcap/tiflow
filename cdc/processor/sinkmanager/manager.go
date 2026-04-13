@@ -1001,7 +1001,9 @@ func (m *SinkManager) GetTableStats(span tablepb.Span) TableStats {
 			zap.String("changefeed", m.changefeedID.ID),
 			zap.Stringer("span", &span),
 			zap.Uint64("upperbound", sinkUpperBound),
-			zap.Any("checkpointTs", checkpointTs))
+			zap.Uint64("checkpointTs", checkpointTs.Ts),
+			zap.Int("checkpointMode", int(checkpointTs.Mode)),
+			zap.Uint64("checkpointBatchID", checkpointTs.BatchID))
 	}
 	return TableStats{
 		CheckpointTs: checkpointTs.ResolvedMark(),

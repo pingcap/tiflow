@@ -224,7 +224,7 @@ func (c *captureImpl) reset(ctx context.Context) (*vars.GlobalVars, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Info("reset session successfully", zap.Any("session", sess))
+	log.Info("reset session successfully", zap.Int64("leaseID", int64(lease.ID)))
 
 	c.captureMu.Lock()
 	defer c.captureMu.Unlock()
@@ -291,7 +291,11 @@ func (c *captureImpl) reset(ctx context.Context) (*vars.GlobalVars, error) {
 	c.processorManager = c.newProcessorManager(
 		c.info, c.upstreamManager, &c.liveness, c.config.Debug.Scheduler, globalVars)
 
-	log.Info("capture initialized", zap.Any("capture", c.info))
+	log.Info("capture initialized",
+		zap.String("captureID", c.info.ID),
+		zap.String("advertiseAddr", c.info.AdvertiseAddr),
+		zap.String("version", c.info.Version),
+		zap.String("gitHash", c.info.GitHash))
 	return globalVars, nil
 }
 
