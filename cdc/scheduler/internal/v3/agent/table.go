@@ -155,6 +155,14 @@ func (t *tableSpan) handleRemoveTableTask() *schedulepb.Message {
 		case tablepb.TableStatePreparing,
 			tablepb.TableStatePrepared,
 			tablepb.TableStateReplicating:
+			if t.task.status == dispatchTableTaskReceived {
+				log.Info("schedulerv3: agent accepted remove table task",
+					zap.String("namespace", t.changefeedID.Namespace),
+					zap.String("changefeed", t.changefeedID.ID),
+					zap.Int64("tableID", t.span.TableID),
+					zap.Stringer("startKey", t.span.StartKey))
+				t.task.status = dispatchTableTaskProcessed
+			}
 			done := t.executor.RemoveTableSpan(t.task.Span)
 			if !done {
 				status := t.getTableSpanStatus(false)
@@ -193,6 +201,21 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 				status := t.getTableSpanStatus(false)
 				return newAddTableResponseMessage(t.changefeedID, status), errors.Trace(err)
 			}
+			if t.task.IsPrepare {
+				log.Info("schedulerv3: agent accepted prepare table task",
+					zap.String("namespace", t.changefeedID.Namespace),
+					zap.String("changefeed", t.changefeedID.ID),
+					zap.Int64("tableID", t.span.TableID),
+					zap.Stringer("startKey", t.span.StartKey),
+					zap.Uint64("checkpointTs", t.task.Checkpoint.CheckpointTs))
+			} else {
+				log.Info("schedulerv3: agent accepted replicate table task",
+					zap.String("namespace", t.changefeedID.Namespace),
+					zap.String("changefeed", t.changefeedID.ID),
+					zap.Int64("tableID", t.span.TableID),
+					zap.Stringer("startKey", t.span.StartKey),
+					zap.Uint64("checkpointTs", t.task.Checkpoint.CheckpointTs))
+			}
 			state, changed = t.getAndUpdateTableSpanState()
 		case tablepb.TableStateReplicating:
 			t.task = nil
@@ -219,6 +242,12 @@ func (t *tableSpan) handleAddTableTask(ctx context.Context) (result *schedulepb.
 					status := t.getTableSpanStatus(false)
 					return newAddTableResponseMessage(t.changefeedID, status), errors.Trace(err)
 				}
+				log.Info("schedulerv3: agent accepted replicate table task",
+					zap.String("namespace", t.changefeedID.Namespace),
+					zap.String("changefeed", t.changefeedID.ID),
+					zap.Int64("tableID", t.span.TableID),
+					zap.Stringer("startKey", t.span.StartKey),
+					zap.Uint64("checkpointTs", t.task.Checkpoint.CheckpointTs))
 				t.task.status = dispatchTableTaskProcessed
 			}
 
@@ -268,27 +297,6 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 	}
 	if t.task == nil {
 		t.task = task
-		if task.IsRemove {
-			log.Info("schedulerv3: agent accepted remove table task",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID),
-				zap.Stringer("startKey", t.span.StartKey))
-		} else if task.IsPrepare {
-			log.Info("schedulerv3: agent accepted prepare table task",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID),
-				zap.Stringer("startKey", t.span.StartKey),
-				zap.Uint64("checkpointTs", task.Checkpoint.CheckpointTs))
-		} else {
-			log.Info("schedulerv3: agent accepted replicate table task",
-				zap.String("namespace", t.changefeedID.Namespace),
-				zap.String("changefeed", t.changefeedID.ID),
-				zap.Int64("tableID", t.span.TableID),
-				zap.Stringer("startKey", t.span.StartKey),
-				zap.Uint64("checkpointTs", task.Checkpoint.CheckpointTs))
-		}
 		return
 	}
 	if t.task.Span.Eq(&task.Span) &&
@@ -298,7 +306,7 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		t.task.Epoch.Epoch == task.Epoch.Epoch {
 		return
 	}
-	log.Warn("schedulerv3: table inject dispatch table task ignored,"+
+	log.Debug("schedulerv3: table inject dispatch table task ignored,"+
 		"since there is one not finished yet",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),

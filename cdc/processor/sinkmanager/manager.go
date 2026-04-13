@@ -498,10 +498,11 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 
 			value, ok := m.tableSinks.Load(span)
 			if !ok {
-				log.Info("Table sink not found, probably already removed",
+				log.Debug("Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Stringer("span", &span))
+					zap.Int64("tableID", span.TableID),
+					zap.Stringer("startKey", span.StartKey))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
 				continue
@@ -517,10 +518,11 @@ func (m *SinkManager) generateSinkTasks(ctx context.Context) error {
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
 			if tableState != tablepb.TableStateReplicating {
-				log.Info("Table sink is not replicating, skip it",
+				log.Debug("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Stringer("span", &span),
+					zap.Int64("tableID", span.TableID),
+					zap.Stringer("startKey", span.StartKey),
 					zap.String("tableState", tableState.String()))
 				continue
 			}
@@ -671,10 +673,11 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 
 			value, ok := m.tableSinks.Load(span)
 			if !ok {
-				log.Info("Table sink not found, probably already removed",
+				log.Debug("Table sink not found, probably already removed",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Stringer("span", &span))
+					zap.Int64("tableID", span.TableID),
+					zap.Stringer("startKey", span.StartKey))
 				// Maybe the table sink is removed by the processor.(Scheduled the table to other nodes.)
 				// So we do **not** need add it back to the heap.
 				continue
@@ -690,10 +693,11 @@ func (m *SinkManager) generateRedoTasks(ctx context.Context) error {
 			// We should skip it and do not push it back.
 			// Because there is no case that stopping/stopped -> replicating.
 			if tableState != tablepb.TableStateReplicating {
-				log.Info("Table sink is not replicating, skip it",
+				log.Debug("Table sink is not replicating, skip it",
 					zap.String("namespace", m.changefeedID.Namespace),
 					zap.String("changefeed", m.changefeedID.ID),
-					zap.Stringer("span", &span),
+					zap.Int64("tableID", span.TableID),
+					zap.Stringer("startKey", span.StartKey),
 					zap.String("tableState", tableState.String()))
 				continue
 			}

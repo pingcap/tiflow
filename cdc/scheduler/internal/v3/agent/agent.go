@@ -359,7 +359,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 		span := req.RemoveTable.GetSpan()
 		table, ok = a.tableM.getTableSpan(span)
 		if !ok {
-			log.Warn("schedulerv3: agent ignore remove table request, "+
+			log.Debug("schedulerv3: agent ignore remove table request, "+
 				"since the table not found",
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),

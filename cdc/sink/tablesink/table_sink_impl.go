@@ -236,10 +236,11 @@ func (e *EventTableSink[E, P]) freeze() {
 		}
 		if e.state.CompareAndSwap(currentState, state.TableSinkStopping) {
 			stoppingCheckpointTs := e.GetCheckpointTs()
-			log.Info("Stopping table sink",
+			log.Debug("Stopping table sink",
 				zap.String("namespace", e.changefeedID.Namespace),
 				zap.String("changefeed", e.changefeedID.ID),
-				zap.Stringer("span", &e.span),
+				zap.Int64("tableID", e.span.TableID),
+				zap.Stringer("startKey", e.span.StartKey),
 				zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
 			break
 		}
@@ -254,10 +255,11 @@ func (e *EventTableSink[E, P]) markAsClosed() (modified bool) {
 		}
 		if e.state.CompareAndSwap(currentState, state.TableSinkStopped) {
 			stoppedCheckpointTs := e.GetCheckpointTs()
-			log.Info("Table sink stopped",
+			log.Debug("Table sink stopped",
 				zap.String("namespace", e.changefeedID.Namespace),
 				zap.String("changefeed", e.changefeedID.ID),
-				zap.Stringer("span", &e.span),
+				zap.Int64("tableID", e.span.TableID),
+				zap.Stringer("startKey", e.span.StartKey),
 				zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts))
 			return true
 		}

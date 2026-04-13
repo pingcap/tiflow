@@ -296,9 +296,7 @@ func (m *ddlManager) tick(
 			continue
 		}
 
-		// Note: do not change the key words in the log, it is used to search the
-		// FinishTS of the DDL job. Some integration tests and users depend on it.
-		log.Info("handle a ddl job",
+		log.Info("build ddl events from ddl job",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int64("tableID", job.TableID),

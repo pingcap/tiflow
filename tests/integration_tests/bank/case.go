@@ -716,9 +716,8 @@ func tryGetEndTsFromLog(db *sql.DB, tableName string) (result uint64, ok bool) {
 	}
 	log.Info("total files", zap.Any("file", cdcLogFiles))
 
-	logRegex := regexp.MustCompile(`handle a ddl job`)
-	tableNameRegex := regexp.MustCompile(tableName + "`")
 	timeStampRegex := regexp.MustCompile(`finishedTs=([0-9]+)`)
+	jobIDLogField := fmt.Sprintf("jobID=%d", jobID)
 	for _, f := range cdcLogFiles {
 		file, err := os.Open(f)
 		if err != nil {
@@ -729,7 +728,7 @@ func tryGetEndTsFromLog(db *sql.DB, tableName string) (result uint64, ok bool) {
 		scanner := bufio.NewScanner(file)
 		for scanner.Scan() {
 			line := scanner.Text()
-			if !logRegex.MatchString(line) || !tableNameRegex.MatchString(line) {
+			if !strings.Contains(line, jobIDLogField) {
 				continue
 			}
 

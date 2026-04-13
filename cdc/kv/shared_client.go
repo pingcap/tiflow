@@ -310,7 +310,7 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 	s.totalSpans.Unlock()
 	if rt != nil {
 		s.setTableStopped(rt)
-		log.Info("event feed unsubscribes table",
+		log.Debug("event feed unsubscribes table",
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
@@ -385,7 +385,7 @@ func (s *SharedClient) Close() {
 }
 
 func (s *SharedClient) setTableStopped(rt *subscribedTable) {
-	log.Info("event feed starts to stop table",
+	log.Debug("event feed starts to stop table",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
@@ -403,7 +403,7 @@ func (s *SharedClient) setTableStopped(rt *subscribedTable) {
 }
 
 func (s *SharedClient) onTableDrained(rt *subscribedTable) {
-	log.Info("event feed stop table is finished",
+	log.Debug("event feed stop table is finished",
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
