@@ -172,6 +172,8 @@ func (m *feedStateManager) Tick(resolvedTs model.Ts,
 		changefeedErrorStuckDuration := util.GetOrZero(m.state.GetChangefeedInfo().Config.ChangefeedErrorStuckDuration)
 		if m.changefeedErrorStuckDuration != changefeedErrorStuckDuration {
 			log.Info("changefeedErrorStuckDuration update",
+				zap.String("namespace", m.state.GetID().Namespace),
+				zap.String("changefeed", m.state.GetID().ID),
 				zap.Duration("oldChangefeedErrorStuckDuration", m.changefeedErrorStuckDuration),
 				zap.Duration("newChangefeedErrorStuckDuration", changefeedErrorStuckDuration),
 			)
@@ -377,7 +379,9 @@ func (m *feedStateManager) patchState(feedState model.FeedState) {
 		adminJobType = model.AdminRemove
 		updateEpoch = true
 	default:
-		log.Panic("Unreachable")
+		log.Panic("Unreachable",
+			zap.String("namespace", m.state.GetID().Namespace),
+			zap.String("changefeed", m.state.GetID().ID))
 	}
 	epoch := uint64(0)
 	if updateEpoch {
@@ -436,7 +440,10 @@ func (m *feedStateManager) HandleError(errs ...*model.RunningError) {
 	// if any error is occurred in this tick, we should set the changefeed state to warning
 	// and stop the changefeed
 	if lastError != nil {
-		log.Warn("changefeed meets an error", zap.Any("error", lastError))
+		log.Warn("changefeed meets an error",
+			zap.String("namespace", m.state.GetID().Namespace),
+			zap.String("changefeed", m.state.GetID().ID),
+			zap.Any("error", lastError))
 		m.shouldBeRunning = false
 		m.patchState(model.StatePending)
 
@@ -528,5 +535,8 @@ func (m *feedStateManager) checkAndInitLastRetryCheckpointTs(status *model.Chang
 	}
 	m.lastWarningReportCheckpointTs = status.CheckpointTs
 	m.lastErrorRetryCheckpointTs = status.CheckpointTs
-	log.Info("init lastRetryCheckpointTs", zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
+	log.Info("init lastRetryCheckpointTs",
+		zap.String("namespace", m.state.GetID().Namespace),
+		zap.String("changefeed", m.state.GetID().ID),
+		zap.Uint64("lastRetryCheckpointTs", m.lastErrorRetryCheckpointTs))
 }

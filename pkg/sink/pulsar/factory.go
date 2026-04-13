@@ -42,7 +42,8 @@ func NewCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFee
 		Logger:            NewPulsarLogger(log.L()),
 	}
 	log.Info("pulsar client factory created",
-		zap.Stringer("changefeedID", changefeedID),
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
 		zap.Any("clientOptions", option))
 
 	var err error
@@ -131,6 +132,8 @@ func setupAuthentication(config *config.PulsarConfig) (bool, pulsar.Authenticati
 func NewMockCreatorFactory(config *config.PulsarConfig, changefeedID model.ChangeFeedID,
 	sinkConfig *config.SinkConfig,
 ) (pulsar.Client, error) {
-	log.Info("mock pulsar client factory created", zap.Any("changfeedID", changefeedID))
+	log.Info("mock pulsar client factory created",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID))
 	return nil, nil
 }

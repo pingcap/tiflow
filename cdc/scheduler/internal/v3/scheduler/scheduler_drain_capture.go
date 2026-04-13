@@ -119,7 +119,8 @@ func (d *drainCaptureScheduler) Schedule(
 			"since cannot found destination captures",
 			zap.String("namespace", d.changefeedID.Namespace),
 			zap.String("changefeed", d.changefeedID.ID),
-			zap.String("target", d.target), zap.Any("captures", captures))
+			zap.String("target", d.target),
+			zap.Int("captureCount", len(captures)))
 		d.target = captureIDNotDraining
 		return nil
 	}
@@ -136,7 +137,10 @@ func (d *drainCaptureScheduler) Schedule(
 				zap.String("namespace", d.changefeedID.Namespace),
 				zap.String("changefeed", d.changefeedID.ID),
 				zap.String("target", d.target),
-				zap.Any("replication", rep))
+				zap.String("captureID", rep.Primary),
+				zap.Stringer("state", rep.State),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
 			skipDrain = true
 			return false
 		}
@@ -186,7 +190,8 @@ func (d *drainCaptureScheduler) Schedule(
 			log.Panic("schedulerv3: drain capture meet unexpected min workload",
 				zap.String("namespace", d.changefeedID.Namespace),
 				zap.String("changefeed", d.changefeedID.ID),
-				zap.Any("workload", captureWorkload))
+				zap.Int("captureCount", len(captureWorkload)),
+				zap.Int("victimSpanCount", len(victimSpans)))
 		}
 
 		result = append(result, &replication.ScheduleTask{

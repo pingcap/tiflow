@@ -146,8 +146,8 @@ func (m *Reconciler) Reconcile(
 			}
 			// 3. owner switch after some captures failed.
 			log.Info("schedulerv3: detect owner switch after captures fail",
-				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.Int64("tableID", tableID),
 				zap.Int("holes", len(holes)),
 				zap.Stringer("startKey", tableStart.StartKey),

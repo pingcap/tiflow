@@ -134,7 +134,12 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 
 func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
-		log.Error("unexpected key prefix found in row kv entry", zap.String("key", hex.EncodeToString(raw.Key)), zap.Any("eventCommitTs", raw.CRTs), zap.Any("eventStartTs", raw.StartTs))
+		log.Error("unexpected key prefix found in row kv entry",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.String("key", hex.EncodeToString(raw.Key)),
+			zap.Uint64("eventCommitTs", raw.CRTs),
+			zap.Uint64("eventStartTs", raw.StartTs))
 		return nil, nil
 	}
 	// checksumKey is only used to calculate raw checksum if necessary.
@@ -177,6 +182,8 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 				return nil, nil
 			}
 			log.Error("can not found table schema",
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
 				zap.Uint64("ts", raw.CRTs),
 				zap.String("key", hex.EncodeToString(raw.Key)),
 				zap.Int64("tableID", physicalTableID))
@@ -216,8 +223,17 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 		return nil, nil
 	}()
 	if err != nil && !cerror.ShouldFailChangefeed(err) {
-		log.Error("failed to mount and unmarshals entry, start to print debug info", zap.Error(err))
-		snap.PrintStatus(log.Error)
+		log.Error("failed to mount and unmarshals entry, start to print debug info",
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Error(err))
+		snap.PrintStatus(func(msg string, fields ...zap.Field) {
+			fields = append([]zap.Field{
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+			}, fields...)
+			log.Error(msg, fields...)
+		})
 	}
 	return row, err
 }
@@ -369,7 +385,8 @@ func datum2Column(
 			return nil, nil, nil, errors.Trace(err)
 		}
 		if warn != "" {
-			log.Warn(warn, zap.String("table", tableInfo.TableName.String()),
+			log.Warn(warn,
+				zap.String("table", tableInfo.TableName.String()),
 				zap.String("column", colInfo.Name.String()))
 		}
 
@@ -427,8 +444,12 @@ func (m *mounter) verifyColumnChecksum(
 	checksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
 	if err != nil {
 		log.Error("failed to calculate the checksum",
-			zap.Uint32("first", first), zap.Any("columnInfos", columnInfos),
-			zap.Any("rawColumns", rawColumns), zap.Error(err))
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint32("first", first),
+			zap.Any("columnInfos", columnInfos),
+			zap.Any("rawColumns", rawColumns),
+			zap.Error(err))
 		return 0, false, err
 	}
 
@@ -444,16 +465,28 @@ func (m *mounter) verifyColumnChecksum(
 
 	if !skipFail {
 		log.Error("cannot found the extra checksum, the first checksum mismatched",
-			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra),
-			zap.Any("columnInfos", columnInfos), zap.Any("rawColumns", rawColumns), zap.Any("tz", m.tz))
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint32("checksum", checksum),
+			zap.Uint32("first", first),
+			zap.Uint32("extra", extra),
+			zap.Any("columnInfos", columnInfos),
+			zap.Any("rawColumns", rawColumns),
+			zap.Any("tz", m.tz))
 		return checksum, false, nil
 	}
 
 	if time.Since(m.lastSkipOldValueTime) > time.Minute {
 		log.Warn("checksum mismatch on the old value, "+
 			"this may caused by Add Column / Drop Column executed, skip verification",
-			zap.Uint32("checksum", checksum), zap.Uint32("first", first), zap.Uint32("extra", extra),
-			zap.Any("columnInfos", columnInfos), zap.Any("rawColumns", rawColumns), zap.Any("tz", m.tz))
+			zap.String("namespace", m.changefeedID.Namespace),
+			zap.String("changefeed", m.changefeedID.ID),
+			zap.Uint32("checksum", checksum),
+			zap.Uint32("first", first),
+			zap.Uint32("extra", extra),
+			zap.Any("columnInfos", columnInfos),
+			zap.Any("rawColumns", rawColumns),
+			zap.Any("tz", m.tz))
 		m.lastSkipOldValueTime = time.Now()
 	}
 	return checksum, true, nil
@@ -559,7 +592,9 @@ func verifyRawBytesChecksum(
 		datum, err := newDatum(col.Value, columnInfo.FieldType)
 		if err != nil {
 			log.Error("build datum for raw checksum calculation failed",
-				zap.Any("col", col), zap.Any("columnInfo", columnInfo), zap.Error(err))
+				zap.Any("col", col),
+				zap.Any("columnInfo", columnInfo),
+				zap.Error(err))
 			return 0, false, errors.Trace(err)
 		}
 		datums = append(datums, &datum)
@@ -575,9 +610,12 @@ func verifyRawBytesChecksum(
 
 	log.Error("raw bytes checksum mismatch",
 		zap.Int("version", decoder.ChecksumVersion()),
-		zap.Uint32("expected", expected), zap.Uint32("obtained", obtained),
-		zap.Any("tableInfo", tableInfo), zap.Any("columns", columns),
-		zap.Any("handle", handle.String()), zap.Any("tz", tz))
+		zap.Uint32("expected", expected),
+		zap.Uint32("obtained", obtained),
+		zap.Any("tableInfo", tableInfo),
+		zap.Any("columns", columns),
+		zap.String("handle", handle.String()),
+		zap.Any("tz", tz))
 
 	return expected, false, nil
 }
@@ -611,8 +649,14 @@ func (m *mounter) verifyChecksum(
 		expected, matched, err := verifyRawBytesChecksum(tableInfo, columns, decoder, handle, key, m.tz)
 		if err != nil {
 			log.Error("calculate raw checksum failed",
-				zap.Int("version", version), zap.Any("tz", m.tz), zap.Any("handle", handle.String()),
-				zap.Any("key", key), zap.Any("columns", columns), zap.Error(err))
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Int("version", version),
+				zap.Any("tz", m.tz),
+				zap.String("handle", handle.String()),
+				zap.Binary("key", key),
+				zap.Any("columns", columns),
+				zap.Error(err))
 			return 0, false, errors.Trace(err)
 		}
 		if !matched {
@@ -621,8 +665,12 @@ func (m *mounter) verifyChecksum(
 		columnChecksum, err := calculateColumnChecksum(columnInfos, rawColumns, m.tz)
 		if err != nil {
 			log.Error("failed to calculate column-level checksum, after raw checksum verification passed",
-				zap.Any("columnsInfo", columnInfos), zap.Any("rawColumns", rawColumns),
-				zap.Any("tz", m.tz), zap.Error(err))
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Any("columnsInfo", columnInfos),
+				zap.Any("rawColumns", rawColumns),
+				zap.Any("tz", m.tz),
+				zap.Error(err))
 			return 0, false, errors.Trace(err)
 		}
 		return columnChecksum, true, nil
@@ -673,8 +721,12 @@ func (m *mounter) mountRowKVEntry(
 
 		if !matched {
 			log.Error("previous columns checksum mismatch",
-				zap.Uint32("checksum", preChecksum), zap.Any("tableInfo", tableInfo),
-				zap.Any("preCols", preCols), zap.Any("rawCols", preRawCols))
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Uint32("checksum", preChecksum),
+				zap.Any("tableInfo", tableInfo),
+				zap.Any("preCols", preCols),
+				zap.Any("rawCols", preRawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
 					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID)
@@ -700,8 +752,12 @@ func (m *mounter) mountRowKVEntry(
 		}
 		if !matched {
 			log.Error("current columns checksum mismatch",
-				zap.Uint32("checksum", currentChecksum), zap.Any("tableInfo", tableInfo),
-				zap.Any("cols", cols), zap.Any("rawCols", rawCols))
+				zap.String("namespace", m.changefeedID.Namespace),
+				zap.String("changefeed", m.changefeedID.ID),
+				zap.Uint32("checksum", currentChecksum),
+				zap.Any("tableInfo", tableInfo),
+				zap.Any("cols", cols),
+				zap.Any("rawCols", rawCols))
 			if m.integrity.ErrorHandle() {
 				return nil, rawRow, cerror.ErrCorruptedDataMutation.
 					GenWithStackByArgs(m.changefeedID.Namespace, m.changefeedID.ID)
@@ -900,7 +956,8 @@ func getDefaultOrZeroValue(
 		default:
 			d = table.GetZeroValue(col)
 			if d.IsNull() {
-				log.Error("meet unsupported column type", zap.String("columnInfo", col.FieldType.String()))
+				log.Error("meet unsupported column type",
+					zap.String("columnInfo", col.FieldType.String()))
 			}
 		}
 	}

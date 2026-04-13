@@ -28,9 +28,9 @@ import (
 )
 
 type worker struct {
-	ctx         context.Context
-	changefeed  string
-	workerCount int
+	ctx          context.Context
+	changefeedID model.ChangeFeedID
+	workerCount  int
 
 	ID      int
 	backend backend
@@ -56,9 +56,9 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 	wid := fmt.Sprintf("%d", ID)
 
 	return &worker{
-		ctx:         ctx,
-		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
-		workerCount: workerCount,
+		ctx:          ctx,
+		changefeedID: changefeedID,
+		workerCount:  workerCount,
 
 		ID:      ID,
 		backend: backend,
@@ -82,7 +82,8 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
-				zap.String("changefeedID", w.changefeed),
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int("workerID", w.ID),
 				zap.Error(err))
 		}
@@ -132,7 +133,8 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 				// needFlush must be true here, so we can do flush.
 				if err := w.doFlush(); err != nil {
 					log.Error("Transaction dmlSink worker exits unexpectly",
-						zap.String("changefeedID", w.changefeed),
+						zap.String("namespace", w.changefeedID.Namespace),
+						zap.String("changefeed", w.changefeedID.ID),
 						zap.Int("workerID", w.ID),
 						zap.Error(err))
 					return err
@@ -171,9 +173,10 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 		// Log slow conflict detect tables every minute.
 		if lastLog, ok := w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID]; !ok || now.Sub(lastLog) > time.Minute {
 			log.Warn("Transaction dmlSink finds a slow transaction in conflict detector",
-				zap.String("changefeedID", w.changefeed),
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int("workerID", w.ID),
-				zap.Int64("TableID", txn.Event.PhysicalTableID),
+				zap.Int64("tableID", txn.Event.PhysicalTableID),
 				zap.Float64("seconds", conflictDetectTime))
 			w.lastSlowConflictDetectLog[txn.Event.PhysicalTableID] = now
 		}
@@ -193,7 +196,8 @@ func (w *worker) doFlush() error {
 		}()
 		if err := w.backend.Flush(w.ctx); err != nil {
 			log.Warn("Transaction dmlSink backend flush fail",
-				zap.String("changefeedID", w.changefeed),
+				zap.String("namespace", w.changefeedID.Namespace),
+				zap.String("changefeed", w.changefeedID.ID),
 				zap.Int("workerID", w.ID),
 				zap.Error(err))
 			return err

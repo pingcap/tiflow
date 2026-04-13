@@ -78,11 +78,21 @@ type tableProgress struct {
 func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.ResolvedSpans) (err error) {
 	for _, resolvedSpan := range e.Spans {
 		if !spanz.IsSubSpan(resolvedSpan.Span, p.spans...) {
+			tableID := int64(0)
+			var startKey tablepb.Key
+			if len(p.spans) != 0 {
+				tableID = p.spans[0].TableID
+				startKey = p.spans[0].StartKey
+			}
 			log.Panic("the resolved span is not in the table spans",
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
 				zap.String("tableName", p.tableName),
-				zap.Any("spans", p.spans))
+				zap.Int64("tableID", tableID),
+				zap.Stringer("startKey", startKey),
+				zap.Int64("resolvedTableID", resolvedSpan.Span.TableID),
+				zap.Stringer("resolvedStartKey", resolvedSpan.Span.StartKey),
+				zap.Stringer("resolvedEndKey", resolvedSpan.Span.EndKey))
 		}
 		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.ResolvedTs)
 		if e.ResolvedTs > p.maxIngressResolvedTs.Load() {
@@ -232,7 +242,8 @@ func (p *MultiplexingPuller) subscribe(
 			log.Panic("redundant subscription",
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
-				zap.String("span", span.String()))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
 		}
 	}
 
@@ -299,7 +310,8 @@ func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
 			log.Panic("unexist unsubscription",
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
-				zap.String("span", span.String()))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
 		}
 	}
 	if len(progress.spans) != len(spans) {

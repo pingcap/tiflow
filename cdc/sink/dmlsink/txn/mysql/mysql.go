@@ -60,11 +60,11 @@ const (
 )
 
 type mysqlBackend struct {
-	workerID    int
-	changefeed  string
-	db          *sql.DB
-	cfg         *pmysql.Config
-	dmlMaxRetry uint64
+	workerID     int
+	changefeedID model.ChangeFeedID
+	db           *sql.DB
+	cfg          *pmysql.Config
+	dmlMaxRetry  uint64
 
 	events []*dmlsink.TxnCallbackableEvent
 	rows   int
@@ -90,8 +90,6 @@ func NewMySQLBackends(
 	dbConnFactory pmysql.IDBConnectionFactory,
 	statistics *metrics.Statistics,
 ) ([]*mysqlBackend, error) {
-	changefeed := fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID)
-
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
 	if err != nil {
@@ -168,7 +166,8 @@ func NewMySQLBackends(
 	maxAllowedPacket, err = pmysql.QueryMaxAllowedPacket(ctx, db)
 	if err != nil {
 		log.Warn("failed to query max_allowed_packet, use default value",
-			zap.String("changefeed", changefeed),
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
 			zap.Error(err))
 		maxAllowedPacket = int64(vardef.DefMaxAllowedPacket)
 	}
@@ -176,12 +175,12 @@ func NewMySQLBackends(
 	backends := make([]*mysqlBackend, 0, cfg.WorkerCount)
 	for i := 0; i < cfg.WorkerCount; i++ {
 		backends = append(backends, &mysqlBackend{
-			workerID:    i,
-			changefeed:  changefeed,
-			db:          db,
-			cfg:         cfg,
-			dmlMaxRetry: defaultDMLMaxRetry,
-			statistics:  statistics,
+			workerID:     i,
+			changefeedID: changefeedID,
+			db:           db,
+			cfg:          cfg,
+			dmlMaxRetry:  defaultDMLMaxRetry,
+			statistics:   statistics,
 
 			metricTxnSinkDMLBatchCommit:     txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback:   txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -193,7 +192,8 @@ func NewMySQLBackends(
 	}
 
 	log.Info("MySQL backends is created",
-		zap.String("changefeed", changefeed),
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
 		zap.Int("workerCount", cfg.WorkerCount),
 		zap.Bool("forceReplicate", cfg.ForceReplicate))
 	return backends, nil
@@ -225,13 +225,20 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Any("rows", s.rows),
-		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+	log.Debug("prepare DMLs",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Int("rows", s.rows),
+		zap.Strings("sqls", dmls.sqls),
+		zap.Any("values", dmls.values))
 
 	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
 		if errors.Cause(err) != context.Canceled {
-			log.Error("execute DMLs failed", zap.String("changefeed", s.changefeed), zap.Error(err))
+			log.Error("execute DMLs failed",
+				zap.String("namespace", s.changefeedID.Namespace),
+				zap.String("changefeed", s.changefeedID.ID),
+				zap.Error(err))
 		}
 		return errors.Trace(err)
 	}
@@ -532,7 +539,8 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		// replicated before, and there is no such row in downstream MySQL.
 		translateToInsert = translateToInsert && firstRow.CommitTs > firstRow.ReplicatingTs
 		log.Debug("translate to insert",
-			zap.String("changefeed", s.changefeed),
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
 			zap.Bool("translateToInsert", translateToInsert),
 			zap.Uint64("firstRowCommitTs", firstRow.CommitTs),
 			zap.Uint64("firstRowReplicatingTs", firstRow.ReplicatingTs),
@@ -635,8 +643,12 @@ func (s *mysqlBackend) multiStmtExecute(
 	}
 	multiStmtSQL := strings.Join(dmls.sqls, ";")
 
-	log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
-		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
+	log.Debug("exec row",
+		zap.String("namespace", s.changefeedID.Namespace),
+		zap.String("changefeed", s.changefeedID.ID),
+		zap.Int("workerID", s.workerID),
+		zap.String("sql", multiStmtSQL),
+		zap.Any("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	start := time.Now()
@@ -644,10 +656,13 @@ func (s *mysqlBackend) multiStmtExecute(
 	if execError != nil {
 		err := logDMLTxnErr(
 			wrapMysqlTxnError(execError),
-			start, s.changefeed, multiStmtSQL, dmls.rowCount, dmls.startTs)
+			start, s.changefeedID, multiStmtSQL, dmls.rowCount, dmls.startTs)
 		if rbErr := tx.Rollback(); rbErr != nil {
 			if errors.Cause(rbErr) != context.Canceled {
-				log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
+				log.Warn("failed to rollback txn",
+					zap.String("namespace", s.changefeedID.Namespace),
+					zap.String("changefeed", s.changefeedID.ID),
+					zap.Error(rbErr))
 			}
 		}
 		return err
@@ -662,8 +677,12 @@ func (s *mysqlBackend) sequenceExecute(
 	start := time.Now()
 	for i, query := range dmls.sqls {
 		args := dmls.values[i]
-		log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
-			zap.String("sql", query), zap.Any("args", args))
+		log.Debug("exec row",
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
+			zap.Int("workerID", s.workerID),
+			zap.String("sql", query),
+			zap.Any("args", args))
 		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
 
 		var prepStmt *sql.Stmt
@@ -691,10 +710,13 @@ func (s *mysqlBackend) sequenceExecute(
 		if execError != nil {
 			err := logDMLTxnErr(
 				wrapMysqlTxnError(execError),
-				start, s.changefeed, query, dmls.rowCount, dmls.startTs)
+				start, s.changefeedID, query, dmls.rowCount, dmls.startTs)
 			if rbErr := tx.Rollback(); rbErr != nil {
 				if errors.Cause(rbErr) != context.Canceled {
-					log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
+					log.Warn("failed to rollback txn",
+						zap.String("namespace", s.changefeedID.Namespace),
+						zap.String("changefeed", s.changefeedID.ID),
+						zap.Error(rbErr))
 				}
 			}
 			cancelFunc()
@@ -708,7 +730,8 @@ func (s *mysqlBackend) sequenceExecute(
 func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *preparedDMLs) error {
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Error("unexpected number of sqls and values",
-			zap.String("changefeed", s.changefeed),
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
 			zap.Strings("sqls", dmls.sqls),
 			zap.Any("values", dmls.values))
 		return cerror.ErrUnexpected.FastGenByArgs("unexpected number of sqls and values")
@@ -724,7 +747,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 
 		failpoint.Inject("MySQLSinkTxnRandomError", func() {
 			log.Warn("inject MySQLSinkTxnRandomError")
-			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeed, "failpoint", 0, nil)
+			err := logDMLTxnErr(errors.Trace(driver.ErrBadConn), start, s.changefeedID, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 		failpoint.Inject("MySQLSinkHangLongTime", func() { _ = util.Hang(pctx, time.Hour) })
@@ -733,7 +756,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			err := logDMLTxnErr(cerror.WrapError(cerror.ErrMySQLDuplicateEntry, &dmysql.MySQLError{
 				Number:  uint16(mysql.ErrDupEntry),
 				Message: "Duplicate entry",
-			}), start, s.changefeed, "failpoint", 0, nil)
+			}), start, s.changefeedID, "failpoint", 0, nil)
 			failpoint.Return(err)
 		})
 
@@ -742,7 +765,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			if err != nil {
 				return 0, 0, logDMLTxnErr(
 					wrapMysqlTxnError(err),
-					start, s.changefeed, "BEGIN", dmls.rowCount, dmls.startTs)
+					start, s.changefeedID, "BEGIN", dmls.rowCount, dmls.startTs)
 			}
 
 			// Set session variables first and then execute the transaction.
@@ -751,13 +774,16 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			if err = pmysql.SetWriteSource(pctx, s.cfg, tx); err != nil {
 				err := logDMLTxnErr(
 					wrapMysqlTxnError(err),
-					start, s.changefeed,
+					start, s.changefeedID,
 					fmt.Sprintf("SET SESSION %s = %d", "tidb_cdc_write_source",
 						s.cfg.SourceID),
 					dmls.rowCount, dmls.startTs)
 				if rbErr := tx.Rollback(); rbErr != nil {
 					if errors.Cause(rbErr) != context.Canceled {
-						log.Warn("failed to rollback txn", zap.String("changefeed", s.changefeed), zap.Error(rbErr))
+						log.Warn("failed to rollback txn",
+							zap.String("namespace", s.changefeedID.Namespace),
+							zap.String("changefeed", s.changefeedID.ID),
+							zap.Error(rbErr))
 					}
 				}
 				return 0, 0, err
@@ -784,7 +810,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			if err = tx.Commit(); err != nil {
 				return 0, 0, logDMLTxnErr(
 					wrapMysqlTxnError(err),
-					start, s.changefeed, "COMMIT", dmls.rowCount, dmls.startTs)
+					start, s.changefeedID, "COMMIT", dmls.rowCount, dmls.startTs)
 			}
 			return dmls.rowCount, dmls.approximateSize, nil
 		})
@@ -792,7 +818,8 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 			return errors.Trace(err)
 		}
 		log.Debug("Exec Rows succeeded",
-			zap.String("changefeed", s.changefeed),
+			zap.String("namespace", s.changefeedID.Namespace),
+			zap.String("changefeed", s.changefeedID.ID),
 			zap.Int("workerID", s.workerID),
 			zap.Int("numOfRows", dmls.rowCount))
 		return nil
@@ -815,7 +842,7 @@ func wrapMysqlTxnError(err error) error {
 }
 
 func logDMLTxnErr(
-	err error, start time.Time, changefeed string,
+	err error, start time.Time, changefeedID model.ChangeFeedID,
 	query string, count int, startTs []model.Ts,
 ) error {
 	if len(query) > 1024 {
@@ -823,15 +850,22 @@ func logDMLTxnErr(
 	}
 	if isRetryableDMLError(err) {
 		log.Warn("execute DMLs with error, retry later",
-			zap.Error(err), zap.Duration("duration", time.Since(start)),
-			zap.String("query", query), zap.Int("count", count),
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("query", query),
+			zap.Int("count", count),
 			zap.Uint64s("startTs", startTs),
-			zap.String("changefeed", changefeed))
+		)
 	} else {
 		log.Error("execute DMLs with error, can not retry",
-			zap.Error(err), zap.Duration("duration", time.Since(start)),
-			zap.String("query", query), zap.Int("count", count),
-			zap.String("changefeed", changefeed))
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Error(err),
+			zap.Duration("duration", time.Since(start)),
+			zap.String("query", query),
+			zap.Int("count", count))
 	}
 	return errors.WithMessage(err, fmt.Sprintf("Failed query info: %s; ", query))
 }

@@ -105,8 +105,6 @@ func NewKafkaDDLSink(
 	}
 
 	start := time.Now()
-	log.Info("Try to create a DDL sink producer",
-		zap.String("changefeed", changefeedID.String()))
 	syncProducer, err := factory.SyncProducer(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -114,6 +112,7 @@ func NewKafkaDDLSink(
 
 	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
 	s := newDDLSink(changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder.Build(), protocol, syncProducer)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+	log.Info("kafka ddl sink created", zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID), zap.Duration("duration", time.Since(start)))
 	return s, nil
 }

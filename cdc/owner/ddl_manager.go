@@ -214,7 +214,8 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 	start := time.Now()
 	go func() {
 		log.Info("start to send bootstrap messages",
-			zap.Stringer("changefeed", m.changfeedID),
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int("tables", len(currentTables)))
 		for idx, table := range currentTables {
 			if table.TableInfo.IsView() {
@@ -227,7 +228,8 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 			err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
 			if err != nil {
 				log.Error("send bootstrap message failed",
-					zap.Stringer("changefeed", m.changfeedID),
+					zap.String("namespace", m.changfeedID.Namespace),
+					zap.String("changefeed", m.changfeedID.ID),
 					zap.Int("tables", len(currentTables)),
 					zap.Int("emitted", idx+1),
 					zap.Duration("duration", time.Since(start)),
@@ -238,7 +240,8 @@ func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*mode
 		}
 		storeBootstrapState(&m.bootstrapState, bootstrapFinished)
 		log.Info("send bootstrap messages finished",
-			zap.Stringer("changefeed", m.changfeedID),
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
 			zap.Int("tables", len(currentTables)),
 			zap.Duration("cost", time.Since(start)))
 	}()
@@ -365,6 +368,8 @@ func (m *ddlManager) tick(
 	if nextDDL != nil {
 		if m.checkpointTs > nextDDL.CommitTs {
 			log.Panic("checkpointTs is greater than next ddl commitTs",
+				zap.String("namespace", m.changfeedID.Namespace),
+				zap.String("changefeed", m.changfeedID.ID),
 				zap.Uint64("checkpointTs", m.checkpointTs),
 				zap.Uint64("commitTs", nextDDL.CommitTs))
 		}
@@ -414,7 +419,9 @@ func (m *ddlManager) shouldExecDDL(nextDDL *model.DDLEvent) bool {
 	redoDDLResolvedTsExceedBarrier := true
 	if m.redoMetaManager.Enabled() {
 		if !m.redoDDLManager.Enabled() {
-			log.Panic("Redo meta manager is enabled but redo ddl manager is not enabled")
+			log.Panic("Redo meta manager is enabled but redo ddl manager is not enabled",
+				zap.String("namespace", m.changfeedID.Namespace),
+				zap.String("changefeed", m.changfeedID.ID))
 		}
 		flushed := m.redoMetaManager.GetFlushedMeta()
 		// Use the same example as above, let say there are some events are replicated by cdc:
@@ -467,7 +474,10 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 
 	failpoint.Inject("ExecuteDDLSlowly", func() {
 		lag := time.Duration(rand.Intn(5000)) * time.Millisecond
-		log.Warn("execute ddl slowly", zap.Duration("lag", lag))
+		log.Warn("execute ddl slowly",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Duration("lag", lag))
 		time.Sleep(lag)
 	})
 
@@ -479,8 +489,7 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		log.Info("execute a ddl event successfully",
 			zap.String("namespace", m.changfeedID.Namespace),
 			zap.String("changefeed", m.changfeedID.ID),
-			zap.Uint64("commitTs", m.executingDDL.CommitTs),
-			zap.String("query", m.executingDDL.Query))
+			zap.Uint64("commitTs", m.executingDDL.CommitTs))
 		m.cleanCache()
 	}
 	return nil
@@ -545,7 +554,7 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 			}
 		} else {
 			// barrier related physical tables
-			ids := getRelatedPhysicalTableIDs(ddl)
+			ids := getRelatedPhysicalTableIDs(m.changfeedID, ddl)
 			for _, id := range ids {
 				// The same physical table may have multiple related ddl events when calculating barrier.
 				// Example cases:
@@ -658,7 +667,7 @@ func (m *ddlManager) cleanCache() {
 
 // getRelatedPhysicalTableIDs get all related physical table ids of a ddl event.
 // It is a helper function to calculate tableBarrier.
-func getRelatedPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
+func getRelatedPhysicalTableIDs(changefeedID model.ChangeFeedID, ddl *model.DDLEvent) []model.TableID {
 	res := make([]model.TableID, 0, 1)
 	table := ddl.TableInfo
 	if ddl.PreTableInfo != nil {
@@ -667,7 +676,10 @@ func getRelatedPhysicalTableIDs(ddl *model.DDLEvent) []model.TableID {
 	if table == nil {
 		// If the table is nil, it means that the ddl is a global ddl.
 		// It should never go here.
-		log.Panic("tableInfo of this ddl is nil", zap.Any("ddl", ddl))
+		log.Panic("tableInfo of this ddl is nil",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Any("ddl", ddl))
 	}
 	res = append(res, table.ID)
 	partitionInfo := table.TableInfo.GetPartitionInfo()

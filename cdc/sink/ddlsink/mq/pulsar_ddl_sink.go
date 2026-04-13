@@ -63,7 +63,8 @@ func NewPulsarDDLSink(
 	}
 
 	log.Info("Try to create a DDL sink producer",
-		zap.String("changefeed", changefeedID.String()))
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID))
 
 	// NewEventRouter
 	eventRouter, err := dispatcher.NewEventRouter(replicaConfig, protocol, defaultTopic, sinkURI.Scheme)
@@ -85,12 +86,18 @@ func NewPulsarDDLSink(
 	start := time.Now()
 	client, err := clientCreator(pConfig, changefeedID, replicaConfig.Sink)
 	if err != nil {
-		log.Error("DDL sink producer client create fail", zap.Error(err))
+		log.Error("DDL sink producer client create fail",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
 	}
 
 	p, err := producerCreator(ctx, changefeedID, pConfig, client, replicaConfig.Sink)
-	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+	log.Info("DDL sink producer client created",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
+		zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrPulsarNewProducer, err)
 	}

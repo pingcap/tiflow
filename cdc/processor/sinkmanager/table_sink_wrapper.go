@@ -147,7 +147,8 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
-			zap.Stringer("span", &t.span),
+			zap.Int64("tableID", t.span.TableID),
+			zap.Stringer("startKey", t.span.StartKey),
 			zap.Uint64("startTs", startTs),
 			zap.Uint64("oldReplicateTs", t.replicateTs.Load()),
 		)
@@ -271,7 +272,8 @@ func (t *tableSinkWrapper) markAsClosing() {
 			log.Info("Sink is closing",
 				zap.String("namespace", t.changefeed.Namespace),
 				zap.String("changefeed", t.changefeed.ID),
-				zap.Stringer("span", &t.span))
+				zap.Int64("tableID", t.span.TableID),
+				zap.Stringer("startKey", t.span.StartKey))
 			break
 		}
 	}
@@ -287,7 +289,8 @@ func (t *tableSinkWrapper) markAsClosed() {
 			log.Info("Sink is closed",
 				zap.String("namespace", t.changefeed.Namespace),
 				zap.String("changefeed", t.changefeed.ID),
-				zap.Stringer("span", &t.span))
+				zap.Int64("tableID", t.span.TableID),
+				zap.Stringer("startKey", t.span.StartKey))
 			return
 		}
 	}
@@ -388,7 +391,8 @@ func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
 	log.Info("Sink is restarted",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Stringer("span", &t.span),
+		zap.Int64("tableID", t.span.TableID),
+		zap.Stringer("startKey", t.span.StartKey),
 		zap.Uint64("replicateTs", ts))
 	return nil
 }
@@ -452,12 +456,27 @@ func handleRowChangedEvents(
 	size := 0
 	rowChangedEvents := make([]*model.RowChangedEvent, 0, len(events))
 	for _, e := range events {
-		if e == nil || e.Row == nil {
+		if e == nil {
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Stringer("span", &span),
-				zap.Any("event", e))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
+			continue
+		}
+		if e.Row == nil {
+			regionID := uint64(0)
+			if e.RawKV != nil {
+				regionID = e.RawKV.RegionID
+			}
+			log.Warn("skip emit nil row event",
+				zap.String("namespace", changefeed.Namespace),
+				zap.String("changefeed", changefeed.ID),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
+				zap.Uint64("startTs", e.StartTs),
+				zap.Uint64("commitTs", e.CRTs),
+				zap.Uint64("regionID", regionID))
 			continue
 		}
 
@@ -467,10 +486,12 @@ func handleRowChangedEvents(
 		// Just ignore these row changed events.
 		if len(rowEvent.Columns) == 0 && len(rowEvent.PreColumns) == 0 {
 			log.Warn("skip emit empty row event",
-				zap.Stringer("span", &span),
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Any("event", e))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
+				zap.Uint64("startTs", rowEvent.StartTs),
+				zap.Uint64("commitTs", rowEvent.CommitTs))
 			continue
 		}
 

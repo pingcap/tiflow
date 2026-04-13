@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -110,7 +111,8 @@ type RangeLock struct {
 	id uint64
 	// totalSpan is the total range of the table, totalSpan = unlockedRanges + lockedRanges
 	totalSpan tablepb.Span
-	// changefeed is used to identify the changefeed which the RangeLock belongs to.
+	// namespace and changefeed are used to identify the changefeed which the RangeLock belongs to.
+	namespace  string
 	changefeed string
 
 	mu sync.RWMutex
@@ -128,10 +130,12 @@ func NewRangeLock(
 	id uint64,
 	startKey, endKey []byte, startTs uint64, changefeedLogInfo string,
 ) *RangeLock {
+	namespace, changefeed, _ := strings.Cut(changefeedLogInfo, "/")
 	return &RangeLock{
 		id:                     id,
 		totalSpan:              tablepb.Span{StartKey: startKey, EndKey: endKey},
-		changefeed:             changefeedLogInfo,
+		namespace:              namespace,
+		changefeed:             changefeed,
 		unlockedRanges:         newRangeTsMap(startKey, endKey, startTs),
 		lockedRanges:           btree.NewG(16, rangeLockEntryLess),
 		regionIDToLockedRanges: make(map[uint64]*rangeLockEntry),
@@ -181,6 +185,7 @@ func (l *RangeLock) UnlockRange(
 	entry, ok := l.lockedRanges.Get(rangeLockEntryWithKey(startKey))
 	if !ok {
 		log.Panic("unlocking a not locked range",
+			zap.String("namespace", l.namespace),
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
@@ -189,6 +194,7 @@ func (l *RangeLock) UnlockRange(
 	}
 	if entry.regionID != regionID {
 		log.Panic("unlocked a range but regionID mismatch",
+			zap.String("namespace", l.namespace),
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("expectedRegionID", regionID),
 			zap.Uint64("foundRegionID", entry.regionID),
@@ -197,6 +203,7 @@ func (l *RangeLock) UnlockRange(
 	}
 	if entry != l.regionIDToLockedRanges[regionID] {
 		log.Panic("range lock and region id lock mismatch when trying to unlock",
+			zap.String("namespace", l.namespace),
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("unlockingRegionID", regionID),
 			zap.String("rangeLockEntry", entry.String()),
@@ -207,6 +214,7 @@ func (l *RangeLock) UnlockRange(
 
 	if entry.regionVersion != version || !bytes.Equal(entry.endKey, endKey) {
 		log.Panic("unlocking region doesn't match the locked region",
+			zap.String("namespace", l.namespace),
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
@@ -232,8 +240,10 @@ func (l *RangeLock) UnlockRange(
 
 	l.unlockedRanges.set(startKey, endKey, newResolvedTs)
 	log.Debug("unlocked range",
+		zap.String("namespace", l.namespace),
 		zap.String("changefeed", l.changefeed),
-		zap.Uint64("lockID", l.id), zap.Uint64("regionID", entry.regionID),
+		zap.Uint64("lockID", l.id),
+		zap.Uint64("regionID", entry.regionID),
 		zap.Uint64("resolvedTs", newResolvedTs),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)))
@@ -432,6 +442,7 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 
 		l.unlockedRanges.unset(startKey, endKey)
 		log.Debug("range locked",
+			zap.String("namespace", l.namespace),
 			zap.String("changefeed", l.changefeed),
 			zap.Uint64("lockID", l.id),
 			zap.Uint64("regionID", regionID),
@@ -446,11 +457,9 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 		}, nil
 	}
 
-	// Format overlapping ranges for printing log
-	var overlapStr []string
+	overlapRegionIDs := make([]uint64, 0, len(overlappedRangeLocks))
 	for _, r := range overlappedRangeLocks {
-		overlapStr = append(overlapStr, fmt.Sprintf("regionID: %v, ver: %v, start: %v, end: %v",
-			r.regionID, r.regionVersion, hex.EncodeToString(r.startKey), hex.EncodeToString(r.endKey))) // DEBUG
+		overlapRegionIDs = append(overlapRegionIDs, r.regionID)
 	}
 
 	// Check if the current acuqiring range is stale,
@@ -469,11 +478,14 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 		currentRangeStartKey := startKey
 
 		log.Info("try lock range staled",
+			zap.String("namespace", l.namespace),
 			zap.String("changefeed", l.changefeed),
-			zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+			zap.Uint64("lockID", l.id),
+			zap.Uint64("regionID", regionID),
 			zap.String("startKey", hex.EncodeToString(startKey)),
 			zap.String("endKey", hex.EncodeToString(endKey)),
-			zap.Strings("allOverlapping", overlapStr)) // DEBUG
+			zap.Int("overlapRegionCount", len(overlapRegionIDs)),
+			zap.Uint64s("overlapRegionIDs", overlapRegionIDs))
 
 		for _, r := range overlappedRangeLocks {
 			// Ignore the totally-disjointed range which may be added to the list because of
@@ -510,11 +522,14 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 	}
 
 	log.Info("lock range blocked",
+		zap.String("namespace", l.namespace),
 		zap.String("changefeed", l.changefeed),
-		zap.Uint64("lockID", l.id), zap.Uint64("regionID", regionID),
+		zap.Uint64("lockID", l.id),
+		zap.Uint64("regionID", regionID),
 		zap.String("startKey", hex.EncodeToString(startKey)),
 		zap.String("endKey", hex.EncodeToString(endKey)),
-		zap.Strings("blockedBy", overlapStr)) // DEBUG
+		zap.Int("blockedByRegionCount", len(overlapRegionIDs)),
+		zap.Uint64s("blockedByRegionIDs", overlapRegionIDs))
 
 	return LockRangeResult{
 		Status: LockRangeStatusWait,

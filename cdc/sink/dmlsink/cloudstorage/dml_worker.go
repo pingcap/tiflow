@@ -139,9 +139,10 @@ func newDMLWorker(
 
 // run creates a set of background goroutines.
 func (d *dmlWorker) run(ctx context.Context) error {
-	log.Debug("dml worker started", zap.Int("workerID", d.id),
+	log.Debug("dml worker started",
 		zap.String("namespace", d.changeFeedID.Namespace),
-		zap.String("changefeed", d.changeFeedID.ID))
+		zap.String("changefeed", d.changeFeedID.ID),
+		zap.Int("workerID", d.id))
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
@@ -183,9 +184,9 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				err := d.filePathGenerator.CheckOrWriteSchema(ctx, table, task.tableInfo)
 				if err != nil {
 					log.Error("failed to write schema file to external storage",
-						zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.Namespace),
 						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Int("workerID", d.id),
 						zap.Error(err))
 					return errors.Trace(err)
 				}
@@ -198,9 +199,9 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				dataFilePath, err := d.filePathGenerator.GenerateDataFilePath(ctx, table, date)
 				if err != nil {
 					log.Error("failed to generate data file path",
-						zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.Namespace),
 						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Int("workerID", d.id),
 						zap.Error(err))
 					return errors.Trace(err)
 				}
@@ -211,9 +212,9 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				err = d.writeIndexFile(ctx, indexFilePath, path.Base(dataFilePath)+"\n")
 				if err != nil {
 					log.Error("failed to write index file to external storage",
-						zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.Namespace),
 						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Int("workerID", d.id),
 						zap.String("path", indexFilePath),
 						zap.Error(err))
 				}
@@ -222,17 +223,18 @@ func (d *dmlWorker) flushMessages(ctx context.Context) error {
 				err = d.writeDataFile(ctx, dataFilePath, task)
 				if err != nil {
 					log.Error("failed to write data file to external storage",
-						zap.Int("workerID", d.id),
 						zap.String("namespace", d.changeFeedID.Namespace),
 						zap.String("changefeed", d.changeFeedID.ID),
+						zap.Int("workerID", d.id),
 						zap.String("path", dataFilePath),
 						zap.Error(err))
 					return errors.Trace(err)
 				}
 
-				log.Debug("write file to storage success", zap.Int("workerID", d.id),
+				log.Debug("write file to storage success",
 					zap.String("namespace", d.changeFeedID.Namespace),
 					zap.String("changefeed", d.changeFeedID.ID),
+					zap.Int("workerID", d.id),
 					zap.String("schema", table.TableNameWithPhysicTableID.Schema),
 					zap.String("table", table.TableNameWithPhysicTableID.Table),
 					zap.String("path", dataFilePath),
@@ -286,11 +288,12 @@ func (d *dmlWorker) writeDataFile(ctx context.Context, path string, task *single
 		// We have to wait the writer to close to complete the upload
 		// If failed to close writer, some DMLs may not be upload successfully
 		if inErr = writer.Close(ctx); inErr != nil {
-			log.Error("failed to close writer", zap.Error(inErr),
+			log.Error("failed to close writer",
+				zap.String("namespace", d.changeFeedID.Namespace),
+				zap.String("changefeed", d.changeFeedID.ID),
 				zap.Int("workerID", d.id),
 				zap.Any("table", task.tableInfo.TableName),
-				zap.String("namespace", d.changeFeedID.Namespace),
-				zap.String("changefeed", d.changeFeedID.ID))
+				zap.Error(inErr))
 			return 0, 0, inErr
 		}
 

@@ -63,7 +63,11 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 
 	producer, err := p.GetProducerByTopic(topic)
 	if err != nil {
-		log.Error("ddl SyncSendMessage GetProducerByTopic fail", zap.Error(err))
+		log.Error("ddl SyncSendMessage GetProducerByTopic fail",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.String("topic", topic),
+			zap.Error(err))
 		return err
 	}
 
@@ -73,19 +77,29 @@ func (p *pulsarProducers) SyncSendMessage(ctx context.Context, topic string,
 	}
 	mID, err := producer.Send(ctx, data)
 	if err != nil {
-		log.Error("ddl producer send fail", zap.Error(err))
+		log.Error("ddl producer send fail",
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.String("topic", topic),
+			zap.Error(err))
 		mq.IncPublishedDDLFail(topic, p.id.ID, message)
 		return err
 	}
 
 	if message.Type == model.MessageTypeDDL {
 		log.Info("pulsarProducers SyncSendMessage success",
-			zap.Any("mID", mID), zap.String("topic", topic),
+			zap.String("namespace", p.id.Namespace),
+			zap.String("changefeed", p.id.ID),
+			zap.Any("mID", mID),
+			zap.String("topic", topic),
 			zap.String("ddl", string(message.Value)))
 	}
 
 	log.Debug("pulsarProducers SyncSendMessage success",
-		zap.Any("mID", mID), zap.String("topic", topic))
+		zap.String("namespace", p.id.Namespace),
+		zap.String("changefeed", p.id.ID),
+		zap.Any("mID", mID),
+		zap.String("topic", topic))
 
 	mq.IncPublishedDDLSuccess(topic, p.id.ID, message)
 	return nil

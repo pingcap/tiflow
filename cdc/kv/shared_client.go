@@ -314,7 +314,8 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("subscriptionID", uint64(rt.subscriptionID)),
-			zap.String("span", rt.span.String()))
+			zap.Int64("tableID", rt.span.TableID),
+			zap.Stringer("startKey", rt.span.StartKey))
 		return
 	}
 	log.Warn("event feed unsubscribes table, but not found",
@@ -448,7 +449,9 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Uint64("streamID", stream.streamID),
 				zap.Uint64("subscriptionID", uint64(region.subscribedTable.subscriptionID)),
 				zap.Uint64("regionID", region.verID.GetID()),
-				zap.String("span", region.span.String()),
+				zap.Int64("tableID", region.span.TableID),
+				zap.Stringer("startKey", region.span.StartKey),
+				zap.Stringer("endKey", region.span.EndKey),
 				zap.String("addr", store.storeAddr))
 		}
 	}
@@ -551,7 +554,8 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Uint64("subscriptionID", uint64(subscribedTable.subscriptionID)),
-			zap.Any("span", nextSpan))
+			zap.Int64("tableID", nextSpan.TableID),
+			zap.Stringer("startKey", nextSpan.StartKey))
 
 		backoff := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(backoff, nextSpan.StartKey, nextSpan.EndKey, limit)
@@ -560,7 +564,9 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("subscriptionID", uint64(subscribedTable.subscriptionID)),
-				zap.String("span", nextSpan.String()),
+				zap.Int64("tableID", nextSpan.TableID),
+				zap.Stringer("startKey", nextSpan.StartKey),
+				zap.Stringer("endKey", nextSpan.EndKey),
 				zap.Error(err))
 			backoffBeforeLoad = true
 			continue
@@ -578,7 +584,9 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Uint64("subscriptionID", uint64(subscribedTable.subscriptionID)),
-				zap.String("span", nextSpan.String()))
+				zap.Int64("tableID", nextSpan.TableID),
+				zap.Stringer("startKey", nextSpan.StartKey),
+				zap.Stringer("endKey", nextSpan.EndKey))
 			backoffBeforeLoad = true
 			continue
 		}
@@ -597,7 +605,9 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("subscriptionID", uint64(subscribedTable.subscriptionID)),
-					zap.String("span", nextSpan.String()))
+					zap.Int64("tableID", nextSpan.TableID),
+					zap.Stringer("startKey", nextSpan.StartKey),
+					zap.Stringer("endKey", nextSpan.EndKey))
 			}
 
 			verID := tikv.NewRegionVerID(regionMeta.Id, regionMeta.RegionEpoch.ConfVer, regionMeta.RegionEpoch.Version)
@@ -844,7 +854,10 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 						zap.String("changefeed", s.changefeed.ID),
 						zap.Uint64("subscriptionID", uint64(subscriptionID)),
 						zap.Int64("tableID", rt.span.TableID),
-						zap.Any("slowRegion", attr.SlowestRegion))
+						zap.Uint64("regionID", attr.SlowestRegion.RegionID),
+						zap.Uint64("resolvedTs", attr.SlowestRegion.ResolvedTs),
+						zap.Bool("initialized", attr.SlowestRegion.Initialized),
+						zap.Duration("since", currTime.Sub(ckptTime)))
 				}
 			} else if currTime.Sub(attr.SlowestRegion.Created) > 10*time.Minute {
 				slowInitializeRegionCount += 1
@@ -853,22 +866,32 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("subscriptionID", uint64(subscriptionID)),
 					zap.Int64("tableID", rt.span.TableID),
-					zap.Any("slowRegion", attr.SlowestRegion))
+					zap.Uint64("regionID", attr.SlowestRegion.RegionID),
+					zap.Uint64("resolvedTs", attr.SlowestRegion.ResolvedTs),
+					zap.Bool("initialized", attr.SlowestRegion.Initialized),
+					zap.Duration("since", currTime.Sub(attr.SlowestRegion.Created)))
 			} else if currTime.Sub(ckptTime) > 10*time.Minute {
 				log.Info("event feed finds a uninitialized slow region",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("subscriptionID", uint64(subscriptionID)),
 					zap.Int64("tableID", rt.span.TableID),
-					zap.Any("slowRegion", attr.SlowestRegion))
+					zap.Uint64("regionID", attr.SlowestRegion.RegionID),
+					zap.Uint64("resolvedTs", attr.SlowestRegion.ResolvedTs),
+					zap.Bool("initialized", attr.SlowestRegion.Initialized),
+					zap.Duration("since", currTime.Sub(ckptTime)))
 			}
 			if len(attr.UnLockedRanges) > 0 {
+				firstHole := attr.UnLockedRanges[0]
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Uint64("subscriptionID", uint64(subscriptionID)),
 					zap.Int64("tableID", rt.span.TableID),
-					zap.Any("holes", attr.UnLockedRanges))
+					zap.Int("holeCount", len(attr.UnLockedRanges)),
+					zap.Stringer("startKey", firstHole.Span.StartKey),
+					zap.Stringer("endKey", firstHole.Span.EndKey),
+					zap.Uint64("resolvedTs", firstHole.ResolvedTs))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -912,7 +935,12 @@ func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Uint64("subscriptionID", uint64(r.subscriptionID)),
-		zap.Any("ranges", res))
+		zap.Int("lockedRegionCount", res.LockedRegionCount),
+		zap.Int("holeCount", len(res.UnLockedRanges)),
+		zap.Uint64("slowRegionID", res.SlowestRegion.RegionID),
+		zap.Uint64("slowResolvedTs", res.SlowestRegion.ResolvedTs),
+		zap.Uint64("fastRegionID", res.FastestRegion.RegionID),
+		zap.Uint64("fastResolvedTs", res.FastestRegion.ResolvedTs))
 }
 
 type sharedClientMetrics struct {

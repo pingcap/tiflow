@@ -183,7 +183,8 @@ func (r *Manager) HandleCaptureChanges(
 			log.Panic("schedulerv3: init again",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("init", init), zap.Any("tablesCount", r.spans.Len()))
+				zap.Int("initCaptureCount", len(init)),
+				zap.Int("trackedTableCount", r.spans.Len()))
 		}
 		spanStatusMap := spanz.NewBtreeMap[map[model.CaptureID]*tablepb.TableStatus]()
 		for captureID, spans := range init {
@@ -256,10 +257,21 @@ func (r *Manager) HandleMessage(
 			}
 			sentMsgs = append(sentMsgs, msgs...)
 		default:
+			header := msg.GetHeader()
+			ownerRevision := int64(0)
+			processorEpoch := ""
+			if header != nil {
+				ownerRevision = header.OwnerRevision.Revision
+				processorEpoch = header.ProcessorEpoch.Epoch
+			}
 			log.Warn("schedulerv3: ignore message",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Stringer("type", msg.MsgType), zap.Any("message", msg))
+				zap.Stringer("type", msg.MsgType),
+				zap.String("from", msg.GetFrom()),
+				zap.String("to", msg.GetTo()),
+				zap.Int64("ownerRevision", ownerRevision),
+				zap.String("processorEpoch", processorEpoch))
 		}
 	}
 	return sentMsgs, nil
@@ -275,8 +287,12 @@ func (r *Manager) handleMessageHeartbeatResponse(
 			log.Info("schedulerv3: ignore table status no table found",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("from", from),
-				zap.Any("message", status))
+				zap.String("captureID", from),
+				zap.Int64("tableID", status.Span.TableID),
+				zap.Stringer("startKey", status.Span.StartKey),
+				zap.Stringer("state", status.State),
+				zap.Uint64("checkpointTs", status.Checkpoint.CheckpointTs),
+				zap.Uint64("resolvedTs", status.Checkpoint.ResolvedTs))
 			continue
 		}
 		msgs, err := table.handleTableStatus(from, &status)
@@ -304,7 +320,9 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Warn("schedulerv3: ignore unknown dispatch table response",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Any("message", msg))
+			zap.String("captureID", from),
+			zap.Bool("hasAddTable", msg.GetAddTable() != nil),
+			zap.Bool("hasRemoveTable", msg.GetRemoveTable() != nil))
 		return nil, nil
 	}
 
@@ -313,7 +331,12 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Info("schedulerv3: ignore table status no table found",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Any("message", status))
+			zap.String("captureID", from),
+			zap.Int64("tableID", status.Span.TableID),
+			zap.Stringer("startKey", status.Span.StartKey),
+			zap.Stringer("state", status.State),
+			zap.Uint64("checkpointTs", status.Checkpoint.CheckpointTs),
+			zap.Uint64("resolvedTs", status.Checkpoint.ResolvedTs))
 		return nil, nil
 	}
 	msgs, err := table.handleTableStatus(from, status)
@@ -386,17 +409,52 @@ func (r *Manager) HandleTasks(
 		// Skip task if the table is already running a task,
 		// or the table has removed.
 		if _, ok := r.runningTasks.Get(span); ok {
-			log.Info("schedulerv3: ignore task, already exists",
-				zap.String("namespace", r.changefeedID.Namespace),
-				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("task", task))
+			if task.AddTable != nil {
+				log.Info("schedulerv3: ignore task, already exists",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.String("task", task.Name()),
+					zap.String("captureID", task.AddTable.CaptureID),
+					zap.Int64("tableID", task.AddTable.Span.TableID),
+					zap.Stringer("startKey", task.AddTable.Span.StartKey),
+					zap.Uint64("checkpointTs", task.AddTable.CheckpointTs))
+			} else if task.RemoveTable != nil {
+				log.Info("schedulerv3: ignore task, already exists",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.String("task", task.Name()),
+					zap.String("captureID", task.RemoveTable.CaptureID),
+					zap.Int64("tableID", task.RemoveTable.Span.TableID),
+					zap.Stringer("startKey", task.RemoveTable.Span.StartKey))
+			} else if task.MoveTable != nil {
+				log.Info("schedulerv3: ignore task, already exists",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.String("task", task.Name()),
+					zap.String("captureID", task.MoveTable.DestCapture),
+					zap.Int64("tableID", task.MoveTable.Span.TableID),
+					zap.Stringer("startKey", task.MoveTable.Span.StartKey))
+			}
 			continue
 		}
 		if _, ok := r.spans.Get(span); !ok && task.AddTable == nil {
-			log.Info("schedulerv3: ignore task, table not found",
-				zap.String("namespace", r.changefeedID.Namespace),
-				zap.String("changefeed", r.changefeedID.ID),
-				zap.Any("task", task))
+			if task.RemoveTable != nil {
+				log.Info("schedulerv3: ignore task, table not found",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.String("task", task.Name()),
+					zap.String("captureID", task.RemoveTable.CaptureID),
+					zap.Int64("tableID", task.RemoveTable.Span.TableID),
+					zap.Stringer("startKey", task.RemoveTable.Span.StartKey))
+			} else if task.MoveTable != nil {
+				log.Info("schedulerv3: ignore task, table not found",
+					zap.String("namespace", r.changefeedID.Namespace),
+					zap.String("changefeed", r.changefeedID.ID),
+					zap.String("task", task.Name()),
+					zap.String("captureID", task.MoveTable.DestCapture),
+					zap.Int64("tableID", task.MoveTable.Span.TableID),
+					zap.Stringer("startKey", task.MoveTable.Span.StartKey))
+			}
 			continue
 		}
 
@@ -587,8 +645,11 @@ func (r *Manager) AdvanceCheckpoint(
 					log.Warn("schedulerv3: span hole detected, skip advance checkpoint",
 						zap.String("namespace", r.changefeedID.Namespace),
 						zap.String("changefeed", r.changefeedID.ID),
-						zap.String("lastSpan", lastSpan.String()),
-						zap.String("span", span.String()))
+						zap.Int64("tableID", span.TableID),
+						zap.Stringer("lastStartKey", lastSpan.StartKey),
+						zap.Stringer("lastEndKey", lastSpan.EndKey),
+						zap.Stringer("startKey", span.StartKey),
+						zap.Stringer("endKey", span.EndKey))
 					tableHasHole = true
 					return false
 				}
@@ -675,7 +736,7 @@ func (r *Manager) AdvanceCheckpoint(
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Uint64("newCheckpointTs", watermark.CheckpointTs),
 				zap.Uint64("newResolvedTs", watermark.ResolvedTs),
-				zap.Any("currentTables", currentTables))
+				zap.Int("currentTableCount", currentTables.Len()))
 		}
 		watermark.ResolvedTs = barrier.GlobalBarrierTs
 		watermark.CheckpointTs = barrier.MinTableBarrierTs

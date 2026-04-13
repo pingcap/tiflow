@@ -107,7 +107,7 @@ func NewDDLSink(
 		db:         db,
 		cfg:        cfg,
 		statistics: metrics.NewStatistics(changefeedID, sink.TxnSink),
-		needFormat: needFormatDDL(db, cfg),
+		needFormat: needFormatDDL(changefeedID, db, cfg),
 	}
 
 	log.Info("MySQL DDL sink is created",
@@ -444,21 +444,33 @@ func needSwitchDB(ddl *model.DDLEvent) bool {
 }
 
 // needFormatDDL checks vector type support
-func needFormatDDL(db *sql.DB, cfg *pmysql.Config) bool {
+func needFormatDDL(changefeedID model.ChangeFeedID, db *sql.DB, cfg *pmysql.Config) bool {
 	if !cfg.HasVectorType {
 		log.Warn("please set `has-vector-type` to be true if a column is vector type when the downstream is not TiDB or TiDB version less than specify version",
-			zap.Any("hasVectorType", cfg.HasVectorType), zap.Any("supportVectorVersion", defaultSupportVectorVersion))
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Bool("hasVectorType", cfg.HasVectorType),
+			zap.String("supportVectorVersion", defaultSupportVectorVersion))
 		return false
 	}
 	versionInfo, err := export.SelectVersion(db)
 	if err != nil {
-		log.Warn("fail to get version", zap.Error(err), zap.Bool("isTiDB", cfg.IsTiDB))
+		log.Warn("fail to get version",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Bool("isTiDB", cfg.IsTiDB),
+			zap.Error(err))
 		return false
 	}
 	serverInfo := version.ParseServerInfo(versionInfo)
 	version := semver.New(defaultSupportVectorVersion)
 	if !cfg.IsTiDB || serverInfo.ServerVersion.LessThan(*version) {
-		log.Error("downstream unsupport vector type. it will be converted to longtext", zap.String("version", serverInfo.ServerVersion.String()), zap.String("supportVectorVersion", defaultSupportVectorVersion), zap.Bool("isTiDB", cfg.IsTiDB))
+		log.Error("downstream unsupport vector type. it will be converted to longtext",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.String("version", serverInfo.ServerVersion.String()),
+			zap.String("supportVectorVersion", defaultSupportVectorVersion),
+			zap.Bool("isTiDB", cfg.IsTiDB))
 		return true
 	}
 	return false

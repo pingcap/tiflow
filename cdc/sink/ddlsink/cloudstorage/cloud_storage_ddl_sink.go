@@ -175,7 +175,7 @@ func (d *DDLSink) bgCleanup(ctx context.Context) {
 	if d.cfg.DateSeparator != config.DateSeparatorDay.String() || d.cfg.FileExpirationDays <= 0 {
 		log.Info("skip cleanup expired files for storage sink",
 			zap.String("namespace", d.id.Namespace),
-			zap.String("changefeedID", d.id.ID),
+			zap.String("changefeed", d.id.ID),
 			zap.String("dateSeparator", d.cfg.DateSeparator),
 			zap.Int("expiredFileTTL", d.cfg.FileExpirationDays))
 		return
@@ -185,7 +185,7 @@ func (d *DDLSink) bgCleanup(ctx context.Context) {
 	defer d.cron.Stop()
 	log.Info("start schedule cleanup expired files for storage sink",
 		zap.String("namespace", d.id.Namespace),
-		zap.String("changefeedID", d.id.ID),
+		zap.String("changefeed", d.id.ID),
 		zap.String("dateSeparator", d.cfg.DateSeparator),
 		zap.Int("expiredFileTTL", d.cfg.FileExpirationDays))
 
@@ -193,7 +193,7 @@ func (d *DDLSink) bgCleanup(ctx context.Context) {
 	<-ctx.Done()
 	log.Info("stop schedule cleanup expired files for storage sink",
 		zap.String("namespace", d.id.Namespace),
-		zap.String("changefeedID", d.id.ID),
+		zap.String("changefeed", d.id.ID),
 		zap.Error(ctx.Err()))
 }
 
@@ -207,7 +207,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 			if !isRemoveEmptyDirsRuning.CompareAndSwap(false, true) {
 				log.Warn("remove empty dirs is already running, skip this round",
 					zap.String("namespace", d.id.Namespace),
-					zap.String("changefeedID", d.id.ID))
+					zap.String("changefeed", d.id.ID))
 				return
 			}
 
@@ -217,7 +217,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 			if err != nil {
 				log.Error("failed to remove empty dirs",
 					zap.String("namespace", d.id.Namespace),
-					zap.String("changefeedID", d.id.ID),
+					zap.String("changefeed", d.id.ID),
 					zap.Uint64("checkpointTs", checkpointTs),
 					zap.Duration("cost", time.Since(start)),
 					zap.Error(err),
@@ -226,7 +226,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 			}
 			log.Info("remove empty dirs",
 				zap.String("namespace", d.id.Namespace),
-				zap.String("changefeedID", d.id.ID),
+				zap.String("changefeed", d.id.ID),
 				zap.Uint64("checkpointTs", checkpointTs),
 				zap.Uint64("count", cnt),
 				zap.Duration("cost", time.Since(start)))
@@ -238,7 +238,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 		if !isCleanupRunning.CompareAndSwap(false, true) {
 			log.Warn("cleanup expired files is already running, skip this round",
 				zap.String("namespace", d.id.Namespace),
-				zap.String("changefeedID", d.id.ID))
+				zap.String("changefeed", d.id.ID))
 			return
 		}
 
@@ -249,7 +249,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 		if err != nil {
 			log.Error("failed to remove expired files",
 				zap.String("namespace", d.id.Namespace),
-				zap.String("changefeedID", d.id.ID),
+				zap.String("changefeed", d.id.ID),
 				zap.Uint64("checkpointTs", checkpointTs),
 				zap.Duration("cost", time.Since(start)),
 				zap.Error(err),
@@ -258,7 +258,7 @@ func (d *DDLSink) genCleanupJob(ctx context.Context, uri *url.URL) []func() {
 		}
 		log.Info("remove expired files",
 			zap.String("namespace", d.id.Namespace),
-			zap.String("changefeedID", d.id.ID),
+			zap.String("changefeed", d.id.ID),
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.Uint64("count", cnt),
 			zap.Duration("cost", time.Since(start)))

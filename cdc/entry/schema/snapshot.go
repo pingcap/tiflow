@@ -135,7 +135,10 @@ func NewSnapshotFromMeta(
 	tag := negative(currentTs)
 	for _, dbinfo := range dbinfos {
 		if filter.ShouldIgnoreSchema(dbinfo.Name.O) {
-			log.Debug("ignore database", zap.Stringer("db", dbinfo.Name), zap.Stringer("changefeed", id))
+			log.Debug("ignore database",
+				zap.String("namespace", id.Namespace),
+				zap.String("changefeed", id.ID),
+				zap.Stringer("db", dbinfo.Name))
 			continue
 		}
 		vid := newVersionedID(dbinfo.ID, tag)
@@ -211,10 +214,11 @@ func NewSnapshotFromMeta(
 
 	snap.inner.currentTs = currentTs
 	log.Info("schema snapshot created",
-		zap.Stringer("changefeed", id),
+		zap.String("namespace", id.Namespace),
+		zap.String("changefeed", id.ID),
 		zap.Int("tables", tableCount),
 		zap.Uint64("currentTs", currentTs),
-		zap.Any("duration", time.Since(start).Seconds()))
+		zap.Duration("duration", time.Since(start)))
 	return snap, nil
 }
 

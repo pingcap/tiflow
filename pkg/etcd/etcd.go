@@ -502,7 +502,9 @@ func (c *CDCEtcdClientImpl) saveChangefeedAndUpstreamInfo(
 		}
 		if len(jobResp.Kvs) == 0 {
 			// Note that status may not exist, so we don't check it here.
-			log.Debug("job status not exists", zap.Stringer("changefeed", changeFeedID))
+			log.Debug("job status not exists",
+				zap.String("namespace", changeFeedID.Namespace),
+				zap.String("changefeed", changeFeedID.ID))
 		} else {
 			jobModRevision = jobResp.Kvs[0].ModRevision
 		}

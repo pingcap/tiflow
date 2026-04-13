@@ -50,7 +50,10 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	config, err := NewSaramaConfig(ctx, f.option)
 	duration := time.Since(start)
 	if duration > 2*time.Second {
-		log.Warn("new sarama config cost too much time", zap.Duration("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
+		log.Warn("new sarama config cost too much time",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeed", f.changefeedID.ID),
+			zap.Duration("duration", duration))
 	}
 	if err != nil {
 		return nil, err
@@ -60,7 +63,10 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	client, err := sarama.NewClient(f.option.BrokerEndpoints, config)
 	duration = time.Since(start)
 	if duration > 2*time.Second {
-		log.Warn("new sarama client cost too much time", zap.Duration("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
+		log.Warn("new sarama client cost too much time",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeed", f.changefeedID.ID),
+			zap.Duration("duration", duration))
 	}
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -70,7 +76,10 @@ func (f *saramaFactory) AdminClient(ctx context.Context) (ClusterAdminClient, er
 	admin, err := sarama.NewClusterAdminFromClient(client)
 	duration = time.Since(start)
 	if duration > 2*time.Second {
-		log.Warn("new sarama cluster admin cost too much time", zap.Duration("duration", duration), zap.Stringer("changefeedID", f.changefeedID))
+		log.Warn("new sarama cluster admin cost too much time",
+			zap.String("namespace", f.changefeedID.Namespace),
+			zap.String("changefeed", f.changefeedID.ID),
+			zap.Duration("duration", duration))
 	}
 	if err != nil {
 		return nil, errors.Trace(err)

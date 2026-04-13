@@ -550,19 +550,19 @@ func (o *ownerImpl) handleDrainCaptures(ctx context.Context, query *scheduler.Qu
 		state := changefeed.latestInfo.State
 		if state != model.StateNormal {
 			log.Info("skip drain changefeed",
-				zap.String("state", string(state)),
-				zap.String("target", query.CaptureID),
 				zap.String("namespace", changefeed.id.Namespace),
-				zap.String("changefeed", changefeed.id.ID))
+				zap.String("changefeed", changefeed.id.ID),
+				zap.String("state", string(state)),
+				zap.String("target", query.CaptureID))
 			continue
 		}
 		if changefeed.scheduler == nil {
 			// Scheduler is created lazily, it is nil before initialization.
 			log.Info("drain a changefeed without scheduler",
-				zap.String("state", string(state)),
-				zap.String("target", query.CaptureID),
 				zap.String("namespace", changefeed.id.Namespace),
-				zap.String("changefeed", changefeed.id.ID))
+				zap.String("changefeed", changefeed.id.ID),
+				zap.String("state", string(state)),
+				zap.String("target", query.CaptureID))
 			// To prevent a changefeed being considered drained,
 			// we increase totalTableCount.
 			totalTableCount++

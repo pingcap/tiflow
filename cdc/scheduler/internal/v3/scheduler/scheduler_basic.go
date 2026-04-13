@@ -78,13 +78,17 @@ func (b *basicScheduler) Schedule(
 	// Build add table tasks.
 	if len(newSpans) > 0 {
 		captureIDs := make([]model.CaptureID, 0, len(captures))
+		stoppingCaptureCount := 0
 		for captureID, status := range captures {
 			if status.State == member.CaptureStateStopping {
+				stoppingCaptureCount++
 				log.Warn("schedulerv3: capture is stopping, "+
 					"skip the capture when add new table",
 					zap.String("namespace", b.changefeedID.Namespace),
 					zap.String("changefeed", b.changefeedID.ID),
-					zap.Any("captureStatus", status))
+					zap.String("captureID", captureID),
+					zap.Stringer("state", status.State),
+					zap.Bool("isOwner", status.IsOwner))
 				continue
 			}
 			captureIDs = append(captureIDs, captureID)
@@ -98,11 +102,12 @@ func (b *basicScheduler) Schedule(
 			log.Warn("schedulerv3: cannot found capture when add new table",
 				zap.String("namespace", b.changefeedID.Namespace),
 				zap.String("changefeed", b.changefeedID.ID),
-				zap.Any("allCaptureStatus", captures))
+				zap.Int("captureCount", len(captures)),
+				zap.Int("stoppingCaptureCount", stoppingCaptureCount))
 			return tasks
 		}
 		tasks = append(
-			tasks, newBurstAddTables(b.changefeedID, checkpointTs, newSpans, captureIDs))
+			tasks, newBurstAddTables(checkpointTs, newSpans, captureIDs))
 	}
 
 	// Build remove table tasks.
@@ -139,12 +144,10 @@ func (b *basicScheduler) Schedule(
 
 // newBurstAddTables add each new table to captures in a round-robin way.
 func newBurstAddTables(
-	changefeedID model.ChangeFeedID,
 	checkpointTs model.Ts, newSpans []tablepb.Span, captureIDs []model.CaptureID,
 ) *replication.ScheduleTask {
 	idx := 0
 	tables := make([]replication.AddTable, 0, len(newSpans))
-	tablesPerCapture := make(map[model.CaptureID][]int64, len(captureIDs))
 	for _, span := range newSpans {
 		targetCapture := captureIDs[idx]
 		tables = append(tables, replication.AddTable{
@@ -152,18 +155,10 @@ func newBurstAddTables(
 			CaptureID:    targetCapture,
 			CheckpointTs: checkpointTs,
 		})
-		tablesPerCapture[targetCapture] = append(tablesPerCapture[targetCapture], span.TableID)
 		idx++
 		if idx >= len(captureIDs) {
 			idx = 0
 		}
-	}
-	for captureID, tableIDs := range tablesPerCapture {
-		log.Info("schedulerv3: burst add tables",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
-			zap.String("captureID", captureID),
-			zap.Int64s("tableIDs", tableIDs))
 	}
 	return &replication.ScheduleTask{
 		BurstBalance: &replication.BurstBalance{
@@ -177,7 +172,6 @@ func newBurstRemoveTables(
 	changefeedID model.ChangeFeedID,
 ) *replication.ScheduleTask {
 	tables := make([]replication.RemoveTable, 0, len(rmSpans))
-	tablesPerCapture := make(map[model.CaptureID][]int64)
 	for _, span := range rmSpans {
 		rep := replications.GetV(span)
 		var captureID model.CaptureID
@@ -197,30 +191,23 @@ func newBurstRemoveTables(
 				"this may happen if the capture shutdown",
 				zap.String("namespace", changefeedID.Namespace),
 				zap.String("changefeed", changefeedID.ID),
-				zap.Any("checkpoint", rep.Checkpoint),
+				zap.Uint64("checkpointTs", rep.Checkpoint.CheckpointTs),
+				zap.Uint64("resolvedTs", rep.Checkpoint.ResolvedTs),
 				zap.Stringer("state", rep.State),
 				zap.String("primary", rep.Primary),
 				zap.String("secondary", secondary),
-				zap.Stringer("span", &span))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
 			continue
 		}
 		tables = append(tables, replication.RemoveTable{
 			Span:      span,
 			CaptureID: captureID,
 		})
-		tablesPerCapture[captureID] = append(tablesPerCapture[captureID], span.TableID)
 	}
 
 	if len(tables) == 0 {
 		return nil
-	}
-
-	for captureID, tableIDs := range tablesPerCapture {
-		log.Info("schedulerv3: burst remove table",
-			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeed", changefeedID.ID),
-			zap.String("captureID", captureID),
-			zap.Int64s("tableIDs", tableIDs))
 	}
 
 	return &replication.ScheduleTask{

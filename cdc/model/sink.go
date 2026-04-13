@@ -1193,7 +1193,7 @@ func trySplitAndSortUpdateEvent(
 	split := false
 	for _, e := range events {
 		if e == nil {
-			log.Warn("skip emit nil event", zap.Any("event", e))
+			log.Warn("skip emit nil event")
 			continue
 		}
 
@@ -1203,7 +1203,19 @@ func trySplitAndSortUpdateEvent(
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
-			log.Warn("skip emit empty row event", zap.Any("event", e))
+			if e.TableInfo != nil {
+				log.Warn("skip emit empty row event",
+					zap.String("schema", e.TableInfo.GetSchemaName()),
+					zap.String("table", e.TableInfo.GetTableName()),
+					zap.Int64("tableID", e.PhysicalTableID),
+					zap.Uint64("startTs", e.StartTs),
+					zap.Uint64("commitTs", e.CommitTs))
+			} else {
+				log.Warn("skip emit empty row event",
+					zap.Int64("tableID", e.PhysicalTableID),
+					zap.Uint64("startTs", e.StartTs),
+					zap.Uint64("commitTs", e.CommitTs))
+			}
 			continue
 		}
 

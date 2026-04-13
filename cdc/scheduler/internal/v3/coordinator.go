@@ -260,7 +260,7 @@ func (c *coordinator) Close(ctx context.Context) {
 	log.Info("schedulerv3: coordinator closed",
 		zap.String("namespace", c.changefeedID.Namespace),
 		zap.String("changefeed", c.changefeedID.ID),
-		zap.Any("ownerRev", c.captureM.OwnerRev))
+		zap.Int64("ownerRevision", c.captureM.OwnerRev.Revision))
 }
 
 // ===========
@@ -408,12 +408,39 @@ func (c *coordinator) recvMsgs(ctx context.Context) ([]*schedulepb.Message, erro
 func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error {
 	for i := range msgs {
 		m := msgs[i]
+		header := m.GetHeader()
+		ownerRevision := int64(0)
+		processorEpoch := ""
+		if header != nil {
+			ownerRevision = header.OwnerRevision.Revision
+			processorEpoch = header.ProcessorEpoch.Epoch
+		}
+		dispatchRequest := m.GetDispatchTableRequest()
+		addTable := dispatchRequest.GetAddTable()
+		removeTable := dispatchRequest.GetRemoveTable()
+		tableID := model.TableID(0)
+		if addTable != nil {
+			tableID = addTable.TableID
+		} else if removeTable != nil {
+			tableID = removeTable.TableID
+		}
 		// Correctness check.
 		if len(m.To) == 0 || m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("invalid message no destination or unknown message type",
 				zap.String("namespace", c.changefeedID.Namespace),
 				zap.String("changefeed", c.changefeedID.ID),
-				zap.Any("message", m))
+				zap.Stringer("type", m.MsgType),
+				zap.String("from", m.From),
+				zap.String("to", m.To),
+				zap.Int64("ownerRevision", ownerRevision),
+				zap.String("processorEpoch", processorEpoch),
+				zap.Bool("hasDispatchTableRequest", dispatchRequest != nil),
+				zap.Bool("hasDispatchTableResponse", m.GetDispatchTableResponse() != nil),
+				zap.Bool("hasHeartbeat", m.GetHeartbeat() != nil),
+				zap.Bool("hasHeartbeatResponse", m.GetHeartbeatResponse() != nil),
+				zap.Bool("isAddTable", addTable != nil),
+				zap.Bool("isRemoveTable", removeTable != nil),
+				zap.Int64("tableID", tableID))
 		}
 
 		epoch := schedulepb.ProcessorEpoch{}

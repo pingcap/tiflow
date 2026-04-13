@@ -108,7 +108,8 @@ func (sm *Manager) MoveTable(span tablepb.Span, target model.CaptureID) {
 			"since the last triggered task not finished",
 			zap.String("namespace", sm.changefeedID.Namespace),
 			zap.String("changefeed", sm.changefeedID.ID),
-			zap.String("span", span.String()),
+			zap.Int64("tableID", span.TableID),
+			zap.Stringer("startKey", span.StartKey),
 			zap.String("targetCapture", target))
 	}
 }

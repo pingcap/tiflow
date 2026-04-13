@@ -52,9 +52,10 @@ func newEncodingWorker(
 }
 
 func (w *encodingWorker) run(ctx context.Context) error {
-	log.Debug("encoding worker started", zap.Int("workerID", w.id),
+	log.Debug("encoding worker started",
 		zap.String("namespace", w.changeFeedID.Namespace),
-		zap.String("changefeed", w.changeFeedID.ID))
+		zap.String("changefeed", w.changeFeedID.ID),
+		zap.Int("workerID", w.id))
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {

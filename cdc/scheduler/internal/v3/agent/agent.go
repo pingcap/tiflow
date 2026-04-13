@@ -113,9 +113,9 @@ func newAgent(
 		// If we are registered in Etcd, an elected Owner will have to
 		// contact us before it can schedule any table.
 		log.Info("schedulerv3: no owner found. We will wait for an owner to contact us.",
-			zap.String("ownerCaptureID", ownerCaptureID),
 			zap.String("namespace", changeFeedID.Namespace),
 			zap.String("changefeed", changeFeedID.ID),
+			zap.String("ownerCaptureID", ownerCaptureID),
 			zap.Error(err))
 		return result, nil
 	}
@@ -139,20 +139,18 @@ func newAgent(
 	})
 
 	log.Info("schedulerv3: agent owner found",
-		zap.String("ownerCaptureID", ownerCaptureID),
-		zap.String("captureID", captureID),
 		zap.String("namespace", changeFeedID.Namespace),
-		zap.String("changefeed", changeFeedID.ID))
+		zap.String("changefeed", changeFeedID.ID),
+		zap.String("ownerCaptureID", ownerCaptureID))
 
 	revision, err := client.GetOwnerRevision(etcdCliCtx, ownerCaptureID)
 	if err != nil {
 		if errors.ErrOwnerNotFound.Equal(err) || errors.ErrNotOwner.Equal(err) {
 			// These are expected errors when no owner has been elected
 			log.Info("schedulerv3: no owner found when querying for the owner revision",
-				zap.String("ownerCaptureID", ownerCaptureID),
-				zap.String("captureID", captureID),
 				zap.String("namespace", changeFeedID.Namespace),
 				zap.String("changefeed", changeFeedID.ID),
+				zap.String("ownerCaptureID", ownerCaptureID),
 				zap.Error(err))
 			return result, nil
 		}
@@ -256,10 +254,13 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (result []*schedulepb.M
 			a.handleMessageDispatchTableRequest(message.DispatchTableRequest, processorEpoch)
 		default:
 			log.Warn("schedulerv3: unknown message received",
-				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Any("message", message))
+				zap.String("captureID", ownerCaptureID),
+				zap.Stringer("type", message.GetMsgType()),
+				zap.Int64("ownerRevision", ownerRevision),
+				zap.String("processorEpoch", processorEpoch.Epoch),
+				zap.String("ownerVersion", ownerVersion))
 		}
 	}
 	return
@@ -275,7 +276,8 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.String("span", span.String()))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
 		}
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
@@ -328,7 +330,6 @@ func (a *agent) handleMessageDispatchTableRequest(
 	if a.Epoch != epoch {
 		log.Info("schedulerv3: agent receive dispatch table request "+
 			"epoch does not match, ignore it",
-			zap.String("capture", a.CaptureID),
 			zap.String("namespace", a.ChangeFeedID.Namespace),
 			zap.String("changefeed", a.ChangeFeedID.ID),
 			zap.String("epoch", epoch.Epoch),
@@ -354,34 +355,16 @@ func (a *agent) handleMessageDispatchTableRequest(
 			status:     dispatchTableTaskReceived,
 		}
 		table = a.tableM.addTableSpan(span)
-		if req.AddTable.GetIsSecondary() {
-			log.Info("schedulerv3: agent received prepare table task",
-				zap.String("capture", a.CaptureID),
-				zap.String("namespace", a.ChangeFeedID.Namespace),
-				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Int64("tableID", span.TableID),
-				zap.Stringer("startKey", span.StartKey),
-				zap.Uint64("checkpointTs", req.AddTable.GetCheckpoint().CheckpointTs))
-		} else {
-			log.Info("schedulerv3: agent received replicate table task",
-				zap.String("capture", a.CaptureID),
-				zap.String("namespace", a.ChangeFeedID.Namespace),
-				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Int64("tableID", span.TableID),
-				zap.Stringer("startKey", span.StartKey),
-				zap.Uint64("checkpointTs", req.AddTable.GetCheckpoint().CheckpointTs))
-		}
 	case *schedulepb.DispatchTableRequest_RemoveTable:
 		span := req.RemoveTable.GetSpan()
 		table, ok = a.tableM.getTableSpan(span)
 		if !ok {
 			log.Warn("schedulerv3: agent ignore remove table request, "+
 				"since the table not found",
-				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.String("span", span.String()),
-				zap.Any("request", request))
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey))
 			return
 		}
 		task = &dispatchTableTask{
@@ -390,18 +373,13 @@ func (a *agent) handleMessageDispatchTableRequest(
 			Epoch:    epoch,
 			status:   dispatchTableTaskReceived,
 		}
-		log.Info("schedulerv3: agent received remove table task",
-			zap.String("capture", a.CaptureID),
-			zap.String("namespace", a.ChangeFeedID.Namespace),
-			zap.String("changefeed", a.ChangeFeedID.ID),
-			zap.Int64("tableID", span.TableID),
-			zap.Stringer("startKey", span.StartKey))
 	default:
 		log.Warn("schedulerv3: agent ignore unknown dispatch table request",
-			zap.String("capture", a.CaptureID),
 			zap.String("namespace", a.ChangeFeedID.Namespace),
 			zap.String("changefeed", a.ChangeFeedID.ID),
-			zap.Any("request", request))
+			zap.Bool("hasAddTable", request.GetAddTable() != nil),
+			zap.Bool("hasRemoveTable", request.GetRemoveTable() != nil),
+			zap.String("epoch", epoch.Epoch))
 		return
 	}
 	table.injectDispatchTableTask(task)
@@ -410,7 +388,6 @@ func (a *agent) handleMessageDispatchTableRequest(
 // Close implement agent interface
 func (a *agent) Close() error {
 	log.Debug("schedulerv3: agent closed",
-		zap.String("capture", a.CaptureID),
 		zap.String("namespace", a.ChangeFeedID.Namespace),
 		zap.String("changefeed", a.ChangeFeedID.ID))
 	return a.trans.Close()
@@ -428,7 +405,6 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			// with the same ownerRev but with different ownerIDs.
 			// This should never happen unless the election via Etcd is buggy.
 			log.Panic("schedulerv3: owner IDs do not match",
-				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
 				zap.String("expected", a.ownerInfo.ID),
@@ -450,27 +426,28 @@ func (a *agent) handleOwnerInfo(id model.CaptureID, revision int64, version stri
 			id: &captureInfo,
 		})
 		log.Info("schedulerv3: new owner in power",
-			zap.String("capture", a.CaptureID),
 			zap.String("namespace", a.ChangeFeedID.Namespace),
 			zap.String("changefeed", a.ChangeFeedID.ID),
-			zap.Any("owner", a.ownerInfo), zap.Any("agent", a))
+			zap.String("ownerCaptureID", a.ownerInfo.ID),
+			zap.String("ownerVersion", a.ownerInfo.Version),
+			zap.Int64("ownerRevision", a.ownerInfo.Revision.Revision),
+			zap.String("captureID", a.CaptureID),
+			zap.String("processorEpoch", a.Epoch.Epoch))
 		return true
 	}
 
 	// staled owner heartbeat, just ignore it.
 	log.Debug("schedulerv3: message from staled owner",
-		zap.String("capture", a.CaptureID),
 		zap.String("namespace", a.ChangeFeedID.Namespace),
 		zap.String("changefeed", a.ChangeFeedID.ID),
-		zap.Any("staledOwner", ownerInfo{
-			CaptureInfo: model.CaptureInfo{
-				ID:      id,
-				Version: version,
-			},
-			Revision: schedulepb.OwnerRevision{Revision: revision},
-		}),
-		zap.Any("owner", a.ownerInfo),
-		zap.Any("agent", a.agentInfo))
+		zap.String("staledOwnerCaptureID", id),
+		zap.String("staledOwnerVersion", version),
+		zap.Int64("staledOwnerRevision", revision),
+		zap.String("ownerCaptureID", a.ownerInfo.ID),
+		zap.String("ownerVersion", a.ownerInfo.Version),
+		zap.Int64("ownerRevision", a.ownerInfo.Revision.Revision),
+		zap.String("captureID", a.CaptureID),
+		zap.String("processorEpoch", a.Epoch.Epoch))
 	return false
 }
 
@@ -503,10 +480,11 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 		m := msgs[i]
 		if m.MsgType == schedulepb.MsgUnknown {
 			log.Panic("schedulerv3: invalid message no destination or unknown message type",
-				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Any("message", m))
+				zap.Stringer("type", m.MsgType),
+				zap.String("to", m.To),
+				zap.String("from", m.From))
 		}
 		m.Header = &schedulepb.Message_Header{
 			Version:        a.Version,

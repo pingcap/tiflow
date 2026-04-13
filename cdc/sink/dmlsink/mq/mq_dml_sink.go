@@ -170,7 +170,9 @@ func (s *dmlSink) WriteEvents(txns ...*dmlsink.CallbackableEvent[*model.SingleTa
 			topic := s.alive.eventRouter.GetTopicForRowChange(row)
 			partitionNum, err := s.alive.topicManager.GetPartitionNum(s.ctx, topic)
 			failpoint.Inject("MQSinkGetPartitionError", func() {
-				log.Info("failpoint MQSinkGetPartitionError injected", zap.String("changefeedID", s.id.ID))
+				log.Info("failpoint MQSinkGetPartitionError injected",
+					zap.String("namespace", s.id.Namespace),
+					zap.String("changefeed", s.id.ID))
 				err = errors.New("MQSinkGetPartitionError")
 			})
 			if err != nil {

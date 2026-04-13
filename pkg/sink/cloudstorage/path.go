@@ -157,7 +157,7 @@ func NewFilePathGenerator(
 		pdclock = pdutil.NewMonotonicClock(clock.New())
 		log.Warn("pd clock is not set in storage sink, use local clock instead",
 			zap.String("namespace", changefeedID.Namespace),
-			zap.String("changefeedID", changefeedID.ID))
+			zap.String("changefeed", changefeedID.ID))
 	}
 	return &FilePathGenerator{
 		changefeedID: changefeedID,
@@ -188,7 +188,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		// only check schema for table
 		log.Error("invalid table schema",
 			zap.String("namespace", f.changefeedID.Namespace),
-			zap.String("changefeedID", f.changefeedID.ID),
+			zap.String("changefeed", f.changefeedID.ID),
 			zap.Any("versionedTableName", table),
 			zap.Any("tableInfo", tableInfo))
 		return errors.ErrInternalCheckFailed.GenWithStackByArgs("invalid table schema in FilePathGenerator")
@@ -226,7 +226,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 		if parsedChecksum != checksum {
 			log.Error("invalid schema file name",
 				zap.String("namespace", f.changefeedID.Namespace),
-				zap.String("changefeedID", f.changefeedID.ID),
+				zap.String("changefeed", f.changefeedID.ID),
 				zap.String("path", path), zap.Any("checksum", checksum))
 			errMsg := fmt.Sprintf("invalid schema filename in storage sink, "+
 				"expected checksum: %d, actual checksum: %d", checksum, parsedChecksum)
@@ -253,7 +253,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	if schemaFileCnt != 0 && lastVersion == 0 {
 		log.Warn("no table schema file found in an non-empty meta path",
 			zap.String("namespace", f.changefeedID.Namespace),
-			zap.String("changefeedID", f.changefeedID.ID),
+			zap.String("changefeed", f.changefeedID.ID),
 			zap.Any("versionedTableName", table),
 			zap.Uint32("checksum", checksum))
 	}
@@ -485,7 +485,7 @@ func RemoveEmptyDirs(
 			if err == nil && len(files) == 0 {
 				log.Debug("Deleting empty directory",
 					zap.String("namespace", id.Namespace),
-					zap.String("changeFeedID", id.ID),
+					zap.String("changefeed", id.ID),
 					zap.String("path", path))
 				os.Remove(path)
 				cnt++

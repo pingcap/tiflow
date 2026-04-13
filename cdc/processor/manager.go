@@ -217,7 +217,6 @@ func patchProcessorErr(captureInfo *model.CaptureInfo,
 ) {
 	if isProcessorIgnorableError(err) {
 		log.Info("processor exited",
-			zap.String("capture", captureInfo.ID),
 			zap.String("namespace", changefeed.ID.Namespace),
 			zap.String("changefeed", changefeed.ID.ID),
 			zap.Error(err))
@@ -244,7 +243,6 @@ func patchProcessorErr(captureInfo *model.CaptureInfo,
 			return position, true, nil
 		})
 	log.Error("run processor failed",
-		zap.String("capture", captureInfo.ID),
 		zap.String("namespace", changefeed.ID.Namespace),
 		zap.String("changefeed", changefeed.ID.ID),
 		zap.Error(err))

@@ -127,7 +127,7 @@ func NewKafkaDMLSink(
 		protocol, scheme, replicaConfig.Sink.KafkaConfig.GetOutputRawChangeEvent(), errCh)
 	log.Info("DML sink producer created",
 		zap.String("namespace", changefeedID.Namespace),
-		zap.String("changefeedID", changefeedID.ID))
+		zap.String("changefeed", changefeedID.ID))
 
 	return s, nil
 }

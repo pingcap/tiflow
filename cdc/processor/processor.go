@@ -151,10 +151,10 @@ func (p *processor) AddTableSpan(
 	startTs := checkpoint.CheckpointTs
 	if startTs == 0 {
 		log.Error("table start ts must not be 0",
-			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span),
+			zap.Int64("tableID", span.TableID),
+			zap.Stringer("startKey", span.StartKey),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 		return false, cerror.ErrUnexpected.FastGenByArgs("table start ts must not be 0")
@@ -168,10 +168,10 @@ func (p *processor) AddTableSpan(
 		// no matter `isPrepare` or not, just ignore it should be ok.
 		case tablepb.TableStatePreparing:
 			log.Warn("table is still preparing, ignore the request",
-				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -191,19 +191,19 @@ func (p *processor) AddTableSpan(
 			return true, nil
 		case tablepb.TableStateReplicating:
 			log.Warn("Ignore existing table",
-				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
 		case tablepb.TableStateStopped:
 			log.Warn("The same table exists but is stopped. Cancel it and continue.",
-				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			p.removeTable(span)
@@ -216,10 +216,10 @@ func (p *processor) AddTableSpan(
 	globalCheckpointTs := p.latestStatus.CheckpointTs
 	if startTs < globalCheckpointTs {
 		log.Warn("addTable: startTs < checkpoint",
-			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span),
+			zap.Int64("tableID", span.TableID),
+			zap.Stringer("startKey", span.StartKey),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 	}
@@ -243,10 +243,10 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 	_, exist := p.sinkManager.r.GetTableState(span)
 	if !exist {
 		log.Warn("Table which will be deleted is not found",
-			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span))
+			zap.Int64("tableID", span.TableID),
+			zap.Stringer("startKey", span.StartKey))
 		return true
 	}
 	return p.sinkManager.r.AsyncStopTable(span)
@@ -271,10 +271,10 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			tableCheckpointTs = stats.CheckpointTs
 		} else {
 			log.Panic("table which was added is not found",
-				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				zap.Int64("tableID", span.TableID),
+				zap.Stringer("startKey", span.StartKey),
 				zap.Bool("isPrepare", isPrepare))
 		}
 
@@ -314,12 +314,12 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	stats := p.sinkManager.r.GetTableStats(span)
 	if state != tablepb.TableStateStopped {
 		log.Debug("table is still not stopped",
-			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
+			zap.Int64("tableID", span.TableID),
+			zap.Stringer("startKey", span.StartKey),
 			zap.Uint64("checkpointTs", stats.CheckpointTs),
-			zap.Stringer("span", &span),
-			zap.Any("tableStatus", state))
+			zap.Stringer("tableStatus", state))
 		return 0, false
 	}
 
@@ -329,11 +329,12 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 	p.sinkManager.r.RemoveTable(span)
 	p.sourceManager.r.RemoveTable(span)
 	log.Info("table removed",
-		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
+		zap.Int64("tableID", span.TableID),
+		zap.Stringer("startKey", span.StartKey),
 		zap.Uint64("checkpointTs", stats.CheckpointTs),
-		zap.Stringer("span", &span))
+	)
 
 	return stats.CheckpointTs, true
 }
@@ -501,18 +502,18 @@ func (p *processor) Tick(
 	}
 	if p.upstream.IsClosed() {
 		log.Error("upstream is closed",
-			zap.Uint64("upstreamID", p.upstream.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Uint64("upstreamID", p.upstream.ID))
 		return cerror.ErrUnexpected.FastGenByArgs("upstream is closed"), nil
 	}
 	// skip this tick
 	if !p.upstream.IsNormal() {
 		log.Warn("upstream is not ready, skip",
-			zap.Uint64("id", p.upstream.ID),
-			zap.Strings("pd", p.upstream.PdEndpoints),
 			zap.String("namespace", p.changefeedID.Namespace),
-			zap.String("changefeed", p.changefeedID.ID))
+			zap.String("changefeed", p.changefeedID.ID),
+			zap.Uint64("upstreamID", p.upstream.ID),
+			zap.Strings("pd", p.upstream.PdEndpoints))
 		return nil, nil
 	}
 	startTime := time.Now()
@@ -522,7 +523,6 @@ func (p *processor) Tick(
 		log.Warn("processor tick took too long",
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.String("capture", p.captureInfo.ID),
 			zap.Duration("duration", costTime))
 	}
 
@@ -700,7 +700,6 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 
 	p.initialized.Store(true)
 	log.Info("processor initialized",
-		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
 		zap.Uint64("changefeedEpoch", p.changefeedEpoch))
@@ -738,14 +737,12 @@ func (p *processor) handleErrorCh() (err error) {
 	}
 	if !isProcessorIgnorableError(err) {
 		log.Error("error on running processor",
-			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Error(err))
 		return err
 	}
 	log.Info("processor exited",
-		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
 	return cerror.ErrReactorFinished

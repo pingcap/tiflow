@@ -119,7 +119,9 @@ func NewPulsarDMLProducer(
 		failpointCh: failpointCh,
 		errChan:     errCh,
 	}
-	log.Info("Pulsar DML producer created", zap.Stringer("changefeed", p.id),
+	log.Info("Pulsar DML producer created",
+		zap.String("namespace", p.id.Namespace),
+		zap.String("changefeed", p.id.ID),
 		zap.Duration("duration", time.Since(start)))
 	return p, nil
 }
@@ -181,7 +183,9 @@ func (p *pulsarDMLProducer) AsyncSendMessage(
 				case p.errChan <- e:
 				default:
 					log.Warn("Error channel is full in pulsar DML producer",
-						zap.Stringer("changefeed", p.id), zap.Error(e))
+						zap.String("namespace", p.id.Namespace),
+						zap.String("changefeed", p.id.ID),
+						zap.Error(e))
 				}
 			} else if message.Callback != nil {
 				// success
@@ -215,9 +219,10 @@ func (p *pulsarDMLProducer) Close() { // We have to hold the lock to synchronize
 		p.producers.Remove(topic) // callback func will be called
 		topicName, _ := topic.(string)
 		log.Info("Async client closed in pulsar DML producer",
-			zap.Duration("duration", time.Since(start)),
 			zap.String("namespace", p.id.Namespace),
-			zap.String("changefeed", p.id.ID), zap.String("topic", topicName))
+			zap.String("changefeed", p.id.ID),
+			zap.String("topic", topicName),
+			zap.Duration("duration", time.Since(start)))
 	}
 	p.client.Close()
 }

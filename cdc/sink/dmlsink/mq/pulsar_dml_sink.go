@@ -73,16 +73,22 @@ func NewPulsarDMLSink(
 
 	client, err := clientCreator(pConfig, changefeedID, replicaConfig.Sink)
 	if err != nil {
-		log.Error("DML sink producer client create fail", zap.Error(err))
+		log.Error("DML sink producer client create fail",
+			zap.String("namespace", changefeedID.Namespace),
+			zap.String("changefeed", changefeedID.ID),
+			zap.Error(err))
 		return nil, cerror.WrapError(cerror.ErrPulsarNewClient, err)
 	}
 
 	failpointCh := make(chan error, 1)
-	log.Info("Try to create a DML sink producer", zap.String("changefeed", changefeedID.String()))
+	log.Info("Try to create a DML sink producer",
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID))
 	start := time.Now()
 	p, err := producerCreator(ctx, changefeedID, client, replicaConfig.Sink, errCh, failpointCh)
 	log.Info("DML sink producer created",
-		zap.String("changefeed", changefeedID.String()),
+		zap.String("namespace", changefeedID.Namespace),
+		zap.String("changefeed", changefeedID.ID),
 		zap.Duration("duration", time.Since(start)))
 	if err != nil {
 		defer func() {

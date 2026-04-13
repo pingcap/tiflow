@@ -307,7 +307,10 @@ func (c *changefeed) Tick(ctx context.Context,
 	}
 
 	if err != nil {
-		log.Error("changefeed tick failed", zap.Error(err))
+		log.Error("changefeed tick failed",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
+			zap.Error(err))
 		c.handleErr(ctx, err)
 	}
 	return checkpointTs, minTableBarrierTs
@@ -468,6 +471,8 @@ func (c *changefeed) tick(ctx context.Context,
 			c.lastSyncedTs = watermark.LastSyncedTs
 		} else if c.lastSyncedTs > watermark.LastSyncedTs {
 			log.Warn("LastSyncedTs should not be greater than newLastSyncedTs",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
 				zap.Uint64("c.LastSyncedTs", c.lastSyncedTs),
 				zap.Uint64("newLastSyncedTs", watermark.LastSyncedTs))
 		}
@@ -478,6 +483,8 @@ func (c *changefeed) tick(ctx context.Context,
 			c.pullerResolvedTs = watermark.PullerResolvedTs
 		} else if watermark.PullerResolvedTs < c.pullerResolvedTs {
 			log.Warn("the newPullerResolvedTs should not be smaller than c.pullerResolvedTs",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
 				zap.Uint64("c.pullerResolvedTs", c.pullerResolvedTs),
 				zap.Uint64("newPullerResolvedTs", watermark.PullerResolvedTs))
 		}
@@ -882,7 +889,10 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context, cfInfo *model.Chang
 	if c.isRemoved {
 		if cfInfo == nil || cfInfo.Config == nil ||
 			cfInfo.Config.Consistent == nil {
-			log.Warn("changefeed is removed, but state is not complete", zap.Any("info", cfInfo))
+			log.Warn("changefeed is removed, but state is not complete",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Any("info", cfInfo))
 			return
 		}
 		if !redoCfg.IsConsistentEnabled(cfInfo.Config.Consistent.Level) {
@@ -894,7 +904,10 @@ func (c *changefeed) cleanupRedoManager(ctx context.Context, cfInfo *model.Chang
 		}
 		err := c.redoMetaMgr.Cleanup(ctx)
 		if err != nil {
-			log.Error("cleanup redo logs failed", zap.String("changefeed", c.id.ID), zap.Error(err))
+			log.Error("cleanup redo logs failed",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Error(err))
 		}
 	}
 }
@@ -951,7 +964,10 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 		case finishBarrier:
 			c.feedStateManager.MarkFinished()
 		default:
-			log.Error("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
+			log.Error("Unknown barrier type",
+				zap.String("namespace", c.id.Namespace),
+				zap.String("changefeed", c.id.ID),
+				zap.Int("barrierType", int(barrierTp)))
 			return cerror.ErrUnexpected.FastGenByArgs("Unknown barrier type")
 		}
 	}
@@ -962,6 +978,8 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 	// but we can ignore them because they will be handled in the processor.
 	if barrier.GlobalBarrierTs > barrierTs {
 		log.Debug("There are other barriers less than ddl barrier, wait for them",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
 			zap.Uint64("otherBarrierTs", barrierTs),
 			zap.Uint64("globalBarrierTs", barrier.GlobalBarrierTs))
 		barrier.GlobalBarrierTs = barrierTs
@@ -969,6 +987,8 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 
 	if barrier.MinTableBarrierTs > barrierTs {
 		log.Debug("There are other barriers less than min table barrier, wait for them",
+			zap.String("namespace", c.id.Namespace),
+			zap.String("changefeed", c.id.ID),
 			zap.Uint64("otherBarrierTs", barrierTs),
 			zap.Uint64("minTableBarrierTs", barrier.GlobalBarrierTs))
 		barrier.MinTableBarrierTs = barrierTs
@@ -1004,6 +1024,7 @@ func (c *changefeed) Close(ctx context.Context) {
 	costTime := time.Since(startTime)
 	if costTime > changefeedLogsWarnDuration {
 		log.Warn("changefeed close took too long",
+			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID),
 			zap.Duration("duration", costTime))
 	}
@@ -1026,9 +1047,9 @@ func (c *changefeed) checkUpstream() (skip bool, err error) {
 	}
 	if c.upstream.IsClosed() {
 		log.Warn("upstream is closed",
-			zap.Uint64("upstreamID", c.upstream.ID),
 			zap.String("namespace", c.id.Namespace),
-			zap.String("changefeed", c.id.ID))
+			zap.String("changefeed", c.id.ID),
+			zap.Uint64("upstreamID", c.upstream.ID))
 		return true, cerror.
 			WrapChangefeedUnretryableErr(
 				cerror.ErrUpstreamClosed.GenWithStackByArgs())
@@ -1060,7 +1081,10 @@ func (c *changefeed) tickDownstreamObserver(ctx context.Context) {
 				if strings.Contains(err.Error(), noPrometheusMsg) {
 					return
 				}
-				log.Warn("backend observer tick error", zap.Error(err))
+				log.Warn("backend observer tick error",
+					zap.String("namespace", c.id.Namespace),
+					zap.String("changefeed", c.id.ID),
+					zap.Error(err))
 			}
 		}()
 	}
