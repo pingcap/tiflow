@@ -286,9 +286,18 @@ type RedoRowChangedEvent struct {
 
 // RedoDDLEvent represents DDL event used in redo log persistent
 type RedoDDLEvent struct {
-	DDL       *DDLEvent `msg:"ddl"`
-	Type      byte      `msg:"type"`
-	TableName TableName `msg:"table-name"`
+	DDL       *DDLEvent     `msg:"ddl"`
+	Type      byte          `msg:"type"`
+	TableName TableName     `msg:"table-name"`
+	Columns   []*ColumnInfo `msg:"columns"`
+}
+
+// ColumnInfo is for column meta in DDL event
+type ColumnInfo struct {
+	Name               string `msg:"name"`
+	OriginDefaultValue any    `msg:"origin_default"`
+	Type               byte   `msg:"type"`
+	Version            uint64 `msg:"version"`
 }
 
 // ToRedoLog converts row changed event to redo log
@@ -314,8 +323,20 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 
 // ToRedoLog converts ddl event to redo log
 func (d *DDLEvent) ToRedoLog() *RedoLog {
+	var columns []*ColumnInfo
+	if d.TableInfo != nil {
+		columns = make([]*ColumnInfo, 0, len(d.TableInfo.Columns))
+		for _, col := range d.TableInfo.Columns {
+			columns = append(columns, &ColumnInfo{
+				Name:               col.Name.String(),
+				OriginDefaultValue: col.GetOriginDefaultValue(),
+				Type:               col.GetType(),
+				Version:            col.Version,
+			})
+		}
+	}
 	return &RedoLog{
-		RedoDDL: RedoDDLEvent{DDL: d},
+		RedoDDL: RedoDDLEvent{DDL: d, Columns: columns},
 		Type:    RedoLogTypeDDL,
 	}
 }
