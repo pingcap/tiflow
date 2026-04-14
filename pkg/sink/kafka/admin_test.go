@@ -14,6 +14,7 @@
 package kafka
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -28,6 +29,28 @@ type testSyncProducer struct {
 	closeErr   error
 	callOrder  *[]string
 	callLabel  string
+
+	// doneCh is closed after Close finishes, providing a happens-before
+	// relationship so tests can safely wait for the async close goroutine.
+	doneOnce  sync.Once
+	doneCh    chan struct{}
+	closeOnce sync.Once
+}
+
+func (p *testSyncProducer) done() chan struct{} {
+	p.doneOnce.Do(func() {
+		p.doneCh = make(chan struct{})
+	})
+	return p.doneCh
+}
+
+func (p *testSyncProducer) closeDone() bool {
+	select {
+	case <-p.done():
+		return true
+	default:
+		return false
+	}
 }
 
 func (p *testSyncProducer) Close() error {
@@ -35,6 +58,9 @@ func (p *testSyncProducer) Close() error {
 	if p.callOrder != nil {
 		*p.callOrder = append(*p.callOrder, p.callLabel)
 	}
+	p.closeOnce.Do(func() {
+		close(p.done())
+	})
 	return p.closeErr
 }
 
@@ -93,8 +119,10 @@ func TestSaramaSyncProducerCloseClosesClientAndProducer(t *testing.T) {
 
 	syncProducer.Close()
 	require.Eventually(t, func() bool {
-		return producer.closeCalls == 1 && client.closeCalls == 1
+		return producer.closeDone() && client.closeDone()
 	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, 1, producer.closeCalls)
+	require.Equal(t, 1, client.closeCalls)
 	require.Equal(t, []string{"client", "producer"}, callOrder)
 }
 
@@ -113,7 +141,9 @@ func TestSaramaSyncProducerCloseStillClosesClientWhenProducerCloseFails(t *testi
 
 	syncProducer.Close()
 	require.Eventually(t, func() bool {
-		return producer.closeCalls == 1 && client.closeCalls == 1
+		return producer.closeDone() && client.closeDone()
 	}, time.Second, 10*time.Millisecond)
+	require.Equal(t, 1, producer.closeCalls)
+	require.Equal(t, 1, client.closeCalls)
 	require.True(t, client.closed)
 }

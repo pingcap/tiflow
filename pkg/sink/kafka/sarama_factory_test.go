@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	stdErrors "errors"
+	"sync"
 	"testing"
 
 	"github.com/IBM/sarama"
@@ -110,6 +111,28 @@ type testSaramaClient struct {
 	closeErr   error
 	callOrder  *[]string
 	callLabel  string
+
+	// doneCh is closed after Close finishes, providing a happens-before
+	// relationship so tests can safely wait for async closes without races.
+	doneOnce  sync.Once
+	doneCh    chan struct{}
+	closeOnce sync.Once
+}
+
+func (c *testSaramaClient) done() chan struct{} {
+	c.doneOnce.Do(func() {
+		c.doneCh = make(chan struct{})
+	})
+	return c.doneCh
+}
+
+func (c *testSaramaClient) closeDone() bool {
+	select {
+	case <-c.done():
+		return true
+	default:
+		return false
+	}
 }
 
 func (c *testSaramaClient) Close() error {
@@ -118,6 +141,9 @@ func (c *testSaramaClient) Close() error {
 	if c.callOrder != nil {
 		*c.callOrder = append(*c.callOrder, c.callLabel)
 	}
+	c.closeOnce.Do(func() {
+		close(c.done())
+	})
 	return c.closeErr
 }
 
