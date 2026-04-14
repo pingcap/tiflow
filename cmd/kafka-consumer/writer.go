@@ -99,13 +99,23 @@ func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Of
 			zap.Uint64("watermark", newWatermark))
 		return
 	}
-	// TiCDC only guarantees at-least-once delivery. A replayed resolved event can
-	// be appended to Kafka again with a newer offset, so any fallback watermark
-	// must be treated as a duplicate instead of a fatal ordering bug.
-	log.Warn("partition resolved ts fall back, ignore it since duplicate delivery may replay an old resolved ts",
+	fields := []zap.Field{
 		zap.Int32("partition", p.partition),
-		zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
+		zap.Uint64("newWatermark", newWatermark),
+		zap.Any("offset", offset),
+		zap.Uint64("watermark", watermark),
+		zap.Any("watermarkOffset", p.watermarkOffset),
+	}
+
+	// TiCDC only guarantees at-least-once delivery. Duplicate MQ delivery can
+	// replay old resolved/checkpoint markers, making the resolved ts appear to
+	// fall back. This is unexpected but tolerable, so the consumer keeps the
+	// larger watermark.
+	if offset > p.watermarkOffset {
+		log.Warn("partition resolved ts fall back from newer offset: unexpected but tolerable under at-least-once delivery, ignore it", fields...)
+		return
+	}
+	log.Warn("partition resolved ts fall back, ignore it since consumer read old offset message", fields...)
 }
 
 func (p *partitionProgress) loadWatermark() uint64 {
