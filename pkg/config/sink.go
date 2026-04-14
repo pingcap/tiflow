@@ -238,7 +238,6 @@ func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
 		return false
 	}
 	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
-	log.Info("should send all bootstrap at start", zap.Bool("should", should))
 	return should
 }
 
@@ -844,10 +843,6 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 	if err := util.GetOrZero(s.TxnAtomicity).validate(sinkURI.Scheme); err != nil {
 		return err
 	}
-
-	log.Info("succeed to parse parameter from sink uri",
-		zap.String("protocol", util.GetOrZero(s.Protocol)),
-		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
 
 	// Check that protocol config is compatible with the scheme.
 	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
