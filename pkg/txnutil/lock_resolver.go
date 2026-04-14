@@ -49,8 +49,6 @@ func NewLockerResolver(
 const scanLockLimit = 1024
 
 func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint64) (err error) {
-	var totalLocks []*txnkv.Lock
-
 	// TODO test whether this function will kill active transaction
 	req := tikvrpc.NewRequest(tikvrpc.CmdScanLock, &kvrpcpb.ScanLockRequest{
 		MaxVersion: maxVersion,
@@ -109,7 +107,6 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 		for i := range locksInfo {
 			locks[i] = txnkv.NewLock(locksInfo[i])
 		}
-		totalLocks = append(totalLocks, locks...)
 
 		_, err1 := r.kvStorage.GetLockResolver().ResolveLocks(bo, 0, locks)
 		if err1 != nil {
