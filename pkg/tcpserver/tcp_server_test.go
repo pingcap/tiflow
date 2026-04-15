@@ -18,14 +18,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	grpcTesting "github.com/grpc-ecosystem/go-grpc-middleware/testing"
 	grpcTestingProto "github.com/grpc-ecosystem/go-grpc-middleware/testing/testproto"
-	"github.com/integralist/go-findroot/find"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -69,6 +70,8 @@ func TestTCPServerInsecureHTTP1(t *testing.T) {
 }
 
 func TestTCPServerTLSHTTP1(t *testing.T) {
+	// This regression test verifies the TLS listener can serve HTTP/1.1 traffic
+	// when the test runs from a git worktree or another non-standard cwd layout.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -142,6 +145,8 @@ func TestTCPServerInsecureGrpc(t *testing.T) {
 }
 
 func TestTCPServerTLSGrpc(t *testing.T) {
+	// This regression test verifies the TLS listener can serve gRPC traffic
+	// when the test runs from a git worktree or another non-standard cwd layout.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -179,16 +184,49 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 }
 
 func makeCredential4Testing(t *testing.T) *security.Credential {
-	stat, err := find.Repo()
-	require.NoError(t, err)
-
-	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
+	tlsPath := findTLSPath(t)
 	return &security.Credential{
-		CAPath:        path.Join(tlsPath, "ca.pem"),
-		CertPath:      path.Join(tlsPath, "server.pem"),
-		KeyPath:       path.Join(tlsPath, "server-key.pem"),
+		CAPath:        filepath.Join(tlsPath, "ca.pem"),
+		CertPath:      filepath.Join(tlsPath, "server.pem"),
+		KeyPath:       filepath.Join(tlsPath, "server-key.pem"),
 		CertAllowedCN: nil,
 	}
+}
+
+func findTLSPath(t *testing.T) string {
+	t.Helper()
+
+	const maxDepth = 10
+	const caPemRel = "tests/integration_tests/_certificates/ca.pem"
+
+	var candidates []string
+	if _, file, _, ok := runtime.Caller(0); ok {
+		candidates = append(candidates, filepath.Dir(file))
+	}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, wd)
+	}
+
+	// Walk up from the test file and cwd so the helper keeps working when the
+	// repository is checked out via git worktree and `git rev-parse` resolves
+	// to a parent directory that does not directly contain the test assets.
+	for _, base := range candidates {
+		dir := base
+		for i := 0; i < maxDepth && dir != "." && dir != string(filepath.Separator); i++ {
+			caPath := filepath.Join(dir, caPemRel)
+			if _, err := os.Stat(caPath); err == nil {
+				return filepath.Dir(caPath)
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	require.FailNow(t, "cannot find test TLS certificates", caPemRel)
+	return ""
 }
 
 func testWithHTTPWorkload(_ context.Context, t *testing.T, server TCPServer, addr string, credentials *security.Credential) {
