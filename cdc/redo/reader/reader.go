@@ -210,7 +210,7 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
-				ddl.TableInfo.Columns = setColumns(item.data.RedoDDL.Columns)
+				ddl.TableInfo = setTableInfo(&item.data.RedoDDL)
 				select {
 				case <-egCtx.Done():
 					return errors.Trace(egCtx.Err())
@@ -399,9 +399,9 @@ func (h *logHeap) Pop() interface{} {
 	return x
 }
 
-func setColumns(columns []*model.ColumnInfo) []*timodel.ColumnInfo {
-	res := make([]*timodel.ColumnInfo, 0, len(columns))
-	for _, col := range columns {
+func setTableInfo(ddl *model.RedoDDLEvent) *model.TableInfo {
+	columns := make([]*timodel.ColumnInfo, 0, len(ddl.Columns))
+	for _, col := range ddl.Columns {
 		colInfo := &timodel.ColumnInfo{
 			Name:    ast.NewCIStr(col.Name),
 			State:   timodel.StatePublic,
@@ -414,7 +414,10 @@ func setColumns(columns []*model.ColumnInfo) []*timodel.ColumnInfo {
 				zap.Any("originDefaultValue", col.OriginDefaultValue),
 				zap.Error(err))
 		}
-		res = append(res, colInfo)
+		columns = append(columns, colInfo)
 	}
-	return res
+	return model.WrapTableInfo(0, ddl.TableName.Schema, 100, &timodel.TableInfo{
+		Name:    ast.NewCIStr(ddl.TableName.Table),
+		Columns: columns,
+	})
 }
