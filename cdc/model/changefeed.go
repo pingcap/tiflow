@@ -218,8 +218,7 @@ func (info *ChangeFeedInfo) NeedBlockGC() bool {
 
 func (info *ChangeFeedInfo) isFailedByGC() bool {
 	if info.Error == nil {
-		log.Panic("changefeed info is not consistent",
-			zap.Any("state", info.State), zap.Any("error", info.Error))
+		log.Panic("changefeed info is not consistent", zap.Any("state", info.State))
 	}
 	return cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }
@@ -381,9 +380,6 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
-	log.Info("since the downstream is not a MQ, remove MQ only fields",
-		zap.String("namespace", info.Namespace),
-		zap.String("changefeed", info.ID))
 	info.Config.Sink.DispatchRules = nil
 	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil
