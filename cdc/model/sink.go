@@ -324,7 +324,7 @@ func (r *RowChangedEvent) ToRedoLog() *RedoLog {
 // ToRedoLog converts ddl event to redo log
 func (d *DDLEvent) ToRedoLog() *RedoLog {
 	var columns []*ColumnInfo
-	if d.TableInfo != nil {
+	if d.TableInfo != nil && d.TableInfo.TableInfo != nil {
 		columns = make([]*ColumnInfo, 0, len(d.TableInfo.Columns))
 		for _, col := range d.TableInfo.Columns {
 			columns = append(columns, &ColumnInfo{
