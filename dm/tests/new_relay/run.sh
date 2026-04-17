@@ -358,13 +358,17 @@ function test_relay_operations() {
 		"export configs to directory .* succeed" 1
 
 	# check configs
-	# Normalize session block: next-gen TiDB doesn't inject tidb_txn_mode.
-	for f in /tmp/configs/tasks/test.yaml $cur/configs/tasks/test.yaml; do
-		cp "$f" "$f.normalized"
-		sed -i '/^  session: {}$/c\  session: __NORMALIZED__' "$f.normalized"
-		sed -i '/^  session:$/{N;s/^  session:\n    tidb_txn_mode: optimistic$/  session: __NORMALIZED__/}' "$f.normalized"
+	# Normalize session block: next-gen TiDB exports "session: {}" while
+	# classic exports "session:\n  tidb_txn_mode: optimistic".
+	# Write normalized copies outside /tmp/configs/ so config import
+	# doesn't pick them up as task configs.
+	cp /tmp/configs/tasks/test.yaml /tmp/exported_task.normalized
+	cp $cur/configs/tasks/test.yaml /tmp/expected_task.normalized
+	for f in /tmp/exported_task.normalized /tmp/expected_task.normalized; do
+		sed -i '/^  session: {}$/c\  session: __NORMALIZED__' "$f"
+		sed -i '/^  session:$/{N;s/^  session:\n    tidb_txn_mode: optimistic$/  session: __NORMALIZED__/}' "$f"
 	done
-	sed '/password/d' /tmp/configs/tasks/test.yaml.normalized | diff $cur/configs/tasks/test.yaml.normalized - || exit 1
+	sed '/password/d' /tmp/exported_task.normalized | diff /tmp/expected_task.normalized - || exit 1
 	sed '/password/d' /tmp/configs/sources/mysql-replica-01.yaml | diff -I '^case-sensitive' $cur/configs/sources/mysql-replica-01.yaml - || exit 1
 	diff <(jq --sort-keys . /tmp/configs/relay_workers.json) <(jq --sort-keys . $cur/configs/relay_workers.json) || exit 1
 
