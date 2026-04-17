@@ -244,9 +244,7 @@ function test_local_special_name() {
 }
 
 function run() {
-	killall tidb-server 2>/dev/null || true
-	killall tikv-server 2>/dev/null || true
-	killall pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
 
 	mkdir -p "$WORK_DIR.downstream"
 	run_downstream_cluster "$WORK_DIR.downstream"
@@ -266,9 +264,7 @@ function run() {
 	# echo "run local special task-name success"
 
 	# restart to standalone tidb
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
 	rm -rf /tmp/tidb || true
 	run_tidb_server 4000 $TIDB_PASSWORD
 }

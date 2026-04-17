@@ -23,11 +23,7 @@ API_VERSION="v1alpha1"
 # this case will change downstream TiDB not to use new collation. Following cases
 # should turn on new collation if they need.
 function run() {
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
-
-	# clean unistore data
-	rm -rf /tmp/tidb
+	cleanup_downstream_cluster
 
 	# start a TiDB with off new-collation
 	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config.toml

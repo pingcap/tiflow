@@ -6,6 +6,7 @@ TEST_DIR=/tmp/dm_test
 export DM_MASTER_EXTRA_ARG=""
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/_utils/env_variables
+source $CUR/_utils/cluster_lib.sh
 
 if [ "$#" -ge 1 ]; then
 	test_case="$*"
@@ -69,9 +70,9 @@ start_services() {
 	# (e.g. ADD INDEX) because the DXF framework needs PD to coordinate tasks.
 	# Classic TiDB can use the lightweight unistore mode.
 	if [ "${NEXT_GEN:-}" = "1" ]; then
-		$CUR/_utils/run_downstream_cluster $TEST_DIR
+		run_downstream_cluster $TEST_DIR
 	else
-		$CUR/_utils/run_tidb_server $TIDB_PORT $TIDB_PASSWORD
+		run_tidb_server $TIDB_PORT $TIDB_PASSWORD
 	fi
 
 	i=0

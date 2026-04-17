@@ -39,18 +39,6 @@ stop_syncer() {
 	killall -9 syncer || true
 }
 
-start_tidb() {
-	cd "${TIDB_DIR}" || exit
-	killall -9 tidb-server || true
-	bin/tidb-server >"$1" 2>&1 &
-	cd "${OLDPWD}" || exit
-}
-
-stop_tidb() {
-	killall -9 tidb-server || true
-	rm -r /tmp/tidb || true
-}
-
 check_previous_command_success_or_exit() {
 	if [ "$?" != 0 ]; then
 		exit 1

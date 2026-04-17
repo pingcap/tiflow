@@ -10,21 +10,6 @@ if [[ $group == "TLS_GROUP" ]]; then
 fi
 group_num=${group#G}
 
-# On next-gen, run only the group under test to validate one at a time.
-# Change NEXT_GEN_TEST_GROUP to advance: G00 → G01 → G02 → ... → G12.
-# Set to "ALL" to run all groups (final validation).
-NEXT_GEN_TEST_GROUP="G05"
-if [[ "${NEXT_GEN:-}" = "1" && "$NEXT_GEN_TEST_GROUP" != "ALL" && "$group" != "$NEXT_GEN_TEST_GROUP" ]]; then
-	echo "NEXT_GEN=1: skipping $group (testing $NEXT_GEN_TEST_GROUP only)"
-	exit 0
-fi
-
-# Temporarily skip G10 on next-gen (MariaDB sidecar + TiDB restart work).
-if [[ "${NEXT_GEN:-}" = "1" && "$group" == "G10" ]]; then
-	echo "NEXT_GEN=1: skipping G10 (needs MariaDB sidecar + TiDB restart work)"
-	exit 0
-fi
-
 # Define groups
 # Note: If new group is added, the group name must also be added to CI
 #  https://github.com/PingCAP-QE/ci/blob/main/pipelines/pingcap/tiflow/latest/pull_dm_integration_test.groovy

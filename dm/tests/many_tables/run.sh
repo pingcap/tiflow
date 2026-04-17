@@ -54,15 +54,7 @@ function incremental_data_2() {
 }
 
 function run() {
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		# Next-gen: restart user TiDB with small-txn config.
-		cleanup_tidb_server
-	else
-		pkill -hup tidb-server 2>/dev/null || true
-		wait_process_exit tidb-server
-		# clean unistore data
-		rm -rf /tmp/tidb
-	fi
+	cleanup_downstream_cluster
 
 	# start a TiDB with small txn-total-size-limit
 	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config-small-txn.toml
@@ -152,15 +144,7 @@ function run() {
 		"query-status test" \
 		'"synced": true' 1
 
-	# Kill the downstream TiDB so worker will meet downstream error and auto-resume.
-	# On next-gen, use cleanup_tidb_server (port-4000 only, preserves SYSTEM TiDB
-	# and cleans temp-storage lock). On classic, kill the single TiDB.
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		cleanup_tidb_server
-	else
-		pkill -hup tidb-server 2>/dev/null || true
-		wait_process_exit tidb-server
-	fi
+	cleanup_tidb_server
 	# now worker will process some binlog events, save table checkpoint and meet downstream error
 	echo "start incremental_data_2"
 	incremental_data_2
@@ -181,18 +165,12 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "stop-task test"
 
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		# Next-gen already has a running cluster; just restart user TiDB.
-		cleanup_tidb_server
-		run_tidb_server 4000 $TIDB_PASSWORD
-	else
-		killall tidb-server 2>/dev/null || true
-		killall tikv-server 2>/dev/null || true
-		killall pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
+	if [ "${NEXT_GEN:-}" != "1" ]; then
 		run_downstream_cluster $WORK_DIR
-		# wait TiKV init
 		sleep 5
 	fi
+	run_tidb_server 4000 $TIDB_PASSWORD
 
 	run_sql_source1 "ALTER TABLE many_tables_db.t1 DROP x;"
 	run_sql_source1 "ALTER TABLE many_tables_db.t2 DROP x;"
@@ -211,16 +189,8 @@ function run() {
 	fi
 	run_sql_tidb_with_retry_times "select count(*) from merge_many_tables_db.t;" "count(*): 6002" 60
 
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		cleanup_tidb_server
-		run_tidb_server 4000 $TIDB_PASSWORD
-	else
-		killall -9 tidb-server 2>/dev/null || true
-		killall -9 tikv-server 2>/dev/null || true
-		killall -9 pd-server 2>/dev/null || true
-		rm -rf /tmp/tidb || true
-		run_tidb_server 4000 $TIDB_PASSWORD
-	fi
+	cleanup_downstream_cluster
+	run_tidb_server 4000 $TIDB_PASSWORD
 }
 
 cleanup_data many_tables_db merge_many_tables_db

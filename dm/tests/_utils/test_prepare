@@ -35,34 +35,9 @@ function cleanup_process() {
     wait_process_exit dm-syncer.test
 }
 
-function cleanup_tidb_server(){
-    # Kill only the tidb-server serving user traffic on port 4000. Classic
-    # unistore has a single tidb-server (on 4000); next-gen additionally runs
-    # a SYSTEM TiDB on 4001 that must stay up so the cluster remains
-    # bootstrapped and run_tidb_server can reattach the restarted user TiDB.
-    local pattern='tidb-server.*-P 4000'
-    local pids
-    pids=$(pgrep -f "$pattern" || true)
-    echo "tidb-server on port 4000 pids=${pids:-none}"
-    if [ -n "$pids" ]; then
-        kill -HUP $pids 2>/dev/null || true
-    fi
-    for _ in $(seq 1 120); do
-        if ! pgrep -f "$pattern" >/dev/null 2>&1; then
-            echo "tidb-server on port 4000 already exit"
-            # Remove temp-storage locks so a new TiDB can start without
-            # "The current temporary storage dir has been occupied".
-            # flock is on the inode — removing the file doesn't affect
-            # SYSTEM TiDB (port 4001) which still holds its fd open.
-            rm -f /tmp/*_tidb/*/tmp-storage/_dir.lock 2>/dev/null || true
-            return 0
-        fi
-        sleep 1
-    done
-    echo "tidb-server on port 4000 didn't exit in 120s"
-    pgrep -af "$pattern" || true
-    return 1
-}
+# Cluster lifecycle: cleanup_tidb_server, cleanup_downstream_cluster,
+# run_tidb_server, run_downstream_cluster, run_downstream_cluster_with_tls
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cluster_lib.sh"
 
 function kill_process() {
     keyword=$1

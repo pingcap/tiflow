@@ -292,13 +292,9 @@ mkdir -p $WORK_DIR
 
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-killall tidb-server 2>/dev/null || true
-killall tikv-server 2>/dev/null || true
-killall pd-server 2>/dev/null || true
+cleanup_downstream_cluster
 run $*
 cleanup_process $*
-killall pd-server 2>/dev/null || true
-killall tikv-server 2>/dev/null || true
-killall tidb-server 2>/dev/null || true
+cleanup_downstream_cluster
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"

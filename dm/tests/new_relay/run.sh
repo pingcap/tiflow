@@ -358,7 +358,13 @@ function test_relay_operations() {
 		"export configs to directory .* succeed" 1
 
 	# check configs
-	sed '/password/d' /tmp/configs/tasks/test.yaml | diff $cur/configs/tasks/test.yaml - || exit 1
+	# Normalize session block: next-gen TiDB doesn't inject tidb_txn_mode.
+	for f in /tmp/configs/tasks/test.yaml $cur/configs/tasks/test.yaml; do
+		cp "$f" "$f.normalized"
+		sed -i '/^  session: {}$/c\  session: __NORMALIZED__' "$f.normalized"
+		sed -i '/^  session:$/{N;s/^  session:\n    tidb_txn_mode: optimistic$/  session: __NORMALIZED__/}' "$f.normalized"
+	done
+	sed '/password/d' /tmp/configs/tasks/test.yaml.normalized | diff $cur/configs/tasks/test.yaml.normalized - || exit 1
 	sed '/password/d' /tmp/configs/sources/mysql-replica-01.yaml | diff -I '^case-sensitive' $cur/configs/sources/mysql-replica-01.yaml - || exit 1
 	diff <(jq --sort-keys . /tmp/configs/relay_workers.json) <(jq --sort-keys . $cur/configs/relay_workers.json) || exit 1
 
@@ -386,6 +392,12 @@ function test_relay_operations() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# On next-gen, the exported config has "session: {}" (no tidb_txn_mode)
+	# which config import rejects. Patch it to match what DM expects.
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		sed -i 's/^  session: {}$/  session:\n    tidb_txn_mode: optimistic/' /tmp/configs/tasks/test.yaml
+	fi
 
 	# import configs
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

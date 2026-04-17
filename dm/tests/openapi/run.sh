@@ -1158,24 +1158,6 @@ function test_stop_task_with_condition() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: START TASK WITH CONDITION SUCCESS"
 }
 
-function reset_downstream_for_tls_rebuild() {
-	# Classic: full teardown (tidb+tikv+pd) and wait for ports to be released
-	# before the TLS cluster binds the same ports.
-	# Next-gen: only the user TiDB (port 4000) needs to restart with TLS;
-	# PD/TiKV/tikv-worker/SYSTEM TiDB are DFS-backed and must stay alive so
-	# the keyspace stays bootstrapped.
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		cleanup_tidb_server
-	else
-		killall -9 tidb-server 2>/dev/null || true
-		killall -9 tikv-server 2>/dev/null || true
-		killall -9 pd-server 2>/dev/null || true
-		wait_process_exit tidb-server
-		wait_process_exit tikv-server
-		wait_process_exit pd-server
-	fi
-}
-
 function test_tls() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TLS"
 	prepare_database
@@ -1186,7 +1168,7 @@ function test_tls() {
 	openapi_source_check "create_source2_success"
 
 	echo "restart downstream TiDB (TLS, different certs)"
-	reset_downstream_for_tls_rebuild
+	cleanup_downstream_cluster
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf ca.pem dm.pem dm.key ca2.pem tidb.pem tidb.key
 
 	task_name="task-tls-1"
@@ -1200,7 +1182,7 @@ function test_tls() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 
 	echo "restart downstream TiDB (TLS, matching certs)"
-	reset_downstream_for_tls_rebuild
+	cleanup_downstream_cluster
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf ca2.pem tidb.pem tidb.key ca2.pem tidb.pem tidb.key
 
 	task_name="task-tls-2"
@@ -1231,7 +1213,7 @@ function test_tls() {
 		"" "" ""
 
 	# Restore the plain (non-TLS) downstream for subsequent tests.
-	reset_downstream_for_tls_rebuild
+	cleanup_downstream_cluster
 	run_tidb_server 4000 $TIDB_PASSWORD
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS SUCCESS"
 }
