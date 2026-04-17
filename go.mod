@@ -436,7 +436,11 @@ require (
 	sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67 // indirect
 )
 
+<<<<<<< HEAD
 replace github.com/IBM/sarama v1.41.2 => github.com/pingcap/sarama v1.41.2-pingcap-20260508
+=======
+replace github.com/IBM/sarama v1.41.2 => github.com/pingcap/sarama v1.41.2-pingcap-20251202-x
+>>>>>>> e33ff6c907 (cdc(logging): remove some verbose and useless logs (#12604))
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.5 => github.com/benbjohnson/clock v1.1.0
