@@ -46,7 +46,12 @@ type TiDBTableAnalyzer struct {
 	sourceTableMap    map[string]*common.TableSource
 }
 
-// AnalyzeSplitter returns a new iterator for TiDB table
+// AnalyzeSplitter returns a new iterator for TiDB table.
+//
+// When SplitterStrategy is "limit" or "random" the bucket iterator is skipped
+// entirely, so callers opt out of any risk of bad bucket stats skewing chunk
+// boundaries. "auto" preserves the historical behavior: try bucket first,
+// fall back to random on construction error.
 func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.TableDiff, startRange *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	matchedSource := getMatchSource(a.sourceTableMap, table)
 	// Shallow Copy
@@ -54,20 +59,24 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	originTable.Schema = matchedSource.OriginSchema
 	originTable.Table = matchedSource.OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
-	// if we decide to use bucket to split chunks
+
+	switch originTable.SplitterStrategy {
+	case config.SplitterStrategyLimit:
+		log.Info("choose limit splitter", zap.String("table", progressID))
+		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
+	case config.SplitterStrategyRandom:
+		log.Info("choose random splitter", zap.String("table", progressID))
+		return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
+	}
+
+	// auto: if we decide to use bucket to split chunks
 	// we always use bucksIter even we load from checkpoint is not bucketNode
-	// TODO check whether we can use bucket for this table to split chunks.
 	// NOTICE: If checkpoint use random splitter, it will also fail the next time build bucket splitter.
 	bucketIter, err := splitter.NewBucketIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange, a.bucketSpliterPool)
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, falling back", zap.Error(err))
-	if originTable.SplitterStrategy == config.SplitterStrategyLimit {
-		log.Info("choose limit splitter", zap.String("table", progressID))
-		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
-	}
-	log.Info("choose random splitter", zap.String("table", progressID))
+	log.Info("failed to build bucket iterator, falling back to random", zap.Error(err))
 	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 
