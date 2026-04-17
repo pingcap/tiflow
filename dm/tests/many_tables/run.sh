@@ -167,10 +167,14 @@ function run() {
 
 	cleanup_downstream_cluster
 	if [ "${NEXT_GEN:-}" != "1" ]; then
+		# Classic: need full PD+TiKV cluster for Phase 2 physical import.
+		# run_downstream_cluster starts TiDB on port 4000 internally.
 		run_downstream_cluster $WORK_DIR
 		sleep 5
+	else
+		# Next-gen: PD/TiKV/SYSTEM TiDB still running, just restart user TiDB.
+		run_tidb_server 4000 $TIDB_PASSWORD
 	fi
-	run_tidb_server 4000 $TIDB_PASSWORD
 
 	run_sql_source1 "ALTER TABLE many_tables_db.t1 DROP x;"
 	run_sql_source1 "ALTER TABLE many_tables_db.t2 DROP x;"

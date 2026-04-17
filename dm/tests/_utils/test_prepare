@@ -34,13 +34,15 @@ function cleanup_process() {
         kill -9 $pid 2>/dev/null || true
     done
 
+    # Workers and syncers: SIGKILL directly. Workers can be stuck in long
+    # Lightning loads (many_tables: 500 tables) and won't respond to SIGHUP.
     dm_worker_num=$(pgrep -c -f dm-worker.test || true)
     echo "$dm_worker_num dm-worker alive"
-    pkill -hup dm-worker.test 2>/dev/null || true
+    pkill -9 dm-worker.test 2>/dev/null || true
 
     dm_syncer_num=$(pgrep -c -f dm-syncer.test || true)
     echo "$dm_syncer_num dm-syncer alive"
-    pkill -hup dm-syncer.test 2>/dev/null || true
+    pkill -9 dm-syncer.test 2>/dev/null || true
 
     wait_process_exit dm-master.test
     wait_process_exit dm-worker.test
