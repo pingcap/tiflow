@@ -1193,7 +1193,7 @@ func trySplitAndSortUpdateEvent(
 	split := false
 	for _, e := range events {
 		if e == nil {
-			log.Warn("skip emit nil event", zap.Any("event", e))
+			log.Warn("skip emit nil event")
 			continue
 		}
 

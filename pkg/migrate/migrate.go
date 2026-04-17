@@ -279,9 +279,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 		log.Error("update meta version failed, etcd meta data migration failed", zap.Error(err))
 		return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 	}
-	log.Info("etcd data migration successful")
 	cleanOldData(ctx, m.cli.GetEtcdClient())
-	log.Info("clean old etcd data successful")
 	return nil
 }
 
