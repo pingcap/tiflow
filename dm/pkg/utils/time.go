@@ -14,6 +14,7 @@
 package utils
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,9 +24,26 @@ import (
 )
 
 const (
-	StartTimeFormat  = "2006-01-02 15:04:05"
-	StartTimeFormat2 = "2006-01-02T15:04:05"
+	StartTimeFormat        = "2006-01-02 15:04:05"
+	StartTimeFormat2       = "2006-01-02T15:04:05"
+	StartTimeFormatWithTZ  = "2006-01-02 15:04:05Z07:00"
+	StartTimeFormatWithTZ2 = "2006-01-02T15:04:05Z07:00"
+	StartTimeFormatWithTZ3 = "2006-01-02 15:04:05Z0700"
+	StartTimeFormatWithTZ4 = "2006-01-02T15:04:05Z0700"
+	StartTimeFormatHint    = "'2006-01-02 15:04:05', '2006-01-02T15:04:05', '2006-01-02 15:04:05+08:00', '2006-01-02T15:04:05+08:00', '2006-01-02 15:04:05+0800', or '2006-01-02T15:04:05+0800'"
 )
+
+var startTimeLayoutsWithTZ = []string{
+	StartTimeFormatWithTZ,
+	StartTimeFormatWithTZ2,
+	StartTimeFormatWithTZ3,
+	StartTimeFormatWithTZ4,
+}
+
+var startTimeLayoutsWithoutTZ = []string{
+	StartTimeFormat,
+	StartTimeFormat2,
+}
 
 // ParseTimeZone parse the time zone location by name or offset
 //
@@ -68,16 +86,28 @@ func ParseTimeZone(s string) (*time.Location, error) {
 	return nil, terror.ErrConfigInvalidTimezone.Generate(s)
 }
 
-// ParseStartTime parses start-time of task-start and validation-start in local location.
+// ParseStartTime parses start-time of task-start and validation-start.
+// If the time string contains a timezone offset, it is parsed as an absolute time.
+// Otherwise it is interpreted in local location.
 func ParseStartTime(timeStr string) (time.Time, error) {
 	return ParseStartTimeInLoc(timeStr, time.Local)
 }
 
 // ParseStartTimeInLoc parses start-time of task-start and validation-start.
+// If the time string contains a timezone offset, it is parsed as an absolute time.
+// Otherwise it is interpreted in the specified location.
 func ParseStartTimeInLoc(timeStr string, loc *time.Location) (time.Time, error) {
-	t, err := time.ParseInLocation(StartTimeFormat, timeStr, loc)
-	if err != nil {
-		return time.ParseInLocation(StartTimeFormat2, timeStr, loc)
+	for _, layout := range startTimeLayoutsWithTZ {
+		t, parseErr := time.Parse(layout, timeStr)
+		if parseErr == nil {
+			return t, nil
+		}
 	}
-	return t, nil
+	for _, layout := range startTimeLayoutsWithoutTZ {
+		t, parseErr := time.ParseInLocation(layout, timeStr, loc)
+		if parseErr == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, fmt.Errorf("unsupported start-time format %q, expected one of %s", timeStr, StartTimeFormatHint)
 }
