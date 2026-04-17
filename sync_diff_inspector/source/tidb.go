@@ -115,7 +115,7 @@ type TiDBSource struct {
 // It prefers _tidb_rowid or clustered PK, then falls back to the regular
 // splitter configuration when ignore-columns removes the checksum-specific
 // handle. Iterator choice follows SplitterStrategy: "limit" uses the limit
-// iterator; "auto" and "random" use the random iterator.
+// iterator; "auto", "random", and any other value use the random iterator.
 func (s *TiDBSource) GetGlobalChecksumIterator(
 	ctx context.Context,
 	tableIndex int,

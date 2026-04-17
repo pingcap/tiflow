@@ -227,7 +227,7 @@ func TestGetGlobalChecksumIteratorUsesLimitWhenConfigured(t *testing.T) {
 	require.True(t, ok, "expected *splitter.LimitIterator, got %T", iter)
 }
 
-func TestGetGlobalChecksumIteratorUsesRandomForAutoAndRandom(t *testing.T) {
+func TestGetGlobalChecksumIteratorDefaultsToRandom(t *testing.T) {
 	for _, strategy := range []string{config.SplitterStrategyAuto, config.SplitterStrategyRandom, ""} {
 		t.Run("strategy="+strategy, func(t *testing.T) {
 			tableInfo, err := utils.GetTableInfoBySQL(
