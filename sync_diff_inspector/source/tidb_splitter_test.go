@@ -74,13 +74,17 @@ func TestAnalyzeSplitterEnforcesLimitStrategy(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	// No SQL expectations: if AnalyzeSplitter calls the bucket path it will
-	// issue stats queries that sqlmock rejects, making ExpectationsWereMet fail.
+	// No SQL expectations: if AnalyzeSplitter took the bucket path, sqlmock
+	// would reject the unexpected stats query and AnalyzeSplitter would
+	// surface the error (caught by require.NoError). The iterator-type
+	// assertion below is the definitive guard — ExpectationsWereMet is a
+	// secondary check since there are no expectations to be unmet.
 
 	a, td := makeAnalyzer(t, db, config.SplitterStrategyLimit)
 
 	iter, err := a.AnalyzeSplitter(context.Background(), td, nil)
 	require.NoError(t, err)
+	defer iter.Close()
 	_, ok := iter.(*splitter.LimitIterator)
 	require.True(t, ok, "expected *splitter.LimitIterator, got %T", iter)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -109,6 +113,7 @@ func TestAnalyzeSplitterEnforcesRandomStrategy(t *testing.T) {
 
 	iter, err := a.AnalyzeSplitter(context.Background(), td, nil)
 	require.NoError(t, err)
+	defer iter.Close()
 	_, ok := iter.(*splitter.RandomIterator)
 	require.True(t, ok, "expected *splitter.RandomIterator, got %T", iter)
 	require.NoError(t, mock.ExpectationsWereMet())
@@ -132,6 +137,7 @@ func TestAnalyzeSplitterAutoFallsBackToRandomOnBucketError(t *testing.T) {
 
 	iter, err := a.AnalyzeSplitter(context.Background(), td, nil)
 	require.NoError(t, err)
+	defer iter.Close()
 	_, ok := iter.(*splitter.RandomIterator)
 	require.True(t, ok, "expected *splitter.RandomIterator (auto fallback), got %T", iter)
 	require.NoError(t, mock.ExpectationsWereMet())
