@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -184,4 +185,85 @@ func TestGetGlobalChecksumIteratorReturnsErrorForInvalidConfiguredFallbackFields
 	require.Error(t, err)
 	require.Nil(t, iter)
 	require.Contains(t, err.Error(), "column id")
+}
+
+func TestGetGlobalChecksumIteratorUsesLimitWhenConfigured(t *testing.T) {
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT)",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	src := &TiDBSource{
+		tableDiffs: []*common.TableDiff{{
+			Schema:           "test",
+			Table:            "t",
+			Info:             tableInfo,
+			SplitterStrategy: config.SplitterStrategyLimit,
+			// ChunkSize must be positive to avoid a DB round-trip (getRowCount)
+			// that would panic with the nil dbConn used in this unit test.
+			ChunkSize: 1,
+		}},
+		sourceTableMap: map[string]*common.TableSource{
+			dbutil.TableName("test", "t"): {
+				OriginSchema: "test",
+				OriginTable:  "t",
+			},
+		},
+	}
+
+	startRange := &splitter.RangeInfo{
+		ChunkRange: &chunk.Range{
+			Index: &chunk.CID{
+				TableIndex: 0,
+				ChunkIndex: 0,
+				ChunkCnt:   1,
+			},
+		},
+	}
+	iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, startRange)
+	require.NoError(t, err)
+	_, ok := iter.(*splitter.LimitIterator)
+	require.True(t, ok, "expected *splitter.LimitIterator, got %T", iter)
+}
+
+func TestGetGlobalChecksumIteratorUsesRandomForAutoAndRandom(t *testing.T) {
+	for _, strategy := range []string{config.SplitterStrategyAuto, config.SplitterStrategyRandom, ""} {
+		t.Run("strategy="+strategy, func(t *testing.T) {
+			tableInfo, err := utils.GetTableInfoBySQL(
+				"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT)",
+				parser.New(),
+			)
+			require.NoError(t, err)
+
+			src := &TiDBSource{
+				tableDiffs: []*common.TableDiff{{
+					Schema:           "test",
+					Table:            "t",
+					Info:             tableInfo,
+					SplitterStrategy: strategy,
+				}},
+				sourceTableMap: map[string]*common.TableSource{
+					dbutil.TableName("test", "t"): {
+						OriginSchema: "test",
+						OriginTable:  "t",
+					},
+				},
+			}
+
+			startRange := &splitter.RangeInfo{
+				ChunkRange: &chunk.Range{
+					Index: &chunk.CID{
+						TableIndex: 0,
+						ChunkIndex: 0,
+						ChunkCnt:   1,
+					},
+				},
+			}
+			iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, startRange)
+			require.NoError(t, err)
+			_, ok := iter.(*splitter.RandomIterator)
+			require.True(t, ok, "expected *splitter.RandomIterator, got %T", iter)
+		})
+	}
 }

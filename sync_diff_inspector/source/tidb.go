@@ -113,7 +113,9 @@ type TiDBSource struct {
 
 // GetGlobalChecksumIterator builds chunk iterator for global-checksum mode.
 // It prefers _tidb_rowid or clustered PK, then falls back to the regular
-// splitter configuration when ignore-columns removes the checksum-specific handle.
+// splitter configuration when ignore-columns removes the checksum-specific
+// handle. Iterator choice follows SplitterStrategy: "limit" uses the limit
+// iterator; "auto" and "random" use the random iterator.
 func (s *TiDBSource) GetGlobalChecksumIterator(
 	ctx context.Context,
 	tableIndex int,
@@ -136,12 +138,25 @@ func (s *TiDBSource) GetGlobalChecksumIterator(
 	}
 	originTable.Fields = fields
 
-	iter, err := splitter.NewRandomIteratorWithCheckpoint(
-		ctx, "", &originTable, s.dbConn, startRange)
-	if err != nil {
-		return nil, 0, errors.Trace(err)
+	switch originTable.SplitterStrategy {
+	case config.SplitterStrategyLimit:
+		limitIter, err := splitter.NewLimitIteratorWithCheckpoint(
+			ctx, "", &originTable, s.dbConn, startRange)
+		if err != nil {
+			return nil, 0, errors.Trace(err)
+		}
+		// LimitIterator produces chunks asynchronously and has no total up
+		// front; return 0 so progress reporting degrades gracefully (shows
+		// completed count without a denominator).
+		return limitIter, 0, nil
+	default:
+		randomIter, err := splitter.NewRandomIteratorWithCheckpoint(
+			ctx, "", &originTable, s.dbConn, startRange)
+		if err != nil {
+			return nil, 0, errors.Trace(err)
+		}
+		return randomIter, randomIter.Len(), nil
 	}
-	return iter, iter.Len(), nil
 }
 
 // prepareChecksumSplitFields returns the split fields for global-checksum mode.
