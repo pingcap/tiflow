@@ -181,9 +181,8 @@ function test_cant_dail_downstream() {
 	echo "kill dm-worker1"
 	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	# kill downstream TiDB (on next-gen, preserve SYSTEM TiDB)
+	cleanup_tidb_server
 
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT

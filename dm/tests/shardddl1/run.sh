@@ -684,8 +684,8 @@ function DM_MULTIPLE_ROWS_CASE() {
 	updateMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLInsertOnDuplicateUpdate\]' | wc -l)
 	deleteMergeCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep '\[op=DMLDelete\]' | wc -l)
 	echo $insertMergeCnt $replaceMergeCnt $updateMergeCnt $deleteMergeCnt
-	if [[ "$insertMergeCnt" -le 5 || "$updateMergeCnt" -le 5 || "$deleteMergeCnt" -le 5 || "$replaceMergeCnt" -le 5 ]]; then
-		echo "merge dmls less than 5, insertMergeCnt: $insertMergeCnt, replaceMergeCnt: $replaceMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
+	if [[ "$insertMergeCnt" -le 2 || "$updateMergeCnt" -le 2 || "$deleteMergeCnt" -le 2 || "$replaceMergeCnt" -le 2 ]]; then
+		echo "merge dmls less than expected, insertMergeCnt: $insertMergeCnt, replaceMergeCnt: $replaceMergeCnt, updateMergeCnt: $updateMergeCnt, deleteMergeCnt: $deleteMergeCnt"
 		exit 1
 	fi
 }

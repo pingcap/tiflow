@@ -1,0 +1,271 @@
+#!/usr/bin/env bash
+# Start a next-gen TiDB downstream cluster.
+#
+# Next-gen TiDB has a different architecture from classic TiDB:
+# - TiKV uses API V2 + DFS (S3-compatible object storage) for data.
+# - A separate `tikv-worker` process exposes an HTTP /write_sst endpoint
+#   that lightning's ingest backfill (ADD INDEX, IMPORT INTO) talks to.
+# - TiDB requires a SYSTEM keyspace bootstrap node before any user
+#   keyspace TiDB can serve traffic, and both must have
+#   `tidb_service_scope = "dxf_service"` so DXF tasks can be scheduled.
+#
+# Components started:
+# - MinIO              :9000   (S3 backend for DFS)
+# - PD                 :2379   (with [keyspace] pre-alloc)
+# - TiKV               :2016   (API V2 + TTL + DFS)
+# - tikv-worker        :19000  (DFS ingest)
+# - SYSTEM TiDB        :4001   (bootstrap)
+# - user keyspace TiDB :4000   (the one tests connect to)
+#
+# Ref: pingcap/tidb tests/realtikvtest/scripts/next-gen/bootstrap-test-with-cluster.sh
+#
+# parameter 1: work directory
+set -eux
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$CUR/env_variables"
+WORK_DIR=$1
+
+start_minio() {
+	echo "Starting MinIO (next-gen DFS backend)..."
+	# MinIO maps subdirectories under its data root to buckets, so creating the
+	# bucket directory up-front avoids needing the `mc` client.
+	mkdir -p "$WORK_DIR/minio/data/$MINIO_BUCKET"
+
+	# Resolve the minio binary: prefer the one shipped under bin/, fall back to
+	# whatever is on PATH, otherwise download the release binary.
+	MINIO_BIN="bin/minio"
+	if [ ! -x "$MINIO_BIN" ]; then
+		MINIO_BIN=$(command -v minio || true)
+	fi
+	if [ -z "$MINIO_BIN" ] || [ ! -x "$MINIO_BIN" ]; then
+		echo "MinIO binary not found, downloading..."
+		MINIO_BIN="bin/minio"
+		curl -sSL -o "$MINIO_BIN" "https://dl.min.io/server/minio/release/linux-amd64/minio"
+		chmod +x "$MINIO_BIN"
+	fi
+
+	MINIO_ROOT_USER="$MINIO_ACCESS_KEY" MINIO_ROOT_PASSWORD="$MINIO_SECRET_KEY" \
+		"$MINIO_BIN" server "$WORK_DIR/minio/data" --address ":9000" \
+		>"$WORK_DIR/minio.log" 2>&1 &
+
+	i=0
+	while true; do
+		code=$(curl -s -o /dev/null -w "%{http_code}" "http://$MINIO_ADDR/minio/health/ready" || echo "")
+		if [ "$code" = "200" ]; then
+			echo 'Start MinIO success'
+			break
+		fi
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo 'Failed to start MinIO'
+			exit 1
+		fi
+		echo 'Waiting for MinIO ready...'
+		sleep 2
+	done
+}
+
+start_pd() {
+	echo "Starting PD..."
+
+	cat >"$WORK_DIR/pd.toml" <<EOF
+[replication]
+# The number of replicas for each region.
+max-replicas = 1
+
+[keyspace]
+pre-alloc = ["$KEYSPACE_NAME"]
+EOF
+
+	bin/pd-server --version
+	mkdir -p "$WORK_DIR/pd"
+	bin/pd-server \
+		--client-urls "http://$PD_ADDR" \
+		--peer-urls "http://$PD_PEER_ADDR" \
+		--log-file "$WORK_DIR/pd.log" \
+		--config "$WORK_DIR/pd.toml" \
+		--data-dir "$WORK_DIR/pd" &
+	sleep 5
+	i=0
+	while true; do
+		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version" || echo "")
+		echo "curl response: $response"
+		if [ "$response" -eq 200 ]; then
+			echo 'Start PD success'
+			break
+		fi
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo 'Failed to start PD'
+			exit 1
+		fi
+		echo 'Waiting for PD ready...'
+		sleep 3
+	done
+}
+
+start_tikv() {
+	echo "Starting TiKV..."
+	mkdir -p "$WORK_DIR/tikv"
+
+	cat >"$WORK_DIR/tikv.toml" <<EOF
+[storage]
+reserve-space = 0
+api-version = 2
+enable-ttl = true
+
+[dfs]
+prefix = "tikv"
+s3-endpoint = "http://$MINIO_ADDR"
+s3-key-id = "$MINIO_ACCESS_KEY"
+s3-secret-key = "$MINIO_SECRET_KEY"
+s3-bucket = "$MINIO_BUCKET"
+s3-region = "local"
+
+[ia]
+enabled = true
+EOF
+
+	bin/tikv-server --version
+	bin/tikv-server \
+		--pd "$PD_ADDR" \
+		-A "$TIKV_ADDR" \
+		--status-addr "$TIKV_STATUS_ADDR" \
+		--log-file "$WORK_DIR/tikv.log" \
+		--log-level info \
+		-s "$WORK_DIR/tikv" \
+		--config "$WORK_DIR/tikv.toml" &
+	sleep 5
+	i=0
+	while true; do
+		response=$(curl -s "http://$PD_ADDR/pd/api/v1/cluster/status" || echo "")
+
+		if [ -z "$response" ]; then
+			echo "Failed to connect to PD server"
+		else
+			echo "PD response: $response"
+			if echo "$response" | grep -q '"is_initialized": true'; then
+				echo "TiKV cluster initialized successfully"
+				break
+			fi
+		fi
+
+		i=$((i + 1))
+		if [ "$i" -gt 20 ]; then
+			echo 'Failed to initialize TiKV cluster after 20 attempts'
+			exit 1
+		fi
+
+		echo 'Waiting for TiKV ready...'
+		sleep 5
+	done
+}
+
+start_tikv_worker() {
+	echo "Starting tikv-worker..."
+	mkdir -p "$WORK_DIR/tikv-worker/data"
+
+	cat >"$WORK_DIR/tikv-worker.toml" <<EOF
+[dfs]
+prefix = "tikv"
+s3-endpoint = "http://$MINIO_ADDR"
+s3-key-id = "$MINIO_ACCESS_KEY"
+s3-secret-key = "$MINIO_SECRET_KEY"
+s3-bucket = "$MINIO_BUCKET"
+s3-region = "local"
+
+[ia]
+mem-cap = "5GB"
+disk-cap = "20GB"
+EOF
+
+	bin/tikv-worker \
+		--addr "$TIKV_WORKER_ADDR" \
+		--pd-endpoints "http://$PD_ADDR" \
+		--config "$WORK_DIR/tikv-worker.toml" \
+		--data-dir "$WORK_DIR/tikv-worker/data" \
+		--log-file "$WORK_DIR/tikv-worker.log" &
+
+	i=0
+	while true; do
+		# tikv-worker exposes /health on its --addr port; if that's not present
+		# we fall back to a simple TCP probe.
+		if curl -sS "http://$TIKV_WORKER_ADDR/health" >/dev/null 2>&1; then
+			echo 'Start tikv-worker success'
+			break
+		fi
+		if bash -c "exec 3<>/dev/tcp/127.0.0.1/19000" 2>/dev/null; then
+			exec 3<&-
+			exec 3>&-
+			echo 'tikv-worker port is open'
+			break
+		fi
+		i=$((i + 1))
+		if [ "$i" -gt 30 ]; then
+			echo 'Failed to start tikv-worker'
+			exit 1
+		fi
+		echo 'Waiting for tikv-worker ready...'
+		sleep 2
+	done
+}
+
+start_tidb() {
+	echo "Starting TiDB..."
+	bin/tidb-server -V
+
+	# Next-gen needs a SYSTEM keyspace TiDB to bootstrap the cluster before
+	# any user keyspace TiDB can start. Only the SYSTEM node needs
+	# `tidb_service_scope = "dxf_service"` -- DXF routes tasks to any eligible
+	# node and one is enough.
+	cat >"$WORK_DIR/tidb-system.toml" <<EOF
+keyspace-name = "SYSTEM"
+tikv-worker-url = "http://$TIKV_WORKER_ADDR"
+
+[instance]
+tidb_service_scope = "dxf_service"
+EOF
+
+	# User TiDB config: keyspace-name and tikv-worker-url are injected by
+	# run_tidb_server when NEXT_GEN=1, so we don't duplicate them here.
+	cat >"$WORK_DIR/tidb-user.toml" <<EOF
+EOF
+
+	echo "Starting SYSTEM TiDB for bootstrap..."
+	bin/tidb-server \
+		-P "$TIDB_SYSTEM_PORT" \
+		--status "$TIDB_SYSTEM_STATUS_PORT" \
+		--advertise-address="127.0.0.1" \
+		--store tikv \
+		--path "$PD_ADDR" \
+		--config "$WORK_DIR/tidb-system.toml" \
+		--log-file "$WORK_DIR/tidb-system.log" &
+	sleep 5
+	i=0
+	while true; do
+		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$TIDB_HOST:$TIDB_SYSTEM_STATUS_PORT/status" || echo "")
+		if [ "$response" -eq 200 ]; then
+			echo 'Start SYSTEM TiDB success'
+			break
+		fi
+		i=$((i + 1))
+		if [ "$i" -gt 50 ]; then
+			echo 'Failed to start SYSTEM TiDB'
+			exit 1
+		fi
+		echo 'Waiting for SYSTEM TiDB ready...'
+		sleep 3
+	done
+
+	# User keyspace TiDB: delegate to run_tidb_server which handles next-gen
+	# config (keyspace-name, tikv-worker-url) and user/grant setup.
+	echo "Starting user keyspace TiDB via run_tidb_server..."
+	CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+	"$CUR_DIR/run_tidb_server" 4000 123456 "$WORK_DIR/tidb-user.toml"
+}
+
+start_minio
+start_pd
+start_tikv
+start_tikv_worker
+start_tidb

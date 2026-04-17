@@ -1,126 +1,19 @@
 #!/usr/bin/env bash
-# tools to run a TiDB cluster
+# Dispatcher for starting a downstream TiDB cluster.
+#
+# When NEXT_GEN=1, delegate to run_downstream_cluster_nextgen which spins up
+# the full next-gen architecture (MinIO + PD + TiKV + tikv-worker + SYSTEM
+# TiDB + user keyspace TiDB). Otherwise, delegate to
+# run_downstream_cluster_classic which starts the simple classic cluster
+# (single PD + TiKV + TiDB).
+#
 # parameter 1: work directory
-set -eux
-WORK_DIR=$1
+set -eu
 
-export PD_PEER_ADDR="127.0.0.1:2380"
-export PD_ADDR="127.0.0.1:2379"
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-export TIDB_IP="127.0.0.1"
-export TIDB_PORT="4000"
-export TIDB_ADDR="127.0.0.1:4000"
-
-export TIDB_STATUS_ADDR="127.0.0.1:10080"
-export TIKV_ADDR="127.0.0.1:2016"
-export TIKV_STATUS_ADDR="127.0.0.1:2018"
-
-start_pd() {
-	echo "Starting PD..."
-
-	cat >"$WORK_DIR/pd.toml" <<EOF
-[replication]
-# The number of replicas for each region.
-max-replicas = 1
-EOF
-
-	bin/pd-server --version
-	mkdir -p "$WORK_DIR/pd"
-	bin/pd-server \
-		--client-urls "http://$PD_ADDR" \
-		--peer-urls "http://$PD_PEER_ADDR" \
-		--log-file "$WORK_DIR/pd.log" \
-		--config "$WORK_DIR/pd.toml" \
-		--data-dir "$WORK_DIR/pd" &
-	sleep 5
-	i=0
-	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$PD_ADDR/pd/api/v1/version" || echo "")
-		echo "curl response: $response"
-		if [ "$response" -eq 200 ]; then
-			echo 'Start PD success'
-			break
-		fi
-		i=$((i + 1))
-		if [ "$i" -gt 20 ]; then
-			echo 'Failed to start PD'
-			return 1
-		fi
-		echo 'Waiting for PD ready...'
-		sleep 3
-	done
-}
-
-start_tikv() {
-	echo "Starting TiKV..."
-	mkdir -p "$WORK_DIR/tikv"
-	bin/tikv-server --version
-	bin/tikv-server \
-		--pd "$PD_ADDR" \
-		-A "$TIKV_ADDR" \
-		--status-addr "$TIKV_STATUS_ADDR" \
-		--log-file "$WORK_DIR/tikv.log" \
-		--log-level info \
-		-s "$WORK_DIR/tikv" &
-	sleep 5
-	i=0
-	while true; do
-		response=$(curl -s "http://$PD_ADDR/pd/api/v1/cluster/status" || echo "")
-
-		if [ -z "$response" ]; then
-			echo "Failed to connect to PD server"
-		else
-			echo "PD response: $response"
-			if echo "$response" | grep -q '"is_initialized": true'; then
-				echo "TiKV cluster initialized successfully"
-				break
-			fi
-		fi
-
-		i=$((i + 1))
-		if [ "$i" -gt 20 ]; then
-			echo 'Failed to initialize TiKV cluster after 20 attempts'
-			return 1
-		fi
-
-		echo 'Waiting for TiKV ready...'
-		sleep 5
-	done
-}
-
-start_tidb() {
-	echo "Starting TiDB..."
-	bin/tidb-server -V
-	bin/tidb-server \
-		-P 4000 \
-		--status 10080 \
-		--advertise-address="127.0.0.1" \
-		--store tikv \
-		--path "$PD_ADDR" \
-		--log-file "$WORK_DIR/tidb.log" &
-	sleep 5
-	# wait until TiDB is online...
-	i=0
-	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$TIDB_IP:10080/status" || echo "")
-		echo "curl response: $response"
-		if [ "$response" -eq 200 ]; then
-			echo 'Start TiDB success'
-			break
-		fi
-		i=$((i + 1))
-		if [ "$i" -gt 50 ]; then
-			echo 'Failed to start TiDB'
-			return 1
-		fi
-		echo 'Waiting for TiDB ready...'
-		sleep 3
-	done
-}
-
-start_pd
-start_tikv
-start_tidb
-
-mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '123456';" || true
-mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	"$CUR/run_downstream_cluster_nextgen" "$@"
+else
+	"$CUR/run_downstream_cluster_classic" "$@"
+fi

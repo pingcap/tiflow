@@ -473,9 +473,8 @@ function run() {
 	check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/$ILLEGAL_CHAR_NAME '"stage": "Running"' 10
 	sleep 2 # still wait for subtask running on other dm-workers
 
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	# kill downstream TiDB (on next-gen, preserve SYSTEM TiDB)
+	cleanup_tidb_server
 
 	# dm-worker execute sql failed, and will try auto resume task
 	run_sql_file $cur/data/db2.increment0.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2

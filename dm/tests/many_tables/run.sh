@@ -54,11 +54,15 @@ function incremental_data_2() {
 }
 
 function run() {
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
-
-	# clean unistore data
-	rm -rf /tmp/tidb
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		# Next-gen: restart user TiDB with small-txn config.
+		cleanup_tidb_server
+	else
+		pkill -hup tidb-server 2>/dev/null || true
+		wait_process_exit tidb-server
+		# clean unistore data
+		rm -rf /tmp/tidb
+	fi
 
 	# start a TiDB with small txn-total-size-limit
 	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config-small-txn.toml
@@ -148,8 +152,15 @@ function run() {
 		"query-status test" \
 		'"synced": true' 1
 
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	# Kill the downstream TiDB so worker will meet downstream error and auto-resume.
+	# On next-gen, use cleanup_tidb_server (port-4000 only, preserves SYSTEM TiDB
+	# and cleans temp-storage lock). On classic, kill the single TiDB.
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		cleanup_tidb_server
+	else
+		pkill -hup tidb-server 2>/dev/null || true
+		wait_process_exit tidb-server
+	fi
 	# now worker will process some binlog events, save table checkpoint and meet downstream error
 	echo "start incremental_data_2"
 	incremental_data_2
@@ -170,13 +181,18 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "stop-task test"
 
-	killall tidb-server 2>/dev/null || true
-	killall tikv-server 2>/dev/null || true
-	killall pd-server 2>/dev/null || true
-
-	run_downstream_cluster $WORK_DIR
-	# wait TiKV init
-	sleep 5
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		# Next-gen already has a running cluster; just restart user TiDB.
+		cleanup_tidb_server
+		run_tidb_server 4000 $TIDB_PASSWORD
+	else
+		killall tidb-server 2>/dev/null || true
+		killall tikv-server 2>/dev/null || true
+		killall pd-server 2>/dev/null || true
+		run_downstream_cluster $WORK_DIR
+		# wait TiKV init
+		sleep 5
+	fi
 
 	run_sql_source1 "ALTER TABLE many_tables_db.t1 DROP x;"
 	run_sql_source1 "ALTER TABLE many_tables_db.t2 DROP x;"
@@ -184,14 +200,27 @@ function run() {
 	# check merge shard tables from one source and change UK
 	run_sql_tidb "CREATE TABLE merge_many_tables_db.t(i INT, j INT, UNIQUE KEY(i,j), c1 VARCHAR(20), c2 VARCHAR(20), c3 VARCHAR(20), c4 VARCHAR(20), c5 VARCHAR(20), c6 VARCHAR(20), c7 VARCHAR(20), c8 VARCHAR(20), c9 VARCHAR(20), c10 VARCHAR(20), c11 VARCHAR(20), c12 VARCHAR(20), c13 VARCHAR(20));;"
 
-	dmctl_start_task_standalone $cur/conf/dm-task-2.yaml
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		# Use import-into mode with existing MinIO for S3 storage.
+		S3_DIR="s3://next-gen-test/many_tables_dump?endpoint=http://${MINIO_ADDR}\&access_key=${MINIO_ACCESS_KEY}\&secret_access_key=${MINIO_SECRET_KEY}\&force_path_style=true"
+		cp $cur/conf/dm-task-2-nextgen.yaml $WORK_DIR/dm-task-2.yaml
+		sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task-2.yaml
+		dmctl_start_task_standalone $WORK_DIR/dm-task-2.yaml
+	else
+		dmctl_start_task_standalone $cur/conf/dm-task-2.yaml
+	fi
 	run_sql_tidb_with_retry_times "select count(*) from merge_many_tables_db.t;" "count(*): 6002" 60
 
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
-	rm -rf /tmp/tidb || true
-	run_tidb_server 4000 $TIDB_PASSWORD
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		cleanup_tidb_server
+		run_tidb_server 4000 $TIDB_PASSWORD
+	else
+		killall -9 tidb-server 2>/dev/null || true
+		killall -9 tikv-server 2>/dev/null || true
+		killall -9 pd-server 2>/dev/null || true
+		rm -rf /tmp/tidb || true
+		run_tidb_server 4000 $TIDB_PASSWORD
+	fi
 }
 
 cleanup_data many_tables_db merge_many_tables_db

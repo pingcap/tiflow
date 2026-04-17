@@ -2,6 +2,13 @@
 
 set -eu
 
+# Lightning's cluster version check rejects next-gen TiDB (version 26.x >
+# max 10.0.0). Skip until the version gate is relaxed.
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	echo "NEXT_GEN=1: skipping s3_dumpling_lightning (Lightning version gate)"
+	exit 0
+fi
+
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME

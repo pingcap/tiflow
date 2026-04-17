@@ -7,6 +7,17 @@ ha_test2="ha_test2"
 master_ports=($MASTER_PORT1 $MASTER_PORT2 $MASTER_PORT3)
 worker_ports=($WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT)
 
+# print_debug_status dumps query-status for both tasks when check_sync_diff
+# fails, so the CI log shows what went wrong before the test exits.
+function print_debug_status() {
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
+		"query-status test" \
+		"fail me!" 1 &&
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
+			"query-status test2" \
+			"fail me!" 1 && exit 1
+}
+
 function load_data() {
 	port=$1
 	pswd=$2

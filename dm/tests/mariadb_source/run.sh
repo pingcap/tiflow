@@ -2,6 +2,14 @@
 
 set -eu
 
+# The next-gen CI pod template does not include a MariaDB sidecar yet, so
+# skip the test until MARIADB_PORT is wired up for next-gen. Keeps the rest
+# of the G10 group runnable.
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	echo "NEXT_GEN=1: skipping mariadb_source test (no MariaDB sidecar in next-gen CI pod)"
+	exit 0
+fi
+
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME

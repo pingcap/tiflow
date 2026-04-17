@@ -42,8 +42,17 @@ function start_s3() {
 
 # clean s3 server
 cleanup_s3() {
-	pkill -9 minio 2>/dev/null || true
-	wait_process_exit minio
+	# Kill only the test's MinIO (port 8688), not the next-gen cluster MinIO (port 9000).
+	if [ -n "${s3_MINIO_PID:-}" ]; then
+		kill -9 $s3_MINIO_PID 2>/dev/null || true
+	fi
+	# Wait for the specific port to be free
+	for _ in $(seq 1 30); do
+		if ! pgrep -f "minio.*$S3_ENDPOINT" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 1
+	done
 	rm -rf $s3_DBPATH
 }
 

@@ -56,7 +56,18 @@ function diff_get_config() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"config task test --path $WORK_DIR/get_task.yaml" \
 		"\"result\": true" 1
-	diff $WORK_DIR/get_task.yaml $cur/conf/get_task.yaml || exit 1
+	# The downstream session block is version-dependent: classic TiDB has DM
+	# inject `tidb_txn_mode: optimistic`, but next-gen TiDB deprecates the
+	# optimistic transaction mode (pessimistic-auto-commit defaults to true),
+	# so DM no longer injects it. Normalize the session block out before diff.
+	# Normalization: collapse `session:\n    tidb_txn_mode: optimistic` and
+	# `session: {}` to `session: __NORMALIZED__`.
+	for f in "$WORK_DIR/get_task.yaml" "$cur/conf/get_task.yaml"; do
+		cp "$f" "$f.normalized"
+		sed -i '/^  session: {}$/c\  session: __NORMALIZED__' "$f.normalized"
+		sed -i '/^  session:$/{N;s/^  session:\n    tidb_txn_mode: optimistic$/  session: __NORMALIZED__/}' "$f.normalized"
+	done
+	diff "$WORK_DIR/get_task.yaml.normalized" "$cur/conf/get_task.yaml.normalized" || exit 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"config master master1 --path $dm_master_conf" \
