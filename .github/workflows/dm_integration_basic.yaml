@@ -157,7 +157,10 @@ jobs:
           -p 3306:3306 \
           mariadb:${{ matrix.mariadb_version }} \
           --log-bin=mariadb-bin \
-          --binlog-format=ROW
+          --log-bin-compress=OFF \
+          --binlog-format=ROW \
+          --binlog-annotate-row-events=OFF \
+          --loose-binlog-legacy-event-pos=ON
           until mysqladmin -h 127.0.0.1 -u root ping; do sleep 1; done
           mysql -h 127.0.0.1 -u root -e "reset master"
           mysql -h 127.0.0.1 -u root -e "flush privileges"
