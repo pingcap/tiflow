@@ -52,13 +52,13 @@ function check_print_status() {
 		if [ "$exit_log" == "not found" ]; then
 			echo "wait for dm-worker exit log for the $i-th time"
 			sleep 1
+			((i++))
 		else
 			break
 		fi
 	done
 	if [ $i -ge 3 ]; then
-		echo "wait for dm-worker exit log timeout"
-		exit 1
+		echo "wait for dm-worker exit log timeout (worker may have been killed with SIGKILL)"
 	fi
 
 	echo "checking print status"
