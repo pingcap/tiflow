@@ -926,6 +926,19 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			beforeImage = ev.Rows[i]
 		}
 
+		if beforeImage != nil {
+			beforeImage, err = adjustValueFromBinlogData(beforeImage, tableInfo)
+			if err != nil {
+				return terror.Annotate(err, "failed to adjust row before image")
+			}
+		}
+		if afterImage != nil {
+			afterImage, err = adjustValueFromBinlogData(afterImage, tableInfo)
+			if err != nil {
+				return terror.Annotate(err, "failed to adjust row after image")
+			}
+		}
+
 		rowChange := sqlmodel.NewRowChange(
 			&cdcmodel.TableName{Schema: sourceTable.Schema, Table: sourceTable.Name},
 			&cdcmodel.TableName{Schema: targetTable.Schema, Table: targetTable.Name},
