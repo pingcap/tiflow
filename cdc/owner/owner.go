@@ -592,7 +592,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 			return nil
 		}
 		ret := &model.ChangeFeedStatusForAPI{}
-		ret.ResolvedTs = cfReactor.resolvedTs
+		ret.ResolvedTs = cfReactor.resolvedTs.Load()
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
 		query.Data = ret
 	case QueryChangeFeedSyncedStatus:
