@@ -74,7 +74,7 @@ func newDDLSink(ctx context.Context,
 		return nil, errors.Trace(err)
 	}
 
-	storage, err := util.GetExternalStorageFromURI(ctx, sinkURI.String())
+	storage, err := util.GetExternalStorageWithDefaultTimeout(ctx, sinkURI.String())
 	if err != nil {
 		return nil, err
 	}
