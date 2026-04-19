@@ -187,18 +187,21 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 		return nil, cerror.ErrAPIInvalidParam.GenWithStack(
 			"invalid start-ts %v, larger than current tso %v", cfg.StartTs, currentTSO)
 	}
-	// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
-	const ensureTTL = 60 * 60
-	if err = gc.EnsureChangefeedStartTsSafety(
-		ctx,
-		pdClient,
-		ensureGCServiceID,
-		model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
-		ensureTTL, cfg.StartTs); err != nil {
-		if !cerror.ErrStartTsBeforeGC.Equal(err) {
-			return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
+
+	if cfg.ReplicaConfig.CheckGCSafePoint {
+		// Ensure the start ts is valid in the next 3600 seconds, aka 1 hour
+		const ensureTTL = 60 * 60
+		if err = gc.EnsureChangefeedStartTsSafety(
+			ctx,
+			pdClient,
+			ensureGCServiceID,
+			model.ChangeFeedID{Namespace: cfg.Namespace, ID: cfg.ID},
+			ensureTTL, cfg.StartTs); err != nil {
+			if !cerror.ErrStartTsBeforeGC.Equal(err) {
+				return nil, cerror.ErrPDEtcdAPIError.Wrap(err)
+			}
+			return nil, err
 		}
-		return nil, err
 	}
 
 	// verify target ts

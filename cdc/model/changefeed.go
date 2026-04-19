@@ -205,6 +205,10 @@ func ValidateNamespace(namespace string) error {
 // NeedBlockGC returns true if the changefeed need to block the GC safepoint.
 // Note: if the changefeed is failed by GC, it should not block the GC safepoint.
 func (info *ChangeFeedInfo) NeedBlockGC() bool {
+	if !info.Config.CheckGCSafePoint {
+		return false
+	}
+
 	switch info.State {
 	case StateNormal, StateStopped, StatePending, StateWarning:
 		return true
