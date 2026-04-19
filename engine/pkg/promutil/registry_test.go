@@ -107,8 +107,10 @@ func TestMustRegisterNotValidName(t *testing.T) {
 
 	defer func() {
 		err := recover()
-		require.NotNil(t, err)
-		require.Regexp(t, "not a valid metric name", err.(error).Error())
+		// This will not panic because prometheus relaxes the validation of
+		// label names and metric name, allowing all UTF-8 characters.
+		// For more details, see: https://github.com/prometheus/client_golang/releases/tag/v1.21.0-rc.0
+		require.Nil(t, err)
 	}()
 
 	reg := NewRegistry()

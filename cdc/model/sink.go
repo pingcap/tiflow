@@ -23,7 +23,12 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/kv"
+<<<<<<< HEAD
 	"github.com/pingcap/tidb/pkg/parser/model"
+=======
+	"github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/errors"

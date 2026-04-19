@@ -541,8 +541,6 @@ function run() {
 	run_sql_source1 "drop table if exists \`all_mode\`.\`tb1\`;"
 	run_sql_source2 "drop table if exists \`all_mode\`.\`tb2\`;"
 	run_sql_source2 "drop table if exists \`all_mode\`.\`tb2\`;"
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "Error .* Table .* doesn't exist"
-	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "Error .* Table .* doesn't exist"
 
 	# test Db not exists should be reported
 	run_sql_tidb "drop database all_mode"

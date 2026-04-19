@@ -52,11 +52,21 @@ func NewBatchDecoder(ctx context.Context,
 		backslashEscape = true
 	}
 	cfg := &lconfig.CSVConfig{
+<<<<<<< HEAD
 		Separator:       codecConfig.Delimiter,
 		Delimiter:       codecConfig.Quote,
 		Terminator:      codecConfig.Terminator,
 		Null:            []string{codecConfig.NullString},
 		BackslashEscape: backslashEscape,
+=======
+		FieldsTerminatedBy: codecConfig.Delimiter,
+		FieldsEnclosedBy:   codecConfig.Quote,
+		LinesTerminatedBy:  codecConfig.Terminator,
+		FieldNullDefinedBy: []string{codecConfig.NullString},
+		BackslashEscape:    backslashEscape,
+		HeaderSchemaMatch:  true,
+		Header:             codecConfig.CSVOutputFieldHeader,
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	}
 	csvParser, err := mydump.NewCSVParser(ctx, cfg,
 		mydump.NewStringReader(string(value)),

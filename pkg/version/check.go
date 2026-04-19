@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/security"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 	"go.uber.org/zap"
 )
 
@@ -201,6 +202,7 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 	failpoint.Inject("GetStoreFailed", func() {
 		failpoint.Return(cerror.WrapError(cerror.ErrGetAllStoresFailed, fmt.Errorf("unknown store %d", storeID)))
 	})
+<<<<<<< HEAD
 	var stores []*metapb.Store
 	var err error
 	if storeID == 0 {
@@ -209,6 +211,9 @@ func CheckStoreVersion(ctx context.Context, client pd.Client, storeID uint64) er
 		stores = make([]*metapb.Store, 1)
 		stores[0], err = client.GetStore(ctx, storeID)
 	}
+=======
+	stores, err := client.GetAllStores(ctx, pdopt.WithExcludeTombstone())
+>>>>>>> 3c931aa4f2 (*: bump tidb, pd and parser (#12137))
 	if err != nil {
 		return cerror.WrapError(cerror.ErrGetAllStoresFailed, err)
 	}

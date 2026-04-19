@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 	"golang.org/x/time/rate"
 )
 
@@ -518,7 +519,7 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 
 	// check store version failed.
 	pdClient.GetAllStoresFunc = func(
-		ctx context.Context, opts ...pd.GetStoreOption,
+		ctx context.Context, opts ...pdopt.GetStoreOption,
 	) ([]*metapb.Store, error) {
 		return nil, errors.New("store version check failed")
 	}
@@ -527,7 +528,7 @@ func TestHandleDrainCapturesSchedulerNotReady(t *testing.T) {
 	require.Error(t, <-done)
 
 	pdClient.GetAllStoresFunc = func(
-		ctx context.Context, opts ...pd.GetStoreOption,
+		ctx context.Context, opts ...pdopt.GetStoreOption,
 	) ([]*metapb.Store, error) {
 		return nil, nil
 	}
