@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -51,6 +52,7 @@ type mockDDLPuller struct {
 	resolvedTs    model.Ts
 	ddlQueue      []*timodel.Job
 	schemaStorage entry.SchemaStorage
+	closed        int64
 }
 
 func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
@@ -66,7 +68,11 @@ func (m *mockDDLPuller) PopFrontDDL() (uint64, *timodel.Job) {
 	return m.resolvedTs, nil
 }
 
-func (m *mockDDLPuller) Close() {}
+func (m *mockDDLPuller) Close() {
+	if !atomic.CompareAndSwapInt64(&m.closed, 0, 1) {
+		panic("close twice!")
+	}
+}
 
 func (m *mockDDLPuller) Run(ctx context.Context) error {
 	<-ctx.Done()
@@ -636,6 +642,7 @@ func testChangefeedReleaseResource(
 ) {
 	var err error
 	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+	defer cf.Close(ctx)
 
 	// pre check
 	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)
@@ -742,4 +749,26 @@ func TestBarrierAdvance(t *testing.T) {
 			require.Less(t, barrier.GlobalBarrierTs, cf.ddlManager.ddlResolvedTs)
 		}
 	}
+}
+
+func TestReleaseResourcesTwice(t *testing.T) {
+	globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
+	ctx := context.Background()
+	cf, captures, tester, state := createChangefeed4Test(globalVars, changefeedInfo, newMockDDLSink, t)
+	defer cf.Close(ctx)
+
+	// pre check
+	state.CheckCaptureAlive(globalVars.CaptureInfo.ID)
+	require.False(t, preflightCheck(state, captures))
+	tester.MustApplyPatches()
+
+	// initialize
+	cf.Tick(ctx, state.Info, state.Status, captures)
+	tester.MustApplyPatches()
+	require.Equal(t, cf.initialized.Load(), true)
+
+	// close twice
+	cf.releaseResources(ctx)
+	cf.isReleased = false
+	cf.releaseResources(ctx)
 }
