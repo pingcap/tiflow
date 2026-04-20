@@ -15,35 +15,21 @@ package utils
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 const (
-	StartTimeFormat        = "2006-01-02 15:04:05"
-	StartTimeFormat2       = "2006-01-02T15:04:05"
-	StartTimeFormatWithTZ  = "2006-01-02 15:04:05Z07:00"
-	StartTimeFormatWithTZ2 = "2006-01-02T15:04:05Z07:00"
-	StartTimeFormatWithTZ3 = "2006-01-02 15:04:05Z0700"
-	StartTimeFormatWithTZ4 = "2006-01-02T15:04:05Z0700"
-	StartTimeFormatHint    = "'2006-01-02 15:04:05', '2006-01-02T15:04:05', '2006-01-02 15:04:05+08:00', '2006-01-02T15:04:05+08:00', '2006-01-02 15:04:05+0800', or '2006-01-02T15:04:05+0800'"
+	StartTimeFormatHint = "'2006-01-02 15:04:05', '2006-01-02T15:04:05', '2006-01-02 15:04:05+08:00', '2006-01-02T15:04:05+08:00', '2006-01-02 15:04:05+0800', or '2006-01-02T15:04:05+0800'"
 )
 
-var startTimeLayoutsWithTZ = []string{
-	StartTimeFormatWithTZ,
-	StartTimeFormatWithTZ2,
-	StartTimeFormatWithTZ3,
-	StartTimeFormatWithTZ4,
-}
-
-var startTimeLayoutsWithoutTZ = []string{
-	StartTimeFormat,
-	StartTimeFormat2,
-}
+var startTimePattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:?\d{2})?$`)
 
 // ParseTimeZone parse the time zone location by name or offset
 //
@@ -97,17 +83,14 @@ func ParseStartTime(timeStr string) (time.Time, error) {
 // If the time string contains a timezone offset, it is parsed as an absolute time.
 // Otherwise it is interpreted in the specified location.
 func ParseStartTimeInLoc(timeStr string, loc *time.Location) (time.Time, error) {
-	for _, layout := range startTimeLayoutsWithTZ {
-		t, parseErr := time.Parse(layout, timeStr)
-		if parseErr == nil {
-			return t, nil
-		}
+	if !startTimePattern.MatchString(timeStr) {
+		return time.Time{}, fmt.Errorf("unsupported start-time format %q, expected one of %s", timeStr, StartTimeFormatHint)
 	}
-	for _, layout := range startTimeLayoutsWithoutTZ {
-		t, parseErr := time.ParseInLocation(layout, timeStr, loc)
-		if parseErr == nil {
-			return t, nil
-		}
+
+	t, err := types.ParseTime(types.DefaultStmtNoWarningContext.WithLocation(loc), timeStr, mysql.TypeDatetime, types.MinFsp)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("unsupported start-time format %q, expected one of %s", timeStr, StartTimeFormatHint)
 	}
-	return time.Time{}, fmt.Errorf("unsupported start-time format %q, expected one of %s", timeStr, StartTimeFormatHint)
+
+	return t.GoTime(loc)
 }

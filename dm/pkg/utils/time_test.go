@@ -36,9 +36,18 @@ func TestParseStartTime(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ParseStartTime("2006-01-02T15:04:05Z")
 	require.NoError(t, err)
-	_, err = ParseStartTime("15:04:05")
-	require.Error(t, err)
-	require.ErrorContains(t, err, "unsupported start-time format")
+
+	for _, invalid := range []string{
+		"15:04:05",
+		"2006/01/02 15:04:05",
+		"20060102 150405",
+		"2006-01-02",
+		"2006-01-02 15:04:05.123",
+	} {
+		_, err = ParseStartTime(invalid)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "unsupported start-time format")
+	}
 }
 
 func TestParseStartTimeInLoc(t *testing.T) {
