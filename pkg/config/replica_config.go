@@ -34,7 +34,7 @@ import (
 
 const (
 	// minSyncPointInterval is the minimum of SyncPointInterval can be set.
-	minSyncPointInterval = time.Second * 30
+	minSyncPointInterval = time.Second * 1
 	// minSyncPointRetention is the minimum of SyncPointRetention can be set.
 	minSyncPointRetention           = time.Hour * 1
 	minChangeFeedErrorStuckDuration = time.Minute * 30
