@@ -19,15 +19,17 @@ TEST_DIR=/tmp/dm_test
 tmp_config="/tmp/dm_test/tidb.toml"
 rm -f $tmp_config
 
-# Both classic and next-gen TiDB accept keyspace-name and
-# tidb-service-scope (on classic unistore they are no-ops). Always set them
-# so the config path is identical. tikv-worker-url is only meaningful on
-# next-gen but harmless on classic.
-cat >>$tmp_config <<EOF
+# Next-gen TiDB rejects startup without a keyspace and requires a tikv-worker
+# URL for the lightning backend. Classic TiDB rejects keyspace-name in config.
+# Prepend these top-level keys before any user-supplied config (which may
+# contain [sections] that would otherwise swallow them).
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	cat >>$tmp_config <<EOF
 keyspace-name = "${KEYSPACE_NAME:-dm_test}"
 tikv-worker-url = "http://${TIKV_WORKER_ADDR:-127.0.0.1:19000}"
 
 EOF
+fi
 
 if [ "$#" -ge 3 ]; then
 	cat $3 >>$tmp_config

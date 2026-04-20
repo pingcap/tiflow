@@ -10,9 +10,6 @@ TIDB_PORT=${TIDB_PORT:-4000}
 user="root"
 OUTFILE="$TEST_DIR/sql_res.$TEST_NAME.txt"
 echo "[$(date)] Executing SQL: $1" >$OUTFILE
-# Diagnostic: log DROP DATABASE statements to stderr so the failing SQL is
-# visible in CI console output right before any mysql error.
-case "$1" in *[Dd][Rr][Oo][Pp]\ [Dd][Aa][Tt][Aa][Bb][Aa][Ss][Ee]*) echo "[run_sql] DROP DATABASE on port $2: $1" >&2 ;; esac
 
 if [[ "$2" = $TIDB_PORT ]]; then
 	user="test"
