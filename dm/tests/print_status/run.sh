@@ -52,7 +52,7 @@ function check_print_status() {
 		if [ "$exit_log" == "not found" ]; then
 			echo "wait for dm-worker exit log for the $i-th time"
 			sleep 1
-			((i++))
+			i=$((i + 1))
 		else
 			break
 		fi
