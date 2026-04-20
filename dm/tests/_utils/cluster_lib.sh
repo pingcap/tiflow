@@ -15,41 +15,41 @@ CUR_CLUSTER_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # Kill only the port-4000 user TiDB. On next-gen, SYSTEM TiDB (4001) stays.
 cleanup_tidb_server() {
-    local pattern='tidb-server.*-P 4000'
-    local pids
-    pids=$(pgrep -f "$pattern" || true)
-    echo "tidb-server on port 4000 pids=${pids:-none}"
-    if [ -n "$pids" ]; then
-        kill -HUP $pids 2>/dev/null || true
-    fi
-    for _ in $(seq 1 120); do
-        if ! pgrep -f "$pattern" >/dev/null 2>&1; then
-            echo "tidb-server on port 4000 already exit"
-            rm -f /tmp/*_tidb/*/tmp-storage/_dir.lock 2>/dev/null || true
-            return 0
-        fi
-        sleep 1
-    done
-    echo "tidb-server on port 4000 didn't exit in 120s"
-    pgrep -af "$pattern" || true
-    return 1
+	local pattern='tidb-server.*-P 4000'
+	local pids
+	pids=$(pgrep -f "$pattern" || true)
+	echo "tidb-server on port 4000 pids=${pids:-none}"
+	if [ -n "$pids" ]; then
+		kill -HUP $pids 2>/dev/null || true
+	fi
+	for _ in $(seq 1 120); do
+		if ! pgrep -f "$pattern" >/dev/null 2>&1; then
+			echo "tidb-server on port 4000 already exit"
+			rm -f /tmp/*_tidb/*/tmp-storage/_dir.lock 2>/dev/null || true
+			return 0
+		fi
+		sleep 1
+	done
+	echo "tidb-server on port 4000 didn't exit in 120s"
+	pgrep -af "$pattern" || true
+	return 1
 }
 
 # Tear down the full downstream cluster.
 # Next-gen: only user TiDB (preserve SYSTEM TiDB + PD + TiKV + MinIO).
 # Classic: kill everything + clean unistore data.
 cleanup_downstream_cluster() {
-    if [ "${NEXT_GEN:-}" = "1" ]; then
-        cleanup_tidb_server
-    else
-        killall -9 tidb-server 2>/dev/null || true
-        killall -9 tikv-server 2>/dev/null || true
-        killall -9 pd-server 2>/dev/null || true
-        wait_process_exit tidb-server
-        wait_process_exit tikv-server
-        wait_process_exit pd-server
-        rm -rf /tmp/tidb
-    fi
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		cleanup_tidb_server
+	else
+		killall -9 tidb-server 2>/dev/null || true
+		killall -9 tikv-server 2>/dev/null || true
+		killall -9 pd-server 2>/dev/null || true
+		wait_process_exit tidb-server
+		wait_process_exit tikv-server
+		wait_process_exit pd-server
+		rm -rf /tmp/tidb
+	fi
 }
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ cleanup_downstream_cluster() {
 # Start or restart a single downstream TiDB.
 # Args: port password [config_file]
 run_tidb_server() {
-    "$CUR_CLUSTER_LIB/run_tidb_server" "$@"
+	"$CUR_CLUSTER_LIB/run_tidb_server" "$@"
 }
 
 # Start a full downstream cluster (PD + TiKV + TiDB).
@@ -67,11 +67,11 @@ run_tidb_server() {
 # Next-gen: MinIO + PD + TiKV + tikv-worker + SYSTEM TiDB + user TiDB.
 # Args: work_dir
 run_downstream_cluster() {
-    if [ "${NEXT_GEN:-}" = "1" ]; then
-        "$CUR_CLUSTER_LIB/run_downstream_cluster_nextgen" "$@"
-    else
-        "$CUR_CLUSTER_LIB/run_downstream_cluster_classic" "$@"
-    fi
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		"$CUR_CLUSTER_LIB/run_downstream_cluster_nextgen" "$@"
+	else
+		"$CUR_CLUSTER_LIB/run_downstream_cluster_classic" "$@"
+	fi
 }
 
 # Start a TLS-enabled downstream cluster.
@@ -79,9 +79,9 @@ run_downstream_cluster() {
 # Next-gen: restart only user TiDB with client-facing TLS.
 # Args: work_dir conf_dir cluster_ca cluster_cert cluster_key db_ca db_cert db_key
 run_downstream_cluster_with_tls() {
-    if [ "${NEXT_GEN:-}" = "1" ]; then
-        "$CUR_CLUSTER_LIB/run_downstream_cluster_with_tls_nextgen" "$@"
-    else
-        "$CUR_CLUSTER_LIB/run_downstream_cluster_with_tls_classic" "$@"
-    fi
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		"$CUR_CLUSTER_LIB/run_downstream_cluster_with_tls_nextgen" "$@"
+	else
+		"$CUR_CLUSTER_LIB/run_downstream_cluster_with_tls_classic" "$@"
+	fi
 }

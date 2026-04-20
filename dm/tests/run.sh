@@ -24,6 +24,9 @@ stop_services() {
 		mysql -u root -h $MYSQL_HOST1 -P $MYSQL_PORT1 -p$MYSQL_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 		mysql -u root -h $MYSQL_HOST2 -P $MYSQL_PORT2 -p$MYSQL_PASSWORD2 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	fi
+	if [ "$need_mariadb" -eq 1 ]; then
+		mysql -u root -h $MARIADB_HOST1 -P $MARIADB_PORT1 -p$MARIADB_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+	fi
 }
 
 print_worker_stacks() {
@@ -85,6 +88,7 @@ start_services() {
 	fi
 	if [ "$need_mariadb" -eq 1 ]; then
 		check_mysql $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
+		set_default_variables $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
 	fi
 }
 
@@ -114,12 +118,12 @@ if [ "$test_case" == "*" ]; then
 else
 	for one_case in $test_case; do
 		case "$one_case" in
-			mariadb_source)
-				need_mariadb=1
-				;;
-			*)
-				need_mysql=1
-				;;
+		mariadb_*)
+			need_mariadb=1
+			;;
+		*)
+			need_mysql=1
+			;;
 		esac
 	done
 fi

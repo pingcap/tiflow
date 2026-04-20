@@ -11,6 +11,7 @@ if [ "${NEXT_GEN:-}" = "1" ]; then
 fi
 
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+export RESET_MASTER=false
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
