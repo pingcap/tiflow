@@ -55,4 +55,7 @@ if [ "${NEXT_GEN:-}" = "1" ]; then
 	export TIDB_SYSTEM_PORT=${TIDB_SYSTEM_PORT:-"4001"}
 	export TIDB_SYSTEM_STATUS_PORT=${TIDB_SYSTEM_STATUS_PORT:-"10081"}
 	export KEYSPACE_NAME=${KEYSPACE_NAME:-"dm_test"}
+
+	# Extra CLI flags for user TiDB.
+	export TIDB_EXTRA_ARGS="-keyspace-name ${KEYSPACE_NAME}"
 fi

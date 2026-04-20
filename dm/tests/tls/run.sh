@@ -34,19 +34,13 @@ cluster-ssl-cert = "$cur/conf/dm.pem"
 cluster-ssl-key = "$cur/conf/dm.key"
 EOF
 
-	# Classic TiDB rejects keyspace-name; only pass on next-gen.
-	EXTRA_ARGS=""
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		EXTRA_ARGS="-keyspace-name ${KEYSPACE_NAME:-dm_test} -tidb-service-scope dxf_service"
-	fi
-
 	bin/tidb-server \
 		-P 4400 \
 		--path $WORK_DIR/tidb \
 		--store unistore \
 		--config $WORK_DIR/tidb-tls-config.toml \
 		--log-file "$WORK_DIR/tidb.log" \
-		${EXTRA_ARGS} 2>&1 &
+		${TIDB_EXTRA_ARGS:-} 2>&1 &
 
 	sleep 5
 

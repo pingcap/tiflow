@@ -89,6 +89,13 @@ function join_string() {
     local IFS="$1"; shift; echo "$*";
 }
 
+# Normalize session block in a YAML file in-place. Next-gen exports
+# "session: {}" while classic exports "session:\n  tidb_txn_mode: optimistic".
+function normalize_session_block() {
+    sed -i '/^  session: {}$/c\  session: __NORMALIZED__' "$1"
+    sed -i '/^  session:$/{N;s/^  session:\n    tidb_txn_mode: optimistic$/  session: __NORMALIZED__/}' "$1"
+}
+
 # shortcut for start task on one DM-worker
 function dmctl_start_task_standalone() {
     if [ $# -ge 2 ]; then

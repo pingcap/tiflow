@@ -8,15 +8,6 @@ CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/_utils/env_variables
 source $CUR/_utils/cluster_lib.sh
 
-if [ "$#" -ge 1 ]; then
-	test_case="$*"
-else
-	test_case="*"
-fi
-
-need_mariadb=0
-need_mysql=1
-
 stop_services() {
 	echo "..."
 	if [ "$need_mysql" -eq 1 ]; then
@@ -91,6 +82,12 @@ start_services() {
 		set_default_variables $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
 	fi
 }
+
+if [ "$#" -ge 1 ]; then
+	test_case="$*"
+else
+	test_case="*"
+fi
 
 should_run=0
 if [ "$test_case" == "*" ]; then
