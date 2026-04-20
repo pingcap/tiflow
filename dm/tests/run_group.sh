@@ -37,7 +37,7 @@ groups=(
 	# G09
 	"import_v10x sharding2 ha new_collation_off only_dml openapi s3_dumpling_lightning sequence_sharding_optimistic"
 	# G10
-	"start_task print_status http_apis new_relay all_mode import_into_mode mariadb_source"
+	"start_task print_status http_apis new_relay all_mode import_into_mode"
 	# `others others_2 others_3` tests of old pipeline
 	# G11
 	"validator_basic dm_syncer shardddl_optimistic slow_relay_writer sql_mode sync_collation"
@@ -46,11 +46,14 @@ groups=(
 )
 
 # Get other cases not in groups, to avoid missing any case
+# mariadb_source requires a MariaDB sidecar in CI (PingCAP-QE/ci#4496);
+# skip it until that CI change is merged and the sidecar is available.
+skip_list=" mariadb_source "
 others=()
 for script in "$CUR"/*/run.sh; do
 	test_name="$(basename "$(dirname "$script")")"
 	# shellcheck disable=SC2076
-	if [[ ! " ${groups[*]} " =~ " ${test_name} " ]]; then
+	if [[ ! " ${groups[*]} " =~ " ${test_name} " ]] && [[ ! "$skip_list" =~ " ${test_name} " ]]; then
 		others=("${others[@]} ${test_name}")
 	fi
 done
