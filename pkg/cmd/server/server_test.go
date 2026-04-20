@@ -183,12 +183,12 @@ func TestParseCfg(t *testing.T) {
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
 				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
-				ClientMaxBatchSize:           8 * 1024 * 1024,
-				ClientMaxBatchCount:          128,
+				ClientMaxBatchSize:           64 * 1024 * 1024,
+				ClientMaxBatchCount:          1024,
 				ClientRetryRateLimit:         1.0,
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
-				ServerWorkerPoolSize:         4,
+				ServerWorkerPoolSize:         8,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
 				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
 				KeepAliveTime:                config.TomlDuration(time.Second * 30),
@@ -469,12 +469,12 @@ cert-allowed-cn = ["dd","ee"]
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
 				ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
-				ClientMaxBatchSize:           8 * 1024 * 1024,
-				ClientMaxBatchCount:          128,
+				ClientMaxBatchSize:           64 * 1024 * 1024,
+				ClientMaxBatchCount:          1024,
 				ClientRetryRateLimit:         1.0,
 				ServerMaxPendingMessageCount: 102400,
 				ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
-				ServerWorkerPoolSize:         4,
+				ServerWorkerPoolSize:         8,
 				MaxRecvMsgSize:               256 * 1024 * 1024,
 				KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
 				KeepAliveTime:                config.TomlDuration(time.Second * 30),
@@ -534,12 +534,12 @@ unknown3 = 3
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{
 			ClientMaxBatchInterval:       config.TomlDuration(time.Millisecond * 10),
-			ClientMaxBatchSize:           8 * 1024 * 1024,
-			ClientMaxBatchCount:          128,
+			ClientMaxBatchSize:           64 * 1024 * 1024,
+			ClientMaxBatchCount:          1024,
 			ClientRetryRateLimit:         1.0,
 			ServerMaxPendingMessageCount: 102400,
 			ServerAckInterval:            config.TomlDuration(time.Millisecond * 100),
-			ServerWorkerPoolSize:         4,
+			ServerWorkerPoolSize:         8,
 			MaxRecvMsgSize:               256 * 1024 * 1024,
 			KeepAliveTimeout:             config.TomlDuration(time.Second * 10),
 			KeepAliveTime:                config.TomlDuration(time.Second * 30),

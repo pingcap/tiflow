@@ -65,6 +65,10 @@ type p2pTransport struct {
 		// FIXME it's an unbounded buffer, and may cause OOM!
 		msgBuf []*schedulepb.Message
 	}
+	lastPrintTime time.Time
+	ignoreCount   int64
+	totalMsg      int64
+	role          Role
 }
 
 // Role of the transport user.
@@ -89,6 +93,7 @@ func NewTransport(
 		peerTopic:     peerTopic,
 		messageServer: server,
 		messageRouter: router,
+		role:          role,
 	}
 	var err error
 	trans.errCh, err = trans.messageServer.SyncAddHandler(
@@ -112,6 +117,7 @@ func NewTransport(
 func (t *p2pTransport) Send(
 	ctx context.Context, msgs []*schedulepb.Message,
 ) error {
+	t.totalMsg += int64(len(msgs))
 	for i := range msgs {
 		value := msgs[i]
 		to := value.To
@@ -127,6 +133,18 @@ func (t *p2pTransport) Send(
 		_, err := client.TrySendMessage(ctx, t.peerTopic, value)
 		if err != nil {
 			if cerror.ErrPeerMessageSendTryAgain.Equal(err) {
+				t.ignoreCount++
+				if time.Since(t.lastPrintTime) > 30*time.Second {
+					log.Warn("schedulerv3: message send failed since ignored, retry later",
+						zap.String("namespace", t.changefeed.Namespace),
+						zap.String("changefeed", t.changefeed.ID),
+						zap.String("to", to),
+						zap.Int64("ignoreCount", t.ignoreCount),
+						zap.Int64("totalMsg", t.totalMsg),
+						zap.Float64("ignoreRate", float64(t.ignoreCount)/float64(t.totalMsg)),
+						zap.String("role", string(t.role)),
+					)
+				}
 				return nil
 			}
 			if cerror.ErrPeerMessageClientClosed.Equal(err) {

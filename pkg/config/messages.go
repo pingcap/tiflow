@@ -49,12 +49,12 @@ type MessagesConfig struct {
 var defaultMessageConfig = &MessagesConfig{
 	// Note that ClientMaxBatchInterval may increase the checkpoint latency.
 	ClientMaxBatchInterval:       TomlDuration(time.Millisecond * 10),
-	ClientMaxBatchSize:           8 * 1024 * 1024, // 8MB
-	ClientMaxBatchCount:          128,
+	ClientMaxBatchSize:           64 * 1024 * 1024, // 64MB
+	ClientMaxBatchCount:          1024,
 	ClientRetryRateLimit:         1.0, // Once per second
 	ServerMaxPendingMessageCount: 102400,
 	ServerAckInterval:            TomlDuration(time.Millisecond * 100),
-	ServerWorkerPoolSize:         4,
+	ServerWorkerPoolSize:         8,
 	MaxRecvMsgSize:               defaultMaxRecvMsgSize,
 	KeepAliveTime:                TomlDuration(time.Second * 30),
 	KeepAliveTimeout:             TomlDuration(time.Second * 10),
@@ -66,7 +66,7 @@ const (
 
 	// clientSendChannelSize represents the size of an internal channel used to buffer
 	// unsent messages.
-	clientSendChannelSize = 128
+	clientSendChannelSize = 1024
 
 	// clientDialTimeout represents the timeout given to gRPC to dial. 5 seconds seems reasonable
 	// because it is unlikely that the latency between TiCDC nodes is larger than 5 seconds.
