@@ -175,7 +175,7 @@ func (r *RowChange) String() string {
 
 // TargetTableID returns a ID string for target table.
 func (r *RowChange) TargetTableID() string {
-	return r.targetTable.QuoteString()
+	return r.targetTable.QuoteSinkString()
 }
 
 // ColumnCount returns the number of columns of this RowChange.
@@ -292,7 +292,7 @@ func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	var buf strings.Builder
 	buf.Grow(1024)
 	buf.WriteString("DELETE FROM ")
-	buf.WriteString(r.targetTable.QuoteString())
+	buf.WriteString(r.targetTable.QuoteSinkString())
 	buf.WriteString(" WHERE ")
 	whereArgs := r.genWhere(&buf)
 	buf.WriteString(" LIMIT 1")
@@ -311,7 +311,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	var buf strings.Builder
 	buf.Grow(2048)
 	buf.WriteString("UPDATE ")
-	buf.WriteString(r.targetTable.QuoteString())
+	buf.WriteString(r.targetTable.QuoteSinkString())
 	buf.WriteString(" SET ")
 
 	// Build target generated columns lower names set to accelerate following check
