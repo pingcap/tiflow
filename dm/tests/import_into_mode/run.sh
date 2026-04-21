@@ -178,8 +178,10 @@ function run_ha_failover_test() {
 		"\"source\": \"$SOURCE_ID1\"" 1
 
 	# wait for sync to resume on remaining worker
+	# After failover, worker2 needs to re-dump + IMPORT INTO which can
+	# take 30-60s on loaded CI nodes. Default 10 retries (20s) is too tight.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
+		"query-status test" 30 \
 		'"unit": "Sync"' 1
 
 	echo "check full dump data after failover"
