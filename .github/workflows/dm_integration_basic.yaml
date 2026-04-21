@@ -68,6 +68,26 @@ jobs:
         run: |
           ./bin/dm-master -master-addr ${DM_MASTER_ADDR} -log-file dm_master.log -log-format json &
           ./bin/dm-worker -join ${DM_MASTER_ADDR} -worker-addr ${DM_WORKER_ADDR} -log-file dm_worker.log -log-format json &
+      - name: Wait for DM readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_MASTER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-master is ready after ${i}s"
+              break
+            fi
+            echo "waiting for dm-master... (${i}/30)"
+            sleep 1
+          done
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_WORKER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-worker is ready after ${i}s"
+              exit 0
+            fi
+            echo "waiting for dm-worker... (${i}/30)"
+            sleep 1
+          done
+          echo "timed out waiting for DM readiness"
+          exit 1
       - name: Show DM status
         shell: bash -xe {0}
         run: |
@@ -187,6 +207,26 @@ jobs:
         run: |
           ./bin/dm-master -master-addr ${DM_MASTER_ADDR} -log-file dm_master.log -log-format json &
           ./bin/dm-worker -join ${DM_MASTER_ADDR} -worker-addr ${DM_WORKER_ADDR} -log-file dm_worker.log -log-format json &
+      - name: Wait for DM readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_MASTER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-master is ready after ${i}s"
+              break
+            fi
+            echo "waiting for dm-master... (${i}/30)"
+            sleep 1
+          done
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_WORKER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-worker is ready after ${i}s"
+              exit 0
+            fi
+            echo "waiting for dm-worker... (${i}/30)"
+            sleep 1
+          done
+          echo "timed out waiting for DM readiness"
+          exit 1
       - name: Show DM status
         shell: bash -xe {0}
         run: |
