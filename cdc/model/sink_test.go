@@ -694,3 +694,34 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, txn2.Rows, 2)
 }
+
+func TestDDLEventCreateTableLikeReferTable(t *testing.T) {
+	job := &timodel.Job{
+		Type:       timodel.ActionCreateTable,
+		SchemaName: "test",
+		Query:      "create table b like a",
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 123,
+		},
+	}
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema: "test",
+			Table:  "b",
+		},
+		TableInfo: &timodel.TableInfo{
+			Name: timodel.CIStr{O: "b"},
+		},
+	}
+
+	event := &DDLEvent{}
+	event.FromJobWithArgs(job, nil, tableInfo, "", "")
+	require.NotNil(t, event.ReferTable)
+	require.Equal(t, &TableName{Schema: "test", Table: "a"}, event.ReferTable)
+
+	job.Query = "create table b like other.a"
+	event = &DDLEvent{}
+	event.FromJobWithArgs(job, nil, tableInfo, "", "")
+	require.NotNil(t, event.ReferTable)
+	require.Equal(t, &TableName{Schema: "other", Table: "a"}, event.ReferTable)
+}
