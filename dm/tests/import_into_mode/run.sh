@@ -296,8 +296,5 @@ cleanup_downstream_cluster
 run $*
 cleanup_process $*
 cleanup_downstream_cluster
-# Restore TiDB for subsequent tests in the same group (run.sh only
-# starts TiDB once at the beginning).
-run_tidb_server $TIDB_PORT $TIDB_PASSWORD
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"
