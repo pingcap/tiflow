@@ -462,7 +462,7 @@ type StartTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 
-	// task start time
+	// task start time. Prefer RFC3339-like values with timezone offset (+08:00 or +0800). Legacy values without timezone are interpreted in upstream timezone.
 	StartTime *string `json:"start_time,omitempty"`
 }
 
