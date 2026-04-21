@@ -51,6 +51,43 @@ function run() {
 	run_dm_master_info_log $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
 
+	# Pre-create Lightning's internal metadata tables. Each dm-worker spawns its
+	# own Lightning instance with the physical backend, and they race to
+	# bootstrap `lightning_metadata.task_meta_v2` / `table_meta` concurrently.
+	# TiDB's DDL schema cache can lag between the concurrent `CREATE TABLE IF
+	# NOT EXISTS` and the follow-up `SELECT`, yielding `Error 1146: Table ...
+	# doesn't exist` on one worker. Creating the tables ahead of time removes
+	# the race. The schemas mirror
+	# br/pkg/lightning/importer/import.go:CreateTaskMetaTable / CreateTableMetadataTable.
+	run_sql_tidb "CREATE DATABASE IF NOT EXISTS lightning_metadata;"
+	run_sql_tidb "CREATE TABLE IF NOT EXISTS lightning_metadata.task_meta_v2 (
+		task_id BIGINT(20) UNSIGNED NOT NULL,
+		pd_cfgs VARCHAR(2048) NOT NULL DEFAULT '',
+		status  VARCHAR(32) NOT NULL,
+		state   TINYINT(1) NOT NULL DEFAULT 0 COMMENT '0: normal, 1: exited before finish',
+		tikv_source_bytes BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		tiflash_source_bytes BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		tikv_avail BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		tiflash_avail BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		PRIMARY KEY (task_id)
+	);"
+	run_sql_tidb "CREATE TABLE IF NOT EXISTS lightning_metadata.table_meta (
+		task_id BIGINT(20) UNSIGNED,
+		table_id BIGINT(64) NOT NULL,
+		table_name VARCHAR(64) NOT NULL,
+		row_id_base BIGINT(20) NOT NULL DEFAULT 0,
+		row_id_max BIGINT(20) NOT NULL DEFAULT 0,
+		total_kvs_base BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		total_bytes_base BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		checksum_base BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		total_kvs BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		total_bytes BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		checksum BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+		status VARCHAR(32) NOT NULL,
+		has_duplicates BOOL NOT NULL DEFAULT 0,
+		PRIMARY KEY (table_id, task_id)
+	);"
+
 	# start DM task
 	dmctl_start_task "$cur/conf/dm-task-dup.yaml" "--remove-meta"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
