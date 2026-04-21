@@ -10,14 +10,10 @@ source $CUR/_utils/cluster_lib.sh
 
 stop_services() {
 	echo "..."
-	if [ "$need_mysql" -eq 1 ]; then
-		# clean sql mode
-		mysql -u root -h $MYSQL_HOST1 -P $MYSQL_PORT1 -p$MYSQL_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
-		mysql -u root -h $MYSQL_HOST2 -P $MYSQL_PORT2 -p$MYSQL_PASSWORD2 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
-	fi
-	if [ "$need_mariadb" -eq 1 ]; then
-		mysql -u root -h $MARIADB_HOST1 -P $MARIADB_PORT1 -p$MARIADB_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
-	fi
+	# clean sql mode
+	mysql -u root -h $MYSQL_HOST1 -P $MYSQL_PORT1 -p$MYSQL_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+	mysql -u root -h $MYSQL_HOST2 -P $MYSQL_PORT2 -p$MYSQL_PASSWORD2 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+	mysql -u root -h $MARIADB_HOST1 -P $MARIADB_PORT1 -p$MARIADB_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 }
 
 print_worker_stacks() {
@@ -71,16 +67,12 @@ start_services() {
 
 	i=0
 
-	if [ "$need_mysql" -eq 1 ]; then
-		check_mysql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-		check_mysql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-		set_default_variables $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
-		set_default_variables $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	fi
-	if [ "$need_mariadb" -eq 1 ]; then
-		check_mysql $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
-		set_default_variables $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
-	fi
+	check_mysql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_mysql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	check_mysql $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
+	set_default_variables $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	set_default_variables $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	set_default_variables $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
 }
 
 if [ "$#" -ge 1 ]; then
@@ -105,24 +97,6 @@ else
 		fi
 	done
 	test_case=$exist_case
-fi
-
-need_mariadb=0
-need_mysql=0
-if [ "$test_case" == "*" ]; then
-	need_mariadb=1
-	need_mysql=1
-else
-	for one_case in $test_case; do
-		case "$one_case" in
-		mariadb_*)
-			need_mariadb=1
-			;;
-		*)
-			need_mysql=1
-			;;
-		esac
-	done
 fi
 
 if [ $should_run -eq 0 ]; then
