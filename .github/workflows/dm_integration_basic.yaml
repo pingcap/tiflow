@@ -5,6 +5,9 @@ on:
     - cron: '0 3 * * *'
   workflow_dispatch:
   pull_request:
+    paths:
+      - 'dm/**'
+      - 'cmd/dm*/*'
 
 jobs:
   mysql-integration:
@@ -215,7 +218,7 @@ jobs:
           ./bin/dmctl query-status mariadb-to-tidb
       - name: install mysql-tester
         run: |
-          go install github.com/pingcap/mysql-tester/src@latest
+          go install github.com/pingcap/mysql-tester/src@f2d90ea9522d30c9a8e8d70cc31c7f016ca2801f
           mv ~/go/bin/src ~/go/bin/mysql-tester
       # - name: record validation test
       #   working-directory: ./dm/tests/integration_basic
