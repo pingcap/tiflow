@@ -482,10 +482,15 @@ forLoop:
 			}
 		}
 
-		// add more options if needed.
-		// NOTE: I think use the client's context is better than something like `concurrency.WithContext(ctx)`,
-		// so we can close the session when the client is still valid.
-		session, err = concurrency.NewSession(e.cli, concurrency.WithTTL(e.sessionTTL))
+		// Bind the session ctx to the election ctx so Session.Close()'s Revoke
+		// call aborts when the election is closed, instead of waiting out the
+		// lease TTL on a dying etcd cluster. Without this, when all dm-masters
+		// receive SIGHUP together and tear down concurrently (ha_cases
+		// cleanup), quorum vanishes mid-Revoke and each non-leader blocks up
+		// to sessionTTL (60s) in session.Close(), exceeding the cleanup
+		// deadline. On normal session expiry (line ~232), the lease is
+		// already gone on the server side so Revoke returns quickly anyway.
+		session, err = concurrency.NewSession(e.cli, concurrency.WithTTL(e.sessionTTL), concurrency.WithContext(ctx))
 		if err == nil || errors.Cause(err) == e.cli.Ctx().Err() {
 			break forLoop
 		}
