@@ -62,7 +62,13 @@ function clean_cluster_sources_and_tasks() {
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
 	openapi_source_check "list_source_success" 0
 	openapi_task_check "get_task_list" 0
-	run_sql_tidb "DROP DATABASE if exists openapi;"
+	# Force-deleting sources may trigger async DM metadata cleanup that races
+	# with this DROP. Retry to tolerate transient errors.
+	for i in $(seq 1 3); do
+		run_sql_tidb "DROP DATABASE if exists openapi;" && break
+		echo "DROP DATABASE openapi failed (attempt $i), retrying..."
+		sleep 1
+	done
 }
 
 function test_source() {

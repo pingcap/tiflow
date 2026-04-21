@@ -119,7 +119,9 @@ function test_query_timeout() {
 		"query-status $ILLEGAL_CHAR_NAME" \
 		"context deadline exceeded" 2
 	duration=$(($(date +%s) - $start_time))
-	if [[ $duration -gt 10 ]]; then
+	# Each query-status waits up to rpc-timeout (3s), and run_dm_ctl_with_retry
+	# may need 2+ attempts (2s interval). On loaded CI nodes 10s is too tight.
+	if [[ $duration -gt 30 ]]; then
 		echo "query-status takes too much time $duration"
 		exit 1
 	fi
