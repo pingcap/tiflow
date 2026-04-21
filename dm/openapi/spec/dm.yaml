@@ -2280,8 +2280,8 @@ components:
           $ref: "#/components/schemas/SourceNameList"
         start_time:
           type: string
-          example: "2006-01-02 15:04:05"
-          description: task start time
+          example: "2006-01-02T15:04:05+08:00"
+          description: task start time. Prefer RFC3339-like values with timezone offset (`+08:00` or `+0800`). Legacy values without timezone are interpreted in upstream timezone.
         safe_mode_time_duration:
           type: string
           example: "10s"
