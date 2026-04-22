@@ -20,21 +20,9 @@ function cleanup_data_upstream() {
 }
 
 function cleanup_process() {
-    # Kill dm-masters one at a time to maintain etcd quorum during graceful
-    # shutdown. Killing all 3 simultaneously causes etcd to lose quorum,
-    # blocking leader transfer indefinitely.
-    local pids
-    pids=$(pgrep -f dm-master.test || true)
-    echo "$(echo "$pids" | wc -w) dm-master alive"
-    for pid in $pids; do
-        kill -HUP $pid 2>/dev/null || true
-        for _ in $(seq 1 30); do
-            if ! kill -0 $pid 2>/dev/null; then break; fi
-            sleep 1
-        done
-        # Escalate if still alive after 30s
-        kill -9 $pid 2>/dev/null || true
-    done
+    dm_master_num=$(pgrep -c -f dm-master.test || true)
+    echo "$dm_master_num dm-master alive"
+    pkill -hup dm-master.test 2>/dev/null || true
 
     # Workers and syncers: SIGKILL directly. Workers can be stuck in long
     # Lightning loads (many_tables: 500 tables) and won't respond to SIGHUP.
