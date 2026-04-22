@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -367,25 +368,36 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 // Column is not case-sensitive on any platform, nor are column aliases.
 // So we always match in lowercase.
 // See also: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html
-func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
+func (ti *TableInfo) OffsetsByNames(names []string) ([]int, error) {
 	// todo: optimize it
-	columnOffsets := make(map[string]int, len(ti.Columns))
+	columnOffsets := make(map[string]int)
+	virtualGeneratedColumn := make(map[string]struct{})
 	for _, col := range ti.Columns {
 		if col != nil {
-			columnOffsets[col.Name.L] = ti.columnsOffset[col.ID]
+			if IsColCDCVisible(col) {
+				columnOffsets[col.Name.L] = ti.columnsOffset[col.ID]
+			} else {
+				virtualGeneratedColumn[col.Name.L] = struct{}{}
+			}
 		}
 	}
 
 	result := make([]int, 0, len(names))
 	for _, col := range names {
-		offset, ok := columnOffsets[strings.ToLower(col)]
+		name := strings.ToLower(col)
+		if _, ok := virtualGeneratedColumn[name]; ok {
+			return nil, errors.ErrDispatcherFailed.GenWithStack(
+				"found virtual generated columns when dispatch event, table: %v, columns: %v column: %v", ti.GetTableName(), names, name)
+		}
+		offset, ok := columnOffsets[name]
 		if !ok {
-			return nil, false
+			return nil, errors.ErrDispatcherFailed.GenWithStack(
+				"columns not found when dispatch event, table: %v, columns: %v, column: %v", ti.GetTableName(), names, name)
 		}
 		result = append(result, offset)
 	}
 
-	return result, true
+	return result, nil
 }
 
 // GetPrimaryKeyColumnNames returns the primary key column names
