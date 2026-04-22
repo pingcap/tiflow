@@ -48,9 +48,6 @@ type kafkaTopicManager struct {
 
 	topics sync.Map
 
-	metaRefreshTicker   *time.Ticker
-	keepConnAliveTicker *time.Ticker
-
 	// cancel is used to cancel the background goroutine.
 	cancel context.CancelFunc
 }
@@ -62,15 +59,12 @@ func NewKafkaTopicManager(
 	changefeedID model.ChangeFeedID,
 	admin kafka.ClusterAdminClient,
 	cfg *kafka.AutoCreateTopicConfig,
-	keepConnAliveInterval time.Duration,
 ) *kafkaTopicManager {
 	mgr := &kafkaTopicManager{
-		defaultTopic:        defaultTopic,
-		changefeedID:        changefeedID,
-		admin:               admin,
-		cfg:                 cfg,
-		metaRefreshTicker:   time.NewTicker(metaRefreshInterval),
-		keepConnAliveTicker: time.NewTicker(keepConnAliveInterval),
+		defaultTopic: defaultTopic,
+		changefeedID: changefeedID,
+		admin:        admin,
+		cfg:          cfg,
 	}
 
 	ctx, mgr.cancel = context.WithCancel(ctx)
@@ -100,7 +94,8 @@ func (m *kafkaTopicManager) GetPartitionNum(
 }
 
 func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
-	defer m.keepConnAliveTicker.Stop()
+	ticker := time.NewTicker(metaRefreshInterval)
+	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -109,17 +104,13 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 				zap.String("changefeed", m.changefeedID.ID),
 			)
 			return
-		case <-m.metaRefreshTicker.C:
+		case <-ticker.C:
 			// We ignore the error here, because the error may be caused by the
 			// network problem, and we can try to get the metadata next time.
 			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)
 			for topic, partitionNum := range topicPartitionNums {
 				m.tryUpdatePartitionsAndLogging(topic, partitionNum)
 			}
-		case <-m.keepConnAliveTicker.C:
-			// This operation is used to keep the kafka connection alive.
-			// For more details, see https://github.com/pingcap/tiflow/pull/12173
-			m.admin.HeartbeatBrokers()
 		}
 	}
 }

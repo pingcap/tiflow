@@ -17,7 +17,6 @@ import (
 	"context"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/manager"
@@ -105,10 +104,9 @@ func GetTopicManagerAndTryCreateTopic(
 	topic string,
 	topicCfg *kafka.AutoCreateTopicConfig,
 	adminClient kafka.ClusterAdminClient,
-	keepConnAliveInterval time.Duration,
 ) (manager.TopicManager, error) {
 	topicManager := manager.NewKafkaTopicManager(
-		ctx, topic, changefeedID, adminClient, topicCfg, keepConnAliveInterval,
+		ctx, topic, changefeedID, adminClient, topicCfg,
 	)
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {

@@ -193,7 +193,3 @@ func (a *saramaAdminClient) Close() {
 		}
 	}
 }
-
-func (a *saramaAdminClient) HeartbeatBrokers() {
-	KeepConnAlive(a.client)
-}

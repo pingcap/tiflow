@@ -72,8 +72,6 @@ type DDLSink struct {
 	statistics *metrics.Statistics
 	// admin is used to query kafka cluster information.
 	admin kafka.ClusterAdminClient
-	// connRefresherForDDL is used to refresh the connection for DDL events.
-	connRefresherForDDL kafka.SyncProducer
 }
 
 func newDDLSink(
@@ -84,18 +82,16 @@ func newDDLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoder codec.RowEventEncoder,
 	protocol config.Protocol,
-	connRefresherForDDL kafka.SyncProducer,
 ) *DDLSink {
 	return &DDLSink{
-		id:                  changefeedID,
-		protocol:            protocol,
-		eventRouter:         eventRouter,
-		topicManager:        topicManager,
-		encoder:             encoder,
-		producer:            producer,
-		statistics:          metrics.NewStatistics(changefeedID, sink.RowSink),
-		admin:               adminClient,
-		connRefresherForDDL: connRefresherForDDL,
+		id:           changefeedID,
+		protocol:     protocol,
+		eventRouter:  eventRouter,
+		topicManager: topicManager,
+		encoder:      encoder,
+		producer:     producer,
+		statistics:   metrics.NewStatistics(changefeedID, sink.RowSink),
+		admin:        adminClient,
 	}
 }
 
@@ -145,15 +141,6 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-	// This operation is used to keep the kafka connection alive.
-	// For more details, see https://github.com/pingcap/tiflow/pull/12173
-	if k.connRefresherForDDL != nil {
-		// The implementation is saramaSyncProducer.HeartbeatBrokers. And
-		// there is a keepConnAliveInterval in the saramaSyncProducer, so
-		// we don't need to worry about the heartbeat is too frequent.
-		k.connRefresherForDDL.HeartbeatBrokers()
-	}
-
 	var (
 		err          error
 		partitionNum int32
