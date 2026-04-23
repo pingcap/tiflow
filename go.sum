@@ -888,8 +888,8 @@ github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9 h1:qG9BSvlWFEE5otQGa
 github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9/go.mod h1:ORfBOFp1eteu2odzsyaxI+b8TzJwgjwyQcGhI+9SfEA=
 github.com/pingcap/metering_sdk v0.0.0-20251110022152-dac449ac5389 h1:bqbE3bwFSrUDSiN5M4EG+IXmm5eWLJnGRy/caXnxuHA=
 github.com/pingcap/metering_sdk v0.0.0-20251110022152-dac449ac5389/go.mod h1:zie1N5PRttgtqkZmRtpIDM7CuyWtvlX9LTxRd3fVSc4=
-github.com/pingcap/sarama v1.41.2-pingcap-20251202-x.0.20260420101120-1f9445ca72e1 h1:bnOmXQ9lJLYz+YO3LDz3pRugzgiu3OVIOcSv0j1oyek=
-github.com/pingcap/sarama v1.41.2-pingcap-20251202-x.0.20260420101120-1f9445ca72e1/go.mod h1:4jPnDmTqSWDQyFDQVlf1kTm/fMVaxwVE2juxc+t/eTQ=
+github.com/pingcap/sarama v1.41.2-pingcap-20251202-x.0.20260415160222-5d919a890748 h1:g9MHjQm6eGKJ/w5J3HVQxtv8Wh83Tb6rNZ4SVEJVHmw=
+github.com/pingcap/sarama v1.41.2-pingcap-20251202-x.0.20260415160222-5d919a890748/go.mod h1:4jPnDmTqSWDQyFDQVlf1kTm/fMVaxwVE2juxc+t/eTQ=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
 github.com/pingcap/tidb v1.1.0-beta.0.20260325043212-0c4df2e19ecc h1:2Ateg1PUQqozi+TtbL+Bx62qn4IpQ48VTOpqCh2d3AI=
