@@ -131,10 +131,13 @@ function run_test() {
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "check task result"
-	# wait
-	run_sql_tidb_with_retry "select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+	# wait for both sources to finish physical import and enter sync,
+	# then sync catches up with binlog (including increments written above)
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $2" \
+		'"unit": "Sync"' 2
 
-	# check table data
+	# check table data (full dump + increments replicated via sync)
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
 
 	# check dump file
@@ -236,10 +239,12 @@ function test_local_special_name() {
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "check task result"
-	# wait
-	run_sql_tidb_with_retry "select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+	# wait for both sources to finish physical import and enter sync
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $SPECIAL_TASK_NAME" \
+		'"unit": "Sync"' 2
 
-	# check table data
+	# check table data (full dump + increments replicated via sync)
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
 }
 
