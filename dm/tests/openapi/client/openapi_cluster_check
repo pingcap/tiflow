@@ -29,7 +29,7 @@ def delete_master_with_retry_success(master_name):
             return
         data = resp.json()
         print("delete_master_failed resp=", data, "retry cnt=", i)
-        # Treat "not exists" as success — the master was already removed.
+        # Treat "not exists" as success - the master was already removed.
         if "not exists" in data.get("error_msg", ""):
             print("delete_master_with_retry_success (already removed)")
             return
