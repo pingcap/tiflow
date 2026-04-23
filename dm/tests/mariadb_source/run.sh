@@ -65,6 +65,15 @@ function run() {
 	check_full_data
 
 	run_sql_file $cur/data/db1.increment.sql $MARIADB_HOST $MARIADB_PORT $MARIADB_PASSWORD
+
+	# Diagnostic: check if syncer has errors processing MariaDB binlog
+	sleep 5
+	echo "=== diagnostic: query-status after increment ==="
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test"
+	echo "=== diagnostic: worker log errors ==="
+	grep -i "error\|panic\|fail" $WORK_DIR/worker1/log/dm-worker.log | tail -20 || echo "no errors in worker log"
+
 	check_incremental_data
 }
 
