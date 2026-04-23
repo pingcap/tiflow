@@ -66,7 +66,7 @@ func (t *testServer) SetUpSuite(c *check.C) {
 }
 
 func (t *testServer) TearDownSuite(c *check.C) {
-	getMinLocForSubTaskFunc = getMinLocForSubTask
+	getMinLocForSubTaskFunc = GetMinLocForSubTask
 }
 
 func createMockETCD(dir string, host string) (*embed.Etcd, error) {
