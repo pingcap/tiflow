@@ -176,3 +176,33 @@ func TestComputeConfigHashIgnoresTLSName(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, hash2, hash3)
 }
+
+func TestNormalizeSplitterStrategy(t *testing.T) {
+	cases := []struct {
+		name    string
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{name: "empty defaults to auto", input: "", want: SplitterStrategyAuto},
+		{name: "auto", input: "auto", want: SplitterStrategyAuto},
+		{name: "auto uppercase", input: "AUTO", want: SplitterStrategyAuto},
+		{name: "auto with spaces", input: "  auto  ", want: SplitterStrategyAuto},
+		{name: "random", input: "random", want: SplitterStrategyRandom},
+		{name: "limit", input: "limit", want: SplitterStrategyLimit},
+		{name: "invalid", input: "bucket", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &Config{SplitterStrategy: tc.input}
+			err := c.normalizeSplitterStrategy()
+			if tc.wantErr {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), "auto")
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, c.SplitterStrategy)
+		})
+	}
+}

@@ -45,6 +45,7 @@ import (
 
 // Supported values for SplitterStrategy.
 const (
+	SplitterStrategyAuto   = "auto"
 	SplitterStrategyLimit  = "limit"
 	SplitterStrategyRandom = "random"
 )
@@ -410,7 +411,10 @@ type Config struct {
 	CheckDataOnly bool `toml:"check-data-only" json:"-"`
 	// skip validation for tables that don't exist upstream or downstream
 	SkipNonExistingTable bool `toml:"skip-non-existing-table" json:"-"`
-	// SplitterStrategy controls the fallback splitter when bucket stats are unavailable.
+	// SplitterStrategy controls which chunk iterator is used. "auto" (default)
+	// prefers the bucket iterator for chunk checksum and falls back to random
+	// on error; "random" and "limit" are enforced and skip the bucket iterator
+	// entirely.
 	SplitterStrategy string `toml:"splitter-strategy" json:"-"`
 	// DMAddr is dm-master's address, the format should like "http://127.0.0.1:8261"
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
@@ -666,12 +670,12 @@ func (c *Config) CheckConfig() bool {
 func (c *Config) normalizeSplitterStrategy() error {
 	mode := strings.ToLower(strings.TrimSpace(c.SplitterStrategy))
 	switch mode {
-	case "", SplitterStrategyRandom:
-		c.SplitterStrategy = SplitterStrategyRandom
-	case SplitterStrategyLimit:
+	case "", SplitterStrategyAuto:
+		c.SplitterStrategy = SplitterStrategyAuto
+	case SplitterStrategyRandom, SplitterStrategyLimit:
 		c.SplitterStrategy = mode
 	default:
-		return errors.Errorf("splitter-strategy must be limit or random")
+		return errors.Errorf("splitter-strategy must be auto, random, or limit")
 	}
 	return nil
 }
