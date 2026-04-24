@@ -146,13 +146,11 @@ function start_multi_tasks_cluster() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER5_PORT
 
 	echo "start DM task"
-
-	dmctl_start_task &
-	pid1=$!
-	dmctl_start_task "$cur/conf/dm-task2.yaml" &
-	pid2=$!
-
-	wait "$pid1" "$pid2"
+	# Run sequentially — parallel dmctl calls write the same log file
+	# ($workdir/dmctl.$ts.log) when executed in the same second, causing
+	# output corruption and false "result count mismatch" failures.
+	dmctl_start_task
+	dmctl_start_task "$cur/conf/dm-task2.yaml"
 }
 
 function cleanup() {
