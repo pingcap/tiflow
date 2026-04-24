@@ -56,7 +56,12 @@ function diff_get_config() {
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"config task test --path $WORK_DIR/get_task.yaml" \
 		"\"result\": true" 1
-	diff $WORK_DIR/get_task.yaml $cur/conf/get_task.yaml || exit 1
+	# Session block differs between classic and next-gen; normalize before diff.
+	for f in "$WORK_DIR/get_task.yaml" "$cur/conf/get_task.yaml"; do
+		cp "$f" "$f.normalized"
+		normalize_session_block "$f.normalized"
+	done
+	diff "$WORK_DIR/get_task.yaml.normalized" "$cur/conf/get_task.yaml.normalized" || exit 1
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"config master master1 --path $dm_master_conf" \

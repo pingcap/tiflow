@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# tools to run a TiDB cluster
+# Start a classic (single-PD + single-TiKV + single-TiDB) downstream cluster.
 # parameter 1: work directory
 set -eux
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$CUR/env_variables"
 WORK_DIR=$1
 
-export PD_PEER_ADDR="127.0.0.1:2380"
-export PD_ADDR="127.0.0.1:2379"
-
-export TIDB_IP="127.0.0.1"
-export TIDB_PORT="4000"
-export TIDB_ADDR="127.0.0.1:4000"
-
-export TIDB_STATUS_ADDR="127.0.0.1:10080"
-export TIKV_ADDR="127.0.0.1:2016"
-export TIKV_STATUS_ADDR="127.0.0.1:2018"
+# Classic cluster needs these — on next-gen they come from env_variables.
+export PD_PEER_ADDR=${PD_PEER_ADDR:-"127.0.0.1:2380"}
+export PD_ADDR=${PD_ADDR:-"127.0.0.1:2379"}
+export TIKV_ADDR=${TIKV_ADDR:-"127.0.0.1:2016"}
+export TIKV_STATUS_ADDR=${TIKV_STATUS_ADDR:-"127.0.0.1:2018"}
 
 start_pd() {
 	echo "Starting PD..."
@@ -44,7 +41,7 @@ EOF
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to start PD'
-			return 1
+			exit 1
 		fi
 		echo 'Waiting for PD ready...'
 		sleep 3
@@ -80,7 +77,7 @@ start_tikv() {
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to initialize TiKV cluster after 20 attempts'
-			return 1
+			exit 1
 		fi
 
 		echo 'Waiting for TiKV ready...'
@@ -88,39 +85,10 @@ start_tikv() {
 	done
 }
 
-start_tidb() {
-	echo "Starting TiDB..."
-	bin/tidb-server -V
-	bin/tidb-server \
-		-P 4000 \
-		--status 10080 \
-		--advertise-address="127.0.0.1" \
-		--store tikv \
-		--path "$PD_ADDR" \
-		--log-file "$WORK_DIR/tidb.log" &
-	sleep 5
-	# wait until TiDB is online...
-	i=0
-	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$TIDB_IP:10080/status" || echo "")
-		echo "curl response: $response"
-		if [ "$response" -eq 200 ]; then
-			echo 'Start TiDB success'
-			break
-		fi
-		i=$((i + 1))
-		if [ "$i" -gt 50 ]; then
-			echo 'Failed to start TiDB'
-			return 1
-		fi
-		echo 'Waiting for TiDB ready...'
-		sleep 3
-	done
-}
-
 start_pd
 start_tikv
-start_tidb
 
-mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '123456';" || true
-mysql -uroot -h127.0.0.1 -P4000 --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
+# PD_ADDR is already exported above; run_tidb_server derives --store tikv
+# from it automatically.
+CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+"$CUR_DIR/run_tidb_server" 4000 123456

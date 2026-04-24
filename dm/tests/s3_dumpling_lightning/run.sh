@@ -2,6 +2,13 @@
 
 set -eu
 
+# Lightning's cluster version check rejects next-gen TiDB (version 26.x >
+# max 10.0.0). Skip until the version gate is relaxed.
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	echo "NEXT_GEN=1: skipping s3_dumpling_lightning (Lightning version gate)"
+	exit 0
+fi
+
 cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
@@ -124,10 +131,13 @@ function run_test() {
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "check task result"
-	# wait
-	run_sql_tidb_with_retry "select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+	# wait for both sources to finish physical import and enter sync,
+	# then sync catches up with binlog (including increments written above)
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $2" \
+		'"unit": "Sync"' 2
 
-	# check table data
+	# check table data (full dump + increments replicated via sync)
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
 
 	# check dump file
@@ -229,17 +239,17 @@ function test_local_special_name() {
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 
 	echo "check task result"
-	# wait
-	run_sql_tidb_with_retry "select count(1) from information_schema.tables where TABLE_SCHEMA='${db}' and TABLE_NAME = '${tb}';" "count(1): 1"
+	# wait for both sources to finish physical import and enter sync
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $SPECIAL_TASK_NAME" \
+		'"unit": "Sync"' 2
 
-	# check table data
+	# check table data (full dump + increments replicated via sync)
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
 }
 
 function run() {
-	killall tidb-server 2>/dev/null || true
-	killall tikv-server 2>/dev/null || true
-	killall pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
 
 	mkdir -p "$WORK_DIR.downstream"
 	run_downstream_cluster "$WORK_DIR.downstream"
@@ -259,9 +269,7 @@ function run() {
 	# echo "run local special task-name success"
 
 	# restart to standalone tidb
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
 	rm -rf /tmp/tidb || true
 	run_tidb_server 4000 $TIDB_PASSWORD
 }

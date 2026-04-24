@@ -6,7 +6,7 @@
 
 set -eu
 
-TIDB_PORT=4000
+TIDB_PORT=${TIDB_PORT:-4000}
 user="root"
 OUTFILE="$TEST_DIR/sql_res.$TEST_NAME.txt"
 echo "[$(date)] Executing SQL: $1" >$OUTFILE

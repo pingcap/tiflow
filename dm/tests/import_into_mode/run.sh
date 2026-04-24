@@ -42,8 +42,17 @@ function start_s3() {
 
 # clean s3 server
 cleanup_s3() {
-	pkill -9 minio 2>/dev/null || true
-	wait_process_exit minio
+	# Kill only the test's MinIO (port 8688), not the next-gen cluster MinIO (port 9000).
+	if [ -n "${s3_MINIO_PID:-}" ]; then
+		kill -9 $s3_MINIO_PID 2>/dev/null || true
+	fi
+	# Wait for the specific port to be free
+	for _ in $(seq 1 30); do
+		if ! pgrep -f "minio.*$S3_ENDPOINT" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 1
+	done
 	rm -rf $s3_DBPATH
 }
 
@@ -169,8 +178,10 @@ function run_ha_failover_test() {
 		"\"source\": \"$SOURCE_ID1\"" 1
 
 	# wait for sync to resume on remaining worker
+	# After failover, worker2 needs to re-dump + IMPORT INTO which can
+	# take 30-60s on loaded CI nodes. Default 10 retries (20s) is too tight.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"query-status test" \
+		"query-status test" 30 \
 		'"unit": "Sync"' 1
 
 	echo "check full dump data after failover"
@@ -283,13 +294,9 @@ mkdir -p $WORK_DIR
 
 # also cleanup dm processes in case of last run failed
 cleanup_process $*
-killall tidb-server 2>/dev/null || true
-killall tikv-server 2>/dev/null || true
-killall pd-server 2>/dev/null || true
+cleanup_downstream_cluster
 run $*
 cleanup_process $*
-killall pd-server 2>/dev/null || true
-killall tikv-server 2>/dev/null || true
-killall tidb-server 2>/dev/null || true
+cleanup_downstream_cluster
 
 echo "[$(date)] <<<<<< test case $TEST_NAME success! >>>>>>"

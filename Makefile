@@ -508,7 +508,8 @@ install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
 
-check_third_party_binary_for_dm : sync-diff-inspector
+check_third_party_binary_for_dm:
+	@which bin/sync_diff_inspector
 	@which bin/tidb-server
 	@which mysql
 	@which bin/minio
