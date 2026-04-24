@@ -113,7 +113,7 @@ CREATE TABLE t1 (
                     col0 INT NOT NULL
 );
 
-RENAME TABLE `cross_db_1`.`t1` TO `cross_db_2`.`t1`;
+RENAME TABLE `t1` TO `cross_db_2`.`t1`;
 
 CREATE TABLE `cross_db_1`.`t2` like `cross_db_2`.`t1`;
 
