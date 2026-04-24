@@ -52,8 +52,8 @@ tidb_sha1=$(curl "${file_server_url}/download/refs/pingcap/tidb/${branch}/sha1")
 
 # All download links.
 tidb_download_url="${file_server_url}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-sync_diff_inspector_download_url="http://download.pingcap.org/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
-mydumper_download_url="http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
+sync_diff_inspector_download_url="http://download.pingcap.com/tidb-enterprise-tools-nightly-linux-amd64.tar.gz"
+mydumper_download_url="http://download.pingcap.com/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
 
 gh_os_download_url="https://github.com/github/gh-ost/releases/download/v1.1.0/gh-ost-binary-linux-20200828140552.tar.gz"
 minio_download_url="${file_server_url}/download/minio.tar.gz"
