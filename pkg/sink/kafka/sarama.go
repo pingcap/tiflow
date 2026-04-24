@@ -61,7 +61,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// According to the https://github.com/IBM/sarama/issues/2619,
 	// sarama may send message out of order even set the `config.Net.MaxOpenRequest` to 1,
 	// when the kafka cluster is unhealthy and trigger the internal retry mechanism.
-	config.Producer.Retry.Max = 0
+	config.Producer.Retry.Max = 5
 
 	// make sure sarama producer flush messages as soon as possible.
 	config.Producer.Flush.Bytes = 0
@@ -254,17 +254,4 @@ func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr
 		KafkaVersion = sarama.V0_8_2_0
 	}
 	return KafkaVersion, nil
-}
-
-// KeepConnAlive sends a heartbeat request to all brokers to keep the connection alive.
-func KeepConnAlive(client sarama.Client) {
-	// We don't care about the response and error here, even the connection
-	// is unestablished, we just need to keep the connection alive WHEN it's established.
-	// The connection will be established when a producer send messages.
-	// This is a workaround for the issue that sarama doesn't keep the connection alive
-	// when the connection is idle for a long time and we have disabled the retry in sarama.
-	brokers := client.Brokers()
-	for _, b := range brokers {
-		_, _ = b.Heartbeat(&sarama.HeartbeatRequest{})
-	}
 }
