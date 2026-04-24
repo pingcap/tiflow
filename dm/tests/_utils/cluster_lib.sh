@@ -13,7 +13,7 @@ CUR_CLUSTER_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # Cleanup
 # ---------------------------------------------------------------------------
 
-# Kill only the port-4000 user TiDB. On next-gen, SYSTEM TiDB (4001) stays.
+# Kill the port-4000 TiDB (SYSTEM TiDB on next-gen, unistore on classic).
 cleanup_tidb_server() {
 	local pattern='tidb-server.*-P 4000'
 	local pids
@@ -36,7 +36,7 @@ cleanup_tidb_server() {
 }
 
 # Tear down the full downstream cluster.
-# Next-gen: only user TiDB (preserve SYSTEM TiDB + PD + TiKV + MinIO).
+# Next-gen: only TiDB (preserve PD + TiKV + MinIO + tikv-worker).
 # Classic: kill everything + clean unistore data.
 cleanup_downstream_cluster() {
 	if [ "${NEXT_GEN:-}" = "1" ]; then

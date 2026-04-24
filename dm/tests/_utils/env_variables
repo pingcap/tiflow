@@ -52,9 +52,7 @@ if [ "${NEXT_GEN:-}" = "1" ]; then
 	export MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-"minioadmin"}
 	export MINIO_BUCKET=${MINIO_BUCKET:-"next-gen-test"}
 	export TIKV_WORKER_ADDR=${TIKV_WORKER_ADDR:-"127.0.0.1:19000"}
-	export TIDB_SYSTEM_PORT=${TIDB_SYSTEM_PORT:-"4001"}
-	export TIDB_SYSTEM_STATUS_PORT=${TIDB_SYSTEM_STATUS_PORT:-"10081"}
-	export KEYSPACE_NAME=${KEYSPACE_NAME:-"dm_test"}
+	export KEYSPACE_NAME=${KEYSPACE_NAME:-"SYSTEM"}
 
 	# Extra CLI flags for user TiDB.
 	export TIDB_EXTRA_ARGS="-keyspace-name ${KEYSPACE_NAME}"

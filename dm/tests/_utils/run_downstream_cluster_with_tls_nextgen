@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Restart the user-facing TiDB (port 4000) with TLS enabled, reusing the
-# already-running next-gen cluster infrastructure (MinIO + PD + TiKV +
-# tikv-worker + SYSTEM TiDB) brought up by run_downstream_cluster_nextgen.
+# Restart the TiDB (port 4000) with TLS enabled, reusing the already-running
+# next-gen cluster infrastructure (MinIO + PD + TiKV + tikv-worker) brought
+# up by run_downstream_cluster_nextgen.
 #
-# On next-gen we keep PD/TiKV/tikv-worker/SYSTEM TiDB alive and only
-# replace the user keyspace TiDB with a TLS-enabled instance. DM only
-# talks to TiDB through the mysql driver, so TLS on the client connection
-# is the only thing the openapi test exercises.
+# We keep PD/TiKV/tikv-worker alive and only replace the SYSTEM TiDB with
+# a TLS-enabled instance. DM only talks to TiDB through the mysql driver,
+# so TLS on the client connection is the only thing the openapi test exercises.
 #
 # parameters (positional, match run_downstream_cluster_with_tls_classic):
 #   1: WORK_DIR
@@ -40,7 +39,7 @@ ssl-cert = "${CONF_DIR}/${DB_CERT_FILE}"
 ssl-key = "${CONF_DIR}/${DB_KEY_FILE}"
 EOF
 
-# Kill only the user TiDB on port 4000; SYSTEM TiDB and infra stay alive.
+# Kill the TiDB on port 4000; PD/TiKV/tikv-worker stay alive.
 source "$CUR/test_prepare"
 cleanup_tidb_server
 

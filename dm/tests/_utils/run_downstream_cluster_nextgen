@@ -14,8 +14,7 @@
 # - PD                 :2379   (with [keyspace] pre-alloc)
 # - TiKV               :2016   (API V2 + TTL + DFS)
 # - tikv-worker        :19000  (DFS ingest)
-# - SYSTEM TiDB        :4001   (bootstrap)
-# - user keyspace TiDB :4000   (the one tests connect to)
+# - SYSTEM TiDB        :4000   (bootstrap + downstream for tests)
 #
 # Ref: pingcap/tidb tests/realtikvtest/scripts/next-gen/bootstrap-test-with-cluster.sh
 #
@@ -72,9 +71,6 @@ start_pd() {
 [replication]
 # The number of replicas for each region.
 max-replicas = 1
-
-[keyspace]
-pre-alloc = ["$KEYSPACE_NAME"]
 EOF
 
 	bin/pd-server --version
@@ -214,54 +210,18 @@ start_tidb() {
 	echo "Starting TiDB..."
 	bin/tidb-server -V
 
-	# Next-gen needs a SYSTEM keyspace TiDB to bootstrap the cluster before
-	# any user keyspace TiDB can start. Only the SYSTEM node needs
-	# `tidb_service_scope = "dxf_service"` -- DXF routes tasks to any eligible
-	# node and one is enough.
+	# Use SYSTEM keyspace TiDB directly as the downstream on port 4000.
+	# DM tests don't need keyspace isolation. DXF (tidb_service_scope) is
+	# only required for IMPORT INTO / ADD INDEX; tests that kill-restart
+	# TiDB operate in Sync mode which doesn't use DXF.
 	cat >"$WORK_DIR/tidb-system.toml" <<EOF
-keyspace-name = "SYSTEM"
-tikv-worker-url = "http://$TIKV_WORKER_ADDR"
-
 [instance]
 tidb_service_scope = "dxf_service"
 EOF
 
-	# User TiDB config: keyspace-name and tikv-worker-url are injected by
-	# run_tidb_server when NEXT_GEN=1, so we don't duplicate them here.
-	cat >"$WORK_DIR/tidb-user.toml" <<EOF
-EOF
-
-	echo "Starting SYSTEM TiDB for bootstrap..."
-	bin/tidb-server \
-		-P "$TIDB_SYSTEM_PORT" \
-		--status "$TIDB_SYSTEM_STATUS_PORT" \
-		--advertise-address="127.0.0.1" \
-		--store tikv \
-		--path "$PD_ADDR" \
-		--config "$WORK_DIR/tidb-system.toml" \
-		--log-file "$WORK_DIR/tidb-system.log" &
-	sleep 5
-	i=0
-	while true; do
-		response=$(curl -s -o /dev/null -w "%{http_code}" "http://$TIDB_HOST:$TIDB_SYSTEM_STATUS_PORT/status" || echo "")
-		if [ "$response" -eq 200 ]; then
-			echo 'Start SYSTEM TiDB success'
-			break
-		fi
-		i=$((i + 1))
-		if [ "$i" -gt 50 ]; then
-			echo 'Failed to start SYSTEM TiDB'
-			exit 1
-		fi
-		echo 'Waiting for SYSTEM TiDB ready...'
-		sleep 3
-	done
-
-	# User keyspace TiDB: delegate to run_tidb_server which handles next-gen
-	# config (keyspace-name, tikv-worker-url) and user/grant setup.
-	echo "Starting user keyspace TiDB via run_tidb_server..."
+	echo "Starting SYSTEM TiDB on port 4000..."
 	CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-	"$CUR_DIR/run_tidb_server" 4000 123456 "$WORK_DIR/tidb-user.toml"
+	"$CUR_DIR/run_tidb_server" 4000 123456 "$WORK_DIR/tidb-system.toml"
 }
 
 start_minio
