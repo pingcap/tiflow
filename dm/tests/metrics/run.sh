@@ -68,10 +68,12 @@ function run() {
 	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker1/log/dm-worker.log
 	check_log_contain_with_retry "[ShowLagInLog]" $WORK_DIR/worker2/log/dm-worker.log
 
+	# Wait for data sync before checking metrics — ensures both syncers
+	# have processed events and updated their lag counters.
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+
 	check_metric $WORKER1_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-01",task="test",worker="worker1"}' 5 0 999
 	check_metric $WORKER2_PORT 'dm_syncer_replication_lag_sum{source_id="mysql-replica-02",task="test",worker="worker2"}' 5 0 999
-
-	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	# check the after ddl query-status lag should be set to 0
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
