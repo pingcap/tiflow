@@ -21,6 +21,7 @@ const (
 	codeDBUnExpect
 	codeDBQueryFailed
 	codeDBExecuteFailed
+	codeDBExecuteFailedBegin
 )
 
 // Functional error code list.
@@ -739,9 +740,10 @@ var (
 	ErrDBBadConn     = New(codeDBBadConn, ClassDatabase, ScopeNotSet, LevelHigh, "database driver", "Please check the database connection, then use `pause-task` to pause the task and then use `resume-task` to resume the task.")
 	ErrDBInvalidConn = New(codeDBInvalidConn, ClassDatabase, ScopeNotSet, LevelHigh, "database driver", "Please check the database connection, then use `pause-task` to stop the task and then use `resume-task` to resume the task.")
 
-	ErrDBUnExpect      = New(codeDBUnExpect, ClassDatabase, ScopeNotSet, LevelHigh, "unexpect database error: %s", "")
-	ErrDBQueryFailed   = New(codeDBQueryFailed, ClassDatabase, ScopeNotSet, LevelHigh, "query statement failed: %s", "")
-	ErrDBExecuteFailed = New(codeDBExecuteFailed, ClassDatabase, ScopeNotSet, LevelHigh, "execute statement failed: %s", "")
+	ErrDBUnExpect           = New(codeDBUnExpect, ClassDatabase, ScopeNotSet, LevelHigh, "unexpect database error: %s", "")
+	ErrDBQueryFailed        = New(codeDBQueryFailed, ClassDatabase, ScopeNotSet, LevelHigh, "query statement failed: %s", "")
+	ErrDBExecuteFailed      = New(codeDBExecuteFailed, ClassDatabase, ScopeNotSet, LevelHigh, "execute statement failed: %s", "")
+	ErrDBExecuteFailedBegin = New(codeDBExecuteFailedBegin, ClassDatabase, ScopeNotSet, LevelHigh, "execute statement failed: begin", "")
 
 	// Functional error.
 	ErrParseMydumperMeta      = New(codeParseMydumperMeta, ClassFunctional, ScopeInternal, LevelHigh, "parse mydumper metadata error: %s, metadata: %s", "")
