@@ -46,12 +46,7 @@ type TiDBTableAnalyzer struct {
 	sourceTableMap    map[string]*common.TableSource
 }
 
-// AnalyzeSplitter returns a new iterator for TiDB table.
-//
-// When SplitterStrategy is "limit" or "random" the bucket iterator is skipped
-// entirely, so callers opt out of any risk of bad bucket stats skewing chunk
-// boundaries. "auto" preserves the historical behavior: try bucket first,
-// fall back to random on construction error.
+// AnalyzeSplitter returns a new iterator for TiDB table
 func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.TableDiff, startRange *splitter.RangeInfo) (splitter.ChunkIterator, error) {
 	matchedSource := getMatchSource(a.sourceTableMap, table)
 	// Shallow Copy
@@ -112,11 +107,8 @@ type TiDBSource struct {
 }
 
 // GetGlobalChecksumIterator builds chunk iterator for global-checksum mode.
-// It prefers _tidb_rowid or clustered PK, then falls back to the regular
-// splitter configuration when ignore-columns removes the checksum-specific
-// handle. Iterator choice follows SplitterStrategy: "limit" uses the limit
-// iterator; "auto" and "random" both use the random iterator ("auto"
-// preserves the pre-existing random-only behavior for global checksum).
+// Iterator choice follows SplitterStrategy: "limit" uses the limit iterator;
+// "auto" and "random" both use the random iterator.
 func (s *TiDBSource) GetGlobalChecksumIterator(
 	ctx context.Context,
 	tableIndex int,
@@ -143,13 +135,10 @@ func (s *TiDBSource) GetGlobalChecksumIterator(
 	case config.SplitterStrategyLimit:
 		limitIter, err := splitter.NewLimitIteratorWithCheckpoint(
 			ctx, "", &originTable, s.dbConn, startRange)
-		if err != nil {
-			return nil, 0, errors.Trace(err)
-		}
 		// LimitIterator produces chunks asynchronously and has no total up
 		// front; return 0 so progress reporting degrades gracefully (shows
 		// completed count without a denominator).
-		return limitIter, 0, nil
+		return limitIter, 0, err
 	default:
 		randomIter, err := splitter.NewRandomIteratorWithCheckpoint(
 			ctx, "", &originTable, s.dbConn, startRange)
