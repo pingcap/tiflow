@@ -73,7 +73,7 @@ groups=(
 	# G19
 	'changefeed_fast_fail batch_update_to_no_batch changefeed_resume_with_checkpoint_ts'
 	# G20
-	'tidb_mysql_test ddl_reentrant multi_cdc_cluster'
+	'tidb_mysql_test ddl_reentrant multi_cdc_cluster ddl_wait'
 	# G21
 	'bank kill_owner_with_ddl owner_remove_table_error'
 )
