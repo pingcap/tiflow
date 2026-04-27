@@ -211,17 +211,11 @@ start_tidb() {
 	bin/tidb-server -V
 
 	# Use SYSTEM keyspace TiDB directly as the downstream on port 4000.
-	# DM tests don't need keyspace isolation. DXF (tidb_service_scope) is
-	# only required for IMPORT INTO / ADD INDEX; tests that kill-restart
-	# TiDB operate in Sync mode which doesn't use DXF.
-	cat >"$WORK_DIR/tidb-system.toml" <<EOF
-[instance]
-tidb_service_scope = "dxf_service"
-EOF
-
+	# DM tests don't need keyspace isolation. run_tidb_server handles
+	# keyspace-name, tikv-worker-url, and dxf_service on next-gen.
 	echo "Starting SYSTEM TiDB on port 4000..."
 	CUR_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-	"$CUR_DIR/run_tidb_server" 4000 123456 "$WORK_DIR/tidb-system.toml"
+	"$CUR_DIR/run_tidb_server" 4000 123456
 }
 
 start_minio

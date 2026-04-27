@@ -25,8 +25,11 @@ rm -f $tmp_config
 # contain [sections] that would otherwise swallow them).
 if [ "${NEXT_GEN:-}" = "1" ]; then
 	cat >>$tmp_config <<EOF
-keyspace-name = "${KEYSPACE_NAME:-dm_test}"
+keyspace-name = "${KEYSPACE_NAME:-SYSTEM}"
 tikv-worker-url = "http://${TIKV_WORKER_ADDR:-127.0.0.1:19000}"
+
+[instance]
+tidb_service_scope = "dxf_service"
 
 EOF
 fi
