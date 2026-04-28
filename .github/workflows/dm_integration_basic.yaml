@@ -6,6 +6,10 @@ on:
     paths:
       - 'dm/**'
       - 'cmd/dm*/*'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/dm_integration_basic.yaml'
 
 jobs:
   mysql-integration:
@@ -30,7 +34,7 @@ jobs:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
       tidb:
-        image: 'pingcap/tidb:v8.5.5'
+        image: 'pingcap/tidb:v8.5.6'
         ports:
           - 4000:4000
     env:
@@ -117,7 +121,7 @@ jobs:
           ./bin/dmctl query-status mysql-to-tidb
       - name: install mysql-tester
         run: |
-          go install github.com/pingcap/mysql-tester/src@latest
+          go install github.com/pingcap/mysql-tester/src@f2d90ea9522d30c9a8e8d70cc31c7f016ca2801f
           mv ~/go/bin/src ~/go/bin/mysql-tester
       - name: check logs
         continue-on-error: true
