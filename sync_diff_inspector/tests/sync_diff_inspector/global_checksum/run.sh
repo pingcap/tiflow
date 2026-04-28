@@ -25,6 +25,18 @@ check_not_contains "_tidb_rowid" $CHECKPOINT_FILE
 
 rm -rf $OUT_DIR/*
 
+echo "run global-checksum mode on clustered PK table with random splitter strategy"
+GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \
+	sync_diff_inspector --config=./config_clustered_random.toml >$OUT_DIR/global_checksum_clustered_random.output
+
+check_contains "check pass!!!" $OUT_DIR/sync_diff.log
+check_contains "random splitter" $OUT_DIR/sync_diff.log
+CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
+check_contains "checksum-info" $CHECKPOINT_FILE
+check_not_contains "chunk-info" $CHECKPOINT_FILE
+
+rm -rf $OUT_DIR/*
+
 echo "introduce mismatch, global-checksum mode should fail on clustered PK table"
 mysql -uroot -h 127.0.0.1 -P 4000 -e "UPDATE checksum_mode_clustered.t SET v='z' WHERE id=1;"
 GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()" \

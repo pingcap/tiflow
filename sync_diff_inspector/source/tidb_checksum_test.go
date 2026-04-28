@@ -186,3 +186,41 @@ func TestGetGlobalChecksumIteratorReturnsErrorForInvalidConfiguredFallbackFields
 	require.Nil(t, iter)
 	require.Contains(t, err.Error(), "column id")
 }
+
+func TestGetGlobalChecksumIteratorUsesRandomStrategy(t *testing.T) {
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT, KEY `idx_v`(`v`))",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	src := &TiDBSource{
+		tableDiffs: []*common.TableDiff{{
+			Schema:           "test",
+			Table:            "t",
+			Info:             tableInfo,
+			SplitterStrategy: config.SplitterStrategyRandom,
+		}},
+		sourceTableMap: map[string]*common.TableSource{
+			dbutil.TableName("test", "t"): {
+				OriginSchema: "test",
+				OriginTable:  "t",
+			},
+		},
+	}
+
+	startRange := &splitter.RangeInfo{
+		ChunkRange: &chunk.Range{
+			Index: &chunk.CID{
+				TableIndex: 0,
+				ChunkIndex: 0,
+				ChunkCnt:   1,
+			},
+		},
+	}
+	iter, chunkCount, err := src.GetGlobalChecksumIterator(context.Background(), 0, startRange)
+	require.NoError(t, err)
+	require.NotNil(t, iter)
+	require.IsType(t, &splitter.RandomIterator{}, iter)
+	require.Equal(t, 0, chunkCount)
+}
