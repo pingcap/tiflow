@@ -83,6 +83,23 @@ func TestComputeConfigHashIncludesExportFixSQL(t *testing.T) {
 	require.NotEqual(t, withFixSQL, withoutFixSQL)
 }
 
+func TestComputeConfigHashIncludesSplitterStrategy(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	require.NoError(t, cfg.Init())
+
+	cfg.Task.SplitterStrategy = SplitterStrategyRandom
+	randomHash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	cfg.Task.SplitterStrategy = SplitterStrategyLimit
+	limitHash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	require.NotEqual(t, randomHash, limitHash)
+}
+
 func TestError(t *testing.T) {
 	tableConfig := &TableConfig{}
 	require.False(t, tableConfig.Valid())

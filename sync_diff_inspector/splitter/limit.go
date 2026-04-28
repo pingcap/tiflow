@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -46,6 +47,7 @@ type LimitIterator struct {
 
 	progressID   string
 	columnOffset map[string]int
+	chunkCount   int
 }
 
 // NewLimitIterator return a new iterator
@@ -160,6 +162,15 @@ func NewLimitIteratorWithCheckpoint(
 
 		progressID,
 		columnOffset,
+		0,
+	}
+
+	if undone {
+		limitIterator.chunkCount, err = estimateLimitChunkCount(ctx, dbConn, table, tagChunk, chunkSize)
+		if err != nil {
+			cancel()
+			return nil, errors.Trace(err)
+		}
 	}
 
 	progress.StartTable(progressID, 0, false)
@@ -208,6 +219,33 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 // GetIndexID get the current index id
 func (lmt *LimitIterator) GetIndexID() int64 {
 	return lmt.indexID
+}
+
+// Len returns estimated remaining chunks for this iterator.
+func (lmt *LimitIterator) Len() int {
+	return lmt.chunkCount
+}
+
+func estimateLimitChunkCount(
+	ctx context.Context,
+	dbConn *sql.DB,
+	table *common.TableDiff,
+	tagChunk *chunk.Range,
+	chunkSize int64,
+) (int, error) {
+	where, args := tagChunk.ToString(table.Collation)
+	remainingRows, err := getRowCount(ctx, dbConn, table.Schema, table.Table, where, args)
+	if err != nil {
+		return 0, errors.Trace(err)
+	}
+	// Limit splitter uses "LIMIT chunkSize, 1", so each boundary chunk
+	// consumes at least chunkSize+1 rows, then one trailing chunk is emitted.
+	// This gives an exact count when split key is unique.
+	chunkCount := remainingRows/(chunkSize+1) + 1
+	if chunkCount > int64(math.MaxInt) {
+		return math.MaxInt, nil
+	}
+	return int(chunkCount), nil
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {

@@ -135,10 +135,10 @@ func (s *TiDBSource) GetGlobalChecksumIterator(
 	case config.SplitterStrategyLimit:
 		limitIter, err := splitter.NewLimitIteratorWithCheckpoint(
 			ctx, "", &originTable, s.dbConn, startRange)
-		// LimitIterator produces chunks asynchronously and has no total up
-		// front; return 0 so progress reporting degrades gracefully (shows
-		// completed count without a denominator).
-		return limitIter, 0, err
+		if err != nil {
+			return nil, 0, errors.Trace(err)
+		}
+		return limitIter, limitIter.Len(), nil
 	default:
 		randomIter, err := splitter.NewRandomIteratorWithCheckpoint(
 			ctx, "", &originTable, s.dbConn, startRange)

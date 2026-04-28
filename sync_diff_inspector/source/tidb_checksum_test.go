@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
@@ -223,4 +224,61 @@ func TestGetGlobalChecksumIteratorUsesRandomStrategy(t *testing.T) {
 	require.NotNil(t, iter)
 	require.IsType(t, &splitter.RandomIterator{}, iter)
 	require.Equal(t, 0, chunkCount)
+}
+
+func TestGetGlobalChecksumIteratorUsesLimitStrategy(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = db.Close()
+	})
+
+	// estimateLimitChunkCount: remaining rows = 3, chunk-size = 2 => 2 chunks.
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM `test`\\.`t`.*").
+		WillReturnRows(sqlmock.NewRows([]string{"CNT"}).AddRow(3))
+	// First boundary row
+	mock.ExpectQuery("SELECT `id` FROM `test`\\.`t` WHERE .* LIMIT 2,1").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow("3"))
+	// Final round: no more boundary row.
+	mock.ExpectQuery("SELECT `id` FROM `test`\\.`t` WHERE .* LIMIT 2,1").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	tableInfo, err := utils.GetTableInfoBySQL(
+		"CREATE TABLE `t` (`id` BIGINT PRIMARY KEY, `v` INT)",
+		parser.New(),
+	)
+	require.NoError(t, err)
+
+	src := &TiDBSource{
+		tableDiffs: []*common.TableDiff{{
+			Schema:           "test",
+			Table:            "t",
+			Info:             tableInfo,
+			SplitterStrategy: config.SplitterStrategyLimit,
+			ChunkSize:        2,
+		}},
+		sourceTableMap: map[string]*common.TableSource{
+			dbutil.TableName("test", "t"): {
+				OriginSchema: "test",
+				OriginTable:  "t",
+			},
+		},
+		dbConn: db,
+	}
+
+	iter, chunkCount, err := src.GetGlobalChecksumIterator(context.Background(), 0, nil)
+	require.NoError(t, err)
+	require.NotNil(t, iter)
+	require.IsType(t, &splitter.LimitIterator{}, iter)
+	require.Equal(t, 2, chunkCount)
+
+	for {
+		c, err := iter.Next()
+		require.NoError(t, err)
+		if c == nil {
+			break
+		}
+	}
+	iter.Close()
+	require.NoError(t, mock.ExpectationsWereMet())
 }

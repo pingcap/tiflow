@@ -876,6 +876,9 @@ func TestLimitSpliter(t *testing.T) {
 }
 
 func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM .*").
+		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(len(aValues)))
+
 	for i, a := range aValues {
 		limitRows := sqlmock.NewRows([]string{"a", "b"})
 		limitRows.AddRow(a, bValues[i])
@@ -976,6 +979,7 @@ func TestChunkSize(t *testing.T) {
 	require.Equal(t, randomIter.chunkSize, int64(1001))
 
 	// test limit splitter chunksize
+	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM .*").WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(1000))
 	mock.ExpectQuery("SELECT `a`,.*limit 50000.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
 	_, err = NewLimitIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)

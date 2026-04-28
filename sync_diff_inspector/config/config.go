@@ -243,6 +243,9 @@ type TaskConfig struct {
 	// ComputeConfigHash can include this mode switch without changing its
 	// signature, while still omitting the derived field from JSON output.
 	ExportFixSQL bool `json:"-"`
+	// SplitterStrategy mirrors top-level splitter-strategy so checkpoint hash
+	// can detect strategy changes consistently.
+	SplitterStrategy string `json:"-"`
 
 	FixDir        string
 	CheckpointDir string
@@ -359,6 +362,7 @@ func (t *TaskConfig) Init(
 func (t *TaskConfig) ComputeConfigHash() (string, error) {
 	hash := make([]byte, 0)
 	hash = append(hash, []byte(strconv.FormatBool(t.ExportFixSQL))...)
+	hash = append(hash, []byte(t.SplitterStrategy)...)
 	// compute sources
 	for _, c := range t.SourceInstances {
 		configBytes, err := json.Marshal(c)
@@ -609,6 +613,7 @@ func (c *Config) Init() (err error) {
 			return errors.Annotate(err, "failed to init Task")
 		}
 		c.Task.ExportFixSQL = c.ExportFixSQL
+		c.Task.SplitterStrategy = c.SplitterStrategy
 		err = c.Task.Init(c.DataSources, c.TableConfigs)
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
@@ -635,6 +640,7 @@ func (c *Config) Init() (err error) {
 	}
 
 	c.Task.ExportFixSQL = c.ExportFixSQL
+	c.Task.SplitterStrategy = c.SplitterStrategy
 	err = c.Task.Init(c.DataSources, c.TableConfigs)
 	if err != nil {
 		return errors.Annotate(err, "failed to init Task")
