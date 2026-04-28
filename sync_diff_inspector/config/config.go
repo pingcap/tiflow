@@ -607,13 +607,17 @@ func (c *Config) adjustConfigByDMSubTasks() (err error) {
 
 // Init initialize the config
 func (c *Config) Init() (err error) {
+	if err := c.normalizeSplitterStrategy(); err != nil {
+		return errors.Annotate(err, "failed to normalize splitter strategy")
+	}
+	c.Task.ExportFixSQL = c.ExportFixSQL
+	c.Task.SplitterStrategy = c.SplitterStrategy
+
 	if len(c.DMAddr) > 0 {
 		err := c.adjustConfigByDMSubTasks()
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
 		}
-		c.Task.ExportFixSQL = c.ExportFixSQL
-		c.Task.SplitterStrategy = c.SplitterStrategy
 		err = c.Task.Init(c.DataSources, c.TableConfigs)
 		if err != nil {
 			return errors.Annotate(err, "failed to init Task")
@@ -638,9 +642,6 @@ func (c *Config) Init() (err error) {
 			return errors.Annotate(err, "failed to build route config")
 		}
 	}
-
-	c.Task.ExportFixSQL = c.ExportFixSQL
-	c.Task.SplitterStrategy = c.SplitterStrategy
 	err = c.Task.Init(c.DataSources, c.TableConfigs)
 	if err != nil {
 		return errors.Annotate(err, "failed to init Task")
@@ -652,10 +653,6 @@ func (c *Config) Init() (err error) {
 func (c *Config) CheckConfig() bool {
 	if c.CheckThreadCount <= 0 {
 		log.Error("check-thread-count must greater than 0!")
-		return false
-	}
-	if err := c.normalizeSplitterStrategy(); err != nil {
-		log.Warn("invalid splitter strategy", zap.Error(err))
 		return false
 	}
 	if len(c.DMAddr) != 0 {
