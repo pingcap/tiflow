@@ -126,25 +126,27 @@ func NewLimitIteratorWithCheckpoint(
 
 	tagChunk.IndexColumnNames = utils.GetColumnNames(indexColumns)
 
-	chunkSize := table.ChunkSize
-	knownRemainingRows := int64(0)
-	hasKnownRemainingRows := false
-	if chunkSize <= 0 {
-		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, "", nil)
+	remainingRows := int64(0)
+	if undone {
+		where, args := "TRUE", []any(nil)
+		if startRange != nil {
+			where, args = tagChunk.ToString(table.Collation)
+		}
+		remainingRows, err = getRowCount(ctx, dbConn, table.Schema, table.Table, where, args)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+	}
+
+	chunkSize := table.ChunkSize
+	if chunkSize <= 0 {
 		if len(table.Info.Indices) != 0 {
-			chunkSize = utils.CalculateChunkSize(cnt)
+			chunkSize = utils.CalculateChunkSize(remainingRows)
 		} else {
 			// no index
 			// will use table scan
 			// so we use one chunk
-			chunkSize = cnt
-		}
-		if startRange == nil {
-			knownRemainingRows = cnt
-			hasKnownRemainingRows = true
+			chunkSize = remainingRows
 		}
 	}
 	log.Info("get chunk size for table", zap.Int64("chunk size", chunkSize),
@@ -172,12 +174,7 @@ func NewLimitIteratorWithCheckpoint(
 	}
 
 	if undone {
-		limitIterator.chunkCount, err = estimateLimitChunkCount(
-			ctx, dbConn, table, tagChunk, chunkSize, hasKnownRemainingRows, knownRemainingRows)
-		if err != nil {
-			cancel()
-			return nil, errors.Trace(err)
-		}
+		limitIterator.chunkCount = estimateLimitChunkCount(remainingRows, chunkSize)
 	}
 
 	progress.StartTable(progressID, 0, false)
@@ -233,32 +230,15 @@ func (lmt *LimitIterator) Len() int {
 	return lmt.chunkCount
 }
 
-func estimateLimitChunkCount(
-	ctx context.Context,
-	dbConn *sql.DB,
-	table *common.TableDiff,
-	tagChunk *chunk.Range,
-	chunkSize int64,
-	hasKnownRemainingRows bool,
-	knownRemainingRows int64,
-) (int, error) {
-	remainingRows := knownRemainingRows
-	if !hasKnownRemainingRows {
-		where, args := tagChunk.ToString(table.Collation)
-		var err error
-		remainingRows, err = getRowCount(ctx, dbConn, table.Schema, table.Table, where, args)
-		if err != nil {
-			return 0, errors.Trace(err)
-		}
-	}
+func estimateLimitChunkCount(remainingRows, chunkSize int64) int {
 	// Limit splitter uses "LIMIT chunkSize, 1", so each boundary chunk
 	// consumes at least chunkSize+1 rows, then one trailing chunk is emitted.
 	// This gives an exact count when split key is unique.
 	chunkCount := remainingRows/(chunkSize+1) + 1
 	if chunkCount > int64(math.MaxInt) {
-		return math.MaxInt, nil
+		return math.MaxInt
 	}
-	return int(chunkCount), nil
+	return int(chunkCount)
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
