@@ -172,7 +172,9 @@ func NewLimitIteratorWithCheckpoint(
 		int((remainingRows + chunkSize - 1) / chunkSize),
 	}
 
-	progress.StartTable(progressID, 0, false)
+	if progressID != "" {
+		progress.StartTable(progressID, 0, false)
+	}
 	if !undone {
 		// this table is finished.
 		close(chunksCh)
@@ -227,7 +229,9 @@ func (lmt *LimitIterator) Len() int {
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 	defer func() {
-		progress.UpdateTotal(lmt.progressID, 0, true)
+		if lmt.progressID != "" {
+			progress.UpdateTotal(lmt.progressID, 0, true)
+		}
 		close(lmt.chunksCh)
 	}()
 	for {
@@ -263,7 +267,9 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 
 		chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
 		bucketID++
-		progress.UpdateTotal(lmt.progressID, 1, false)
+		if lmt.progressID != "" {
+			progress.UpdateTotal(lmt.progressID, 1, false)
+		}
 		select {
 		case <-ctx.Done():
 			return
