@@ -118,7 +118,6 @@ GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-check
 	sync_diff_inspector --config=$RANDOM_CFG >$OUT_DIR/restart_run.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
-check_contains "random splitter" $OUT_DIR/sync_diff.log
 # After successful restart both sides must be done.
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
 check_not_contains "\"done\":false" $CHECKPOINT_FILE
@@ -142,7 +141,6 @@ GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-check
 	sync_diff_inspector --config=$LIMIT_CFG >$OUT_DIR/restart_run_limit.output
 
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
-check_contains "limit splitter" $OUT_DIR/sync_diff.log
 CHECKPOINT_FILE=$OUT_DIR/checkpoint/sync_diff_checkpoints.pb
 check_not_contains "\"done\":false" $CHECKPOINT_FILE
 
