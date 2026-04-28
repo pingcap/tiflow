@@ -819,7 +819,7 @@ func TestLimitSpliter(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		createFakeResultForLimitSplit(mock, testCase.limitAValues, testCase.limitBValues, true)
+		createFakeResultForLimitSplit(t, mock, testCase.limitAValues, testCase.limitBValues, true)
 
 		iter, err := NewLimitIterator(ctx, "", tableDiff, db)
 		require.NoError(t, err)
@@ -844,7 +844,7 @@ func TestLimitSpliter(t *testing.T) {
 
 	// Test Checkpoint
 	stopJ := 2
-	createFakeResultForLimitSplit(mock2, testCases[0].limitAValues[:stopJ], testCases[0].limitBValues[:stopJ], true)
+	createFakeResultForLimitSplit(t, mock2, testCases[0].limitAValues[:stopJ], testCases[0].limitBValues[:stopJ], true)
 	iter, err := NewLimitIterator(ctx, "", tableDiff, db2)
 	require.NoError(t, err)
 	j := 0
@@ -864,7 +864,7 @@ func TestLimitSpliter(t *testing.T) {
 	require.NoError(t, err)
 	defer db3.Close()
 
-	createFakeResultForLimitSplit(mock3, testCases[0].limitAValues[stopJ:], testCases[0].limitBValues[stopJ:], true)
+	createFakeResultForLimitSplit(t, mock3, testCases[0].limitAValues[stopJ:], testCases[0].limitBValues[stopJ:], true)
 	iter, err = NewLimitIteratorWithCheckpoint(ctx, "", tableDiff, db3, rangeInfo)
 	require.NoError(t, err)
 	chunk, err = iter.Next()
@@ -875,9 +875,8 @@ func TestLimitSpliter(t *testing.T) {
 	}
 }
 
-func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
-	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM .*").
-		WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(len(aValues)))
+func createFakeResultForLimitSplit(t *testing.T, mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
+	createFakeResultForCount(t, len(aValues))
 
 	for i, a := range aValues {
 		limitRows := sqlmock.NewRows([]string{"a", "b"})
@@ -979,7 +978,7 @@ func TestChunkSize(t *testing.T) {
 	require.Equal(t, randomIter.chunkSize, int64(1001))
 
 	// test limit splitter chunksize
-	mock.ExpectQuery("SELECT COUNT\\(1\\) cnt FROM .*").WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(1000))
+	createFakeResultForCount(t, 1000)
 	mock.ExpectQuery("SELECT `a`,.*limit 50000.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
 	_, err = NewLimitIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)

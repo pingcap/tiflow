@@ -17,7 +17,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -170,11 +169,7 @@ func NewLimitIteratorWithCheckpoint(
 
 		progressID,
 		columnOffset,
-		0,
-	}
-
-	if undone {
-		limitIterator.chunkCount = estimateLimitChunkCount(remainingRows, chunkSize)
+		int((remainingRows + chunkSize - 1) / chunkSize),
 	}
 
 	progress.StartTable(progressID, 0, false)
@@ -228,17 +223,6 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 // Len returns estimated remaining chunks for this iterator.
 func (lmt *LimitIterator) Len() int {
 	return lmt.chunkCount
-}
-
-func estimateLimitChunkCount(remainingRows, chunkSize int64) int {
-	// Limit splitter uses "LIMIT chunkSize, 1", so each boundary chunk
-	// consumes at least chunkSize+1 rows, then one trailing chunk is emitted.
-	// This gives an exact count when split key is unique.
-	chunkCount := remainingRows/(chunkSize+1) + 1
-	if chunkCount > int64(math.MaxInt) {
-		return math.MaxInt
-	}
-	return int(chunkCount)
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
