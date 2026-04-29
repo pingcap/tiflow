@@ -1,0 +1,300 @@
+name: Basic Integration Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'dm/**'
+      - 'cmd/dm*/*'
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/dm_integration_basic.yaml'
+
+jobs:
+  mysql-integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql_version:
+          # MySQL 5.7 doens't enable binlogs by default and there are no easy options for enabling it.
+          # - '5.7' 
+          - '8.0'
+          - '8.4'
+          - '9.7'
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: container-registry.oracle.com/mysql/community-server:${{ matrix.mysql_version }}
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_ROOT_HOST: "%"
+          MYSQL_DATABASE: test
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+      tidb:
+        image: 'pingcap/tidb:v8.5.6'
+        ports:
+          - 4000:4000
+    env:
+      DM_MASTER_ADDR: "127.0.0.1:8261"
+      DM_WORKER_ADDR: "127.0.0.1:8262"
+    steps:
+      # Some steps may fail on some versions, but the end result should be the same.
+      # That's why we set continue-on-error and run this in multiple commands.
+      - name: Try to enable GTID
+        continue-on-error: true
+        run: |
+          mysql -h 127.0.0.1 -u root -e "SET GLOBAL ENFORCE_GTID_CONSISTENCY=ON"
+          mysql -h 127.0.0.1 -u root -e "SET GLOBAL gtid_mode=OFF_PERMISSIVE"
+          mysql -h 127.0.0.1 -u root -e "SET GLOBAL gtid_mode=ON_PERMISSIVE"
+          mysql -h 127.0.0.1 -u root -e "SET GLOBAL gtid_mode=ON"
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+      - name: Build DM binary
+        run: make dm
+      - name: Show versions
+        shell: bash -xe {0}
+        run: |
+          ./bin/dm-master -V
+          ./bin/dm-worker -V
+          ./bin/dmctl -V
+          mysql -h 127.0.0.1 -u root -BNe "SELECT VERSION()"
+          mysql -h 127.0.0.1 -P 4000 -u root -BNe "SELECT VERSION()"
+      - name: Run DM
+        run: |
+          ./bin/dm-master -master-addr ${DM_MASTER_ADDR} -log-file dm_master.log -log-format json &
+          ./bin/dm-worker -join ${DM_MASTER_ADDR} -worker-addr ${DM_WORKER_ADDR} -log-file dm_worker.log -log-format json &
+      - name: Wait for DM readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_MASTER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-master is ready after ${i}s"
+              break
+            fi
+            echo "waiting for dm-master... (${i}/30)"
+            sleep 1
+          done
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_WORKER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-worker is ready after ${i}s"
+              exit 0
+            fi
+            echo "waiting for dm-worker... (${i}/30)"
+            sleep 1
+          done
+          echo "timed out waiting for DM readiness"
+          exit 1
+      - name: Show DM status
+        shell: bash -xe {0}
+        run: |
+          ./bin/dmctl list-member
+          ./bin/dmctl query-status
+      - name: Setup source
+        run: ./bin/dmctl operate-source create dm/tests/integration_basic/source-mysql.yaml | tee dm_setup_source.log
+      - name: Start task
+        run: ./bin/dmctl start-task dm/tests/integration_basic/task-mysql.yaml | tee dm_setup_task.log
+
+        # Here we check that dm_setup_task.log contains a line with `"result": true`.
+        # Unfortunately dm_setup_task.log doesn't contain valid JSON so we can't use jq here.
+        # https://github.com/pingcap/tiflow/issues/11736
+      - name: Check task result
+        run: |
+          grep '"result": true' dm_setup_task.log
+
+      - name: Check status
+        run: |
+          ./bin/dmctl operate-source show
+          ./bin/dmctl query-status
+          ./bin/dmctl query-status mysql-to-tidb
+      - name: Run input
+        run: mysql -h 127.0.0.1 -u root -v < dm/tests/integration_basic/setup.sql
+      - name: Check status
+        run: |
+          ./bin/dmctl operate-source show
+          ./bin/dmctl query-status
+          ./bin/dmctl query-status mysql-to-tidb
+      - name: install mysql-tester
+        run: |
+          go install github.com/pingcap/mysql-tester/src@f2d90ea9522d30c9a8e8d70cc31c7f016ca2801f
+          mv ~/go/bin/src ~/go/bin/mysql-tester
+      - name: check logs
+        continue-on-error: true
+        run: |
+          jq 'select(.level == "DPANIC") | .message + ": " + .error' dm_worker.log
+          jq 'select(.level == "ERROR") | .message + ": " + .error' dm_worker.log
+      # - name: record validation test
+      #   working-directory: ./dm/tests/integration_basic
+      #   run: ~/go/bin/mysql-tester -record basic
+      # - name: show results
+      #   working-directory: ./dm/tests/integration_basic
+      #   run: cat r/basic.result
+      - name: run validation tests
+        working-directory: ./dm/tests/integration_basic
+        run: ~/go/bin/mysql-tester
+      - name: Check status
+        run: |
+          ./bin/dmctl operate-source show
+          ./bin/dmctl query-status
+          ./bin/dmctl query-status mysql-to-tidb
+      - name: upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dm-logs-mysql-${{ matrix.mysql_version }}
+          path: dm*log
+
+  mariadb-integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        mariadb_version:
+          - '10.11'
+          - '11.4'
+          - '11.8'
+          - '12.3-rc'
+    runs-on: ubuntu-latest
+    services:
+      tidb:
+        image: 'pingcap/tidb:v8.5.5'
+        ports:
+          - 4000:4000
+    env:
+      DM_MASTER_ADDR: "127.0.0.1:8261"
+      DM_WORKER_ADDR: "127.0.0.1:8262"
+    steps:
+      # Enabling binlogs with a services container is hard, so use docker directly. 
+      # Note that FLUSH PRIVILEGES is done to make sure there is at least one GTID
+      # as otherwise the GTID format isn't detected correctly and this error happens:
+      # "message":"failed to update GTID set","GTID":"0-1-6",
+      # "error":"invalid GTID format, must UUID:interval[:interval]"
+      # https://github.com/pingcap/tiflow/issues/12423
+      - name: Run MariaDB
+        run: |
+          docker run \
+          -d \
+          --name mariadb \
+          -e MARIADB_ALLOW_EMPTY_ROOT_PASSWORD=1 \
+          -p 3306:3306 \
+          mariadb:${{ matrix.mariadb_version }} \
+          --log-bin=mariadb-bin \
+          --log-bin-compress=OFF \
+          --binlog-format=ROW \
+          --binlog-annotate-row-events=OFF \
+          --loose-binlog-legacy-event-pos=ON
+          until mysqladmin -h 127.0.0.1 -u root ping; do sleep 1; done
+          mysql -h 127.0.0.1 -u root -e "reset master"
+          mysql -h 127.0.0.1 -u root -e "flush privileges"
+      - name: Check out code
+        uses: actions/checkout@v6
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+      - name: Build DM binary
+        run: make dm
+      - name: Show versions
+        shell: bash -xe {0}
+        run: |
+          ./bin/dm-master -V
+          ./bin/dm-worker -V
+          ./bin/dmctl -V
+          mysql -h 127.0.0.1 -u root -BNe "SELECT VERSION()"
+          mysql -h 127.0.0.1 -P 4000 -u root -BNe "SELECT VERSION()"
+      - name: Run DM
+        run: |
+          ./bin/dm-master -master-addr ${DM_MASTER_ADDR} -log-file dm_master.log -log-format json &
+          ./bin/dm-worker -join ${DM_MASTER_ADDR} -worker-addr ${DM_WORKER_ADDR} -log-file dm_worker.log -log-format json &
+      - name: Wait for DM readiness
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_MASTER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-master is ready after ${i}s"
+              break
+            fi
+            echo "waiting for dm-master... (${i}/30)"
+            sleep 1
+          done
+          for i in $(seq 1 30); do
+            if curl -sf http://${DM_WORKER_ADDR}/status > /dev/null 2>&1; then
+              echo "dm-worker is ready after ${i}s"
+              exit 0
+            fi
+            echo "waiting for dm-worker... (${i}/30)"
+            sleep 1
+          done
+          echo "timed out waiting for DM readiness"
+          exit 1
+      - name: Show DM status
+        shell: bash -xe {0}
+        run: |
+          ./bin/dmctl list-member
+          ./bin/dmctl query-status
+      - name: Setup source
+        run: ./bin/dmctl operate-source create dm/tests/integration_basic/source-mariadb.yaml | tee dm_setup_source.log
+      - name: Start task
+        run: ./bin/dmctl start-task dm/tests/integration_basic/task-mariadb.yaml | tee dm_setup_task.log
+
+        # Here we check that dm_setup_task.log contains a line with `"result": true`.
+        # Unfortunately dm_setup_task.log doesn't contain valid JSON so we can't use jq here.
+        # https://github.com/pingcap/tiflow/issues/11736
+      - name: Check task result
+        run: |
+          grep '"result": true' dm_setup_task.log
+
+      - name: Check status
+        run: |
+          ./bin/dmctl operate-source show
+          ./bin/dmctl query-status
+          ./bin/dmctl query-status mariadb-to-tidb
+      - name: Run input
+        run: mysql -h 127.0.0.1 -u root -v < dm/tests/integration_basic/setup.sql
+      - name: Check status
+        run: |
+          ./bin/dmctl operate-source show
+          ./bin/dmctl query-status
+          ./bin/dmctl query-status mariadb-to-tidb
+      - name: install mysql-tester
+        run: |
+          go install github.com/pingcap/mysql-tester/src@f2d90ea9522d30c9a8e8d70cc31c7f016ca2801f
+          mv ~/go/bin/src ~/go/bin/mysql-tester
+      # - name: record validation test
+      #   working-directory: ./dm/tests/integration_basic
+      #   run: ~/go/bin/mysql-tester -record basic
+      # - name: show results
+      #   working-directory: ./dm/tests/integration_basic
+      #   run: cat r/basic.result
+      - name: debug
+        run: |
+          sleep 30
+          mysql -h 127.0.0.1 -u root -e "DESCRIBE test_basic.t1"
+          mysql -h 127.0.0.1 -u root -e "SELECT * FROM test_basic.t1"
+          mysql -h 127.0.0.1 -u root -P 4000 -e "DESCRIBE test_basic.t1"
+          mysql -h 127.0.0.1 -u root -P 4000 -e "SELECT * FROM test_basic.t1"
+          mysql -h 127.0.0.1 -u root -e "SHOW BINARY LOGS"
+          mysql -h 127.0.0.1 -u root -e "SHOW BINLOG EVENTS"
+      - name: check logs
+        continue-on-error: true
+        run: |
+          jq 'select(.level == "DPANIC") | .message + ": " + .error' dm_worker.log
+          jq 'select(.level == "ERROR") | .message + ": " + .error' dm_worker.log
+      - name: run validation tests
+        working-directory: ./dm/tests/integration_basic
+        run: |
+          ~/go/bin/mysql-tester
+      - name: Check status
+        if: ${{ always() }}
+        run: |
+          ./bin/dmctl operate-source show
+          ./bin/dmctl query-status
+          ./bin/dmctl query-status mariadb-to-tidb | tee dm_task_status.log
+      - name: upload artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: dm-logs-mariadb-${{ matrix.mariadb_version }}
+          path: dm*log
