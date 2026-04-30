@@ -53,12 +53,15 @@ func (a *MySQLTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.
 	originTable.Schema = matchedSources[0].OriginSchema
 	originTable.Table = matchedSources[0].OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
-	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
-	randIter, err := splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, matchedSources[0].DBConn, startRange)
-	if err != nil {
-		return nil, errors.Trace(err)
+
+	switch originTable.SplitterStrategy {
+	case config.SplitterStrategyLimit:
+		log.Info("choose limit splitter", zap.String("table", progressID))
+		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, matchedSources[0].DBConn, startRange)
+	default:
+		log.Info("choose random splitter", zap.String("table", progressID))
+		return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, matchedSources[0].DBConn, startRange)
 	}
-	return randIter, nil
 }
 
 // MySQLSources represent one table in MySQL
