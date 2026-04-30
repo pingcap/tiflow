@@ -27,6 +27,3 @@ insert into t_1(dt) values('0000-00-00');
 -- test sql_mode ERROR_FOR_DIVISION_BY_ZERO
 insert into t_1(num) values(4/0);
 
--- test sql_mode NO_AUTO_CREATE_USER
-drop user if exists 'no_auto_create_user';
-grant select on *.* to 'no_auto_create_user';

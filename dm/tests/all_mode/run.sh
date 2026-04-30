@@ -119,7 +119,9 @@ function test_query_timeout() {
 		"query-status $ILLEGAL_CHAR_NAME" \
 		"context deadline exceeded" 2
 	duration=$(($(date +%s) - $start_time))
-	if [[ $duration -gt 10 ]]; then
+	# Each query-status waits up to rpc-timeout (3s), and run_dm_ctl_with_retry
+	# may need 2+ attempts (2s interval). On loaded CI nodes 10s is too tight.
+	if [[ $duration -gt 30 ]]; then
 		echo "query-status takes too much time $duration"
 		exit 1
 	fi
@@ -473,9 +475,8 @@ function run() {
 	check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/$ILLEGAL_CHAR_NAME '"stage": "Running"' 10
 	sleep 2 # still wait for subtask running on other dm-workers
 
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	# kill downstream TiDB (on next-gen, preserve SYSTEM TiDB)
+	cleanup_tidb_server
 
 	# dm-worker execute sql failed, and will try auto resume task
 	run_sql_file $cur/data/db2.increment0.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2

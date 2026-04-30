@@ -1,22 +1,44 @@
 #!/bin/sh
+# Start (or restart) a single downstream TiDB server.
+#
+# Works for both classic (unistore) and next-gen (TiKV-backed keyspace)
+# deployments, with optional TLS support.
+#
 # parameter 1: tidb port
 # parameter 2: tidb password
-# parameter 3: optional, tidb config file
+# parameter 3: optional, tidb config file (may contain [security] for TLS)
+# parameter 4: optional, status port (default: 10080)
 
 set -eu
 
-tmp_config="/tmp/dm_test/tidb.toml"
-
 PORT=$1
 PASSWORD=$2
-CONFIG=""
+STATUS_PORT=${4:-10080}
+TEST_DIR=/tmp/dm_test
+
+tmp_config="/tmp/dm_test/tidb.toml"
+rm -f $tmp_config
+
+# Next-gen TiDB rejects startup without a keyspace and requires a tikv-worker
+# URL for the lightning backend. Classic TiDB rejects keyspace-name in config.
+# Prepend these top-level keys before any user-supplied config (which may
+# contain [sections] that would otherwise swallow them).
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	cat >>$tmp_config <<EOF
+keyspace-name = "${KEYSPACE_NAME:-SYSTEM}"
+tikv-worker-url = "http://${TIKV_WORKER_ADDR:-127.0.0.1:19000}"
+
+[instance]
+tidb_service_scope = "dxf_service"
+
+EOF
+fi
 
 if [ "$#" -ge 3 ]; then
-	cat $3 >$tmp_config
+	cat $3 >>$tmp_config
 else
 	# turn on collation framework https://docs.pingcap.com/tidb/stable/character-set-and-collation#new-framework-for-collations
-	rm $tmp_config || true
-	cat >$tmp_config <<EOF
+	cat >>$tmp_config <<EOF
 new_collations_enabled_on_first_bootstrap = true
 
 [experimental]
@@ -25,16 +47,31 @@ enable-new-charset = true
 EOF
 fi
 
-TEST_DIR=/tmp/dm_test
+# Detect TLS: if the config contains [security] ssl-cert, TiDB enforces TLS
+# on the mysql protocol port. The HTTP status port stays plain HTTP.
+USE_TLS=0
+if grep -q 'ssl-cert' "$tmp_config" 2>/dev/null; then
+	USE_TLS=1
+fi
 
-echo "Starting TiDB on port ${PORT}"
+# When PD_ADDR is set (via env_variables on next-gen, or exported by the
+# cluster scripts), connect to a real TiKV store; otherwise use unistore.
+STORE_ARGS=""
+if [ -n "${PD_ADDR:-}" ]; then
+	STORE_ARGS="--store tikv --path $PD_ADDR --advertise-address=127.0.0.1 --status ${STATUS_PORT}"
+fi
+
+echo "Starting TiDB on port ${PORT} (status=${STATUS_PORT}, tls=${USE_TLS}, store=${PD_ADDR:-unistore})"
 bin/tidb-server \
 	-P ${PORT} \
+	${STORE_ARGS} \
 	--config "$tmp_config" \
 	--log-file "$TEST_DIR/downstream/tidb/log/tidb.log" &
 
 echo "Verifying TiDB is started..."
 i=0
+# TiDB [security] ssl-* only enables TLS on the mysql port, NOT the HTTP
+# status port. Always probe via plain HTTP status endpoint.
 while ! mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e 'select * from mysql.tidb;'; do
 	i=$((i + 1))
 	if [ "$i" -gt 10 ]; then
@@ -44,9 +81,20 @@ while ! mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e 'sele
 	sleep 2
 done
 
-# if user test is already exist, add || true to avoid exit with 2
-mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '$PASSWORD';" || true
-mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
-mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_clustered_index = 'INT_ONLY'"
-mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
-mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
+# Skip user/grant setup when TLS is enabled — TiDB enforces TLS on client
+# connections so plain mysql can't connect. The user was already created
+# during the initial non-TLS startup before test_tls switched to TLS.
+if [ "$USE_TLS" = "0" ]; then
+	# if user test already exists, add || true to avoid exit with 2
+	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '$PASSWORD';" || true
+	# Avoid GRANT ALL PRIVILEGES which fails on next-gen TiDB due to missing
+	# SHUTDOWN/CONFIG privileges. Use an explicit privilege list instead.
+	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, CREATE VIEW, SHOW VIEW, TRIGGER, REFERENCES, EXECUTE, SHOW DATABASES, SUPER, LOCK TABLES, CREATE TEMPORARY TABLES, RELOAD, REPLICATION CLIENT, REPLICATION SLAVE, PROCESS, CREATE USER, CREATE ROUTINE, ALTER ROUTINE, EVENT, CONFIG ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
+	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_clustered_index = 'INT_ONLY'" || true
+	# Next-gen DDL relies on the distributed execution framework (DXF) and fast
+	# reorg via tikv-worker; disabling them breaks ADD INDEX / ADD COLUMN.
+	if [ "${NEXT_GEN:-}" != "1" ]; then
+		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
+		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
+	fi
+fi

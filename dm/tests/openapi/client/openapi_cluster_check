@@ -24,13 +24,16 @@ def delete_master_with_retry_success(master_name):
     url = API_ENDPOINT + "/masters/" + master_name
     for i in range(0, 30):
         resp = requests.delete(url=url)
-        if resp.status_code != 204:
-            print("delete_master_failed resp=", resp.json(), "retry cnt=", i)
-            time.sleep(1)
-        else:
-            assert resp.status_code == 204
+        if resp.status_code == 204:
             print("delete_master_with_retry_success")
             return
+        data = resp.json()
+        print("delete_master_failed resp=", data, "retry cnt=", i)
+        # Treat "not exists" as success - the master was already removed.
+        if "not exists" in data.get("error_msg", ""):
+            print("delete_master_with_retry_success (already removed)")
+            return
+        time.sleep(1)
     raise Exception("delete_master_with_retry_success failed")
 
 
