@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	stdlog "log"
 	"os"
 	"strconv"
 	"strings"
@@ -228,6 +229,10 @@ func initSaramaLogger(level zapcore.Level) error {
 		return errors.Trace(err)
 	}
 	sarama.Logger = logger
+	sarama.DebugLogger = stdlog.New(io.Discard, "[Sarama] ", stdlog.LstdFlags)
+	if level.Enabled(zapcore.DebugLevel) {
+		sarama.DebugLogger = logger
+	}
 	return nil
 }
 
