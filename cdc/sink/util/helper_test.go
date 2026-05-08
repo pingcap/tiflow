@@ -44,7 +44,7 @@ func TestPartition(t *testing.T) {
 	ctx := context.Background()
 
 	manager, err := GetTopicManagerAndTryCreateTopic(
-		ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient, FOREVER)
+		ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
 	require.NoError(t, err)
 	defer manager.Close()
 
