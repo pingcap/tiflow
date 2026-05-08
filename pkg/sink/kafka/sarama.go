@@ -53,14 +53,10 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// set it as the read timeout.
 	config.Admin.Timeout = 10 * time.Second
 
-	// Producer.Retry take effect when the producer try to send message to kafka
-	// brokers. If kafka cluster is healthy, just the default value should be enough.
-	// For kafka cluster with a bad network condition, producer should not try to
-	// waster too much time on sending a message, get response no matter success
-	// or fail as soon as possible is preferred.
-	// According to the https://github.com/IBM/sarama/issues/2619,
-	// sarama may send message out of order even set the `config.Net.MaxOpenRequest` to 1,
-	// when the kafka cluster is unhealthy and trigger the internal retry mechanism.
+	// Keep a bounded producer retry budget to tolerate transient broker-side
+	// connection failures such as stale connections or broken pipe errors.
+	// The PingCAP Sarama fork includes the partition-muting ordering fix, while
+	// Net.MaxOpenRequests=1 below remains an extra ordering guard.
 	config.Producer.Retry.Max = 5
 
 	// make sure sarama producer flush messages as soon as possible.

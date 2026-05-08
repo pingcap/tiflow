@@ -45,11 +45,7 @@ func TestSyncProducer(t *testing.T) {
 	t.Parallel()
 
 	leader := sarama.NewMockBroker(t, 1)
-
-	metadataResponse := new(sarama.MetadataResponse)
-	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	// Response for `sarama.NewClient`
-	leader.Returns(metadataResponse)
+	setProducerMockHandlers(t, leader)
 
 	defer leader.Close()
 
@@ -77,11 +73,7 @@ func TestAsyncProducer(t *testing.T) {
 	t.Parallel()
 
 	leader := sarama.NewMockBroker(t, 1)
-
-	metadataResponse := new(sarama.MetadataResponse)
-	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	// Response for `sarama.NewClient`
-	leader.Returns(metadataResponse)
+	setProducerMockHandlers(t, leader)
 
 	defer leader.Close()
 
@@ -103,25 +95,18 @@ func TestAsyncProducer(t *testing.T) {
 	async.Close()
 }
 
-// mockClientForHeartbeat is a mock sarama.Client used to verify
-// that the Brokers() method is called as part of the heartbeat logic.
-type mockClientForHeartbeat struct {
-	sarama.Client // Embed the interface to avoid implementing all methods.
-	brokersCalled chan struct{}
-}
-
-// Brokers is the mocked method. It sends a signal to a channel when called.
-func (c *mockClientForHeartbeat) Brokers() []*sarama.Broker {
-	// The function under test iterates over the returned slice.
-	// Returning nil is fine, as we only want to check if this method was called.
-	c.brokersCalled <- struct{}{}
-	return nil
-}
-
-// Close closes the signal channel.
-func (c *mockClientForHeartbeat) Close() error {
-	close(c.brokersCalled)
-	return nil
+func setProducerMockHandlers(t *testing.T, broker *sarama.MockBroker) {
+	broker.SetHandlerByMap(map[string]sarama.MockResponse{
+		"ApiVersionsRequest": sarama.NewMockApiVersionsResponse(t).SetApiKeys([]sarama.ApiVersionsResponseKey{
+			{ApiKey: 0, MinVersion: 0, MaxVersion: 8},  // Produce
+			{ApiKey: 1, MinVersion: 0, MaxVersion: 11}, // Fetch
+			{ApiKey: 2, MinVersion: 0, MaxVersion: 5},  // ListOffsets
+			{ApiKey: 3, MinVersion: 0, MaxVersion: 10}, // Metadata
+			{ApiKey: 18, MinVersion: 0, MaxVersion: 3}, // ApiVersions
+		}),
+		"MetadataRequest": sarama.NewMockMetadataResponse(t).
+			SetBroker(broker.Addr(), broker.BrokerID()),
+	})
 }
 
 type testSaramaClient struct {
