@@ -182,6 +182,93 @@ func assembleEvent(
 		return nil, errors.New("schema fields should be a map")
 	}
 
+	columns, err := avroData2Columns(keyMap, valueMap, fields)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+
+	beforeMap, hasBefore, err := extractBeforeValueMap(valueMap)
+	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	var beforeColumns []*model.Column
+	if hasBefore {
+		beforeColumns, err = avroData2Columns(keyMap, beforeMap, fields)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+	}
+
+	// "namespace.schema"
+	namespace := schema["namespace"].(string)
+	schemaName := strings.Split(namespace, ".")[1]
+	tableName := schema["name"].(string)
+
+	var commitTs int64
+	if !isDelete {
+		o, ok := valueMap[tidbCommitTs]
+		if !ok {
+			return nil, errors.New("commit ts not found")
+		}
+		commitTs = o.(int64)
+	}
+
+	event := new(model.RowChangedEvent)
+	event.CommitTs = uint64(commitTs)
+	pkNameSet := make(map[string]struct{}, len(keyMap))
+	for name := range keyMap {
+		pkNameSet[name] = struct{}{}
+	}
+	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNameSet)
+
+	if isDelete {
+		event.PreColumns = model.Columns2ColumnDatas(columns, event.TableInfo)
+	} else {
+		event.Columns = model.Columns2ColumnDatas(columns, event.TableInfo)
+		if hasBefore {
+			event.PreColumns = model.Columns2ColumnDatas(beforeColumns, event.TableInfo)
+		}
+	}
+
+	return event, nil
+}
+
+func isAvroExtensionField(name string) bool {
+	switch name {
+	case tidbOp, tidbCommitTs, tidbPhysicalTime, tidbRowLevelChecksum,
+		tidbChecksumVersion, tidbCorrupted, ticdcBefore:
+		return true
+	default:
+		return false
+	}
+}
+
+func extractBeforeValueMap(valueMap map[string]interface{}) (map[string]interface{}, bool, error) {
+	rawBefore, ok := valueMap[ticdcBefore]
+	if !ok || rawBefore == nil {
+		return nil, false, nil
+	}
+
+	beforeUnion, ok := rawBefore.(map[string]interface{})
+	if !ok {
+		return nil, false, errors.New("before value should be a map")
+	}
+	for unionName, value := range beforeUnion {
+		if unionName == "null" || value == nil {
+			return nil, false, nil
+		}
+		before, ok := value.(map[string]interface{})
+		if !ok {
+			return nil, false, errors.New("before record should be a map")
+		}
+		return before, true, nil
+	}
+	return nil, false, nil
+}
+
+func avroData2Columns(
+	keyMap, valueMap map[string]interface{}, fields []interface{},
+) ([]*model.Column, error) {
 	columns := make([]*model.Column, 0, len(valueMap))
 	// fields is ordered by the column id, so iterate over it to build columns
 	// it's also the order to calculate the checksum.
@@ -191,10 +278,9 @@ func assembleEvent(
 			return nil, errors.New("schema field should be a map")
 		}
 
-		// `tidbOp` is the first extension field in the schema,
-		// it's not real columns, so break here.
+		// Extension fields are not real columns, so break here.
 		colName := field["name"].(string)
-		if colName == tidbOp {
+		if isAvroExtensionField(colName) {
 			break
 		}
 
@@ -241,36 +327,7 @@ func assembleEvent(
 		}
 		columns = append(columns, col)
 	}
-
-	// "namespace.schema"
-	namespace := schema["namespace"].(string)
-	schemaName := strings.Split(namespace, ".")[1]
-	tableName := schema["name"].(string)
-
-	var commitTs int64
-	if !isDelete {
-		o, ok := valueMap[tidbCommitTs]
-		if !ok {
-			return nil, errors.New("commit ts not found")
-		}
-		commitTs = o.(int64)
-	}
-
-	event := new(model.RowChangedEvent)
-	event.CommitTs = uint64(commitTs)
-	pkNameSet := make(map[string]struct{}, len(keyMap))
-	for name := range keyMap {
-		pkNameSet[name] = struct{}{}
-	}
-	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNameSet)
-
-	if isDelete {
-		event.PreColumns = model.Columns2ColumnDatas(columns, event.TableInfo)
-	} else {
-		event.Columns = model.Columns2ColumnDatas(columns, event.TableInfo)
-	}
-
-	return event, nil
+	return columns, nil
 }
 
 func isCorrupted(valueMap map[string]interface{}) bool {

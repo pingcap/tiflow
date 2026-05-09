@@ -36,6 +36,7 @@ func TestNewConfig(t *testing.T) {
 	require.Equal(t, "precise", c.AvroDecimalHandlingMode)
 	require.Equal(t, "long", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "", c.AvroConfluentSchemaRegistry)
+	require.False(t, c.AvroIncludeBeforeValue)
 	require.False(t, c.EnableRowChecksum)
 	require.NotNil(t, c.LargeMessageHandle)
 }
@@ -370,7 +371,7 @@ func TestMergeConfig(t *testing.T) {
 		"protocol=avro&enable-tidb-extension=true&schema-registry=abc&" +
 		"only-output-updated-columns=true&avro-enable-watermark=true&" +
 		"avro-bigint-unsigned-handling-mode=ab&avro-decimal-handling-mode=cd&" +
-		"max-message-bytes=123&max-batch-size=456"
+		"include-before-value=true&max-message-bytes=123&max-batch-size=456"
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
@@ -381,6 +382,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.True(t, c.AvroIncludeBeforeValue)
 	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
@@ -402,6 +404,7 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroBigintUnsignedHandlingMode: aws.String("ab"),
 			AvroDecimalHandlingMode:        aws.String("cd"),
+			AvroIncludeBeforeValue:         aws.Bool(true),
 			EncodingFormat:                 aws.String("json"),
 		},
 		LargeMessageHandle: &config.LargeMessageHandleConfig{
@@ -415,6 +418,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.True(t, c.AvroIncludeBeforeValue)
 	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)
@@ -427,7 +431,7 @@ func TestMergeConfig(t *testing.T) {
 		"protocol=avro&enable-tidb-extension=true&schema-registry=abc&" +
 		"only-output-updated-columns=true&avro-enable-watermark=true&" +
 		"avro-bigint-unsigned-handling-mode=ab&avro-decimal-handling-mode=cd&" +
-		"max-message-bytes=123&max-batch-size=456"
+		"include-before-value=true&max-message-bytes=123&max-batch-size=456"
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)
@@ -441,6 +445,7 @@ func TestMergeConfig(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(false),
 			AvroBigintUnsignedHandlingMode: aws.String("adb"),
 			AvroDecimalHandlingMode:        aws.String("cde"),
+			AvroIncludeBeforeValue:         aws.Bool(false),
 			EncodingFormat:                 aws.String("avro"),
 		},
 		LargeMessageHandle: &config.LargeMessageHandleConfig{
@@ -455,6 +460,7 @@ func TestMergeConfig(t *testing.T) {
 	require.Equal(t, "abc", c.AvroConfluentSchemaRegistry)
 	require.True(t, c.OnlyOutputUpdatedColumns)
 	require.True(t, c.AvroEnableWatermark)
+	require.True(t, c.AvroIncludeBeforeValue)
 	require.False(t, c.ContentCompatible)
 	require.Equal(t, "ab", c.AvroBigintUnsignedHandlingMode)
 	require.Equal(t, "cd", c.AvroDecimalHandlingMode)

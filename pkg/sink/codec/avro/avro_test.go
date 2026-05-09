@@ -243,6 +243,87 @@ func TestAvroEncode(t *testing.T) {
 	}
 }
 
+func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.AvroIncludeBeforeValue = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
+
+	tableColumns := []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
+		{Name: "name", Type: mysql.TypeVarchar},
+		{Name: "age", Type: mysql.TypeLong},
+	}
+	tableInfo := model.BuildTableInfo("test", "person", tableColumns, [][]int{{0}})
+	beforeColumns := []*model.Column{
+		{Name: "id", Value: int64(1)},
+		{Name: "name", Value: "old"},
+		{Name: "age", Value: int64(18)},
+	}
+	afterColumns := []*model.Column{
+		{Name: "id", Value: int64(1)},
+		{Name: "name", Value: "new"},
+		{Name: "age", Value: int64(20)},
+	}
+	event := &model.RowChangedEvent{
+		CommitTs:   1024,
+		TableInfo:  tableInfo,
+		PreColumns: model.Columns2ColumnDatas(beforeColumns, tableInfo),
+		Columns:    model.Columns2ColumnDatas(afterColumns, tableInfo),
+	}
+
+	topic := "default"
+	bin, err := encoder.encodeValue(ctx, topic, event)
+	require.NoError(t, err)
+
+	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
+	require.NoError(t, err)
+
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
+	require.NoError(t, err)
+
+	res, _, err := avroValueCodec.NativeFromBinary(data)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	m, ok := res.(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, int32(20), m["age"])
+	require.Equal(t, "new", m["name"])
+
+	beforeUnion, ok := m[ticdcBefore].(map[string]interface{})
+	require.True(t, ok)
+	before, ok := beforeUnion[encoder.beforeValueRecordFullName(tableInfo.TableName)].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, int32(18), before["age"])
+	require.Equal(t, "old", before["name"])
+
+	key, err := encoder.encodeKey(ctx, topic, event)
+	require.NoError(t, err)
+	decoder := NewDecoder(codecConfig, encoder.schemaM, topic, nil)
+	err = decoder.AddKeyValue(key, bin)
+	require.NoError(t, err)
+
+	messageType, exist, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, exist)
+	require.Equal(t, model.MessageTypeRow, messageType)
+
+	decoded, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.True(t, decoded.IsUpdate())
+	require.Equal(t, uint64(1024), decoded.CommitTs)
+	require.Equal(t, "old", decoded.GetPreColumns()[1].Value)
+	require.Equal(t, "new", decoded.GetColumns()[1].Value)
+}
+
 func TestAvroEnvelope(t *testing.T) {
 	t.Parallel()
 	cManager := &confluentSchemaManager{}
