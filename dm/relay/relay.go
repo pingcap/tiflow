@@ -532,7 +532,7 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 		// when RawModeEnabled not true, XIDEvent will be parsed.
 		result.GTIDSet = ev.GSet
 		result.CanSaveGTID = true // need save GTID for XID
-	case *replication.GenericEvent:
+	case *replication.GenericEvent, *replication.HeartbeatEvent:
 		// handle some un-parsed events
 		if e.Header.EventType == replication.HEARTBEAT_EVENT {
 			// ignore artificial heartbeat event
