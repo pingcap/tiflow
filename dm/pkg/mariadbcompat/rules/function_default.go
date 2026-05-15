@@ -13,61 +13,48 @@
 
 package rules
 
-import (
-	"strings"
+import "github.com/pingcap/tidb/pkg/parser/ast"
 
-	"github.com/pingcap/tidb/pkg/parser/ast"
-)
-
-// FunctionDefaultRule removes unsupported function-based default values.
-// TiDB allows only a small set of deterministic functions in DEFAULT clauses
-// (for example, CURRENT_TIMESTAMP). Any other function call is stripped.
-// Reference: Step 6 in legacy universal_tidb_transform.sh
-// Other function-based defaults are removed entirely for compatibility.
+// FunctionDefaultRule strips DEFAULT clauses TiDB cannot accept.
+//
+// DM never relies on TiDB-side default value computation (every row from the
+// MariaDB binlog already carries a materialised value), so the rule keeps the
+// minimum set TiDB is guaranteed to accept and discards everything else:
+//
+//   - literal DEFAULTs are kept on every column type;
+//   - CURRENT_TIMESTAMP / NOW / CURRENT_DATE / CURRENT_TIME (and aliases) are
+//     kept only on TIMESTAMP / DATETIME / DATE columns, where TiDB accepts them
+//     unconditionally;
+//   - any other function or expression default is dropped.
 type FunctionDefaultRule struct{}
 
-// Name returns rule name
 func (r *FunctionDefaultRule) Name() string { return "FunctionDefault" }
 
-// Description returns rule description
 func (r *FunctionDefaultRule) Description() string {
-	return "Remove unsupported function-based default values"
+	return "Strip DEFAULT expressions TiDB cannot accept; literals and time-function defaults on time columns are kept"
 }
 
-// Priority defines rule execution order
 func (r *FunctionDefaultRule) Priority() int { return 600 }
 
-// ShouldApply checks if the column has a function-based default that TiDB disallows
 func (r *FunctionDefaultRule) ShouldApply(node ast.Node) bool {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok {
 		return false
 	}
 	for _, opt := range col.Options {
-		if opt.Tp == ast.ColumnOptionDefaultValue {
-			if fc, ok := opt.Expr.(*ast.FuncCallExpr); ok {
-				name := strings.ToLower(fc.FnName.O)
-				if !allowedDefaultFuncs[name] {
-					return true
-				}
-			}
+		if opt.Tp == ast.ColumnOptionDefaultValue && !keepDefaultExpr(col, opt.Expr) {
+			return true
 		}
 	}
 	return false
 }
 
-// Apply removes the default clause if it uses a disallowed function
 func (r *FunctionDefaultRule) Apply(node ast.Node) (ast.Node, error) {
 	col := node.(*ast.ColumnDef)
 	opts := col.Options[:0]
 	for _, opt := range col.Options {
-		if opt.Tp == ast.ColumnOptionDefaultValue {
-			if fc, ok := opt.Expr.(*ast.FuncCallExpr); ok {
-				name := strings.ToLower(fc.FnName.O)
-				if !allowedDefaultFuncs[name] {
-					continue
-				}
-			}
+		if opt.Tp == ast.ColumnOptionDefaultValue && !keepDefaultExpr(col, opt.Expr) {
+			continue
 		}
 		opts = append(opts, opt)
 	}
@@ -75,10 +62,36 @@ func (r *FunctionDefaultRule) Apply(node ast.Node) (ast.Node, error) {
 	return col, nil
 }
 
-// allowedDefaultFuncs lists function names permitted in DEFAULT clauses
+// keepDefaultExpr returns true when TiDB is guaranteed to accept the DEFAULT
+// expression on the given column.
+func keepDefaultExpr(col *ast.ColumnDef, expr ast.ExprNode) bool {
+	// Some parser code paths may wrap the expression in parentheses; unwrap
+	// defensively so the decision below is purely about the inner node.
+	for {
+		p, ok := expr.(*ast.ParenthesesExpr)
+		if !ok {
+			break
+		}
+		expr = p.Expr
+	}
+	if _, ok := expr.(ast.ValueExpr); ok {
+		return true
+	}
+	fc, ok := expr.(*ast.FuncCallExpr)
+	if !ok {
+		return false
+	}
+	return isTimeType(col.Tp.GetType()) && allowedDefaultFuncs[fc.FnName.L]
+}
+
+// allowedDefaultFuncs lists time-function names TiDB accepts as DEFAULT on
+// TIMESTAMP / DATETIME / DATE columns. MariaDB synonyms (LOCALTIME,
+// LOCALTIMESTAMP) are normalised by the parser to one of these names.
 var allowedDefaultFuncs = map[string]bool{
 	"current_timestamp": true,
 	"current_date":      true,
 	"current_time":      true,
 	"now":               true,
+	"localtime":         true,
+	"localtimestamp":    true,
 }
