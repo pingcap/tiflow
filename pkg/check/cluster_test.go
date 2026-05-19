@@ -22,7 +22,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/stretchr/testify/require"
 	pd "github.com/tikv/pd/client"
@@ -58,6 +57,7 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 		wantClusterID uint64
 		wantIsTiDB    bool
 		wantErr       error
+		wantNotInErr  string
 	}{
 		{
 			name:       "non mysql scheme",
@@ -65,9 +65,10 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 			wantIsTiDB: false,
 		},
 		{
-			name:    "invalid uri",
-			sinkURI: ":invalid:",
-			wantErr: cerror.ErrSinkURIInvalid.Wrap(errors.New("parse \":invalid:\": missing protocol scheme")),
+			name:         "invalid uri",
+			sinkURI:      "mysql://user:verysecure@127.0.0.1/%zz",
+			wantErr:      errors.New(`parse "<invalid uri>": invalid URL escape "%zz"`),
+			wantNotInErr: "verysecure",
 		},
 		{
 			name:    "connect error",
@@ -136,6 +137,9 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 			if tc.wantErr != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.wantErr.Error())
+				if tc.wantNotInErr != "" {
+					require.NotContains(t, err.Error(), tc.wantNotInErr)
+				}
 			} else {
 				require.NoError(t, err)
 				require.Equal(t, tc.wantClusterID, clusterID)

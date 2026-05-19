@@ -25,6 +25,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/util"
 )
 
 // Observer defines an interface of downstream performance observer.
@@ -67,7 +68,10 @@ func NewObserver(
 
 		sinkURI, err := url.Parse(sinkURIStr)
 		if err != nil {
-			return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+			return nil, cerror.WrapError(
+				cerror.ErrSinkURIInvalid,
+				util.MaskSensitiveDataInURLError(err),
+				util.MaskSensitiveDataInURIForError(sinkURIStr))
 		}
 
 		scheme := strings.ToLower(sinkURI.Scheme)
