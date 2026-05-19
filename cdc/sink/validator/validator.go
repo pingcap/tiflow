@@ -74,7 +74,7 @@ func checkSyncPointSchemeCompatibility(
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack(
 				"sink uri scheme is not supported with syncpoint enabled"+
-					"sink uri: %s", util.MaskSensitiveDataInURIForError(uri.String()),
+					" sink uri: %s", util.MaskSensitiveDataInURIForError(uri.String()),
 			)
 	}
 	return nil

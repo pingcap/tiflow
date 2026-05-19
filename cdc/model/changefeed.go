@@ -347,7 +347,7 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 	if err != nil {
 		log.Warn(
 			"failed to parse the sink uri",
-			zap.Error(err),
+			zap.Error(util.MaskSensitiveDataInURLError(err)),
 			zap.Any("sinkURI", util.MaskSensitiveDataInURIForError(info.SinkURI)),
 		)
 		return
