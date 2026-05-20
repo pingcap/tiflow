@@ -75,7 +75,10 @@ func New(
 ) (*SinkFactory, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return nil, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURIStr))
 	}
 
 	s := &SinkFactory{}
