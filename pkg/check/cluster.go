@@ -24,6 +24,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
+	"github.com/pingcap/tiflow/pkg/util"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
 )
@@ -48,7 +49,8 @@ func UpstreamDownstreamNotSame(ctx context.Context,
 		zap.Uint64("upID", upID), zap.Uint64("downID", downID), zap.Bool("isTiDB", isTiDB))
 	if err != nil {
 		log.Error("failed to get cluster ID from sink URI",
-			zap.String("downSinkURI", downSinkURI), zap.Error(err))
+			zap.String("downSinkURI", util.MaskSensitiveDataInURIForError(downSinkURI)),
+			zap.Error(err))
 		return false, cerror.Trace(err)
 	}
 
@@ -70,7 +72,10 @@ func getClusterIDBySinkURI(
 	// Create a MySQL connection by using the sink URI.
 	url, err := url.Parse(sinkURI)
 	if err != nil {
-		return 0, true, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return 0, true, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURI))
 	}
 	if !sink.IsMySQLCompatibleScheme(sink.GetScheme(url)) {
 		return 0, false, nil

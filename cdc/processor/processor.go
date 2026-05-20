@@ -591,7 +591,10 @@ func (p *processor) tick(ctx context.Context) (error, error) {
 func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return false, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURIStr))
 	}
 	scheme := sink.GetScheme(sinkURI)
 	return sink.IsMySQLCompatibleScheme(scheme), nil
@@ -609,7 +612,10 @@ func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
 func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURIStr))
 	}
 	scheme := sink.GetScheme(sinkURI)
 	if !sink.IsMySQLCompatibleScheme(scheme) {

@@ -74,7 +74,7 @@ func checkSyncPointSchemeCompatibility(
 		return cerror.ErrSinkURIInvalid.
 			GenWithStack(
 				"sink uri scheme is not supported with syncpoint enabled"+
-					"sink uri: %s", uri,
+					" sink uri: %s", util.MaskSensitiveDataInURIForError(uri.String()),
 			)
 	}
 	return nil
@@ -90,7 +90,10 @@ func preCheckSinkURI(sinkURIStr string) (*url.URL, error) {
 
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return nil, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURIStr))
 	}
 
 	// Check if we use the correct IPv6 address format.
