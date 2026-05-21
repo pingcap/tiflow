@@ -511,7 +511,9 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 }
 
 func (checker *healthyChecker) update(eps []string) {
+	updateEps := make(map[string]struct{})
 	for _, ep := range eps {
+		updateEps[ep] = struct{}{}
 		// check if client exists, if not, create one, if exists, check if it's offline or disconnected.
 		if client, ok := checker.Load(ep); ok {
 			lastHealthy := client.(*healthyClient).lastHealth
@@ -528,6 +530,13 @@ func (checker *healthyChecker) update(eps []string) {
 		}
 		checker.addClient(ep, time.Now())
 	}
+	checker.Range(func(key, value interface{}) bool {
+		ep := key.(string)
+		if _, exist := updateEps[ep]; !exist {
+			checker.Delete(key)
+		}
+		return true
+	})
 }
 
 func (checker *healthyChecker) addClient(ep string, lastHealth time.Time) {
