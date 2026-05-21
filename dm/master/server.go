@@ -2854,7 +2854,7 @@ func (s *Server) checkStartValidationParams(
 	startTime := req.GetStartTimeValue()
 	if startTime != "" {
 		if _, err := utils.ParseStartTime(startTime); err != nil {
-			return "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+			return fmt.Sprintf("start-time should be in the format like %s", utils.StartTimeFormatHint), false
 		}
 	}
 

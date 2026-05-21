@@ -331,8 +331,7 @@ const TaskList: React.FC = () => {
       extraPayload.startTaskRequest = {
         start_time: formValues.start_time
           .milliseconds(0)
-          .utc()
-          .format('YYYY-MM-DDTHH:mm:ss'),
+          .format('YYYY-MM-DDTHH:mm:ssZ'),
         safe_mode_time_duration: formValues.safe_mode_time_duration + 's',
       }
     }

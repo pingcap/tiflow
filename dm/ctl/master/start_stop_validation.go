@@ -39,7 +39,7 @@ func NewStartValidationCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("all-task", false, "whether applied to all tasks")
 	cmd.Flags().String("mode", "full", "specify the mode of validation: full (default), fast; this flag will be ignored if the validation task has been ever enabled but currently paused")
-	cmd.Flags().String("start-time", "", "specify the start time of binlog for validation, e.g. '2021-10-21 00:01:00' or 2021-10-21T00:01:00")
+	cmd.Flags().String("start-time", "", "specify the start time of binlog for validation, e.g. '2021-10-21 00:01:00', '2021-10-21T00:01:00', or '2021-10-21T00:01:00+08:00'")
 	return cmd
 }
 
@@ -100,7 +100,7 @@ func parseValidationStartStopArgs(cmd *cobra.Command, op string) (validationStar
 				return args, err.Error(), false
 			}
 			if _, err = utils.ParseStartTime(args.startTime); err != nil {
-				return args, "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+				return args, fmt.Sprintf("start-time should be in the format like %s", utils.StartTimeFormatHint), false
 			}
 		}
 	}
