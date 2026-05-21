@@ -519,7 +519,7 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 }
 
 func (checker *healthyChecker) update(eps []string) {
-	updateEps := make(map[string]struct{})
+	updateEps := make(map[string]struct{}, len(eps))
 	for _, ep := range eps {
 		updateEps[ep] = struct{}{}
 		// check if client exists, if not, create one, if exists, check if it's offline or disconnected.
