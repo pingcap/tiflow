@@ -519,20 +519,22 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 }
 
 func (checker *healthyChecker) update(eps []string) {
-	updateEps := make(map[string]struct{}, len(eps))
+	updateEps := make(map[string]struct{})
 	for _, ep := range eps {
 		updateEps[ep] = struct{}{}
 		// check if client exists, if not, create one, if exists, check if it's offline or disconnected.
-		if client, ok := checker.Load(ep); ok {
-			lastHealthy := client.(*healthyClient).lastHealth
+		if value, ok := checker.Load(ep); ok {
+			client := value.(*healthyClient)
+			lastHealthy := client.lastHealth
 			if time.Since(lastHealthy) > etcdServerOfflineTimeout {
 				log.Info("some etcd server maybe offline", zap.String("endpoint", ep))
+				client.Close()
 				checker.Delete(ep)
 			}
 			if time.Since(lastHealthy) > etcdServerDisconnectedTimeout {
 				// try to reset client endpoint to trigger reconnect
-				client.(*healthyClient).Client.SetEndpoints([]string{}...)
-				client.(*healthyClient).Client.SetEndpoints(ep)
+				client.Client.SetEndpoints([]string{}...)
+				client.Client.SetEndpoints(ep)
 			}
 			continue
 		}
@@ -541,6 +543,9 @@ func (checker *healthyChecker) update(eps []string) {
 	checker.Range(func(key, value interface{}) bool {
 		ep := key.(string)
 		if _, exist := updateEps[ep]; !exist {
+			if client, ok := value.(*healthyClient); ok {
+				client.Close()
+			}
 			checker.Delete(key)
 		}
 		return true
