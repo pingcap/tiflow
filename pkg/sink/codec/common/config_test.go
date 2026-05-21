@@ -371,7 +371,7 @@ func TestMergeConfig(t *testing.T) {
 		"protocol=avro&enable-tidb-extension=true&schema-registry=abc&" +
 		"only-output-updated-columns=true&avro-enable-watermark=true&" +
 		"avro-bigint-unsigned-handling-mode=ab&avro-decimal-handling-mode=cd&" +
-		"include-before-value=true&max-message-bytes=123&max-batch-size=456"
+		"avro-include-before-value=true&max-message-bytes=123&max-batch-size=456"
 	sinkURI, err := url.Parse(uri)
 	require.NoError(t, err)
 
@@ -431,7 +431,7 @@ func TestMergeConfig(t *testing.T) {
 		"protocol=avro&enable-tidb-extension=true&schema-registry=abc&" +
 		"only-output-updated-columns=true&avro-enable-watermark=true&" +
 		"avro-bigint-unsigned-handling-mode=ab&avro-decimal-handling-mode=cd&" +
-		"include-before-value=true&max-message-bytes=123&max-batch-size=456"
+		"avro-include-before-value=true&max-message-bytes=123&max-batch-size=456"
 	sinkURI, err = url.Parse(uri)
 	require.NoError(t, err)
 	replicaConfig.Sink.OnlyOutputUpdatedColumns = aws.Bool(false)

@@ -184,7 +184,8 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		log.Error("avro: converting value to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
-	if a.config.AvroIncludeBeforeValue {
+	native[ticdcBefore] = goavro.Union("null", nil)
+	if a.config.AvroIncludeBeforeValue && e.IsUpdate() {
 		native, err = a.nativeValueWithBeforeValue(native, e)
 		if err != nil {
 			return nil, errors.Trace(err)
@@ -348,11 +349,6 @@ func (a *BatchEncoder) nativeValueWithBeforeValue(
 	native map[string]interface{},
 	e *model.RowChangedEvent,
 ) (map[string]interface{}, error) {
-	if !e.IsUpdate() {
-		native[ticdcBefore] = goavro.Union("null", nil)
-		return native, nil
-	}
-
 	input := avroEncodeInput{
 		TableInfo: e.TableInfo,
 		columns:   e.PreColumns,

@@ -162,7 +162,7 @@ type urlConfig struct {
 	MaxMessageBytes                *int    `form:"max-message-bytes"`
 	AvroDecimalHandlingMode        *string `form:"avro-decimal-handling-mode"`
 	AvroBigintUnsignedHandlingMode *string `form:"avro-bigint-unsigned-handling-mode"`
-	AvroIncludeBeforeValue         *bool   `form:"include-before-value"`
+	AvroIncludeBeforeValue         *bool   `form:"avro-include-before-value"`
 
 	// AvroEnableWatermark is the option for enabling watermark in avro protocol
 	// only used for internal testing, do not set this in the production environment since the
