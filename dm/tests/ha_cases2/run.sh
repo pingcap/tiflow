@@ -9,15 +9,6 @@ API_VERSION="v1alpha1"
 # import helper functions
 source $cur/../_utils/ha_cases_lib.sh
 
-function print_debug_status() {
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
-		"query-status test" \
-		"fail me!" 1 &&
-		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
-			"query-status test2" \
-			"fail me!" 1 && exit 1
-}
-
 function test_multi_task_running() {
 	echo "[$(date)] <<<<<< start test_multi_task_running >>>>>>"
 	cleanup
