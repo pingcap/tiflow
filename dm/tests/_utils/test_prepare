@@ -5,7 +5,9 @@ function cleanup_data() {
     rm -rf $WORK_DIR
     mkdir $WORK_DIR
     for target_db in "$@"; do
-        run_sql "drop database if exists \`${target_db}\`" $TIDB_PORT $TIDB_PASSWORD
+        if [ -n "${target_db}" ]; then
+            run_sql "drop database if exists \`${target_db}\`" $TIDB_PORT $TIDB_PASSWORD
+        fi
     done
     run_sql "drop database if exists dm_meta" $TIDB_PORT $TIDB_PASSWORD
 }
@@ -18,30 +20,40 @@ function cleanup_data_upstream() {
 }
 
 function cleanup_process() {
-    dm_master_num=$(ps aux >temp && grep "dm-master.test" temp | wc -l && rm temp)
-    echo "$dm_master_num dm-master alive"
-    pkill -hup dm-master.test 2>/dev/null || true
+    # Kill dm-masters one at a time to maintain etcd quorum during graceful
+    # shutdown. Killing all 3 simultaneously causes etcd to lose quorum,
+    # blocking leader transfer indefinitely.
+    local pids
+    pids=$(pgrep -f dm-master.test || true)
+    echo "$(echo "$pids" | wc -w) dm-master alive"
+    for pid in $pids; do
+        kill -HUP $pid 2>/dev/null || true
+        for _ in $(seq 1 30); do
+            if ! kill -0 $pid 2>/dev/null; then break; fi
+            sleep 1
+        done
+        # Escalate if still alive after 30s
+        kill -9 $pid 2>/dev/null || true
+    done
 
-    dm_worker_num=$(ps aux >temp && grep "dm-worker.test" temp | wc -l && rm temp)
+    # Workers and syncers: SIGKILL directly. Workers can be stuck in long
+    # Lightning loads (many_tables: 500 tables) and won't respond to SIGHUP.
+    dm_worker_num=$(pgrep -c -f dm-worker.test || true)
     echo "$dm_worker_num dm-worker alive"
-    pkill -hup dm-worker.test 2>/dev/null || true
+    pkill -9 dm-worker.test 2>/dev/null || true
 
-    dm_syncer_num=$(ps aux >temp && grep "dm-syncer.test" temp | wc -l && rm temp)
+    dm_syncer_num=$(pgrep -c -f dm-syncer.test || true)
     echo "$dm_syncer_num dm-syncer alive"
-    pkill -hup dm-syncer.test 2>/dev/null || true
+    pkill -9 dm-syncer.test 2>/dev/null || true
 
     wait_process_exit dm-master.test
     wait_process_exit dm-worker.test
     wait_process_exit dm-syncer.test
 }
 
-function cleanup_tidb_server(){
-    tidb_server_num=$(ps aux >temp && grep "tidb-server" temp | wc -l && rm temp)
-    echo "tidb_server_num tidb-server alive"
-    pkill -hup tidb-server 2>/dev/null || true
-
-    wait_process_exit tidb-server
-}
+# Cluster lifecycle: cleanup_tidb_server, cleanup_downstream_cluster,
+# run_tidb_server, run_downstream_cluster, run_downstream_cluster_with_tls
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cluster_lib.sh"
 
 function kill_process() {
     keyword=$1
@@ -77,6 +89,13 @@ fi
 
 function join_string() {
     local IFS="$1"; shift; echo "$*";
+}
+
+# Normalize session block in a YAML file in-place. Next-gen exports
+# "session: {}" while classic exports "session:\n  tidb_txn_mode: optimistic".
+function normalize_session_block() {
+    sed -i '/^  session: {}$/c\  session: __NORMALIZED__' "$1"
+    sed -i '/^  session:$/{N;s/^  session:\n    tidb_txn_mode: optimistic$/  session: __NORMALIZED__/}' "$1"
 }
 
 # shortcut for start task on one DM-worker

@@ -7,6 +7,17 @@ ha_test2="ha_test2"
 master_ports=($MASTER_PORT1 $MASTER_PORT2 $MASTER_PORT3)
 worker_ports=($WORKER1_PORT $WORKER2_PORT $WORKER3_PORT $WORKER4_PORT $WORKER5_PORT)
 
+# print_debug_status dumps query-status for both tasks when check_sync_diff
+# fails, so the CI log shows what went wrong before the test exits.
+function print_debug_status() {
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
+		"query-status test" \
+		"fail me!" 1 &&
+		run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT3" \
+			"query-status test2" \
+			"fail me!" 1 && exit 1
+}
+
 function load_data() {
 	port=$1
 	pswd=$2
@@ -135,13 +146,11 @@ function start_multi_tasks_cluster() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER5_PORT
 
 	echo "start DM task"
-
-	dmctl_start_task &
-	pid1=$!
-	dmctl_start_task "$cur/conf/dm-task2.yaml" &
-	pid2=$!
-
-	wait "$pid1" "$pid2"
+	# Run sequentially — parallel dmctl calls write the same log file
+	# ($workdir/dmctl.$ts.log) when executed in the same second, causing
+	# output corruption and false "result count mismatch" failures.
+	dmctl_start_task
+	dmctl_start_task "$cur/conf/dm-task2.yaml"
 }
 
 function cleanup() {
