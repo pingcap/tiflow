@@ -34,6 +34,7 @@ type ColumnsHolder struct {
 	Values        []interface{}
 	ValuePointers []interface{}
 	Types         []*sql.ColumnType
+	rawValues     [][]byte
 }
 
 func newColumnHolder(rows *sql.Rows) (*ColumnsHolder, error) {
@@ -42,17 +43,23 @@ func newColumnHolder(rows *sql.Rows) (*ColumnsHolder, error) {
 		return nil, errors.Trace(err)
 	}
 
-	values := make([]interface{}, len(columnTypes))
-	valuePointers := make([]interface{}, len(columnTypes))
-	for i := range values {
-		valuePointers[i] = &values[i]
-	}
-
-	return &ColumnsHolder{
-		Values:        values,
-		ValuePointers: valuePointers,
+	n := len(columnTypes)
+	h := &ColumnsHolder{
+		Values:        make([]interface{}, n),
+		ValuePointers: make([]interface{}, n),
 		Types:         columnTypes,
-	}, nil
+		rawValues:     make([][]byte, n),
+	}
+	// Scan into *[]byte so every column lands as []byte regardless of its
+	// underlying Go type. go-sql-driver/mysql v1.8 returns typed values
+	// (int64, float64, ...) when scanning into *interface{}; downstream
+	// decoders type-assert .([]uint8). Routing through database/sql's
+	// convertAssign for *[]byte formats numbers/bools/etc. as their textual
+	// representation, preserving the pre-v1.8 contract.
+	for i := range h.rawValues {
+		h.ValuePointers[i] = &h.rawValues[i]
+	}
+	return h, nil
 }
 
 // Length return the column count
@@ -255,6 +262,9 @@ func MustSnapshotQuery(
 				zap.String("query", query),
 				zap.String("schema", schema), zap.String("table", table),
 				zap.Uint64("commitTs", commitTs), zap.Error(err))
+		}
+		for i, b := range holder.rawValues {
+			holder.Values[i] = b
 		}
 	}
 	return holder

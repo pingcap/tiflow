@@ -813,7 +813,7 @@ var (
 	ErrBinlogGTIDMariaDBNotValid     = New(codeBinlogGTIDMariaDBNotValid, ClassFunctional, ScopeInternal, LevelHigh, "GTID set string %s for MariaDB not valid", "")
 	ErrBinlogMariaDBServerIDMismatch = New(codeBinlogMariaDBServerIDMismatch, ClassFunctional, ScopeInternal, LevelHigh, "server_id mismatch, in GTID (%d), in event header/server_id (%d)", "")
 	ErrBinlogOnlyOneGTIDSupport      = New(codeBinlogOnlyOneGTIDSupport, ClassFunctional, ScopeInternal, LevelHigh, "only one GTID in set is supported, but got %d (%s)", "")
-	ErrBinlogOnlyOneIntervalInUUID   = New(codeBinlogOnlyOneIntervalInUUID, ClassFunctional, ScopeInternal, LevelHigh, "only one Interval in UUIDSet is supported, but got %d (%s)", "")
+	ErrBinlogOnlyOneIntervalInUUID   = New(codeBinlogOnlyOneIntervalInUUID, ClassFunctional, ScopeInternal, LevelHigh, "only one Interval in MysqlGTIDSet is supported, but got %d (%s)", "")
 	ErrBinlogIntervalValueNotValid   = New(codeBinlogIntervalValueNotValid, ClassFunctional, ScopeInternal, LevelHigh, "Interval's Stop should equal to Start+1, but got %+v (%s)", "")
 	ErrBinlogEmptyQuery              = New(codeBinlogEmptyQuery, ClassFunctional, ScopeInternal, LevelHigh, "empty query not valid", "")
 	ErrBinlogTableMapEvNotValid      = New(codeBinlogTableMapEvNotValid, ClassFunctional, ScopeInternal, LevelHigh, "empty schema (% X) or table (% X) or column type (% X)", "")

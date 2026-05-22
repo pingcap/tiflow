@@ -722,7 +722,9 @@ func (v *DataValidator) doValidate() {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
 			}
-		case *replication.GenericEvent:
+		case *replication.GenericEvent, *replication.HeartbeatEvent:
+			// go-mysql v1.15+ decodes upstream heartbeats as HeartbeatEvent;
+			// DM's own injected heartbeats still arrive as GenericEvent.
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
 					v.sendError(terror.ErrValidatorPersistData.Delegate(err))
