@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/tikv/pd/client/errs"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -331,8 +332,6 @@ func isRetryableError(rpcName string) retry.IsRetryable {
 const (
 	// defaultEtcdClientTimeout is the default timeout for etcd client.
 	defaultEtcdClientTimeout = 5 * time.Second
-	// defaultAutoSyncInterval is the interval to update endpoints with its latest members.
-	defaultAutoSyncInterval = 30 * time.Second
 	// defaultDialKeepAliveTime is the time after which client pings the server to see if transport is alive.
 	defaultDialKeepAliveTime = 10 * time.Second
 	// defaultDialKeepAliveTimeout is the time that the client waits for a response for the
@@ -360,7 +359,6 @@ func newClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints 
 		TLS:                  tlsConfig,
 		LogConfig:            &logConfig,
 		DialTimeout:          defaultEtcdClientTimeout,
-		AutoSyncInterval:     defaultAutoSyncInterval,
 		DialKeepAliveTime:    defaultDialKeepAliveTime,
 		DialKeepAliveTimeout: defaultDialKeepAliveTimeout,
 		DialOptions: []grpc.DialOption{
@@ -402,16 +400,18 @@ func CreateRawEtcdClient(securityConf *security.Credential, grpcDialOption grpc.
 		return nil, err
 	}
 
+	tickerInterval := defaultDialKeepAliveTime
+
 	checker := &healthyChecker{
 		tlsConfig:      tlsConfig,
 		grpcDialOption: grpcDialOption,
 	}
-	eps := client.Endpoints()
+	eps := syncUrls(client)
 	checker.update(eps)
 
 	// Create a goroutine to check the health of etcd endpoints periodically.
 	go func(client *clientv3.Client) {
-		ticker := time.NewTicker(defaultDialKeepAliveTime)
+		ticker := time.NewTicker(tickerInterval)
 		defer ticker.Stop()
 		lastAvailable := time.Now()
 		for {
@@ -454,7 +454,7 @@ func CreateRawEtcdClient(securityConf *security.Credential, grpcDialOption grpc.
 
 	// Notes: use another goroutine to update endpoints to avoid blocking health check in the first goroutine.
 	go func(client *clientv3.Client) {
-		ticker := time.NewTicker(defaultAutoSyncInterval)
+		ticker := time.NewTicker(tickerInterval)
 		defer ticker.Stop()
 		for {
 			select {
@@ -462,8 +462,7 @@ func CreateRawEtcdClient(securityConf *security.Credential, grpcDialOption grpc.
 				log.Info("etcd client is closed, exit update endpoint goroutine")
 				return
 			case <-ticker.C:
-				// the client will auto sync endpoints
-				eps := client.Endpoints()
+				eps := syncUrls(client)
 				checker.update(eps)
 			}
 		}
@@ -499,7 +498,7 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 			defer wg.Done()
 			ep := key.(string)
 			client := value.(*healthyClient)
-			if IsHealthy(ctx, client.Client) {
+			if isHealthy(ctx, client.Client) {
 				hch <- ep
 				checker.Store(ep, &healthyClient{
 					Client:     client.Client,
@@ -564,8 +563,27 @@ func (checker *healthyChecker) addClient(ep string, lastHealth time.Time) {
 	})
 }
 
-// IsHealthy checks if the etcd is healthy.
-func IsHealthy(ctx context.Context, client *clientv3.Client) bool {
+func syncUrls(client *clientv3.Client) []string {
+	// See https://github.com/etcd-io/etcd/blob/85b640cee793e25f3837c47200089d14a8392dc7/clientv3/client.go#L170-L183
+	ctx, cancel := context.WithTimeout(clientv3.WithRequireLeader(client.Ctx()),
+		etcdClientTimeoutDuration)
+	defer cancel()
+	mresp, err := client.MemberList(ctx)
+	if err != nil {
+		log.Error("failed to list members", errs.ZapError(err))
+		return []string{}
+	}
+	var eps []string
+	for _, m := range mresp.Members {
+		if len(m.Name) != 0 && !m.IsLearner {
+			eps = append(eps, m.ClientURLs...)
+		}
+	}
+	return eps
+}
+
+// isHealthy checks if the etcd is healthy.
+func isHealthy(ctx context.Context, client *clientv3.Client) bool {
 	timeout := etcdClientTimeoutDuration
 	ctx, cancel := context.WithTimeout(clientv3.WithRequireLeader(ctx), timeout)
 	defer cancel()
