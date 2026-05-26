@@ -6,12 +6,15 @@ TEST_DIR=/tmp/dm_test
 export DM_MASTER_EXTRA_ARG=""
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/_utils/env_variables
+source $CUR/_utils/cluster_lib.sh
 
 stop_services() {
 	echo "..."
 	# clean sql mode
 	mysql -u root -h $MYSQL_HOST1 -P $MYSQL_PORT1 -p$MYSQL_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 	mysql -u root -h $MYSQL_HOST2 -P $MYSQL_PORT2 -p$MYSQL_PASSWORD2 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
+	# MariaDB may not be available in all CI pods (e.g. compatibility test)
+	mysql -u root -h $MARIADB_HOST1 -P $MARIADB_PORT1 -p$MARIADB_PASSWORD1 -e "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'" || true
 }
 
 print_worker_stacks() {
@@ -54,7 +57,14 @@ start_services() {
 	mkdir -p "$TEST_DIR"
 	rm -rf "$TEST_DIR/*.log"
 
-	$CUR/_utils/run_tidb_server $TIDB_PORT $TIDB_PASSWORD
+	# Next-gen TiDB requires a full PD+TiKV+TiDB cluster for DDL operations
+	# (e.g. ADD INDEX) because the DXF framework needs PD to coordinate tasks.
+	# Classic TiDB can use the lightweight unistore mode.
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		run_downstream_cluster $TEST_DIR
+	else
+		run_tidb_server $TIDB_PORT $TIDB_PASSWORD
+	fi
 
 	i=0
 
@@ -62,10 +72,14 @@ start_services() {
 	check_mysql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	set_default_variables $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	set_default_variables $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	# MariaDB may not be available in all CI pods (e.g. compatibility test)
+	if mysql -u root -h $MARIADB_HOST1 -P $MARIADB_PORT1 -p$MARIADB_PASSWORD1 -e 'select version();' 2>/dev/null; then
+		set_default_variables $MARIADB_HOST1 $MARIADB_PORT1 $MARIADB_PASSWORD1
+	fi
 }
 
 if [ "$#" -ge 1 ]; then
-	test_case="$@"
+	test_case="$*"
 else
 	test_case="*"
 fi

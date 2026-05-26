@@ -2,6 +2,8 @@
 # tools to run a TiDB cluster
 # parameter 1: work directory
 set -eux
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$CUR/env_variables"
 WORK_DIR="${1}_deploy_tidb"
 CONF_DIR=$2
 CLUSTER_CA_FILE=$3
@@ -58,7 +60,7 @@ EOF
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to start PD'
-			return 1
+			exit 1
 		fi
 		echo 'Waiting for PD ready...'
 		sleep 3
@@ -109,7 +111,7 @@ EOF
 		i=$((i + 1))
 		if [ "$i" -gt 20 ]; then
 			echo 'Failed to initialize TiKV cluster after 20 attempts'
-			return 1
+			exit 1
 		fi
 
 		echo 'Waiting for TiKV ready...'
@@ -152,7 +154,7 @@ EOF
 		i=$((i + 1))
 		if [ "$i" -gt 50 ]; then
 			echo 'Failed to start TiDB'
-			return 1
+			exit 1
 		fi
 		echo 'Waiting for TiDB ready...'
 		sleep 3

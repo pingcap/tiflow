@@ -1,10 +1,13 @@
 MYSQL_HOST1=${MYSQL_HOST1:-127.0.0.1}
 MYSQL_HOST2=${MYSQL_HOST2:-127.0.0.1}
+MARIADB_HOST1=${MARIADB_HOST1:-127.0.0.1}
 TIDB_HOST=${TIDB_HOST:-127.0.0.1}
 MYSQL_PORT1=${MYSQL_PORT1:-3306}
 MYSQL_PORT2=${MYSQL_PORT2:-3307}
+MARIADB_PORT1=${MARIADB_PORT1:-3308}
 MYSQL_PASSWORD1=${MYSQL_PASSWORD1:-123456}
 MYSQL_PASSWORD2=${MYSQL_PASSWORD2:-123456}
+MARIADB_PASSWORD1=${MARIADB_PASSWORD1:-123456}
 TIDB_PASSWORD=${TIDB_PASSWORD:-123456}
 
 TIDB_PORT=${TIDB_PORT:-4000}
@@ -34,3 +37,23 @@ SOURCE_ID2="mysql-replica-02"
 RESET_MASTER=${RESET_MASTER:-true}
 
 VERBOSE=${VERBOSE:-false}
+
+# Cluster endpoints. On next-gen, PD_ADDR etc. are always set because a real
+# TiKV cluster is required. On classic, they're only set by the individual
+# cluster scripts (run_downstream_cluster_classic) when a real cluster is
+# needed — most classic tests use unistore (no PD/TiKV).
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	export PD_PEER_ADDR=${PD_PEER_ADDR:-"127.0.0.1:2380"}
+	export PD_ADDR=${PD_ADDR:-"127.0.0.1:2379"}
+	export TIKV_ADDR=${TIKV_ADDR:-"127.0.0.1:2016"}
+	export TIKV_STATUS_ADDR=${TIKV_STATUS_ADDR:-"127.0.0.1:2018"}
+	export MINIO_ADDR=${MINIO_ADDR:-"127.0.0.1:9000"}
+	export MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-"minioadmin"}
+	export MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-"minioadmin"}
+	export MINIO_BUCKET=${MINIO_BUCKET:-"next-gen-test"}
+	export TIKV_WORKER_ADDR=${TIKV_WORKER_ADDR:-"127.0.0.1:19000"}
+	export KEYSPACE_NAME=${KEYSPACE_NAME:-"SYSTEM"}
+
+	# Extra CLI flags for user TiDB.
+	export TIDB_EXTRA_ARGS="-keyspace-name ${KEYSPACE_NAME}"
+fi

@@ -6,7 +6,7 @@
 
 set -eu
 
-TIDB_PORT=4000
+TIDB_PORT=${TIDB_PORT:-4000}
 user="root"
 if [[ "$3" = $TIDB_PORT ]]; then
 	user="test"

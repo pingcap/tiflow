@@ -7,9 +7,7 @@ source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function run() {
-	killall tidb-server 2>/dev/null || true
-	killall tikv-server 2>/dev/null || true
-	killall pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
 
 	run_downstream_cluster $WORK_DIR
 
@@ -117,9 +115,7 @@ function run() {
 	run_sql_both_source "SET @@GLOBAL.SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'"
 
 	# restart to standalone tidb
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
+	cleanup_downstream_cluster
 	rm -rf /tmp/tidb || true
 	run_tidb_server 4000 $TIDB_PASSWORD
 	export GO_FAILPOINTS=''
