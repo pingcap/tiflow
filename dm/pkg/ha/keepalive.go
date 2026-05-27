@@ -119,11 +119,19 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 		return err
 	}
 
-	// once we put the key successfully, we should revoke lease before we quit keepalive normally
+	// Revoke the lease on a normal (ctx-cancel) exit so the master rebinds
+	// promptly. On the channel-close path the lease is already gone and, under
+	// a partition, revoke blocks for its full timeout (~3s) — which keeps the
+	// old worker writing while a new one takes over. Skip it there and let the
+	// lease expire by TTL.
+	skipRevokeOnExit := false
 	defer func() {
+		if skipRevokeOnExit {
+			return
+		}
 		_, err2 := revokeLease(cli, leaseID)
 		if err2 != nil {
-			log.L().Warn("fail to revoke lease", zap.Error(err))
+			log.L().Warn("fail to revoke lease", zap.Error(err2))
 		}
 	}()
 
@@ -142,6 +150,7 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 			})
 			if !ok {
 				log.L().Info("keep alive channel is closed")
+				skipRevokeOnExit = true
 				return nil
 			}
 		case <-ctx.Done():

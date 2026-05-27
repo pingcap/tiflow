@@ -373,3 +373,47 @@ func TestExecuteBatchJobsWithForeignKey(t *testing.T) {
 
 	require.NoError(t, mock.ExpectationsWereMet())
 }
+
+func TestExecuteBatchJobsReturnsWhenSyncContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	sqlConn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	defer sqlConn.Close()
+
+	baseConn := connpkg.NewBaseConnForTest(sqlConn, nil)
+	cfg := &config.SubTaskConfig{Name: "test"}
+	dbConn := dbconn.NewDBConn(cfg, baseConn)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	var fatalErr error
+	successCalled := false
+	worker := &DMLWorker{
+		toDBConns: []*dbconn.DBConn{dbConn},
+		syncCtx:   tcontext.NewContext(ctx, log.L()),
+		successFunc: func(int, int, []*job) {
+			successCalled = true
+		},
+		fatalFunc: func(_ *job, err error) {
+			fatalErr = err
+		},
+		logger: log.L(),
+	}
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "targetSchema", Table: "targetTable"}
+	tableInfo := mockTableInfo(t, "create table db.tb(id int primary key, name varchar(24))")
+	change := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, "canceled"}, tableInfo, nil, nil)
+
+	worker.executeBatchJobs(0, []*job{newDMLJob(change, ec)}, false)
+
+	require.False(t, successCalled)
+	require.ErrorIs(t, fatalErr, context.Canceled)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
