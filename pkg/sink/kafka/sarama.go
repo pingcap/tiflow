@@ -57,7 +57,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// connection failures such as stale connections or broken pipe errors.
 	// The PingCAP Sarama fork includes the partition-muting ordering fix, while
 	// Net.MaxOpenRequests=1 below remains an extra ordering guard.
-	config.Producer.Retry.Max = 5
+	config.Producer.Retry.Max = o.MaxRetry
 
 	// make sure sarama producer flush messages as soon as possible.
 	config.Producer.Flush.Bytes = 0

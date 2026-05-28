@@ -37,6 +37,8 @@ func TestNewSaramaConfig(t *testing.T) {
 	options.Version = "2.6.0"
 
 	options.ClientID = "test-kafka-client"
+	maxRetry := 9
+	options.MaxRetry = maxRetry
 	compressionCases := []struct {
 		algorithm string
 		expected  sarama.CompressionCodec
@@ -53,7 +55,11 @@ func TestNewSaramaConfig(t *testing.T) {
 		cfg, err := NewSaramaConfig(ctx, options)
 		require.NoError(t, err)
 		require.Equal(t, cc.expected, cfg.Producer.Compression)
+		require.Equal(t, maxRetry, cfg.Producer.Retry.Max)
 	}
+	cfg, err := NewSaramaConfig(ctx, options)
+	require.NoError(t, err)
+	require.Equal(t, defaultProducerMaxRetry, cfg.Producer.Retry.Max)
 
 	options.EnableTLS = true
 	options.Credential = &security.Credential{
@@ -73,7 +79,7 @@ func TestNewSaramaConfig(t *testing.T) {
 		SASLMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := NewSaramaConfig(ctx, saslOptions)
+	cfg, err = NewSaramaConfig(ctx, saslOptions)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	require.Equal(t, "user", cfg.Net.SASL.User)
