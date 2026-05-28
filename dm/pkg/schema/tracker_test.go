@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 )
 
@@ -955,6 +956,78 @@ func TestForeignKeyRelationBuildsSourceDomainRootParentForRouteChain(t *testing.
 	require.Equal(t, []int{0}, relation.ChildColumnIdx)
 	require.Len(t, relation.ParentColumns, 1)
 	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationInternalCacheUsesSourceIdentityForUnsupportedSharedTarget(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table gp1(id int primary key)", "db")
+	createAndExec("create table gp2(id int primary key)", "db")
+	createAndExec("create table p1(id int primary key, constraint fk_p1_gp1 foreign key (id) references gp1(id))", "db")
+	createAndExec("create table p2(id int primary key, constraint fk_p2_gp2 foreign key (id) references gp2(id))", "db")
+	createAndExec("create table child(p1_id int not null, p2_id int not null, primary key(p1_id, p2_id), constraint fk_child_p1 foreign key (p1_id) references p1(id), constraint fk_child_p2 foreign key (p2_id) references p2(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	targetParent := &filter.Table{Schema: "db_r", Name: "parent_r"}
+	targetGrandparent := &filter.Table{Schema: "db_r", Name: "grandparent_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(p1_id int not null, p2_id int not null, primary key(p1_id, p2_id), constraint fk_child_p1 foreign key (p1_id) references parent_r(id), constraint fk_child_p2 foreign key (p2_id) references parent_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("parent_r", "create table parent_r(id int primary key, constraint fk_parent_grandparent foreign key (id) references grandparent_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetGrandparent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("grandparent_r", "create table grandparent_r(id int primary key)"))
+
+	// This unsupported shared-target shape isolates the builder's source-domain
+	// cache identity. Production routed multi-worker FK causality must reject it
+	// before calling the route-aware builder.
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "p1", "p2":
+			return &filter.Table{Schema: "db_r", Name: "parent_r"}
+		case "gp1", "gp2":
+			return &filter.Table{Schema: "db_r", Name: "grandparent_r"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 2)
+
+	relationByChildIdx := make(map[int]sqlmodel.ForeignKeyCausalityRelation, 2)
+	for _, relation := range dti.ForeignKeyRelations {
+		require.Len(t, relation.ChildColumnIdx, 1)
+		relationByChildIdx[relation.ChildColumnIdx[0]] = relation
+	}
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "gp1"}).String(), relationByChildIdx[0].ParentTable)
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "gp2"}).String(), relationByChildIdx[1].ParentTable)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

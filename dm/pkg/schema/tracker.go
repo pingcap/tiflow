@@ -609,22 +609,23 @@ func (tr *Tracker) buildForeignKeyRelations(
 	cache map[string][]sqlmodel.ForeignKeyCausalityRelation,
 	visiting map[string]struct{},
 ) ([]sqlmodel.ForeignKeyCausalityRelation, error) {
-	if relations, ok := cache[tableID]; ok {
-		return relations, nil
-	}
-
-	if _, ok := visiting[tableID]; ok {
-		return nil, nil
-	}
-	visiting[tableID] = struct{}{}
-	defer delete(visiting, tableID)
-
 	if sourceTable == nil {
 		sourceTable = utils.UnpackTableID(tableID)
 	}
 	if targetTable == nil {
 		targetTable = utils.UnpackTableID(tableID)
 	}
+
+	sourceTableID := utils.GenTableID(sourceTable)
+	if relations, ok := cache[sourceTableID]; ok {
+		return relations, nil
+	}
+
+	if _, ok := visiting[sourceTableID]; ok {
+		return nil, nil
+	}
+	visiting[sourceTableID] = struct{}{}
+	defer delete(visiting, sourceTableID)
 
 	routedSourceTable := resolveTableRoute(routeResolver, sourceTable)
 	if len(downstreamTI.ForeignKeys) > 0 && !sameTableIdentity(routedSourceTable, targetTable) {
@@ -814,7 +815,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 		}
 	}
 
-	cache[tableID] = relations
+	cache[sourceTableID] = relations
 	return relations, nil
 }
 
