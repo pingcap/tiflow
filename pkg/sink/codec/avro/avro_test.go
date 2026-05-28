@@ -272,56 +272,115 @@ func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
 		{Name: "name", Value: "new"},
 		{Name: "age", Value: int64(20)},
 	}
-	event := &model.RowChangedEvent{
-		CommitTs:   1024,
-		TableInfo:  tableInfo,
-		PreColumns: model.Columns2ColumnDatas(beforeColumns, tableInfo),
-		Columns:    model.Columns2ColumnDatas(afterColumns, tableInfo),
+	testCases := []struct {
+		name       string
+		event      *model.RowChangedEvent
+		op         string
+		beforeName string
+		afterName  string
+		assertRow  func(*testing.T, *model.RowChangedEvent)
+	}{
+		{
+			name: "insert",
+			event: &model.RowChangedEvent{
+				CommitTs:  1024,
+				TableInfo: tableInfo,
+				Columns:   model.Columns2ColumnDatas(afterColumns, tableInfo),
+			},
+			op:        insertOperation,
+			afterName: "new",
+			assertRow: func(t *testing.T, decoded *model.RowChangedEvent) {
+				require.True(t, decoded.IsInsert())
+				require.Empty(t, decoded.GetPreColumns())
+				require.Equal(t, "new", decoded.GetColumns()[1].Value)
+			},
+		},
+		{
+			name: "update",
+			event: &model.RowChangedEvent{
+				CommitTs:   1025,
+				TableInfo:  tableInfo,
+				PreColumns: model.Columns2ColumnDatas(beforeColumns, tableInfo),
+				Columns:    model.Columns2ColumnDatas(afterColumns, tableInfo),
+			},
+			op:         updateOperation,
+			beforeName: "old",
+			afterName:  "new",
+			assertRow: func(t *testing.T, decoded *model.RowChangedEvent) {
+				require.True(t, decoded.IsUpdate())
+				require.Equal(t, "old", decoded.GetPreColumns()[1].Value)
+				require.Equal(t, "new", decoded.GetColumns()[1].Value)
+			},
+		},
+		{
+			name: "delete",
+			event: &model.RowChangedEvent{
+				CommitTs:   1026,
+				TableInfo:  tableInfo,
+				PreColumns: model.Columns2ColumnDatas(beforeColumns, tableInfo),
+			},
+			op:         deleteOperation,
+			beforeName: "old",
+			afterName:  "old",
+			assertRow: func(t *testing.T, decoded *model.RowChangedEvent) {
+				require.True(t, decoded.IsDelete())
+				require.Equal(t, "old", decoded.GetPreColumns()[1].Value)
+				require.Empty(t, decoded.GetColumns())
+			},
+		},
 	}
 
 	topic := "default"
-	bin, err := encoder.encodeValue(ctx, topic, event)
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			bin, err := encoder.encodeValue(ctx, topic, tc.event)
+			require.NoError(t, err)
+			require.NotNil(t, bin)
 
-	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
-	require.NoError(t, err)
+			cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
+			require.NoError(t, err)
 
-	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
-	require.NoError(t, err)
+			avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
+			require.NoError(t, err)
 
-	res, _, err := avroValueCodec.NativeFromBinary(data)
-	require.NoError(t, err)
-	require.NotNil(t, res)
+			res, _, err := avroValueCodec.NativeFromBinary(data)
+			require.NoError(t, err)
+			require.NotNil(t, res)
 
-	m, ok := res.(map[string]interface{})
-	require.True(t, ok)
-	require.Equal(t, int32(20), m["age"])
-	require.Equal(t, "new", m["name"])
+			m, ok := res.(map[string]interface{})
+			require.True(t, ok)
+			require.Equal(t, int64(tc.event.CommitTs), m[tidbCommitTs])
+			require.Equal(t, tc.op, m[tidbOp])
+			require.Equal(t, tc.afterName, m["name"])
 
-	beforeUnion, ok := m[ticdcBefore].(map[string]interface{})
-	require.True(t, ok)
-	before, ok := beforeUnion[encoder.beforeValueRecordFullName(tableInfo.TableName)].(map[string]interface{})
-	require.True(t, ok)
-	require.Equal(t, int32(18), before["age"])
-	require.Equal(t, "old", before["name"])
+			if tc.beforeName == "" {
+				require.Nil(t, m[ticdcBefore])
+			} else {
+				beforeUnion, ok := m[ticdcBefore].(map[string]interface{})
+				require.True(t, ok)
+				before, ok := beforeUnion[encoder.beforeValueRecordFullName(tableInfo.TableName)].(map[string]interface{})
+				require.True(t, ok)
+				require.Equal(t, int32(18), before["age"])
+				require.Equal(t, tc.beforeName, before["name"])
+			}
 
-	key, err := encoder.encodeKey(ctx, topic, event)
-	require.NoError(t, err)
-	decoder := NewDecoder(codecConfig, encoder.schemaM, topic, nil)
-	err = decoder.AddKeyValue(key, bin)
-	require.NoError(t, err)
+			key, err := encoder.encodeKey(ctx, topic, tc.event)
+			require.NoError(t, err)
+			decoder := NewDecoder(codecConfig, encoder.schemaM, topic, nil)
+			err = decoder.AddKeyValue(key, bin)
+			require.NoError(t, err)
 
-	messageType, exist, err := decoder.HasNext()
-	require.NoError(t, err)
-	require.True(t, exist)
-	require.Equal(t, model.MessageTypeRow, messageType)
+			messageType, exist, err := decoder.HasNext()
+			require.NoError(t, err)
+			require.True(t, exist)
+			require.Equal(t, model.MessageTypeRow, messageType)
 
-	decoded, err := decoder.NextRowChangedEvent()
-	require.NoError(t, err)
-	require.True(t, decoded.IsUpdate())
-	require.Equal(t, uint64(1024), decoded.CommitTs)
-	require.Equal(t, "old", decoded.GetPreColumns()[1].Value)
-	require.Equal(t, "new", decoded.GetColumns()[1].Value)
+			decoded, err := decoder.NextRowChangedEvent()
+			require.NoError(t, err)
+			require.Equal(t, tc.event.CommitTs, decoded.CommitTs)
+			tc.assertRow(t, decoded)
+		})
+	}
 }
 
 func TestAvroEnvelope(t *testing.T) {

@@ -161,13 +161,17 @@ func (a *BatchEncoder) getKeySchemaCodec(
 }
 
 func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
-	if e.IsDelete() {
+	if e.IsDelete() && !a.config.AvroIncludeBeforeValue {
 		return nil, nil
 	}
 
+	columns := e.Columns
+	if e.IsDelete() {
+		columns = e.PreColumns
+	}
 	input := avroEncodeInput{
 		TableInfo: e.TableInfo,
-		columns:   e.Columns,
+		columns:   columns,
 		colInfos:  e.TableInfo.GetColInfosForRowChangedEvent(),
 	}
 	if len(input.columns) == 0 {
@@ -184,11 +188,13 @@ func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.R
 		log.Error("avro: converting value to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
-	native[ticdcBefore] = goavro.Union("null", nil)
-	if a.config.AvroIncludeBeforeValue && e.IsUpdate() {
-		native, err = a.nativeValueWithBeforeValue(native, e)
-		if err != nil {
-			return nil, errors.Trace(err)
+	if a.config.AvroIncludeBeforeValue {
+		native[ticdcBefore] = goavro.Union("null", nil)
+		if e.IsUpdate() || e.IsDelete() {
+			native, err = a.nativeValueWithBeforeValue(native, e)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
 		}
 	}
 	if a.config.EnableTiDBExtension {
@@ -322,6 +328,7 @@ func (a *BatchEncoder) Build() (messages []*common.Message) {
 const (
 	insertOperation = "c"
 	updateOperation = "u"
+	deleteOperation = "d"
 )
 
 func getOperation(e *model.RowChangedEvent) string {
@@ -329,6 +336,8 @@ func getOperation(e *model.RowChangedEvent) string {
 		return insertOperation
 	} else if e.IsUpdate() {
 		return updateOperation
+	} else if e.IsDelete() {
+		return deleteOperation
 	}
 	return ""
 }
