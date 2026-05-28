@@ -559,6 +559,7 @@ function DM_COMPACT_CASE() {
 		run_sql_source1 "delete from ${shardddl1}.${tb1} where a=$((i + 100))"
 		run_sql_source1 "insert into ${shardddl1}.${tb1}(a,b) values($i,$i)"
 	done
+	run_sql_tidb_with_retry_times "select count(1) from ${shardddl}.${tb};" "count(1): 100" 120
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml 30
 	compactCnt=$(cat $WORK_DIR/worker1/log/dm-worker.log $WORK_DIR/worker2/log/dm-worker.log | grep "finish to compact" | wc -l)
 	if [[ "$compactCnt" -le 100 ]]; then
