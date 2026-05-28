@@ -8,16 +8,16 @@ on:
 jobs:
   dm-web-ui-lint:
     name: DM Web UI Lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     defaults:
       run:
         working-directory: ./dm/ui
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v6
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v6
         with:
           node-version: '14'
           cache: 'yarn'

@@ -1,0 +1,8 @@
+source-id: "mysql-source-01"
+enable-gtid: true
+enable-relay: false
+
+from:
+  host: "127.0.0.1"
+  user: "root"
+  port: 3306

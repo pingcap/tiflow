@@ -67,8 +67,9 @@ type TableDiff struct {
 
 	ChunkSize int64 `json:"chunk-size"`
 
-	// SplitterStrategy is the fallback splitter when bucket stats are
-	// unavailable ("limit" or "random").
+	// SplitterStrategy selects the chunk iterator. "auto" prefers bucket
+	// (chunk checksum only) then falls back to random; "random" and "limit"
+	// are enforced and skip the bucket iterator.
 	SplitterStrategy string `json:"-"`
 
 	// TableLack = 1: the table only exists downstream,

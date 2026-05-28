@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Restart the TiDB (port 4000) with TLS enabled, reusing the already-running
+# next-gen cluster infrastructure (MinIO + PD + TiKV + tikv-worker) brought
+# up by run_downstream_cluster_nextgen.
+#
+# We keep PD/TiKV/tikv-worker alive and only replace the SYSTEM TiDB with
+# a TLS-enabled instance. DM only talks to TiDB through the mysql driver,
+# so TLS on the client connection is the only thing the openapi test exercises.
+#
+# parameters (positional, match run_downstream_cluster_with_tls_classic):
+#   1: WORK_DIR
+#   2: CONF_DIR
+#   3: CLUSTER_CA_FILE  (unused on next-gen — PD/TiKV keep their plain setup)
+#   4: CLUSTER_CERT_FILE (unused)
+#   5: CLUSTER_KEY_FILE  (unused)
+#   6: DB_CA_FILE        (TiDB server CA)
+#   7: DB_CERT_FILE      (TiDB server cert)
+#   8: DB_KEY_FILE       (TiDB server key)
+set -eux
+
+CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+WORK_DIR_BASE="${1}_deploy_tidb"
+CONF_DIR="$2"
+DB_CA_FILE="$6"
+DB_CERT_FILE="$7"
+DB_KEY_FILE="$8"
+
+mkdir -p "$WORK_DIR_BASE"
+
+# Generate a TLS config for the user TiDB. run_tidb_server will prepend
+# keyspace-name and tikv-worker-url automatically when NEXT_GEN=1.
+cat >"$WORK_DIR_BASE/tidb-tls-nextgen.toml" <<EOF
+socket = "/tmp/tidb-tls.sock"
+
+[security]
+ssl-ca = "${CONF_DIR}/${DB_CA_FILE}"
+ssl-cert = "${CONF_DIR}/${DB_CERT_FILE}"
+ssl-key = "${CONF_DIR}/${DB_KEY_FILE}"
+EOF
+
+# Kill the TiDB on port 4000; PD/TiKV/tikv-worker stay alive.
+source "$CUR/test_prepare"
+cleanup_tidb_server
+
+# Delegate to run_tidb_server which handles next-gen flags, readiness probe
+# (detects TLS from [security] in config), and user/grant setup.
+"$CUR/run_tidb_server" 4000 123456 "$WORK_DIR_BASE/tidb-tls-nextgen.toml"

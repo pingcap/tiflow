@@ -943,7 +943,10 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 ) error {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURIStr))
 	}
 
 	cfgParamsChanged := s.Protocol != oldSinkConfig.Protocol ||

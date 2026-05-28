@@ -8,7 +8,7 @@ env:
 
 jobs:
   assign_bug_project:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     name: Assign to Bugs and Questions Project
     steps:
       - name: Run issues assignment to project Question and Bug Reports Kanban

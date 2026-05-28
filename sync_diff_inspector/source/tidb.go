@@ -54,20 +54,24 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	originTable.Schema = matchedSource.OriginSchema
 	originTable.Table = matchedSource.OriginTable
 	progressID := dbutil.TableName(table.Schema, table.Table)
-	// if we decide to use bucket to split chunks
+
+	switch originTable.SplitterStrategy {
+	case config.SplitterStrategyLimit:
+		log.Info("choose limit splitter", zap.String("table", progressID))
+		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
+	case config.SplitterStrategyRandom:
+		log.Info("choose random splitter", zap.String("table", progressID))
+		return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
+	}
+
+	// auto: if we decide to use bucket to split chunks
 	// we always use bucksIter even we load from checkpoint is not bucketNode
-	// TODO check whether we can use bucket for this table to split chunks.
 	// NOTICE: If checkpoint use random splitter, it will also fail the next time build bucket splitter.
 	bucketIter, err := splitter.NewBucketIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange, a.bucketSpliterPool)
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, falling back", zap.Error(err))
-	if originTable.SplitterStrategy == config.SplitterStrategyLimit {
-		log.Info("choose limit splitter", zap.String("table", progressID))
-		return splitter.NewLimitIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
-	}
-	log.Info("choose random splitter", zap.String("table", progressID))
+	log.Info("failed to build bucket iterator, falling back to random", zap.Error(err))
 	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 
@@ -103,8 +107,8 @@ type TiDBSource struct {
 }
 
 // GetGlobalChecksumIterator builds chunk iterator for global-checksum mode.
-// It prefers _tidb_rowid or clustered PK, then falls back to the regular
-// splitter configuration when ignore-columns removes the checksum-specific handle.
+// Iterator choice follows SplitterStrategy: "limit" uses the limit iterator;
+// "auto" and "random" both use the random iterator.
 func (s *TiDBSource) GetGlobalChecksumIterator(
 	ctx context.Context,
 	tableIndex int,
@@ -127,12 +131,22 @@ func (s *TiDBSource) GetGlobalChecksumIterator(
 	}
 	originTable.Fields = fields
 
-	iter, err := splitter.NewRandomIteratorWithCheckpoint(
-		ctx, "", &originTable, s.dbConn, startRange)
-	if err != nil {
-		return nil, 0, errors.Trace(err)
+	switch originTable.SplitterStrategy {
+	case config.SplitterStrategyLimit:
+		limitIter, err := splitter.NewLimitIteratorWithCheckpoint(
+			ctx, "", &originTable, s.dbConn, startRange)
+		if err != nil {
+			return nil, 0, errors.Trace(err)
+		}
+		return limitIter, limitIter.Len(), nil
+	default:
+		randomIter, err := splitter.NewRandomIteratorWithCheckpoint(
+			ctx, "", &originTable, s.dbConn, startRange)
+		if err != nil {
+			return nil, 0, errors.Trace(err)
+		}
+		return randomIter, randomIter.Len(), nil
 	}
-	return iter, iter.Len(), nil
 }
 
 // prepareChecksumSplitFields returns the split fields for global-checksum mode.

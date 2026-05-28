@@ -62,7 +62,7 @@ func TestParseConfig(t *testing.T) {
 	require.JSONEq(t, cfg.String(), expectedJSON)
 	hash, err := cfg.Task.ComputeConfigHash()
 	require.NoError(t, err)
-	require.Equal(t, hash, "e4b4a202a072904121101d516f05ff8144e431ca6094db0fcca375221ddde98d")
+	require.Equal(t, hash, "4ca9790b4e6743e6a1468071038ae069e12c4f3694ec5cfa424839fdef4ee48d")
 	require.True(t, cfg.TableConfigs["config1"].Valid())
 }
 
@@ -81,6 +81,33 @@ func TestComputeConfigHashIncludesExportFixSQL(t *testing.T) {
 	require.NoError(t, err)
 
 	require.NotEqual(t, withFixSQL, withoutFixSQL)
+}
+
+func TestComputeConfigHashIncludesSplitterStrategy(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	require.NoError(t, cfg.Init())
+
+	cfg.Task.SplitterStrategy = SplitterStrategyRandom
+	randomHash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	cfg.Task.SplitterStrategy = SplitterStrategyLimit
+	limitHash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	require.NotEqual(t, randomHash, limitHash)
+}
+
+func TestInitNormalizesSplitterStrategyBeforeCheckpointHash(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	cfg.SplitterStrategy = " RANDOM "
+	require.NoError(t, cfg.Init())
+	require.Equal(t, SplitterStrategyRandom, cfg.SplitterStrategy)
+	require.Equal(t, SplitterStrategyRandom, cfg.Task.SplitterStrategy)
 }
 
 func TestError(t *testing.T) {

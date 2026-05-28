@@ -367,7 +367,10 @@ func (h *OpenAPIV2) verifyTable(c *gin.Context) {
 
 	uri, err := url.Parse(cfg.SinkURI)
 	if err != nil {
-		_ = c.Error(err)
+		_ = c.Error(cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(cfg.SinkURI)))
 		return
 	}
 	scheme := uri.Scheme

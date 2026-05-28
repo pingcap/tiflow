@@ -46,6 +46,7 @@ type LimitIterator struct {
 
 	progressID   string
 	columnOffset map[string]int
+	chunkCount   int
 }
 
 // NewLimitIterator return a new iterator
@@ -124,19 +125,27 @@ func NewLimitIteratorWithCheckpoint(
 
 	tagChunk.IndexColumnNames = utils.GetColumnNames(indexColumns)
 
-	chunkSize := table.ChunkSize
-	if chunkSize <= 0 {
-		cnt, err := getRowCount(ctx, dbConn, table.Schema, table.Table, "", nil)
+	remainingRows := int64(0)
+	if undone {
+		where, args := "TRUE", []any(nil)
+		if startRange != nil {
+			where, args = tagChunk.ToString(table.Collation)
+		}
+		remainingRows, err = getRowCount(ctx, dbConn, table.Schema, table.Table, where, args)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+	}
+
+	chunkSize := table.ChunkSize
+	if chunkSize <= 0 {
 		if len(table.Info.Indices) != 0 {
-			chunkSize = utils.CalculateChunkSize(cnt)
+			chunkSize = utils.CalculateChunkSize(remainingRows)
 		} else {
 			// no index
 			// will use table scan
 			// so we use one chunk
-			chunkSize = cnt
+			chunkSize = remainingRows
 		}
 	}
 	log.Info("get chunk size for table", zap.Int64("chunk size", chunkSize),
@@ -160,9 +169,12 @@ func NewLimitIteratorWithCheckpoint(
 
 		progressID,
 		columnOffset,
+		int((remainingRows + chunkSize - 1) / chunkSize),
 	}
 
-	progress.StartTable(progressID, 0, false)
+	if progressID != "" {
+		progress.StartTable(progressID, 0, false)
+	}
 	if !undone {
 		// this table is finished.
 		close(chunksCh)
@@ -210,9 +222,16 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 	return lmt.indexID
 }
 
+// Len returns estimated remaining chunks for this iterator.
+func (lmt *LimitIterator) Len() int {
+	return lmt.chunkCount
+}
+
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 	defer func() {
-		progress.UpdateTotal(lmt.progressID, 0, true)
+		if lmt.progressID != "" {
+			progress.UpdateTotal(lmt.progressID, 0, true)
+		}
 		close(lmt.chunksCh)
 	}()
 	for {
@@ -248,7 +267,9 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 
 		chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
 		bucketID++
-		progress.UpdateTotal(lmt.progressID, 1, false)
+		if lmt.progressID != "" {
+			progress.UpdateTotal(lmt.progressID, 1, false)
+		}
 		select {
 		case <-ctx.Done():
 			return
