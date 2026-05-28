@@ -3827,10 +3827,7 @@ func (s *Syncer) prepareDownStreamTableInfo(
 	if !s.needForeignKeyCausality() {
 		return basicDownStreamTableInfo(dti), nil
 	}
-	if err := s.precheckForeignKeyCausality(sourceTable, targetTable, dti); err != nil {
-		return nil, err
-	}
-	return s.schemaTracker.InitDownStreamForeignKeyRelations(tctx, sourceTable, targetTable, originTI, nil)
+	return s.schemaTracker.InitDownStreamForeignKeyRelations(tctx, sourceTable, targetTable, originTI, s.route)
 }
 
 func (s *Syncer) getDownStreamTableInfo(
