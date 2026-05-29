@@ -102,8 +102,13 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	}
 	return &saramaSyncProducer{
 		id:       f.changefeedID,
+<<<<<<< HEAD
 		client:   client,
 		producer: p,
+=======
+		producer: p,
+		client:   client,
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	}, nil
 }
 

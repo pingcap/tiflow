@@ -94,7 +94,11 @@ func GetTopicManagerAndTryCreateTopic(
 	adminClient kafka.ClusterAdminClient,
 ) (manager.TopicManager, error) {
 	topicManager := manager.NewKafkaTopicManager(
+<<<<<<< HEAD
 		ctx, topic, adminClient, topicCfg,
+=======
+		ctx, topic, changefeedID, adminClient, topicCfg,
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	)
 
 	if _, err := topicManager.CreateTopicAndWaitUntilVisible(ctx, topic); err != nil {

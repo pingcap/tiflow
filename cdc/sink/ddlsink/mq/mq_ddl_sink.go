@@ -66,6 +66,7 @@ func newDDLSink(ctx context.Context,
 	protocol config.Protocol,
 ) *DDLSink {
 	return &DDLSink{
+<<<<<<< HEAD
 		id:             changefeedID,
 		protocol:       protocol,
 		eventRouter:    eventRouter,
@@ -74,6 +75,16 @@ func newDDLSink(ctx context.Context,
 		producer:       producer,
 		statistics:     metrics.NewStatistics(ctx, sink.RowSink),
 		admin:          adminClient,
+=======
+		id:           changefeedID,
+		protocol:     protocol,
+		eventRouter:  eventRouter,
+		topicManager: topicManager,
+		encoder:      encoder,
+		producer:     producer,
+		statistics:   metrics.NewStatistics(changefeedID, sink.RowSink),
+		admin:        adminClient,
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	}
 }
 
@@ -128,8 +139,16 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
+<<<<<<< HEAD
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
+=======
+	var (
+		err          error
+		partitionNum int32
+	)
+	msg, err := k.encoder.EncodeCheckpointEvent(ts)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	if err != nil {
 		return errors.Trace(err)
 	}
