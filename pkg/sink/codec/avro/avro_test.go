@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/integrity"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	"github.com/pingcap/tiflow/pkg/uuid"
@@ -185,6 +186,57 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 
 	_, found = m[tidbChecksumVersion]
 	require.True(t, found)
+}
+
+func TestAvroEncodeDeleteChecksum(t *testing.T) {
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+	codecConfig.EnableRowChecksum = true
+	codecConfig.AvroIncludeBeforeValue = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
+
+	tableColumns := []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
+		{Name: "name", Type: mysql.TypeVarchar},
+	}
+	tableInfo := model.BuildTableInfo("test", "person", tableColumns, [][]int{{0}})
+	beforeColumns := []*model.Column{
+		{Name: "id", Value: int64(1)},
+		{Name: "name", Value: "old"},
+	}
+	event := &model.RowChangedEvent{
+		CommitTs:   1024,
+		TableInfo:  tableInfo,
+		PreColumns: model.Columns2ColumnDatas(beforeColumns, tableInfo),
+		Checksum: &integrity.Checksum{
+			Current:  11,
+			Previous: 22,
+		},
+	}
+
+	topic := "default"
+	bin, err := encoder.encodeValue(ctx, topic, event)
+	require.NoError(t, err)
+
+	cid, data, err := extractConfluentSchemaIDAndBinaryData(bin)
+	require.NoError(t, err)
+
+	avroValueCodec, err := encoder.schemaM.Lookup(ctx, topic, schemaID{confluentSchemaID: cid})
+	require.NoError(t, err)
+
+	res, _, err := avroValueCodec.NativeFromBinary(data)
+	require.NoError(t, err)
+	m, ok := res.(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, deleteOperation, m[tidbOp])
+	require.Equal(t, "22", m[tidbRowLevelChecksum])
 }
 
 func TestAvroEncode(t *testing.T) {

@@ -381,7 +381,11 @@ func (a *BatchEncoder) nativeValueWithExtension(
 	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
 
 	if a.config.EnableRowChecksum && e.Checksum != nil {
-		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
+		checksum := e.Checksum.Current
+		if e.IsDelete() {
+			checksum = e.Checksum.Previous
+		}
+		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(checksum), 10)
 		native[tidbCorrupted] = e.Checksum.Corrupted
 		native[tidbChecksumVersion] = e.Checksum.Version
 	}

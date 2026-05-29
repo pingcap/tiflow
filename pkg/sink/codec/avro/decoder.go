@@ -108,10 +108,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		return nil, errors.Trace(err)
 	}
 
-	// for the delete event, only have key part, it holds primary key or the unique key columns.
-	// for the insert / update, extract the value part, it holds all columns.
-	isDelete := len(d.value) == 0
-	if isDelete {
+	hasValue := len(d.value) != 0
+	isDelete := !hasValue
+	if !hasValue {
+		// Legacy delete event only has the key payload, so it can only be
+		// decoded as a delete row with key columns in PreColumns.
 		// delete event only have key part, treat it as the value part also.
 		valueMap = keyMap
 		valueSchema = keySchema
@@ -120,17 +121,18 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
+		if d.config.AvroIncludeBeforeValue {
+			isDelete = valueMap[tidbOp] == deleteOperation
+		}
 	}
 
-	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete)
+	event, err := assembleEvent(keyMap, valueMap, valueSchema, isDelete, hasValue)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	event.PhysicalTableID = d.tableIDAllocator.AllocateTableID(event.TableInfo.GetSchemaName(), event.TableInfo.GetTableName())
 
-	// Delete event only has Primary Key Columns, but the checksum is calculated based on the whole row columns,
-	// checksum verification cannot be done here, so skip it.
-	if isDelete {
+	if !hasValue {
 		return event, nil
 	}
 
@@ -140,16 +142,22 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	}
 	corrupted := isCorrupted(valueMap)
 	if found {
-		event.Checksum = &integrity.Checksum{
-			Current:   uint32(expectedChecksum),
-			Corrupted: corrupted,
+		event.Checksum = &integrity.Checksum{Corrupted: corrupted}
+		if isDelete {
+			event.Checksum.Previous = uint32(expectedChecksum)
+		} else {
+			event.Checksum.Current = uint32(expectedChecksum)
 		}
 	}
 
-	if isCorrupted(valueMap) {
+	if corrupted {
 		log.Warn("row data is corrupted",
 			zap.String("topic", d.topic), zap.Uint64("checksum", expectedChecksum))
-		for _, col := range event.Columns {
+		columns := event.Columns
+		if isDelete {
+			columns = event.PreColumns
+		}
+		for _, col := range columns {
 			colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 			log.Info("data corrupted, print each column for debugging",
 				zap.String("name", colInfo.Name.O),
@@ -172,10 +180,11 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 
 // assembleEvent return a row changed event
 // keyMap hold primary key or unique key columns
-// valueMap hold all columns information
+// valueMap holds all columns for insert/update and before-value delete.
+// For legacy delete, valueMap is keyMap and only contains handle columns.
 // schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
 func assembleEvent(
-	keyMap, valueMap, schema map[string]interface{}, isDelete bool,
+	keyMap, valueMap, schema map[string]interface{}, isDelete bool, hasValue bool,
 ) (*model.RowChangedEvent, error) {
 	fields, ok := schema["fields"].([]interface{})
 	if !ok {
@@ -205,7 +214,7 @@ func assembleEvent(
 	tableName := schema["name"].(string)
 
 	var commitTs int64
-	if !isDelete {
+	if hasValue {
 		o, ok := valueMap[tidbCommitTs]
 		if !ok {
 			return nil, errors.New("commit ts not found")
@@ -222,7 +231,15 @@ func assembleEvent(
 	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNameSet)
 
 	if isDelete {
-		event.PreColumns = model.Columns2ColumnDatas(columns, event.TableInfo)
+		if hasValue {
+			if !hasBefore {
+				return nil, errors.New("before value not found for delete event")
+			}
+			event.PreColumns = model.Columns2ColumnDatas(beforeColumns, event.TableInfo)
+		} else {
+			// Legacy delete only has the key payload, so PreColumns contains handle columns only.
+			event.PreColumns = model.Columns2ColumnDatas(columns, event.TableInfo)
+		}
 	} else {
 		event.Columns = model.Columns2ColumnDatas(columns, event.TableInfo)
 		if hasBefore {
