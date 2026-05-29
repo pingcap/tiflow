@@ -73,7 +73,7 @@ function run() {
 	echo "finish prepare_data"
 
 	# we will check metrics, so don't clean metrics
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/DontUnregister=return();github.com/pingcap/tiflow/dm/syncer/IOTotalBytes=return("uuid")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SleepBeforeDumplingClose=return(30);github.com/pingcap/tiflow/dm/loader/DontUnregister=return();github.com/pingcap/tiflow/dm/syncer/IOTotalBytes=return("uuid")'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -85,8 +85,6 @@ function run() {
 	dmctl_operate_source create $WORK_DIR/source1.yaml $SOURCE_ID1
 
 	dmctl_start_task_standalone
-	# The full load can finish before query-status observes the loader unit.
-	set +e
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
 		"\"totalTables\": \"500\"" 1 \
@@ -94,14 +92,6 @@ function run() {
 		"\"finishedBytes\"" 1 \
 		"\"finishedRows\"" 1 \
 		"\"estimateTotalRows\"" 1
-	load_status=$?
-	set -e
-	if [ "$load_status" -ne 0 ]; then
-		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-			"query-status test" \
-			"\"unit\": \"Sync\"" 1 \
-			"\"synced\": true" 1
-	fi
 	wait_until_sync $WORK_DIR "127.0.0.1:$MASTER_PORT"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	check_metric $WORKER1_PORT 'lightning_tables{result="success",source_id="mysql-replica-01",state="completed",task="test"}' 1 $(($TABLE_NUM - 1)) $(($TABLE_NUM + 1))
