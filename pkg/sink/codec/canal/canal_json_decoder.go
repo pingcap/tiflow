@@ -211,6 +211,14 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 		t := holder.Types[i]
 		name := holder.Types[i].Name()
 		mysqlType := strings.ToLower(t.DatabaseTypeName())
+		// go-sql-driver/mysql v1.8 reports ENUM/SET via DatabaseTypeName; v1.7 reported
+		// them as CHAR/BINARY because the wire type is fieldTypeString. The downstream
+		// canalJSONFormatColumn expects ENUM/SET values to be integer indexes, but the
+		// text-protocol SELECT here returns the name(s). Map back to the generic char
+		// type so the value passes through as a string — MySQL accepts the name on write.
+		if mysqlType == "enum" || mysqlType == "set" {
+			mysqlType = "char"
+		}
 
 		var value string
 		rawValue := holder.Values[i].([]uint8)
