@@ -86,6 +86,7 @@ func TestNewSaramaConfig(t *testing.T) {
 }
 
 func TestNewSaramaConfigMaxRetryFromSinkURI(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		sinkURI  string
