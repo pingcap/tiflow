@@ -121,11 +121,9 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 	}
 
 	return &saramaSyncProducer{
-		id:                    f.changefeedID,
-		producer:              p,
-		client:                client,
-		keepConnAliveInterval: f.option.KeepConnAliveInterval,
-		lastHeartbeatTime:     time.Now().Add(-f.option.KeepConnAliveInterval),
+		id:       f.changefeedID,
+		producer: p,
+		client:   client,
 	}, nil
 }
 
@@ -151,11 +149,10 @@ func (f *saramaFactory) AsyncProducer(
 		return nil, errors.Trace(err)
 	}
 	return &saramaAsyncProducer{
-		client:                client,
-		producer:              p,
-		changefeedID:          f.changefeedID,
-		keepConnAliveInterval: f.option.KeepConnAliveInterval,
-		failpointCh:           failpointCh,
+		client:       client,
+		producer:     p,
+		changefeedID: f.changefeedID,
+		failpointCh:  failpointCh,
 	}, nil
 }
 

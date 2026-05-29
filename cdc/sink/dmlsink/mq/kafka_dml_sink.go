@@ -87,7 +87,6 @@ func NewKafkaDMLSink(
 		topic,
 		options.DeriveTopicConfig(),
 		adminClient,
-		options.KeepConnAliveInterval,
 	)
 	if err != nil {
 		return nil, errors.Trace(err)
