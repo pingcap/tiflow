@@ -91,6 +91,10 @@ type DownstreamTableInfo struct {
 	foreignKeyInitErr   error
 }
 
+// TableRouteResolver resolves a source table to its downstream routed table.
+// A nil resolver means identity route.
+type TableRouteResolver func(*filter.Table) *filter.Table
+
 type executorContext struct {
 	sessionctx.Context
 }
@@ -406,7 +410,7 @@ func (tr *Tracker) GetDownStreamTableInfo(tctx *tcontext.Context, tableID string
 		return nil, err
 	}
 
-	if err := dti.initForeignKeyRelations(tr, tctx, tableID, targetTable, targetTable, originTI); err != nil {
+	if err := dti.initForeignKeyRelations(tr, tctx, tableID, targetTable, targetTable, originTI, nil); err != nil {
 		return nil, err
 	}
 
@@ -424,6 +428,7 @@ func (tr *Tracker) InitDownStreamForeignKeyRelations(
 	sourceTable *filter.Table,
 	targetTable *filter.Table,
 	originTI *model.TableInfo,
+	routeResolver TableRouteResolver,
 ) (*DownstreamTableInfo, error) {
 	tableID := utils.GenTableID(targetTable)
 	dti, err := tr.GetDownStreamTableInfoWithoutForeignKey(tctx, tableID, originTI)
@@ -431,7 +436,31 @@ func (tr *Tracker) InitDownStreamForeignKeyRelations(
 		return nil, err
 	}
 
-	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI); err != nil {
+	// Routed FK relations depend on the source table and resolver, so keep them
+	// out of the downstream table cache that is keyed only by target table ID.
+	if routeResolver != nil {
+		relations, err := tr.buildForeignKeyRelations(
+			tctx,
+			tableID,
+			sourceTable,
+			targetTable,
+			dti.TableInfo,
+			originTI,
+			routeResolver,
+			make(map[string][]sqlmodel.ForeignKeyCausalityRelation),
+			make(map[string]struct{}),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return &DownstreamTableInfo{
+			TableInfo:           dti.TableInfo,
+			WhereHandle:         dti.WhereHandle,
+			ForeignKeyRelations: relations,
+		}, nil
+	}
+
+	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI, routeResolver); err != nil {
 		return nil, err
 	}
 	return dti, nil
@@ -484,6 +513,7 @@ func (dti *DownstreamTableInfo) initForeignKeyRelations(
 	sourceTable *filter.Table,
 	targetTable *filter.Table,
 	originTI *model.TableInfo,
+	routeResolver TableRouteResolver,
 ) error {
 	dti.foreignKeyInitOnce.Do(func() {
 		relations, err := tr.buildForeignKeyRelations(
@@ -493,6 +523,7 @@ func (dti *DownstreamTableInfo) initForeignKeyRelations(
 			targetTable,
 			dti.TableInfo,
 			originTI,
+			routeResolver,
 			make(map[string][]sqlmodel.ForeignKeyCausalityRelation),
 			make(map[string]struct{}),
 		)
@@ -574,19 +605,10 @@ func (tr *Tracker) buildForeignKeyRelations(
 	targetTable *filter.Table,
 	downstreamTI *model.TableInfo,
 	originTI *model.TableInfo,
+	routeResolver TableRouteResolver,
 	cache map[string][]sqlmodel.ForeignKeyCausalityRelation,
 	visiting map[string]struct{},
 ) ([]sqlmodel.ForeignKeyCausalityRelation, error) {
-	if relations, ok := cache[tableID]; ok {
-		return relations, nil
-	}
-
-	if _, ok := visiting[tableID]; ok {
-		return nil, nil
-	}
-	visiting[tableID] = struct{}{}
-	defer delete(visiting, tableID)
-
 	if sourceTable == nil {
 		sourceTable = utils.UnpackTableID(tableID)
 	}
@@ -594,11 +616,33 @@ func (tr *Tracker) buildForeignKeyRelations(
 		targetTable = utils.UnpackTableID(tableID)
 	}
 
-	if len(downstreamTI.ForeignKeys) > 0 && !sameTableIdentity(sourceTable, targetTable) {
+	sourceTableID := utils.GenTableID(sourceTable)
+	if relations, ok := cache[sourceTableID]; ok {
+		return relations, nil
+	}
+
+	if _, ok := visiting[sourceTableID]; ok {
+		return nil, nil
+	}
+	visiting[sourceTableID] = struct{}{}
+	defer delete(visiting, sourceTableID)
+
+	routedSourceTable := resolveTableRoute(routeResolver, sourceTable)
+	if len(downstreamTI.ForeignKeys) > 0 && !sameTableIdentity(routedSourceTable, targetTable) {
+		if routeResolver == nil {
+			return nil, newForeignKeyRouteUnsupportedError(
+				fmt.Sprintf(
+					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
+					sourceTable,
+					targetTable,
+				),
+			)
+		}
 		return nil, newForeignKeyRouteUnsupportedError(
 			fmt.Sprintf(
-				"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
+				"foreign key causality with route under foreign_key_checks=1 and worker_count>1 requires 1:1 route alignment; source child table %s routes to %s, but downstream child table is %s",
 				sourceTable,
+				routedSourceTable,
 				targetTable,
 			),
 		)
@@ -617,29 +661,36 @@ func (tr *Tracker) buildForeignKeyRelations(
 			continue
 		}
 
-		// childIdxs are the current child row value indexes (after hidden columns are
-		// skipped) for this direct FK, and are reused by both direct and lifted relations.
-		childIdxs := make([]int, 0, len(fk.Cols))
-		for _, col := range fk.Cols {
-			idx, ok := childNameToIdx[col.L]
-			if !ok {
-				return nil, newForeignKeySchemaAlignmentError(
-					tableID,
-					fmt.Sprintf("downstream FK column %s was not found in the tracked schema", col.L),
-				)
-			}
-			childIdxs = append(childIdxs, idx)
-		}
-
 		sourceFK := findMatchingForeignKey(originTI, fk, i)
 		if sourceFK == nil {
-			return nil, newForeignKeyRouteUnsupportedError(
+			return nil, newForeignKeySchemaAlignmentError(
+				sourceTable.String(),
 				fmt.Sprintf(
 					"foreign key causality under foreign_key_checks=1 and worker_count>1 requires aligned source and downstream FK metadata; failed to match source foreign key metadata for table %s and downstream FK %s; please align the schema metadata first, and if route is enabled for this table, please use worker_count=1",
 					sourceTable,
 					fk.Name.O,
 				),
 			)
+		}
+		if len(sourceFK.Cols) == 0 || len(sourceFK.Cols) != len(sourceFK.RefCols) {
+			return nil, newForeignKeySchemaAlignmentError(
+				sourceTable.String(),
+				fmt.Sprintf("source FK %s has unexpected child/ref column metadata", sourceFK.Name.O),
+			)
+		}
+
+		// childIdxs are the current child row value indexes (after hidden columns are
+		// skipped) for this direct FK, and are reused by both direct and lifted relations.
+		childIdxs := make([]int, 0, len(sourceFK.Cols))
+		for _, col := range sourceFK.Cols {
+			idx, ok := childNameToIdx[col.L]
+			if !ok {
+				return nil, newForeignKeySchemaAlignmentError(
+					sourceTable.String(),
+					fmt.Sprintf("source FK column %s was not found in the tracked schema", col.L),
+				)
+			}
+			childIdxs = append(childIdxs, idx)
 		}
 
 		sourceParentSchema := sourceFK.RefSchema.O
@@ -653,11 +704,24 @@ func (tr *Tracker) buildForeignKeyRelations(
 			targetParentSchema = targetTable.Schema
 		}
 		targetParentTable := &filter.Table{Schema: targetParentSchema, Name: fk.RefTable.O}
-		if !sameTableIdentity(sourceParentTable, targetParentTable) {
+		routedSourceParent := resolveTableRoute(routeResolver, sourceParentTable)
+		if !sameTableIdentity(routedSourceParent, targetParentTable) {
+			if routeResolver == nil {
+				return nil, newForeignKeyRouteUnsupportedError(
+					fmt.Sprintf(
+						"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; upstream parent table %s and downstream parent table %s do not align for FK %s on table %s; please use worker_count=1",
+						sourceParentTable,
+						targetParentTable,
+						fk.Name.O,
+						sourceTable,
+					),
+				)
+			}
 			return nil, newForeignKeyRouteUnsupportedError(
 				fmt.Sprintf(
-					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; upstream parent table %s and downstream parent table %s do not align for FK %s on table %s; please use worker_count=1",
+					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 requires 1:1 route alignment; upstream parent table %s routes to %s, but downstream parent table is %s for FK %s on table %s",
 					sourceParentTable,
+					routedSourceParent,
 					targetParentTable,
 					fk.Name.O,
 					sourceTable,
@@ -666,7 +730,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 		}
 
 		parentTableID := utils.GenTableID(targetParentTable)
-		parentTableName := (&cdcmodel.TableName{Schema: targetParentSchema, Table: fk.RefTable.O}).String()
+		parentTableName := (&cdcmodel.TableName{Schema: sourceParentSchema, Table: sourceFK.RefTable.O}).String()
 
 		parentOriginTI, err := tr.GetTableInfo(sourceParentTable)
 		if err != nil {
@@ -676,7 +740,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 		if err != nil {
 			return nil, err
 		}
-		parentColumns, err := getColumnsByNames(parentDTI.TableInfo, fk.RefCols)
+		parentColumns, err := getColumnsByNames(parentOriginTI, sourceFK.RefCols)
 		if err != nil {
 			return nil, err
 		}
@@ -696,6 +760,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 			targetParentTable,
 			parentDTI.TableInfo,
 			parentOriginTI,
+			routeResolver,
 			cache,
 			visiting,
 		)
@@ -710,8 +775,8 @@ func (tr *Tracker) buildForeignKeyRelations(
 
 		// Map the direct parent column positions referenced by the current FK back to
 		// the current child row's visible-column indexes.
-		parentIndexToChild := make(map[int]int, len(fk.RefCols))
-		for i, refCol := range fk.RefCols {
+		parentIndexToChild := make(map[int]int, len(sourceFK.RefCols))
+		for i, refCol := range sourceFK.RefCols {
 			if idx, ok := parentNameToIdx[refCol.L]; ok {
 				parentIndexToChild[idx] = childIdxs[i]
 			}
@@ -751,7 +816,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 		}
 	}
 
-	cache[tableID] = relations
+	cache[sourceTableID] = relations
 	return relations, nil
 }
 
@@ -765,24 +830,34 @@ func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInf
 
 	if downstreamFK.Name.L != "" {
 		if fk := model.FindFKInfoByName(originTI.ForeignKeys, downstreamFK.Name.L); fk != nil {
-			return fk
+			if sameForeignKeyColumns(fk, downstreamFK) {
+				return fk
+			}
+			return nil
 		}
 	}
 
 	if idx < len(originTI.ForeignKeys) {
 		candidate := originTI.ForeignKeys[idx]
-		if sameColumns(candidate.Cols, downstreamFK.Cols) && sameColumns(candidate.RefCols, downstreamFK.RefCols) {
+		if sameForeignKeyColumns(candidate, downstreamFK) {
 			return candidate
 		}
 	}
 
 	for _, fk := range originTI.ForeignKeys {
-		if sameColumns(fk.Cols, downstreamFK.Cols) && sameColumns(fk.RefCols, downstreamFK.RefCols) {
+		if sameForeignKeyColumns(fk, downstreamFK) {
 			return fk
 		}
 	}
 
 	return nil
+}
+
+func sameForeignKeyColumns(sourceFK *model.FKInfo, downstreamFK *model.FKInfo) bool {
+	if sourceFK == nil || downstreamFK == nil {
+		return false
+	}
+	return sameColumns(sourceFK.Cols, downstreamFK.Cols) && sameColumns(sourceFK.RefCols, downstreamFK.RefCols)
 }
 
 func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
@@ -802,6 +877,17 @@ func sameTableIdentity(a *filter.Table, b *filter.Table) bool {
 		return a == b
 	}
 	return a.Schema == b.Schema && a.Name == b.Name
+}
+
+func resolveTableRoute(routeResolver TableRouteResolver, table *filter.Table) *filter.Table {
+	if routeResolver == nil || table == nil {
+		return table
+	}
+	routed := routeResolver(table)
+	if routed == nil {
+		return table
+	}
+	return routed
 }
 
 func newForeignKeyRouteUnsupportedError(msg string) error {
