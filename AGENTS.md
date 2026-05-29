@@ -22,4 +22,17 @@ Go is the primary language. Follow [Go Code Review Comments](https://github.com/
 Add unit tests for package-level logic and integration cases for end-to-end replication behavior. New DM shell cases should be added under `dm/tests/<case>/run.sh` and registered in `dm/tests/run_group.sh`. Coverage artifacts are written to `/tmp/dm_test`. If a change affects compatibility behavior, use the existing compatibility workflow instead of only adding a unit test.
 
 ## Commit & Pull Request Guidelines
-Use the established DM commit style: `<subsystem>(dm): <what changed>`, for example `worker(dm): improve retry logging`. Keep the subject within 70 characters and explain the reason in the body. PRs should follow [the pull request template](.github/pull_request_template.md): link the issue with `Issue Number: close #12345`, list the DM tests you ran, note compatibility impact, mention doc updates, and provide a release note or `None`. DM fixes and features are expected to include tests, and PRs normally require two maintainer LGTMs.
+Use the repository commit style from [CONTRIBUTING.md](CONTRIBUTING.md) and existing history: `<subsystem>(ticdc|dm|engine|all): <what changed>` for TiCDC, DM, engine, or shared code, and `sync-diff-inspector: <what changed>` for sync-diff-inspector changes. Match the scope to the code you touch, for example `worker(dm): improve retry logging` for DM-only changes, `capture(ticdc): add comment for variable declaration` for TiCDC changes, and `sync-diff-inspector: update splitter behavior` for sync-diff-inspector changes. Keep the subject within 70 characters and explain the reason in the body.
+
+PR descriptions MUST follow [.github/pull_request_template.md](.github/pull_request_template.md). If you create a PR with GitHub CLI, start from the template with `gh pr create -T .github/pull_request_template.md`, then fill in the fields. Do not replace the template with an informal summary.
+
+Before reporting that a PR is ready or updated, re-read the published PR body and verify it still contains:
+
+- `### What problem does this PR solve?`
+- one line starting with `Issue Number:`. Prefer `Issue Number: close #12345` or `Issue Number: ref #12345`; use `Issue Number: None` only for test-only or housekeeping PRs with no issue.
+- `### What is changed and how it works?`
+- `### Check List`, with at least one applicable test category kept and the exact commands or CI jobs used for verification.
+- `#### Questions`, explicitly answering compatibility/performance impact and documentation impact.
+- `### Release note` with a fenced `release-note` block containing the release note or `None`.
+
+DM fixes and features are expected to include tests.
