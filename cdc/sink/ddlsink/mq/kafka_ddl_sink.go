@@ -112,11 +112,7 @@ func NewKafkaDDLSink(
 	}
 
 	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
-<<<<<<< HEAD
-	s := newDDLSink(changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder, protocol, syncProducer)
-=======
 	s := newDDLSink(changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder.Build(), protocol)
->>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
 	return s, nil
 }

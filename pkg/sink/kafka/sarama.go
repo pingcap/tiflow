@@ -251,19 +251,3 @@ func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr
 	}
 	return KafkaVersion, nil
 }
-<<<<<<< HEAD
-
-// KeepConnAlive sends a ApiVersions request to all brokers to keep the connection alive.
-func KeepConnAlive(client sarama.Client) {
-	// We don't care about the response and error here, even the connection
-	// is unestablished, we just need to keep the connection alive WHEN it's established.
-	// The connection will be established when a producer send messages.
-	// This is a workaround for the issue that sarama doesn't keep the connection alive
-	// when the connection is idle for a long time and we have disabled the retry in sarama.
-	brokers := client.Brokers()
-	for _, b := range brokers {
-		_, _ = b.ApiVersions(&sarama.ApiVersionsRequest{})
-	}
-}
-=======
->>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))

@@ -100,11 +100,6 @@ func NewPulsarDDLSink(
 		return nil, errors.Trace(err)
 	}
 
-<<<<<<< HEAD
-	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder, protocol, nil)
-=======
 	s := newDDLSink(changefeedID, p, nil, topicManager, eventRouter, encoderBuilder.Build(), protocol)
->>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
-
 	return s, nil
 }

@@ -65,8 +65,7 @@ type DDLSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
-	// encoderBuilder builds encoder for the sink.
-	encoderBuilder codec.RowEventEncoderBuilder
+	encoder      codec.RowEventEncoder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
@@ -82,21 +81,10 @@ func newDDLSink(
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoderBuilder codec.RowEventEncoderBuilder,
+	encoder codec.RowEventEncoder,
 	protocol config.Protocol,
 ) *DDLSink {
 	return &DDLSink{
-<<<<<<< HEAD
-		id:                  changefeedID,
-		protocol:            protocol,
-		eventRouter:         eventRouter,
-		topicManager:        topicManager,
-		encoderBuilder:      encoderBuilder,
-		producer:            producer,
-		statistics:          metrics.NewStatistics(changefeedID, sink.RowSink),
-		admin:               adminClient,
-		connRefresherForDDL: connRefresherForDDL,
-=======
 		id:           changefeedID,
 		protocol:     protocol,
 		eventRouter:  eventRouter,
@@ -105,14 +93,12 @@ func newDDLSink(
 		producer:     producer,
 		statistics:   metrics.NewStatistics(changefeedID, sink.RowSink),
 		admin:        adminClient,
->>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	}
 }
 
 // WriteDDLEvent encodes the DDL event and sends it to the MQ system.
 func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	encoder := k.encoderBuilder.Build()
-	msg, err := encoder.EncodeDDLEvent(ddl)
+	msg, err := k.encoder.EncodeDDLEvent(ddl)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -158,24 +144,7 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-<<<<<<< HEAD
-	// This operation is used to keep the kafka connection alive.
-	// For more details, see https://github.com/pingcap/tiflow/pull/12173
-	if k.connRefresherForDDL != nil {
-		// The implementation is saramaSyncProducer.HeartbeatBrokers. And
-		// there is a keepConnAliveInterval in the saramaSyncProducer, so
-		// we don't need to worry about the heartbeat is too frequent.
-		k.connRefresherForDDL.HeartbeatBrokers()
-	}
-	encoder := k.encoderBuilder.Build()
-	msg, err := encoder.EncodeCheckpointEvent(ts)
-=======
-	var (
-		err          error
-		partitionNum int32
-	)
 	msg, err := k.encoder.EncodeCheckpointEvent(ts)
->>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	if err != nil {
 		return errors.Trace(err)
 	}
