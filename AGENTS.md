@@ -35,4 +35,4 @@ Before reporting that a PR is ready or updated, re-read the published PR body an
 - `#### Questions`, explicitly answering compatibility/performance impact and documentation impact.
 - `### Release note` with a fenced `release-note` block containing the release note or `None`.
 
-DM fixes and features are expected to include tests, and PRs normally require two maintainer LGTMs.
+DM fixes and features are expected to include tests.
