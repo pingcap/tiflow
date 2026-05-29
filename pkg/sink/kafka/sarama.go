@@ -53,15 +53,11 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// set it as the read timeout.
 	config.Admin.Timeout = 10 * time.Second
 
-	// Producer.Retry take effect when the producer try to send message to kafka
-	// brokers. If kafka cluster is healthy, just the default value should be enough.
-	// For kafka cluster with a bad network condition, producer should not try to
-	// waster too much time on sending a message, get response no matter success
-	// or fail as soon as possible is preferred.
-	// According to the https://github.com/IBM/sarama/issues/2619,
-	// sarama may send message out of order even set the `config.Net.MaxOpenRequest` to 1,
-	// when the kafka cluster is unhealthy and trigger the internal retry mechanism.
-	config.Producer.Retry.Max = 0
+	// Keep a bounded producer retry budget to tolerate transient broker-side
+	// connection failures such as stale connections or broken pipe errors.
+	// The PingCAP Sarama fork includes the partition-muting ordering fix, while
+	// Net.MaxOpenRequests=1 below remains an extra ordering guard.
+	config.Producer.Retry.Max = o.MaxRetry
 
 	// make sure sarama producer flush messages as soon as possible.
 	config.Producer.Flush.Bytes = 0
@@ -254,17 +250,4 @@ func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr
 		KafkaVersion = sarama.V0_8_2_0
 	}
 	return KafkaVersion, nil
-}
-
-// KeepConnAlive sends a ApiVersions request to all brokers to keep the connection alive.
-func KeepConnAlive(client sarama.Client) {
-	// We don't care about the response and error here, even the connection
-	// is unestablished, we just need to keep the connection alive WHEN it's established.
-	// The connection will be established when a producer send messages.
-	// This is a workaround for the issue that sarama doesn't keep the connection alive
-	// when the connection is idle for a long time and we have disabled the retry in sarama.
-	brokers := client.Brokers()
-	for _, b := range brokers {
-		_, _ = b.ApiVersions(&sarama.ApiVersionsRequest{})
-	}
 }

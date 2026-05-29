@@ -57,7 +57,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/klauspost/compress v1.18.0
+	github.com/klauspost/compress v1.18.5
 	github.com/labstack/gommon v0.4.0
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mailru/easyjson v0.7.7
@@ -65,7 +65,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pierrec/lz4/v4 v4.1.21
+	github.com/pierrec/lz4/v4 v4.1.26
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
@@ -77,7 +77,7 @@ require (
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
-	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
+	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9
 	github.com/robfig/cron v1.2.0
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
 	github.com/shirou/gopsutil/v3 v3.24.5
@@ -85,7 +85,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/files v0.0.0-20210815190702-a29dd2bc99b2
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
@@ -113,11 +113,11 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
-	golang.org/x/net v0.47.0
+	golang.org/x/net v0.53.0
 	golang.org/x/oauth2 v0.33.0
-	golang.org/x/sync v0.18.0
-	golang.org/x/sys v0.38.0
-	golang.org/x/text v0.31.0
+	golang.org/x/sync v0.20.0
+	golang.org/x/sys v0.43.0
+	golang.org/x/text v0.36.0
 	golang.org/x/time v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240401170217-c3f982113cda
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250425173222-7b384671a197
@@ -208,7 +208,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.22.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.22.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/telemetry v0.0.0-20251111182119-bc8e575c7b54 // indirect
+	golang.org/x/telemetry v0.0.0-20260311193753-579e4da9a98c // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20240401170217-c3f982113cda // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
@@ -389,10 +389,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.1.0 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/mod v0.30.0 // indirect
-	golang.org/x/term v0.37.0
-	golang.org/x/tools v0.39.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/term v0.42.0
+	golang.org/x/tools v0.43.0 // indirect
 	google.golang.org/api v0.170.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
@@ -406,7 +406,7 @@ require (
 	sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67 // indirect
 )
 
-replace github.com/IBM/sarama v1.41.2 => github.com/pingcap/sarama v1.41.2-pingcap-20250415
+replace github.com/IBM/sarama v1.41.2 => github.com/pingcap/sarama v1.41.2-pingcap-20260508
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.5 => github.com/benbjohnson/clock v1.1.0
