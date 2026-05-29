@@ -236,6 +236,14 @@ func (w *SourceWorker) stopWithCause(graceful bool, cause error) {
 
 	// cancel status output ticker and wait for return
 	w.cancel()
+
+	// On failover, cancel subtasks before waiting: the syncer context is not
+	// reached by w.cancel(), so otherwise the wait blocks until in-flight SQL
+	// times out, leaving the unbound worker writing downstream.
+	if !graceful {
+		w.subTaskHolder.killAllSubTasksWithCause(cause)
+	}
+
 	w.wg.Wait()
 	w.relayWg.Wait()
 	w.subTaskWg.Wait()
@@ -246,8 +254,6 @@ func (w *SourceWorker) stopWithCause(graceful bool, cause error) {
 	// close or kill all subtasks
 	if graceful {
 		w.subTaskHolder.closeAllSubTasksWithCause(cause)
-	} else {
-		w.subTaskHolder.killAllSubTasksWithCause(cause)
 	}
 
 	if w.relayHolder != nil {
