@@ -57,9 +57,6 @@ type SyncProducer interface {
 	// SendMessages will return an error.
 	SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error
 
-	// HeartbeatBrokers sends heartbeat to all brokers to keep the connection alive.
-	HeartbeatBrokers()
-
 	// Close shuts down the producer and releases the client owned by this wrapper.
 	// You must call this function before the producer passes out of scope, as it
 	// may otherwise leak memory.
@@ -85,11 +82,9 @@ type AsyncProducer interface {
 }
 
 type saramaSyncProducer struct {
-	id                    model.ChangeFeedID
-	producer              sarama.SyncProducer
-	client                sarama.Client
-	keepConnAliveInterval time.Duration
-	lastHeartbeatTime     time.Time // used to check if we need to send heartbeat
+	id       model.ChangeFeedID
+	producer sarama.SyncProducer
+	client   sarama.Client
 }
 
 func (p *saramaSyncProducer) SendMessage(
@@ -117,18 +112,6 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context, topic string, par
 		}
 	}
 	return p.producer.SendMessages(msgs)
-}
-
-func (p *saramaSyncProducer) HeartbeatBrokers() {
-	// We only send heartbeat to brokers when the last heartbeat time is
-	// older than the keep connection alive interval, to avoid sending heartbeat
-	// too frequently.
-	// This function will be called periodically in DDLSink.WriteCheckpointTs.
-	if time.Since(p.lastHeartbeatTime) < p.keepConnAliveInterval {
-		return
-	}
-	p.lastHeartbeatTime = time.Now()
-	KeepConnAlive(p.client)
 }
 
 func (p *saramaSyncProducer) Close() {
@@ -174,11 +157,10 @@ func (p *saramaSyncProducer) Close() {
 }
 
 type saramaAsyncProducer struct {
-	client                sarama.Client
-	producer              sarama.AsyncProducer
-	changefeedID          model.ChangeFeedID
-	keepConnAliveInterval time.Duration
-	failpointCh           chan error
+	client       sarama.Client
+	producer     sarama.AsyncProducer
+	changefeedID model.ChangeFeedID
+	failpointCh  chan error
 }
 
 func (p *saramaAsyncProducer) Close() {
@@ -234,8 +216,6 @@ func (p *saramaAsyncProducer) Close() {
 func (p *saramaAsyncProducer) AsyncRunCallback(
 	ctx context.Context,
 ) error {
-	ticker := time.NewTicker(p.keepConnAliveInterval)
-	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -256,8 +236,6 @@ func (p *saramaAsyncProducer) AsyncRunCallback(
 					callback()
 				}
 			}
-		case <-ticker.C:
-			p.heartbeatBrokers()
 		case err := <-p.producer.Errors():
 			// We should not wrap a nil pointer if the pointer
 			// is of a subtype of `error` because Go would store the type info
@@ -288,9 +266,4 @@ func (p *saramaAsyncProducer) AsyncSend(ctx context.Context, topic string, parti
 	case p.producer.Input() <- msg:
 	}
 	return nil
-}
-
-// heartbeatBrokers sends heartbeat to all brokers to keep the connection alive.
-func (p *saramaAsyncProducer) heartbeatBrokers() {
-	KeepConnAlive(p.client)
 }

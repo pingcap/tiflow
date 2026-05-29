@@ -74,8 +74,6 @@ type DDLSink struct {
 	statistics *metrics.Statistics
 	// admin is used to query kafka cluster information.
 	admin kafka.ClusterAdminClient
-	// connRefresherForDDL is used to refresh the connection for DDL events.
-	connRefresherForDDL kafka.SyncProducer
 }
 
 func newDDLSink(
@@ -86,9 +84,9 @@ func newDDLSink(
 	eventRouter *dispatcher.EventRouter,
 	encoderBuilder codec.RowEventEncoderBuilder,
 	protocol config.Protocol,
-	connRefresherForDDL kafka.SyncProducer,
 ) *DDLSink {
 	return &DDLSink{
+<<<<<<< HEAD
 		id:                  changefeedID,
 		protocol:            protocol,
 		eventRouter:         eventRouter,
@@ -98,6 +96,16 @@ func newDDLSink(
 		statistics:          metrics.NewStatistics(changefeedID, sink.RowSink),
 		admin:               adminClient,
 		connRefresherForDDL: connRefresherForDDL,
+=======
+		id:           changefeedID,
+		protocol:     protocol,
+		eventRouter:  eventRouter,
+		topicManager: topicManager,
+		encoder:      encoder,
+		producer:     producer,
+		statistics:   metrics.NewStatistics(changefeedID, sink.RowSink),
+		admin:        adminClient,
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	}
 }
 
@@ -150,6 +158,7 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
+<<<<<<< HEAD
 	// This operation is used to keep the kafka connection alive.
 	// For more details, see https://github.com/pingcap/tiflow/pull/12173
 	if k.connRefresherForDDL != nil {
@@ -160,6 +169,13 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	}
 	encoder := k.encoderBuilder.Build()
 	msg, err := encoder.EncodeCheckpointEvent(ts)
+=======
+	var (
+		err          error
+		partitionNum int32
+	)
+	msg, err := k.encoder.EncodeCheckpointEvent(ts)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	if err != nil {
 		return errors.Trace(err)
 	}

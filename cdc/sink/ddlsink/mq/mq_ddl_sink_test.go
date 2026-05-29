@@ -17,16 +17,12 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"sync"
 	"testing"
 
 	mm "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/mq/ddlproducer"
 	"github.com/pingcap/tiflow/pkg/config"
-	"github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/sink/codec"
-	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
@@ -295,6 +291,7 @@ func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
 	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolCraft))
 	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolSimple))
 }
+<<<<<<< HEAD
 
 // mockSyncProducer is used to count the calls to HeartbeatBrokers.
 type mockSyncProducer struct {
@@ -389,3 +386,5 @@ func TestDDLSinkHeartbeat(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+=======
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))

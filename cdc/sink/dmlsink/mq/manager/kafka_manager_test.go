@@ -15,18 +15,12 @@ package manager
 
 import (
 	"context"
-	"math"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/sink/kafka"
 	"github.com/stretchr/testify/require"
 )
-
-// A fake interval to keep the connection alive in kafka topic manager.
-const FOREVER = time.Duration(math.MaxInt64)
 
 func TestCreateTopic(t *testing.T) {
 	t.Parallel()
@@ -41,7 +35,7 @@ func TestCreateTopic(t *testing.T) {
 
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg, FOREVER)
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -56,7 +50,7 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
-	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg, FOREVER)
+	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -73,7 +67,7 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
-	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg, FOREVER)
+	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, topic)
 	require.Regexp(
@@ -97,7 +91,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	topic := "new_topic"
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
-	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg, FOREVER)
+	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, topic)
 	require.NoError(t, err)
@@ -107,6 +101,7 @@ func TestCreateTopicWithDelay(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(2), partitionNum)
 }
+<<<<<<< HEAD
 
 // mockAdminClientForHeartbeat is used to count the calls to HeartbeatBrokers.
 type mockAdminClientForHeartbeat struct {
@@ -150,3 +145,5 @@ func TestKafkaManagerHeartbeat(t *testing.T) {
 		return adminClient.GetHeartbeatCount() >= 2
 	}, 2*time.Second, 50*time.Millisecond, "HeartbeatBrokers should be called periodically")
 }
+=======
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))

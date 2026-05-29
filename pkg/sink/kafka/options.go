@@ -38,6 +38,8 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+	// defaultProducerMaxRetry specifies the default retry count for Kafka producer.
+	defaultProducerMaxRetry = 5
 
 	// the `max-message-bytes` is set equal to topic's `max.message.bytes`, and is used to check
 	// whether the message is larger than the max size limit. It's found some message pass the message
@@ -62,10 +64,6 @@ const (
 	// See: https://kafka.apache.org/documentation/#brokerconfigs_min.insync.replicas and
 	// https://kafka.apache.org/documentation/#topicconfigs_min.insync.replicas
 	MinInsyncReplicasConfigName = "min.insync.replicas"
-	// BrokerConnectionsMaxIdleMsConfigName specifies the maximum idle time of a connection to a broker.
-	// Broker will close the connection if it is idle for this long.
-	// See: https://kafka.apache.org/documentation/#brokerconfigs_connections.max.idle.ms
-	BrokerConnectionsMaxIdleMsConfigName = "connections.max.idle.ms"
 )
 
 const (
@@ -119,6 +117,7 @@ type urlConfig struct {
 	ReplicationFactor            *int16  `form:"replication-factor"`
 	KafkaVersion                 *string `form:"kafka-version"`
 	MaxMessageBytes              *int    `form:"max-message-bytes"`
+	MaxRetry                     *int    `form:"max-retry"`
 	Compression                  *string `form:"compression"`
 	KafkaClientID                *string `form:"kafka-client-id"`
 	AutoCreateTopic              *bool   `form:"auto-create-topic"`
@@ -157,6 +156,7 @@ type Options struct {
 	IsAssignedVersion bool
 	RequestVersion    int16
 	MaxMessageBytes   int
+	MaxRetry          int
 	Compression       string
 	ClientID          string
 	RequiredAcks      RequiredAcks
@@ -171,10 +171,9 @@ type Options struct {
 	SASL               *security.SASL
 
 	// Timeout for network configurations, default to `10s`
-	DialTimeout           time.Duration
-	WriteTimeout          time.Duration
-	ReadTimeout           time.Duration
-	KeepConnAliveInterval time.Duration
+	DialTimeout  time.Duration
+	WriteTimeout time.Duration
+	ReadTimeout  time.Duration
 }
 
 // NewOptions returns a default Kafka configuration
@@ -182,18 +181,18 @@ func NewOptions() *Options {
 	return &Options{
 		Version: "2.4.0",
 		// MaxMessageBytes will be used to initialize producer
-		MaxMessageBytes:       config.DefaultMaxMessageBytes,
-		ReplicationFactor:     1,
-		Compression:           "none",
-		RequiredAcks:          WaitForAll,
-		Credential:            &security.Credential{},
-		InsecureSkipVerify:    false,
-		SASL:                  &security.SASL{},
-		AutoCreate:            true,
-		DialTimeout:           10 * time.Second,
-		WriteTimeout:          10 * time.Second,
-		ReadTimeout:           10 * time.Second,
-		KeepConnAliveInterval: 5 * time.Minute,
+		MaxMessageBytes:    config.DefaultMaxMessageBytes,
+		ReplicationFactor:  1,
+		Compression:        "none",
+		RequiredAcks:       WaitForAll,
+		Credential:         &security.Credential{},
+		InsecureSkipVerify: false,
+		SASL:               &security.SASL{},
+		MaxRetry:           defaultProducerMaxRetry,
+		AutoCreate:         true,
+		DialTimeout:        10 * time.Second,
+		WriteTimeout:       10 * time.Second,
+		ReadTimeout:        10 * time.Second,
 	}
 }
 
@@ -259,6 +258,12 @@ func (o *Options) Apply(changefeedID model.ChangeFeedID,
 
 	if urlParameter.MaxMessageBytes != nil {
 		o.MaxMessageBytes = *urlParameter.MaxMessageBytes
+	}
+
+	if urlParameter.MaxRetry != nil {
+		if *urlParameter.MaxRetry >= 0 {
+			o.MaxRetry = *urlParameter.MaxRetry
+		}
 	}
 
 	if urlParameter.Compression != nil {
@@ -592,21 +597,6 @@ func AdjustOptions(
 		if err != nil {
 			return errors.Trace(err)
 		}
-	}
-
-	// adjust keepConnAliveInterval by `connections.max.idle.ms` broker config.
-	idleMs, err := admin.GetBrokerConfig(ctx, BrokerConnectionsMaxIdleMsConfigName)
-	if err != nil {
-		log.Warn("GetBrokerConfig failed for connections.max.idle.ms", zap.Error(err))
-	} else {
-		idleMsInt, err := strconv.Atoi(idleMs)
-		if err != nil || idleMsInt <= 0 {
-			log.Warn("invalid broker config",
-				zap.String("configName", BrokerConnectionsMaxIdleMsConfigName), zap.String("configValue", idleMs))
-			return errors.Trace(err)
-		}
-		options.KeepConnAliveInterval = time.Duration(idleMsInt/3) * time.Millisecond
-		log.Info("Adjust KeepConnAliveInterval", zap.Duration("KeepConnAliveInterval", options.KeepConnAliveInterval))
 	}
 
 	info, exists := topics[topic]
