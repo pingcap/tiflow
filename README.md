@@ -4,7 +4,6 @@
 ![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/pingcap/tiflow)
 ![GitHub Release Date](https://img.shields.io/github/release-date/pingcap/tiflow)
 ![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/pingcap/tiflow)
-[![Build Status](https://github.com/pingcap/tiflow/actions/workflows/check_and_build.yaml/badge.svg?branch=master)](https://github.com/pingcap/tiflow/actions/workflows/check_and_build.yaml?query=event%3Apush+branch%3Amaster)
 [![codecov](https://codecov.io/gh/pingcap/tiflow/branch/master/graph/badge.svg)](https://codecov.io/gh/pingcap/tiflow)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pingcap/tiflow)](https://goreportcard.com/report/github.com/pingcap/tiflow)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/pingcap/tiflow)
