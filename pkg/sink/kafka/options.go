@@ -39,6 +39,18 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+<<<<<<< HEAD
+=======
+	// defaultProducerMaxRetry specifies the default retry count for Kafka producer.
+	defaultProducerMaxRetry = 5
+
+	// the `max-message-bytes` is set equal to topic's `max.message.bytes`, and is used to check
+	// whether the message is larger than the max size limit. It's found some message pass the message
+	// size limit check at the client side and failed at the broker side since message enlarged during
+	// the network transmission. so we set the `max-message-bytes` to a smaller value to avoid this problem.
+	// maxMessageBytesOverhead is used to reduce the `max-message-bytes`.
+	maxMessageBytesOverhead = 128
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 )
 
 const (
@@ -109,6 +121,7 @@ type urlConfig struct {
 	ReplicationFactor            *int16  `form:"replication-factor"`
 	KafkaVersion                 *string `form:"kafka-version"`
 	MaxMessageBytes              *int    `form:"max-message-bytes"`
+	MaxRetry                     *int    `form:"max-retry"`
 	Compression                  *string `form:"compression"`
 	KafkaClientID                *string `form:"kafka-client-id"`
 	AutoCreateTopic              *bool   `form:"auto-create-topic"`
@@ -145,6 +158,7 @@ type Options struct {
 	ReplicationFactor int16
 	Version           string
 	MaxMessageBytes   int
+	MaxRetry          int
 	Compression       string
 	ClientID          string
 	RequiredAcks      RequiredAcks
@@ -176,6 +190,10 @@ func NewOptions() *Options {
 		Credential:         &security.Credential{},
 		InsecureSkipVerify: false,
 		SASL:               &security.SASL{},
+<<<<<<< HEAD
+=======
+		MaxRetry:           defaultProducerMaxRetry,
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 		AutoCreate:         true,
 		DialTimeout:        10 * time.Second,
 		WriteTimeout:       10 * time.Second,
@@ -244,6 +262,12 @@ func (o *Options) Apply(ctx context.Context,
 
 	if urlParameter.MaxMessageBytes != nil {
 		o.MaxMessageBytes = *urlParameter.MaxMessageBytes
+	}
+
+	if urlParameter.MaxRetry != nil {
+		if *urlParameter.MaxRetry >= 0 {
+			o.MaxRetry = *urlParameter.MaxRetry
+		}
 	}
 
 	if urlParameter.Compression != nil {

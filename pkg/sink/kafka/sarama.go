@@ -53,15 +53,11 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 	// set it as the read timeout.
 	config.Admin.Timeout = 10 * time.Second
 
-	// Producer.Retry take effect when the producer try to send message to kafka
-	// brokers. If kafka cluster is healthy, just the default value should be enough.
-	// For kafka cluster with a bad network condition, producer should not try to
-	// waster too much time on sending a message, get response no matter success
-	// or fail as soon as possible is preferred.
-	// According to the https://github.com/IBM/sarama/issues/2619,
-	// sarama may send message out of order even set the `config.Net.MaxOpenRequest` to 1,
-	// when the kafka cluster is unhealthy and trigger the internal retry mechanism.
-	config.Producer.Retry.Max = 0
+	// Keep a bounded producer retry budget to tolerate transient broker-side
+	// connection failures such as stale connections or broken pipe errors.
+	// The PingCAP Sarama fork includes the partition-muting ordering fix, while
+	// Net.MaxOpenRequests=1 below remains an extra ordering guard.
+	config.Producer.Retry.Max = o.MaxRetry
 
 	// make sure sarama producer flush messages as soon as possible.
 	config.Producer.Flush.Bytes = 0
@@ -170,3 +166,71 @@ func completeSaramaSASLConfig(ctx context.Context, config *sarama.Config, o *Opt
 
 	return nil
 }
+<<<<<<< HEAD
+=======
+
+func getKafkaVersion(config *sarama.Config, o *Options) (sarama.KafkaVersion, error) {
+	var err error
+	version := defaultKafkaVersion
+	addrs := o.BrokerEndpoints
+	if len(addrs) > 1 {
+		// Shuffle the list of addresses to randomize the order in which
+		// connections are attempted. This prevents routing all connections
+		// to the first broker (which will usually succeed).
+		rand.Shuffle(len(addrs), func(i, j int) {
+			addrs[i], addrs[j] = addrs[j], addrs[i]
+		})
+	}
+	for i := range addrs {
+		version, err := getKafkaVersionFromBroker(config, o.RequestVersion, addrs[i])
+		if err == nil {
+			return version, err
+		}
+	}
+	return version, err
+}
+
+func getKafkaVersionFromBroker(config *sarama.Config, requestVersion int16, addr string) (sarama.KafkaVersion, error) {
+	KafkaVersion := defaultKafkaVersion
+	broker := sarama.NewBroker(addr)
+	err := broker.Open(config)
+	defer func() {
+		broker.Close()
+	}()
+	if err != nil {
+		log.Warn("Kafka fail to open broker", zap.String("addr", addr), zap.Error(err))
+		return KafkaVersion, err
+	}
+	apiResponse, err := broker.ApiVersions(&sarama.ApiVersionsRequest{Version: requestVersion})
+	if err != nil {
+		log.Warn("Kafka fail to get ApiVersions", zap.String("addr", addr), zap.Error(err))
+		return KafkaVersion, err
+	}
+	// ApiKey method
+	// 0      Produce
+	// 3      Metadata (default)
+	version := apiResponse.ApiKeys[3].MaxVersion
+	if version >= 10 {
+		KafkaVersion = sarama.V2_8_0_0
+	} else if version >= 9 {
+		KafkaVersion = sarama.V2_4_0_0
+	} else if version >= 8 {
+		KafkaVersion = sarama.V2_3_0_0
+	} else if version >= 7 {
+		KafkaVersion = sarama.V2_1_0_0
+	} else if version >= 6 {
+		KafkaVersion = sarama.V2_0_0_0
+	} else if version >= 5 {
+		KafkaVersion = sarama.V1_0_0_0
+	} else if version >= 3 {
+		KafkaVersion = sarama.V0_11_0_0
+	} else if version >= 2 {
+		KafkaVersion = sarama.V0_10_1_0
+	} else if version >= 1 {
+		KafkaVersion = sarama.V0_10_0_0
+	} else if version >= 0 {
+		KafkaVersion = sarama.V0_8_2_0
+	}
+	return KafkaVersion, nil
+}
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))

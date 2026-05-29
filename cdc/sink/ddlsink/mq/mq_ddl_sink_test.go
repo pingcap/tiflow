@@ -272,3 +272,21 @@ func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	require.Len(t, s.producer.(*ddlproducer.MockDDLProducer).GetAllEvents(),
 		0, "No topic and partition should be broadcast")
 }
+<<<<<<< HEAD
+=======
+
+func TestGetDLLDispatchRuleByProtocol(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanal))
+	require.Equal(t, PartitionZero, getDDLDispatchRule(config.ProtocolCanalJSON))
+
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolOpen))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolDefault))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolAvro))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolMaxwell))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolCraft))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolSimple))
+	require.Equal(t, PartitionAll, getDDLDispatchRule(config.ProtocolDebezium))
+}
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))

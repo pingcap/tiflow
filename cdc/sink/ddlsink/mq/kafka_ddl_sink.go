@@ -109,8 +109,14 @@ func NewKafkaDDLSink(
 		return nil, errors.Trace(err)
 	}
 
+<<<<<<< HEAD
 	p := producerCreator(ctx, changefeed, syncProducer)
 	s := newDDLSink(ctx, changefeed, p, adminClient, topicManager, eventRouter, encoderBuilder, protocol)
 	log.Info("DDL sink created", zap.Duration("duration", time.Since(start)))
+=======
+	ddlProducer := producerCreator(ctx, changefeedID, syncProducer)
+	s := newDDLSink(changefeedID, ddlProducer, adminClient, topicManager, eventRouter, encoderBuilder.Build(), protocol)
+	log.Info("DDL sink producer client created", zap.Duration("duration", time.Since(start)))
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	return s, nil
 }

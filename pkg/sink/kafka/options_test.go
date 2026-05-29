@@ -34,11 +34,13 @@ import (
 
 func TestCompleteOptions(t *testing.T) {
 	options := NewOptions()
+	require.Equal(t, defaultProducerMaxRetry, options.MaxRetry)
 
 	// Normal config.
 	uriTemplate := "kafka://127.0.0.1:9092/kafka-test?kafka-version=2.6.0&max-batch-size=5" +
 		"&max-message-bytes=%s&partition-num=1&replication-factor=3" +
-		"&kafka-client-id=unit-test&auto-create-topic=false&compression=gzip&required-acks=1"
+		"&max-retry=7&kafka-client-id=unit-test&auto-create-topic=false" +
+		"&compression=gzip&required-acks=1"
 	maxMessageSize := "4096" // 4kb
 	uri := fmt.Sprintf(uriTemplate, maxMessageSize)
 	sinkURI, err := url.Parse(uri)
@@ -51,6 +53,7 @@ func TestCompleteOptions(t *testing.T) {
 	require.Equal(t, int16(3), options.ReplicationFactor)
 	require.Equal(t, "2.6.0", options.Version)
 	require.Equal(t, 4096, options.MaxMessageBytes)
+	require.Equal(t, 7, options.MaxRetry)
 	require.Equal(t, WaitForLocal, options.RequiredAcks)
 
 	// multiple kafka broker endpoints
@@ -77,6 +80,32 @@ func TestCompleteOptions(t *testing.T) {
 	options = NewOptions()
 	err = options.Apply(ctx, sinkURI, config.GetDefaultReplicaConfig())
 	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
+
+	// Illegal max-retry.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-retry=a"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
+	require.Regexp(t, ".*invalid syntax.*", errors.Cause(err))
+
+	// Negative max-retry is ignored.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-retry=-1"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, defaultProducerMaxRetry, options.MaxRetry)
+
+	// Zero max-retry.
+	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&max-retry=0"
+	sinkURI, err = url.Parse(uri)
+	require.NoError(t, err)
+	options = NewOptions()
+	err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
+	require.NoError(t, err)
+	require.Equal(t, 0, options.MaxRetry)
 
 	// Illegal partition-num.
 	uri = "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&partition-num=a"

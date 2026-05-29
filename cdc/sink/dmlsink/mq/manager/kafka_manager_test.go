@@ -33,7 +33,11 @@ func TestCreateTopic(t *testing.T) {
 	}
 
 	ctx := context.Background()
+<<<<<<< HEAD
 	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, adminClient, cfg)
+=======
+	manager := NewKafkaTopicManager(ctx, kafka.DefaultMockTopicName, changefeedID, adminClient, cfg)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	defer manager.Close()
 	partitionNum, err := manager.CreateTopicAndWaitUntilVisible(ctx, kafka.DefaultMockTopicName)
 	require.NoError(t, err)
@@ -48,7 +52,11 @@ func TestCreateTopic(t *testing.T) {
 
 	// Try to create a topic without auto create.
 	cfg.AutoCreate = false
+<<<<<<< HEAD
 	manager = NewKafkaTopicManager(ctx, "new-topic2", adminClient, cfg)
+=======
+	manager = NewKafkaTopicManager(ctx, "new-topic2", changefeedID, adminClient, cfg)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, "new-topic2")
 	require.Regexp(
@@ -65,7 +73,11 @@ func TestCreateTopic(t *testing.T) {
 		PartitionNum:      2,
 		ReplicationFactor: 4,
 	}
+<<<<<<< HEAD
 	manager = NewKafkaTopicManager(ctx, topic, adminClient, cfg)
+=======
+	manager = NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	defer manager.Close()
 	_, err = manager.CreateTopicAndWaitUntilVisible(ctx, topic)
 	require.Regexp(
@@ -88,7 +100,11 @@ func TestCreateTopicWithDelay(t *testing.T) {
 
 	topic := "new_topic"
 	ctx := context.Background()
+<<<<<<< HEAD
 	manager := NewKafkaTopicManager(ctx, topic, adminClient, cfg)
+=======
+	manager := NewKafkaTopicManager(ctx, topic, changefeedID, adminClient, cfg)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	defer manager.Close()
 	partitionNum, err := manager.createTopic(ctx, topic)
 	require.NoError(t, err)

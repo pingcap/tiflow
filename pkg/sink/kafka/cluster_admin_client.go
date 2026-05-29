@@ -52,6 +52,10 @@ type ClusterAdminClient interface {
 	// CreateTopic creates a new topic.
 	CreateTopic(ctx context.Context, detail *TopicDetail, validateOnly bool) error
 
+<<<<<<< HEAD
 	// Close shuts down the admin client.
+=======
+	// Close shuts down the admin client and releases any owned underlying client connections.
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	Close()
 }
