@@ -54,9 +54,13 @@ type SyncProducer interface {
 	// messages in the set have either succeeded or failed. Note that messages
 	// can succeed and fail individually; if some succeed and some fail,
 	// SendMessages will return an error.
+<<<<<<< HEAD
 	SendMessages(ctx context.Context,
 		topic string, partitionNum int32,
 		key []byte, value []byte) error
+=======
+	SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 
 	// Close shuts down the producer and releases the client owned by this wrapper.
 	// You must call this function before the producer passes out of scope, as it
@@ -86,8 +90,13 @@ type AsyncProducer interface {
 
 type saramaSyncProducer struct {
 	id       model.ChangeFeedID
+<<<<<<< HEAD
 	client   sarama.Client
 	producer sarama.SyncProducer
+=======
+	producer sarama.SyncProducer
+	client   sarama.Client
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 }
 
 func (p *saramaSyncProducer) SendMessage(
@@ -117,7 +126,12 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context,
 			Partition: int32(i),
 		}
 	}
+<<<<<<< HEAD
 	return p.producer.SendMessages(msgs)
+=======
+	err := p.producer.SendMessages(msgs)
+	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 }
 
 func (p *saramaSyncProducer) Close() {
