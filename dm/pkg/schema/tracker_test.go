@@ -1102,8 +1102,10 @@ func TestForeignKeyRelationRejectsSameNameDifferentColumns(t *testing.T) {
 	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
 	require.NoError(t, err)
 	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.ErrorContains(t, err, "foreign key causality initialization failed")
 	require.ErrorContains(t, err, "failed to match source foreign key metadata")
 	require.ErrorContains(t, err, "aligned source and downstream FK metadata")
+	require.ErrorContains(t, err, "binlog-schema update")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

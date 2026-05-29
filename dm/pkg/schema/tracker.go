@@ -663,7 +663,8 @@ func (tr *Tracker) buildForeignKeyRelations(
 
 		sourceFK := findMatchingForeignKey(originTI, fk, i)
 		if sourceFK == nil {
-			return nil, newForeignKeyRouteUnsupportedError(
+			return nil, newForeignKeySchemaAlignmentError(
+				sourceTable.String(),
 				fmt.Sprintf(
 					"foreign key causality under foreign_key_checks=1 and worker_count>1 requires aligned source and downstream FK metadata; failed to match source foreign key metadata for table %s and downstream FK %s; please align the schema metadata first, and if route is enabled for this table, please use worker_count=1",
 					sourceTable,
