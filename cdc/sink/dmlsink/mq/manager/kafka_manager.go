@@ -48,8 +48,11 @@ type kafkaTopicManager struct {
 
 	topics sync.Map
 
+<<<<<<< HEAD
 	metaRefreshTicker *time.Ticker
 
+=======
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	// cancel is used to cancel the background goroutine.
 	cancel context.CancelFunc
 }
@@ -63,11 +66,18 @@ func NewKafkaTopicManager(
 	cfg *kafka.AutoCreateTopicConfig,
 ) *kafkaTopicManager {
 	mgr := &kafkaTopicManager{
+<<<<<<< HEAD
 		defaultTopic:      defaultTopic,
 		changefeedID:      changefeedID,
 		admin:             admin,
 		cfg:               cfg,
 		metaRefreshTicker: time.NewTicker(metaRefreshInterval),
+=======
+		defaultTopic: defaultTopic,
+		changefeedID: changefeedID,
+		admin:        admin,
+		cfg:          cfg,
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	}
 
 	ctx, mgr.cancel = context.WithCancel(ctx)
@@ -97,6 +107,11 @@ func (m *kafkaTopicManager) GetPartitionNum(
 }
 
 func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
+<<<<<<< HEAD
+=======
+	ticker := time.NewTicker(metaRefreshInterval)
+	defer ticker.Stop()
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	for {
 		select {
 		case <-ctx.Done():
@@ -105,7 +120,7 @@ func (m *kafkaTopicManager) backgroundRefreshMeta(ctx context.Context) {
 				zap.String("changefeed", m.changefeedID.ID),
 			)
 			return
-		case <-m.metaRefreshTicker.C:
+		case <-ticker.C:
 			// We ignore the error here, because the error may be caused by the
 			// network problem, and we can try to get the metadata next time.
 			topicPartitionNums, _ := m.fetchAllTopicsPartitionsNum(ctx)

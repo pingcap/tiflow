@@ -38,7 +38,12 @@ func TestPartition(t *testing.T) {
 	changefeedID := model.DefaultChangeFeedID("test")
 	ctx := context.Background()
 
+<<<<<<< HEAD
 	manager, err := GetTopicManagerAndTryCreateTopic(ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
+=======
+	manager, err := GetTopicManagerAndTryCreateTopic(
+		ctx, changefeedID, kafka.DefaultMockTopicName, cfg, adminClient)
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 	require.NoError(t, err)
 	defer manager.Close()
 

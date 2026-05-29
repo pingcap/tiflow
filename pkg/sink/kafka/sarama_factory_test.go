@@ -16,7 +16,6 @@ package kafka
 import (
 	"context"
 	stdErrors "errors"
-	"sync"
 	"testing"
 
 	"github.com/IBM/sarama"
@@ -46,11 +45,7 @@ func TestSyncProducer(t *testing.T) {
 	t.Parallel()
 
 	leader := sarama.NewMockBroker(t, 1)
-
-	metadataResponse := new(sarama.MetadataResponse)
-	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	// Response for `sarama.NewClient`
-	leader.Returns(metadataResponse)
+	setProducerMockHandlers(t, leader)
 
 	defer leader.Close()
 
@@ -78,11 +73,7 @@ func TestAsyncProducer(t *testing.T) {
 	t.Parallel()
 
 	leader := sarama.NewMockBroker(t, 1)
-
-	metadataResponse := new(sarama.MetadataResponse)
-	metadataResponse.AddBroker(leader.Addr(), leader.BrokerID())
-	// Response for `sarama.NewClient`
-	leader.Returns(metadataResponse)
+	setProducerMockHandlers(t, leader)
 
 	defer leader.Close()
 
@@ -104,6 +95,23 @@ func TestAsyncProducer(t *testing.T) {
 	async.Close()
 }
 
+<<<<<<< HEAD
+=======
+func setProducerMockHandlers(t *testing.T, broker *sarama.MockBroker) {
+	broker.SetHandlerByMap(map[string]sarama.MockResponse{
+		"ApiVersionsRequest": sarama.NewMockApiVersionsResponse(t).SetApiKeys([]sarama.ApiVersionsResponseKey{
+			{ApiKey: 0, MinVersion: 0, MaxVersion: 8},  // Produce
+			{ApiKey: 1, MinVersion: 0, MaxVersion: 11}, // Fetch
+			{ApiKey: 2, MinVersion: 0, MaxVersion: 5},  // ListOffsets
+			{ApiKey: 3, MinVersion: 0, MaxVersion: 10}, // Metadata
+			{ApiKey: 18, MinVersion: 0, MaxVersion: 3}, // ApiVersions
+		}),
+		"MetadataRequest": sarama.NewMockMetadataResponse(t).
+			SetBroker(broker.Addr(), broker.BrokerID()),
+	})
+}
+
+>>>>>>> 031ef7da65 (kafka: bump sarama version and enable the retry to fix the broken pipe and out of order (#12618))
 type testSaramaClient struct {
 	sarama.Client
 	closeCalls int
