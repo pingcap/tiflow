@@ -16,6 +16,7 @@ package kafka
 import (
 	"context"
 	stdErrors "errors"
+	"sync"
 	"testing"
 
 	"github.com/IBM/sarama"
