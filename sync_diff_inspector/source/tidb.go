@@ -99,6 +99,7 @@ type TiDBSource struct {
 	sourceTableMap map[string]*common.TableSource
 	snapshot       string
 	sqlHint        string
+	checksumAlgorithm config.ChecksumAlgorithm
 	// bucketSpliterPool is the shared pool to produce chunks using bucket
 	bucketSpliterPool *utils.WorkerPool
 	dbConn            *sql.DB
@@ -261,9 +262,9 @@ func (s *TiDBSource) GetCountAndMD5(ctx context.Context, tableRange *splitter.Ra
 		}
 	}
 
-	count, checksum, err := utils.GetCountAndMD5Checksum(
+	count, checksum, err := utils.GetCountAndChecksum(
 		ctx, s.dbConn, matchSource.OriginSchema, matchSource.OriginTable, table.Info,
-		chunk.Where, indexHint, chunk.Args)
+		chunk.Where, indexHint, chunk.Args, string(s.checksumAlgorithm))
 
 	cost := time.Since(beginTime)
 	return &ChecksumInfo{
@@ -430,6 +431,7 @@ func NewTiDBSource(
 		bucketSpliterPool: bucketSpliterPool,
 		version:           utils.TryToGetVersion(ctx, ds.Conn),
 		sqlHint:           ds.SQLHintUseIndex,
+		checksumAlgorithm: ds.ChecksumAlgorithm,
 	}
 	return ts, nil
 }
