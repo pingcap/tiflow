@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -135,7 +136,7 @@ type SinkConfig struct {
 	// Protocol is NOT available when the downstream is DB.
 	Protocol *string `toml:"protocol" json:"protocol,omitempty"`
 
-	// DispatchRules is only available when the downstream is MQ.
+	// DispatchRules is available for MQ sinks (topic/partition) and MySQL sinks (schema/table routing).
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
 
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
@@ -376,7 +377,9 @@ func (d DateSeparator) String() string {
 	}
 }
 
-// DispatchRule represents partition rule for a table.
+// DispatchRule represents dispatch and routing rules for a table.
+// For MQ sinks (Kafka, Pulsar): controls topic and partition assignment.
+// For MySQL/TiDB sinks: controls schema and table name routing.
 type DispatchRule struct {
 	Matcher []string `toml:"matcher" json:"matcher"`
 	// Deprecated, please use PartitionRule.
@@ -392,6 +395,40 @@ type DispatchRule struct {
 	Columns []string `toml:"columns" json:"columns"`
 
 	TopicRule string `toml:"topic" json:"topic"`
+
+	// SchemaRule specifies the target schema expression for sink routing.
+	// Supports templates: [prefix][{schema}][middle][{table}][suffix]
+	// Example: "{schema}_backup", "new_db", "{schema}_{table}"
+	// Only available for MySQL/TiDB sinks.
+	SchemaRule string `toml:"schema" json:"schema"`
+
+	// TableRule specifies the target table expression for sink routing.
+	// Supports templates: [prefix][{schema}][middle][{table}][suffix]
+	// Example: "{table}_v2", "archive_{table}", "{schema}_{table}"
+	// Only available for MySQL/TiDB sinks.
+	TableRule string `toml:"table" json:"table"`
+}
+
+// validRoutingExprRE validates schema/table routing expressions.
+// Expression can contain {schema}, {table}, or both, with valid separators.
+// Valid characters: A-Za-z0-9\._\-
+var validRoutingExprRE = regexp.MustCompile(`^[A-Za-z0-9\._\-]*(\{schema\})?[A-Za-z0-9\._\-]*(\{table\})?[A-Za-z0-9\._\-]*$`)
+
+// ValidateRoutingExpression validates a schema or table routing expression.
+// Expression format: [prefix][{schema}][middle][{table}][suffix]
+// prefix/middle/suffix are optional and should match [A-Za-z0-9\._\-]*
+func ValidateRoutingExpression(expr string) error {
+	if expr == "" {
+		// Empty is valid - means use source schema/table
+		return nil
+	}
+
+	if !validRoutingExprRE.MatchString(expr) {
+		return fmt.Errorf("invalid schema/table routing expression: %s. "+
+			"Expression must match pattern: [prefix][{schema}][middle][{table}][suffix]", expr)
+	}
+
+	return nil
 }
 
 // ColumnSelector represents a column selector for a table.

@@ -1,0 +1,13 @@
+# Changefeed configuration for sink routing integration test
+# This tests schema and table routing for MySQL sinks
+
+[filter]
+rules = ['source_db.*']
+
+[sink]
+# Dispatch rules with schema and table routing
+# Route source_db.* to target_db.* with table suffix "_routed"
+[[sink.dispatchers]]
+matcher = ['source_db.*']
+schema = 'target_db'
+table = '{table}_routed'
