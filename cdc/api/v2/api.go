@@ -76,6 +76,8 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	verifyTableGroup := v2.Group("/verify_table")
 	verifyTableGroup.POST("", api.verifyTable)
+	getAllTablesGroup := v2.Group("/get_all_tables")
+	getAllTablesGroup.POST("", api.getAllTables)
 
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
