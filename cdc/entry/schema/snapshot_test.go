@@ -255,9 +255,11 @@ func TestUpdatePartition(t *testing.T) {
 	_, ok = snap2.PhysicalTableByID(11 + 65536)
 	require.False(t, ok)
 	require.False(t, snap2.IsIneligibleTableID(11+65536))
+	require.True(t, snap2.IsDroppedTableID(11+65536))
 	_, ok = snap2.PhysicalTableByID(11 + 65536*2)
 	require.True(t, ok)
 	require.True(t, snap2.IsIneligibleTableID(11+65536*2))
+	require.False(t, snap2.IsDroppedTableID(11+65536*2))
 }
 
 func TestTruncateTablePartition(t *testing.T) {
