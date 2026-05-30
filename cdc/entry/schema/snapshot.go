@@ -702,29 +702,14 @@ func (s *snapshot) tableVersionByID(id int64) (vid versionedID, ok bool) {
 }
 
 func (s *snapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, ok bool) {
-	tag := negative(s.currentTs)
-	start := newVersionedID(id, tag)
-	end := newVersionedID(id, negative(uint64(0)))
-	s.tables.AscendRange(start, end, func(i versionedID) bool {
-		tableInfo := targetToTableInfo(i.target)
-		if nilAcceptable || tableInfo != nil {
-			foundTag = i.tag
-			ok = true
-		}
-		return false
-	})
+	vid, ok := s.tableVersionByID(id)
 	if !ok {
-		// Try partition, it could be a partition table.
-		s.partitions.AscendRange(start, end, func(i versionedID) bool {
-			tableInfo := targetToTableInfo(i.target)
-			if nilAcceptable || tableInfo != nil {
-				foundTag = i.tag
-				ok = true
-			}
-			return false
-		})
+		return 0, false
 	}
-	return
+	if !nilAcceptable && vid.target == nil {
+		return 0, false
+	}
+	return vid.tag, true
 }
 
 // dropSchema removes a schema from the snapshot.
