@@ -173,8 +173,10 @@ func TestTable(t *testing.T) {
 		_, ok = snap.PhysicalTableByID(11 + 65536)
 		require.False(t, ok)
 		require.True(t, snap.IsTruncateTableID(11))
+		require.False(t, snap.IsDroppedTableID(11))
 		_, ok = snap.PhysicalTableByID(12)
 		require.True(t, ok)
+		require.False(t, snap.IsDroppedTableID(12))
 		_, ok = snap.PhysicalTableByID(12 + 65536)
 		require.True(t, ok)
 		_, ok = snap.TableByName("DB_1", "TB_12")
@@ -193,6 +195,9 @@ func TestTable(t *testing.T) {
 		require.False(t, ok)
 		_, ok = snap.PhysicalTableByID(12 + 65536)
 		require.False(t, ok)
+		require.True(t, snap.IsDroppedTableID(12))
+		require.True(t, snap.IsDroppedTableID(12+65536))
+		require.False(t, snap.IsDroppedTableID(1024))
 		_, ok = snap.TableByName("DB_1", "TB_12")
 		require.False(t, ok)
 		if !forceReplicate {
@@ -249,9 +254,11 @@ func TestUpdatePartition(t *testing.T) {
 	_, ok = snap2.PhysicalTableByID(11 + 65536)
 	require.False(t, ok)
 	require.False(t, snap2.IsIneligibleTableID(11+65536))
+	require.True(t, snap2.IsDroppedTableID(11+65536))
 	_, ok = snap2.PhysicalTableByID(11 + 65536*2)
 	require.True(t, ok)
 	require.True(t, snap2.IsIneligibleTableID(11+65536*2))
+	require.False(t, snap2.IsDroppedTableID(11+65536*2))
 }
 
 func TestTruncateTablePartition(t *testing.T) {

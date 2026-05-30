@@ -156,6 +156,12 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 				log.Debug("skip the DML of truncated table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
 				return nil, nil
 			}
+			// A dropped table or partition can still have stale row events buffered in puller/mounter.
+			// They are invalid after the drop DDL, but different from an unknown table ID.
+			if snap.IsDroppedTableID(physicalTableID) {
+				log.Debug("skip the DML of dropped table", zap.Uint64("ts", raw.CRTs), zap.Int64("tableID", physicalTableID))
+				return nil, nil
+			}
 			log.Error("can not found table schema",
 				zap.Uint64("ts", raw.CRTs),
 				zap.String("key", hex.EncodeToString(raw.Key)),

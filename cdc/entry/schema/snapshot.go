@@ -372,6 +372,13 @@ func (s *Snapshot) IsTruncateTableID(id int64) bool {
 	return ok && s.inner.truncatedTables.Has(newVersionedID(id, tag))
 }
 
+// IsDroppedTableID returns true if the table id has been dropped by a DDL.
+func (s *Snapshot) IsDroppedTableID(id int64) bool {
+	s.rwlock.RLock()
+	defer s.rwlock.RUnlock()
+	return s.inner.isDroppedTableID(id)
+}
+
 // IsIneligibleTableID returns true if the table is ineligible.
 func (s *Snapshot) IsIneligibleTableID(id int64) bool {
 	s.rwlock.RLock()
@@ -664,30 +671,45 @@ func (s *snapshot) isIneligibleTableID(id int64) (ok bool) {
 	return ok && s.ineligibleTables.Has(newVersionedID(id, tag))
 }
 
-func (s *snapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, ok bool) {
+func (s *snapshot) isDroppedTableID(id int64) bool {
+	// Drop DDLs are stored as version records with a nil target. Truncate DDLs
+	// also leave nil-target records for old IDs, so exclude the truncate marker.
+	vid, ok := s.tableVersionByID(id)
+	return ok && vid.target == nil && !s.truncatedTables.Has(newVersionedID(id, vid.tag))
+}
+
+// tableVersionByID returns the latest version record visible at currentTs.
+// Unlike tableTagByID, it keeps the target field so callers can distinguish a
+// deleted table/partition tombstone from a live table/partition version.
+func (s *snapshot) tableVersionByID(id int64) (vid versionedID, ok bool) {
 	tag := negative(s.currentTs)
 	start := newVersionedID(id, tag)
 	end := newVersionedID(id, negative(uint64(0)))
 	s.tables.AscendRange(start, end, func(i versionedID) bool {
-		tableInfo := targetToTableInfo(i.target)
-		if nilAcceptable || tableInfo != nil {
-			foundTag = i.tag
-			ok = true
-		}
+		vid = i
+		ok = true
 		return false
 	})
 	if !ok {
 		// Try partition, it could be a partition table.
 		s.partitions.AscendRange(start, end, func(i versionedID) bool {
-			tableInfo := targetToTableInfo(i.target)
-			if nilAcceptable || tableInfo != nil {
-				foundTag = i.tag
-				ok = true
-			}
+			vid = i
+			ok = true
 			return false
 		})
 	}
 	return
+}
+
+func (s *snapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, ok bool) {
+	vid, ok := s.tableVersionByID(id)
+	if !ok {
+		return 0, false
+	}
+	if !nilAcceptable && vid.target == nil {
+		return 0, false
+	}
+	return vid.tag, true
 }
 
 // dropSchema removes a schema from the snapshot.
