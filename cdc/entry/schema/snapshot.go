@@ -672,10 +672,15 @@ func (s *snapshot) isIneligibleTableID(id int64) (ok bool) {
 }
 
 func (s *snapshot) isDroppedTableID(id int64) bool {
+	// Drop DDLs are stored as version records with a nil target. Truncate DDLs
+	// also leave nil-target records for old IDs, so exclude the truncate marker.
 	vid, ok := s.tableVersionByID(id)
 	return ok && vid.target == nil && !s.truncatedTables.Has(newVersionedID(id, vid.tag))
 }
 
+// tableVersionByID returns the latest version record visible at currentTs.
+// Unlike tableTagByID, it keeps the target field so callers can distinguish a
+// deleted table/partition tombstone from a live table/partition version.
 func (s *snapshot) tableVersionByID(id int64) (vid versionedID, ok bool) {
 	tag := negative(s.currentTs)
 	start := newVersionedID(id, tag)
