@@ -93,8 +93,13 @@ require (
 	github.com/thanhpk/randstr v1.0.6
 	github.com/tikv/client-go/v2 v2.0.8-0.20260128081005-bc0c2a6df45c
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
+<<<<<<< HEAD
 	github.com/tikv/pd/client v0.0.0-20251219084741-029eb6e7d5d0
 	github.com/tinylib/msgp v1.1.6
+=======
+	github.com/tikv/pd/client v0.0.0-20260323032024-d7b638033a14
+	github.com/tinylib/msgp v1.5.0
+>>>>>>> 5b45aa084a (redo(ticdc): add column info for redo ddl event (#12602))
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
 	github.com/xdg/scram v1.0.5
@@ -334,7 +339,7 @@ require (
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe // indirect
-	github.com/philhofer/fwd v1.1.1 // indirect
+	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
 	github.com/pingcap/badger v1.5.1-0.20241015064302-38533b6cbf8d // indirect
 	github.com/pingcap/fn v1.0.0 // indirect

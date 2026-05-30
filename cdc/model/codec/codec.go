@@ -163,11 +163,7 @@ func MarshalRedoLog(r *model.RedoLog, b []byte) (o []byte, err error) {
 
 // MarshalDDLAsRedoLog converts a DDLEvent into RedoLog, and then marshals it.
 func MarshalDDLAsRedoLog(d *model.DDLEvent, b []byte) (o []byte, err error) {
-	log := &model.RedoLog{
-		RedoDDL: model.RedoDDLEvent{DDL: d},
-		Type:    model.RedoLogTypeDDL,
-	}
-	return MarshalRedoLog(log, b)
+	return MarshalRedoLog(d.ToRedoLog(), b)
 }
 
 func decodeVersion(bts []byte) (uint16, []byte) {
