@@ -1027,6 +1027,58 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	}
 }
 
+func TestDecodeEventIgnoresDroppedTableRow(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("use test;")
+
+	cfg := config.GetDefaultReplicaConfig()
+	f, err := filter.NewFilter(cfg, "")
+	require.Nil(t, err)
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.Nil(t, err)
+
+	cfID := model.DefaultChangeFeedID("changefeed-test-dropped-table-row")
+	schemaStorage, err := NewSchemaStorage(helper.GetCurrentMeta(),
+		ver.Ver, false, cfID, util.RoleTester, f)
+	require.Nil(t, err)
+
+	createJob := helper.DDL2Job("create table test.dropped_table(id int primary key, v int)")
+	err = schemaStorage.HandleDDLJob(createJob)
+	require.Nil(t, err)
+
+	tableInfo, ok := schemaStorage.GetLastSnapshot().TableByName("test", "dropped_table")
+	require.True(t, ok)
+
+	helper.Tk().MustExec("insert into test.dropped_table values (1, 1)")
+	var key, value []byte
+	walkTableSpanInStore(t, helper.Storage(), tableInfo.ID, func(k []byte, v []byte) {
+		if key != nil {
+			return
+		}
+		key = append([]byte(nil), k...)
+		value = append([]byte(nil), v...)
+	})
+	require.NotEmpty(t, key)
+	require.NotEmpty(t, value)
+
+	dropJob := helper.DDL2Job("drop table test.dropped_table")
+	err = schemaStorage.HandleDDLJob(dropJob)
+	require.Nil(t, err)
+
+	mounter := NewMounter(schemaStorage, cfID, time.Local, f).(*mounter)
+	pEvent := model.NewPolymorphicEvent(&model.RawKVEntry{
+		OpType:  model.OpTypePut,
+		Key:     key,
+		Value:   value,
+		StartTs: createJob.BinlogInfo.FinishedTS,
+		CRTs:    dropJob.BinlogInfo.FinishedTS + 1,
+	})
+	err = mounter.DecodeEvent(context.Background(), pEvent)
+	require.Nil(t, err)
+	require.Nil(t, pEvent.Row)
+}
+
 func TestBuildTableInfo(t *testing.T) {
 	cases := []struct {
 		origin              string
