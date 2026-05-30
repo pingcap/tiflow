@@ -372,6 +372,13 @@ func (s *Snapshot) IsTruncateTableID(id int64) bool {
 	return ok && s.inner.truncatedTables.Has(newVersionedID(id, tag))
 }
 
+// IsDroppedTableID returns true if the table id has been dropped by a DDL.
+func (s *Snapshot) IsDroppedTableID(id int64) bool {
+	s.rwlock.RLock()
+	defer s.rwlock.RUnlock()
+	return s.inner.isDroppedTableID(id)
+}
+
 // IsIneligibleTableID returns true if the table is ineligible.
 func (s *Snapshot) IsIneligibleTableID(id int64) bool {
 	s.rwlock.RLock()
@@ -662,6 +669,31 @@ func (s *snapshot) tableByName(schema, table string) (info *model.TableInfo, ok 
 func (s *snapshot) isIneligibleTableID(id int64) (ok bool) {
 	tag, ok := s.tableTagByID(id, false)
 	return ok && s.ineligibleTables.Has(newVersionedID(id, tag))
+}
+
+func (s *snapshot) isDroppedTableID(id int64) bool {
+	vid, ok := s.tableVersionByID(id)
+	return ok && vid.target == nil && !s.truncatedTables.Has(newVersionedID(id, vid.tag))
+}
+
+func (s *snapshot) tableVersionByID(id int64) (vid versionedID, ok bool) {
+	tag := negative(s.currentTs)
+	start := newVersionedID(id, tag)
+	end := newVersionedID(id, negative(uint64(0)))
+	s.tables.AscendRange(start, end, func(i versionedID) bool {
+		vid = i
+		ok = true
+		return false
+	})
+	if !ok {
+		// Try partition, it could be a partition table.
+		s.partitions.AscendRange(start, end, func(i versionedID) bool {
+			vid = i
+			ok = true
+			return false
+		})
+	}
+	return
 }
 
 func (s *snapshot) tableTagByID(id int64, nilAcceptable bool) (foundTag uint64, ok bool) {
