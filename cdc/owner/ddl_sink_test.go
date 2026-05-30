@@ -155,8 +155,8 @@ func TestExecDDLError(t *testing.T) {
 
 	ddlSink.run(ctx)
 
-	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs()
 	ddl2 := &model.DDLEvent{CommitTs: 2, Query: "create table t2(id int)"}
+	mSink.ddlError = cerror.ErrExecDDLFailed.GenWithStackByArgs(ddl2.Query)
 	for {
 		done, err := ddlSink.emitDDLEvent(ctx, ddl2)
 		require.Nil(t, err)
