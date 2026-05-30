@@ -34,6 +34,12 @@ description = ""
 workaround = ""
 tags = ["not-set", "high"]
 
+[error.DM-database-10007]
+message = "execute statement failed: begin"
+description = ""
+workaround = ""
+tags = ["not-set", "high"]
+
 [error.DM-functional-11001]
 message = "parse mydumper metadata error: %s, metadata: %s"
 description = ""
