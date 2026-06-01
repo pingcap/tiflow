@@ -458,6 +458,86 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
 }
 
+func TestExchangeTablePartitionWithoutValidationCurrentBehavior(t *testing.T) {
+	preTableInfo := &TableInfo{
+		TableName: TableName{
+			Schema: "test2",
+			Table:  "t2",
+		},
+	}
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema: "test1",
+			Table:  "t1",
+		},
+	}
+
+	testCases := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{
+			name:  "exact suffix keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing newline drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing newline drops without validation v2",
+			query: "ALTER TABLE t1\n EXCHANGE PARTITION p0\n WITH TABLE t2\n WITHOUT VALIDATION\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing carriage return newline drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\r\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing space drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION ",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing tab drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\t",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing semicolon drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION;",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing space semicolon drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION ;",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing semicolon newline drops without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION;\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			job := &timodel.Job{
+				Type:       timodel.ActionExchangeTablePartition,
+				Query:      tc.query,
+				BinlogInfo: &timodel.HistoryInfo{},
+			}
+			event := &DDLEvent{}
+			event.FromJob(job, preTableInfo, tableInfo)
+			require.Equal(t, tc.want, event.Query)
+		})
+	}
+}
+
 func TestSortRowChangedEvent(t *testing.T) {
 	events := []*RowChangedEvent{
 		{
