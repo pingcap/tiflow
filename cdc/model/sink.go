@@ -770,6 +770,7 @@ func (d *DDLEvent) FromJobWithArgs(
 	case model.ActionExchangeTablePartition:
 		// Parse idx of partition name from query.
 		upperQuery := strings.ToUpper(job.Query)
+		normalizedUpperQuery := strings.TrimRight(upperQuery, " \t\r\n;")
 		idx1 := strings.Index(upperQuery, "EXCHANGE PARTITION") + len("EXCHANGE PARTITION")
 		idx2 := strings.Index(upperQuery, "WITH TABLE")
 
@@ -780,7 +781,7 @@ func (d *DDLEvent) FromJobWithArgs(
 			tableInfo.TableName.Schema, tableInfo.TableName.Table, partName,
 			preTableInfo.TableName.Schema, preTableInfo.TableName.Table)
 
-		if strings.HasSuffix(upperQuery, "WITHOUT VALIDATION") {
+		if strings.HasSuffix(normalizedUpperQuery, "WITHOUT VALIDATION") {
 			d.Query += " WITHOUT VALIDATION"
 		}
 	default:

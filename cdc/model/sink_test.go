@@ -458,7 +458,7 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
 }
 
-func TestExchangeTablePartitionWithoutValidationCurrentBehavior(t *testing.T) {
+func TestExchangeTablePartitionWithoutValidation(t *testing.T) {
 	preTableInfo := &TableInfo{
 		TableName: TableName{
 			Schema: "test2",
@@ -483,42 +483,42 @@ func TestExchangeTablePartitionWithoutValidationCurrentBehavior(t *testing.T) {
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing newline drops without validation",
+			name:  "trailing newline keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\n",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing newline drops without validation v2",
+			name:  "trailing newline keeps without validation v2",
 			query: "ALTER TABLE t1\n EXCHANGE PARTITION p0\n WITH TABLE t2\n WITHOUT VALIDATION\n",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing carriage return newline drops without validation",
+			name:  "trailing carriage return newline keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\r\n",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing space drops without validation",
+			name:  "trailing space keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION ",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing tab drops without validation",
+			name:  "trailing tab keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\t",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing semicolon drops without validation",
+			name:  "trailing semicolon keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION;",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing space semicolon drops without validation",
+			name:  "trailing space semicolon keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION ;",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
 		{
-			name:  "trailing semicolon newline drops without validation",
+			name:  "trailing semicolon newline keeps without validation",
 			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION;\n",
 			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
 		},
