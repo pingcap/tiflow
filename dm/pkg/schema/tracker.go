@@ -627,9 +627,14 @@ func (tr *Tracker) buildForeignKeyRelations(
 	visiting[sourceTableID] = struct{}{}
 	defer delete(visiting, sourceTableID)
 
-	routedSourceTable := resolveTableRoute(routeResolver, sourceTable)
+	routedSourceTable := sourceTable
+	if routeResolver != nil {
+		routedSourceTable = routeResolver(sourceTable)
+	}
 	if len(downstreamTI.ForeignKeys) > 0 && !sameTableIdentity(routedSourceTable, targetTable) {
 		if routeResolver == nil {
+			// Without a route resolver, source and target tables must match. Routed FK
+			// causality is enabled only after the syncer passes a validated resolver.
 			return nil, newForeignKeyRouteUnsupportedError(
 				fmt.Sprintf(
 					"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
@@ -638,6 +643,8 @@ func (tr *Tracker) buildForeignKeyRelations(
 				),
 			)
 		}
+		// With a route resolver, this builder checks only the current source table's
+		// routed target. Syncer must reject many-to-one topology before this call.
 		return nil, newForeignKeyRouteUnsupportedError(
 			fmt.Sprintf(
 				"foreign key causality with route under foreign_key_checks=1 and worker_count>1 requires 1:1 route alignment; source child table %s routes to %s, but downstream child table is %s",
@@ -704,7 +711,11 @@ func (tr *Tracker) buildForeignKeyRelations(
 			targetParentSchema = targetTable.Schema
 		}
 		targetParentTable := &filter.Table{Schema: targetParentSchema, Name: fk.RefTable.O}
-		routedSourceParent := resolveTableRoute(routeResolver, sourceParentTable)
+		routedSourceParent := sourceParentTable
+		if routeResolver != nil {
+			routedSourceParent = routeResolver(sourceParentTable)
+		}
+		// The source parent table must route to the downstream parent table.
 		if !sameTableIdentity(routedSourceParent, targetParentTable) {
 			if routeResolver == nil {
 				return nil, newForeignKeyRouteUnsupportedError(
@@ -877,17 +888,6 @@ func sameTableIdentity(a *filter.Table, b *filter.Table) bool {
 		return a == b
 	}
 	return a.Schema == b.Schema && a.Name == b.Name
-}
-
-func resolveTableRoute(routeResolver TableRouteResolver, table *filter.Table) *filter.Table {
-	if routeResolver == nil || table == nil {
-		return table
-	}
-	routed := routeResolver(table)
-	if routed == nil {
-		return table
-	}
-	return routed
 }
 
 func newForeignKeyRouteUnsupportedError(msg string) error {
