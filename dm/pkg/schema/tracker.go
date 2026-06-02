@@ -668,7 +668,7 @@ func (tr *Tracker) buildForeignKeyRelations(
 			continue
 		}
 
-		sourceFK := findMatchingForeignKey(originTI, fk, i)
+		sourceFK := findMatchingForeignKey(originTI, sourceTable, targetTable, fk, i, routeResolver)
 		if sourceFK == nil {
 			return nil, newForeignKeySchemaAlignmentError(
 				sourceTable.String(),
@@ -832,9 +832,17 @@ func (tr *Tracker) buildForeignKeyRelations(
 }
 
 // findMatchingForeignKey maps a downstream FK back to source-side metadata.
-// It matches by FK name first, then by the same ordinal position if the child/ref
-// columns still align, and finally falls back to a linear scan by FK columns.
-func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInfo, idx int) *model.FKInfo {
+// A same-name source FK must match the columns and never falls back to another FK.
+// Without a same-name FK, candidates must match both columns and the referenced
+// table when a route resolver is available.
+func findMatchingForeignKey(
+	originTI *model.TableInfo,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	downstreamFK *model.FKInfo,
+	idx int,
+	routeResolver TableRouteResolver,
+) *model.FKInfo {
 	if originTI == nil || len(originTI.ForeignKeys) == 0 || downstreamFK == nil {
 		return nil
 	}
@@ -850,13 +858,13 @@ func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInf
 
 	if idx < len(originTI.ForeignKeys) {
 		candidate := originTI.ForeignKeys[idx]
-		if sameForeignKeyColumns(candidate, downstreamFK) {
+		if sameForeignKeyMetadata(candidate, sourceTable, downstreamFK, targetTable, routeResolver) {
 			return candidate
 		}
 	}
 
 	for _, fk := range originTI.ForeignKeys {
-		if sameForeignKeyColumns(fk, downstreamFK) {
+		if sameForeignKeyMetadata(fk, sourceTable, downstreamFK, targetTable, routeResolver) {
 			return fk
 		}
 	}
@@ -864,11 +872,41 @@ func findMatchingForeignKey(originTI *model.TableInfo, downstreamFK *model.FKInf
 	return nil
 }
 
+func sameForeignKeyMetadata(
+	sourceFK *model.FKInfo,
+	sourceTable *filter.Table,
+	downstreamFK *model.FKInfo,
+	targetTable *filter.Table,
+	routeResolver TableRouteResolver,
+) bool {
+	if !sameForeignKeyColumns(sourceFK, downstreamFK) {
+		return false
+	}
+	if routeResolver == nil {
+		return true
+	}
+
+	sourceParentTable := foreignKeyRefTable(sourceTable, sourceFK)
+	sourceParentTable = routeResolver(sourceParentTable)
+	return sameTableIdentity(sourceParentTable, foreignKeyRefTable(targetTable, downstreamFK))
+}
+
 func sameForeignKeyColumns(sourceFK *model.FKInfo, downstreamFK *model.FKInfo) bool {
 	if sourceFK == nil || downstreamFK == nil {
 		return false
 	}
 	return sameColumns(sourceFK.Cols, downstreamFK.Cols) && sameColumns(sourceFK.RefCols, downstreamFK.RefCols)
+}
+
+func foreignKeyRefTable(childTable *filter.Table, fk *model.FKInfo) *filter.Table {
+	if fk == nil {
+		return nil
+	}
+	schema := fk.RefSchema.O
+	if schema == "" && childTable != nil {
+		schema = childTable.Schema
+	}
+	return &filter.Table{Schema: schema, Name: fk.RefTable.O}
 }
 
 func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
