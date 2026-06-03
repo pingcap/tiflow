@@ -253,7 +253,7 @@ func assembleEvent(
 func isAvroExtensionField(name string) bool {
 	switch name {
 	case tidbOp, tidbCommitTs, tidbPhysicalTime, tidbRowLevelChecksum,
-		tidbChecksumVersion, tidbCorrupted, ticdcBefore:
+		tidbChecksumVersion, tidbCorrupted, tidbBefore:
 		return true
 	default:
 		return false
@@ -261,7 +261,7 @@ func isAvroExtensionField(name string) bool {
 }
 
 func extractBeforeValueMap(valueMap map[string]interface{}) (map[string]interface{}, bool, error) {
-	rawBefore, ok := valueMap[ticdcBefore]
+	rawBefore, ok := valueMap[tidbBefore]
 	if !ok || rawBefore == nil {
 		return nil, false, nil
 	}
