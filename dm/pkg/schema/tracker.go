@@ -873,9 +873,6 @@ func findMatchingForeignKey(
 	return nil
 }
 
-<<<<<<< HEAD
-func sameColumns(a []pmodel.CIStr, b []pmodel.CIStr) bool {
-=======
 func sameForeignKeyMetadata(
 	sourceFK *model.FKInfo,
 	sourceTable *filter.Table,
@@ -913,8 +910,7 @@ func foreignKeyRefTable(childTable *filter.Table, fk *model.FKInfo) *filter.Tabl
 	return &filter.Table{Schema: schema, Name: fk.RefTable.O}
 }
 
-func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
->>>>>>> 02e60d212e (dm: make FK relation builder route-aware (#12654))
+func sameColumns(a []pmodel.CIStr, b []pmodel.CIStr) bool {
 	if len(a) != len(b) {
 		return false
 	}
