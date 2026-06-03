@@ -113,6 +113,43 @@ func runForeignKeyRelationTest(
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func runForeignKeyRelationInitErrorTest(t *testing.T, createChildSQL, showCreateChildSQL string) error {
+	t.Helper()
+
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec(createChildSQL, "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", showCreateChildSQL))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.NoError(t, mock.ExpectationsWereMet())
+	return err
+}
+
 func TestNeedSessionCfgInOldImpl(t *testing.T) {
 	ctx := context.Background()
 	table := &filter.Table{
@@ -1093,41 +1130,15 @@ func TestForeignKeyRelationSchemaAlignmentErrorGuidesRepair(t *testing.T) {
 }
 
 func TestForeignKeyRelationRejectsSameNameDifferentColumns(t *testing.T) {
-	ctx := context.Background()
-	p := parser.New()
-
-	dbConn, mock := mockBaseConn(t)
-	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
-	require.NoError(t, err)
-	defer tracker.Close()
-
-	createAndExec := func(sql string, db string) {
-		stmt, parseErr := p.ParseOneStmt(sql, "", "")
-		require.NoError(t, parseErr)
-		require.NoError(t, tracker.Exec(ctx, db, stmt))
-	}
-
-	createAndExec("create database db", "")
-	createAndExec("create table parent(id int primary key)", "db")
-	createAndExec("create table child(id int primary key, parent1_id int not null, parent2_id int not null, key idx_parent1(parent1_id), constraint fk_child_parent foreign key (parent1_id) references parent(id))", "db")
-
-	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-
-	tableIDChild := "`db`.`child`"
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("child", "create table child(id int primary key, parent1_id int not null, parent2_id int not null, key idx_parent2(parent2_id), constraint fk_child_parent foreign key (parent2_id) references parent(id))"))
-
-	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
-	require.NoError(t, err)
-	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	err := runForeignKeyRelationInitErrorTest(
+		t,
+		"create table child(id int primary key, parent1_id int not null, parent2_id int not null, key idx_parent1(parent1_id), constraint fk_child_parent foreign key (parent1_id) references parent(id))",
+		"create table child(id int primary key, parent1_id int not null, parent2_id int not null, key idx_parent2(parent2_id), constraint fk_child_parent foreign key (parent2_id) references parent(id))",
+	)
 	require.ErrorContains(t, err, "foreign key causality initialization failed")
 	require.ErrorContains(t, err, "failed to match source foreign key metadata")
 	require.ErrorContains(t, err, "aligned source and downstream FK metadata")
 	require.ErrorContains(t, err, "binlog-schema update")
-	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestForeignKeyRelationMatchesReferencedTableWhenNameAndOrderDiffer(t *testing.T) {
@@ -1240,41 +1251,15 @@ func TestForeignKeyRelationDoesNotFallbackFromSameNameReferencedTableMismatch(t 
 }
 
 func TestForeignKeyRelationNilResolverKeepsParentRouteUnsupportedError(t *testing.T) {
-	ctx := context.Background()
-	p := parser.New()
-
-	dbConn, mock := mockBaseConn(t)
-	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
-	require.NoError(t, err)
-	defer tracker.Close()
-
-	createAndExec := func(sql string, db string) {
-		stmt, parseErr := p.ParseOneStmt(sql, "", "")
-		require.NoError(t, parseErr)
-		require.NoError(t, tracker.Exec(ctx, db, stmt))
-	}
-
-	createAndExec("create database db", "")
-	createAndExec("create table parent(id int primary key)", "db")
-	createAndExec("create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
-
-	mock.ExpectBegin()
-	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectCommit()
-
-	tableIDChild := "`db`.`child`"
-	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("child", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"))
-
-	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
-	require.NoError(t, err)
-	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	err := runForeignKeyRelationInitErrorTest(
+		t,
+		"create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))",
+		"create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))",
+	)
 	require.ErrorContains(t, err, "not supported yet")
 	require.ErrorContains(t, err, "upstream parent table")
 	require.ErrorContains(t, err, "`db`.`parent`")
 	require.ErrorContains(t, err, "`db`.`parent_r`")
-	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestForeignKeyRelationFallsBackToDirectParentWhenUnmappable(t *testing.T) {
