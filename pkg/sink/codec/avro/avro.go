@@ -133,7 +133,8 @@ func (a *BatchEncoder) getValueSchemaCodec(
 	}
 
 	subject := topicName2SchemaSubjects(topic, valueSchemaSuffix)
-	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject,
+		tableVersion, op, schemaGen)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -153,7 +154,7 @@ func (a *BatchEncoder) getKeySchemaCodec(
 	}
 
 	subject := topicName2SchemaSubjects(topic, keySchemaSuffix)
-	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, keyOperation, schemaGen)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -323,6 +324,7 @@ const (
 	insertOperation = "c"
 	updateOperation = "u"
 	deleteOperation = "d"
+	keyOperation    = ""
 )
 
 func getOperation(e *model.RowChangedEvent) string {
@@ -345,9 +347,6 @@ func (a *BatchEncoder) nativeValue(
 		before map[string]interface{}
 		err    error
 	)
-	if a.config.AvroIncludeBeforeValue {
-		native[tidbBefore] = nil
-	}
 	if op != deleteOperation {
 		native, err = a.columns2AvroData(avroEncodeInput{
 			TableInfo: e.TableInfo,
@@ -358,6 +357,9 @@ func (a *BatchEncoder) nativeValue(
 			log.Error("avro: converting after value to native failed", zap.Error(err))
 			return nil, errors.Trace(err)
 		}
+	}
+	if a.config.AvroIncludeBeforeValue {
+		native[tidbBefore] = nil
 	}
 	if op != insertOperation && a.config.AvroIncludeBeforeValue {
 		before, err = a.columns2AvroData(avroEncodeInput{
@@ -589,6 +591,16 @@ func (a *BatchEncoder) schemaWithBeforeValue(
 	if err != nil {
 		return nil, err
 	}
+	if top == nil {
+		// Delete values do not contain after columns. Keep the top-level
+		// table record and put the row image under _tidb_before.
+		top = &avroSchemaTop{
+			Tp:        "record",
+			Name:      common.SanitizeName(tableName.Table),
+			Namespace: getAvroNamespace(a.namespace, tableName.Schema),
+			Fields:    nil,
+		}
+	}
 
 	top.Fields = append(top.Fields, map[string]interface{}{
 		"name":    tidbBefore,
@@ -670,7 +682,7 @@ func (a *BatchEncoder) value2AvroSchema(tableName model.TableName, input avroEnc
 		}
 	}
 
-	if op != insertOperation && a.config.AvroIncludeBeforeValue {
+	if a.config.AvroIncludeBeforeValue {
 		top, err = a.schemaWithBeforeValue(top, tableName, input)
 		if err != nil {
 			return "", err

@@ -111,9 +111,8 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	hasValue := len(d.value) != 0
 	isDelete := !hasValue
 	if !hasValue {
-		// Legacy delete event only has the key payload, so it can only be
-		// decoded as a delete row with key columns in PreColumns.
-		// delete event only have key part, treat it as the value part also.
+		// Legacy delete events have no Avro value, so decode the key payload
+		// as key-only PreColumns and skip value-side metadata such as checksum.
 		valueMap = keyMap
 		valueSchema = keySchema
 	} else {
@@ -122,6 +121,8 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 			return nil, errors.Trace(err)
 		}
 		if d.config.AvroIncludeBeforeValue {
+			// With avro-include-before-value, delete events carry a value
+			// payload. In that case _tidb_op is the source of truth.
 			isDelete = valueMap[tidbOp] == deleteOperation
 		}
 	}
@@ -178,11 +179,12 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	return event, nil
 }
 
-// assembleEvent return a row changed event
-// keyMap hold primary key or unique key columns
-// valueMap holds all columns for insert/update and before-value delete.
+// assembleEvent return a row changed event.
+// keyMap holds primary key or unique key columns.
+// valueMap holds after columns for insert/update, and only extension fields
+// plus _tidb_before for before-value delete.
 // For legacy delete, valueMap is keyMap and only contains handle columns.
-// schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
+// schema corresponds to valueMap and is used to decode columns.
 func assembleEvent(
 	keyMap, valueMap, schema map[string]interface{}, isDelete bool, hasValue bool,
 ) (*model.RowChangedEvent, error) {
@@ -196,21 +198,20 @@ func assembleEvent(
 		return nil, errors.Trace(err)
 	}
 
-	beforeMap, hasBefore, err := extractBeforeValueMap(valueMap)
+	beforeMap, beforeFields, hasBefore, err := extractBeforeValueMap(valueMap, fields)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	var beforeColumns []*model.Column
 	if hasBefore {
-		beforeColumns, err = avroData2Columns(keyMap, beforeMap, fields)
+		beforeColumns, err = avroData2Columns(keyMap, beforeMap, beforeFields)
 		if err != nil {
 			return nil, errors.Trace(err)
 		}
 	}
 
-	// "namespace.schema"
 	namespace := schema["namespace"].(string)
-	schemaName := strings.Split(namespace, ".")[1]
+	schemaName := schemaNameFromAvroNamespace(namespace)
 	tableName := schema["name"].(string)
 
 	var commitTs int64
@@ -228,13 +229,19 @@ func assembleEvent(
 	for name := range keyMap {
 		pkNameSet[name] = struct{}{}
 	}
-	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, columns, pkNameSet)
+	tableColumns := columns
+	if isDelete && hasValue {
+		if !hasBefore {
+			return nil, errors.New("before value not found for delete event")
+		}
+		// Before-value delete schemas do not have after columns at the top
+		// level, so build TableInfo from the nested before record.
+		tableColumns = beforeColumns
+	}
+	event.TableInfo = model.BuildTableInfoWithPKNames4Test(schemaName, tableName, tableColumns, pkNameSet)
 
 	if isDelete {
 		if hasValue {
-			if !hasBefore {
-				return nil, errors.New("before value not found for delete event")
-			}
 			event.PreColumns = model.Columns2ColumnDatas(beforeColumns, event.TableInfo)
 		} else {
 			// Legacy delete only has the key payload, so PreColumns contains handle columns only.
@@ -250,6 +257,14 @@ func assembleEvent(
 	return event, nil
 }
 
+func schemaNameFromAvroNamespace(namespace string) string {
+	if namespace == "" {
+		return ""
+	}
+	parts := strings.Split(namespace, ".")
+	return parts[len(parts)-1]
+}
+
 func isAvroExtensionField(name string) bool {
 	switch name {
 	case tidbOp, tidbCommitTs, tidbPhysicalTime, tidbRowLevelChecksum,
@@ -260,27 +275,63 @@ func isAvroExtensionField(name string) bool {
 	}
 }
 
-func extractBeforeValueMap(valueMap map[string]interface{}) (map[string]interface{}, bool, error) {
+func extractBeforeValueMap(
+	valueMap map[string]interface{}, fields []interface{},
+) (map[string]interface{}, []interface{}, bool, error) {
 	rawBefore, ok := valueMap[tidbBefore]
 	if !ok || rawBefore == nil {
-		return nil, false, nil
+		return nil, nil, false, nil
 	}
 
 	beforeUnion, ok := rawBefore.(map[string]interface{})
 	if !ok {
-		return nil, false, errors.New("before value should be a map")
+		return nil, nil, false, errors.New("before value should be a map")
+	}
+	beforeFields, err := extractBeforeValueFields(fields)
+	if err != nil {
+		return nil, nil, false, errors.Trace(err)
 	}
 	for unionName, value := range beforeUnion {
 		if unionName == "null" || value == nil {
-			return nil, false, nil
+			return nil, nil, false, nil
 		}
 		before, ok := value.(map[string]interface{})
 		if !ok {
-			return nil, false, errors.New("before record should be a map")
+			return nil, nil, false, errors.New("before record should be a map")
 		}
-		return before, true, nil
+		return before, beforeFields, true, nil
 	}
-	return nil, false, nil
+	return nil, nil, false, nil
+}
+
+func extractBeforeValueFields(fields []interface{}) ([]interface{}, error) {
+	for _, item := range fields {
+		field, ok := item.(map[string]interface{})
+		if !ok {
+			return nil, errors.New("schema field should be a map")
+		}
+		if field["name"] != tidbBefore {
+			continue
+		}
+
+		unionTypes, ok := field["type"].([]interface{})
+		if !ok {
+			return nil, errors.New("before value schema should be a union")
+		}
+		for _, ty := range unionTypes {
+			record, ok := ty.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			nestedFields, ok := record["fields"].([]interface{})
+			if !ok {
+				return nil, errors.New("before record fields should be a list")
+			}
+			return nestedFields, nil
+		}
+		return nil, errors.New("before record schema not found")
+	}
+	return nil, errors.New("before value schema not found")
 }
 
 func avroData2Columns(
