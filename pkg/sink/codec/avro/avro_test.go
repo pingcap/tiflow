@@ -15,7 +15,11 @@ package avro
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
+	"hash/crc32"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
@@ -211,13 +215,14 @@ func TestAvroEncodeDeleteChecksum(t *testing.T) {
 		{Name: "id", Value: int64(1)},
 		{Name: "name", Value: "old"},
 	}
+	expectedPreviousChecksum := checksumForSimpleColumns(1, "old")
 	event := &model.RowChangedEvent{
 		CommitTs:   1024,
 		TableInfo:  tableInfo,
 		PreColumns: model.Columns2ColumnDatas(beforeColumns, tableInfo),
 		Checksum: &integrity.Checksum{
 			Current:  11,
-			Previous: 22,
+			Previous: expectedPreviousChecksum,
 		},
 	}
 
@@ -236,7 +241,20 @@ func TestAvroEncodeDeleteChecksum(t *testing.T) {
 	m, ok := res.(map[string]interface{})
 	require.True(t, ok)
 	require.Equal(t, deleteOperation, m[tidbOp])
-	require.Equal(t, "22", m[tidbRowLevelChecksum])
+	require.Equal(t, strconv.FormatUint(uint64(expectedPreviousChecksum), 10), m[tidbRowLevelChecksum])
+
+	key, err := encoder.encodeKey(ctx, topic, event)
+	require.NoError(t, err)
+	decoder := NewDecoder(codecConfig, encoder.schemaM, topic, nil)
+	err = decoder.AddKeyValue(key, bin)
+	require.NoError(t, err)
+
+	decoded, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.True(t, decoded.IsDelete())
+	require.NotNil(t, decoded.Checksum)
+	require.Zero(t, decoded.Checksum.Current)
+	require.Equal(t, expectedPreviousChecksum, decoded.Checksum.Previous)
 }
 
 func TestAvroEncode(t *testing.T) {
@@ -293,6 +311,50 @@ func TestAvroEncode(t *testing.T) {
 			require.Equal(t, float32(3.14), v)
 		}
 	}
+}
+
+func TestAvroDecodeLegacyDelete(t *testing.T) {
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.EnableTiDBExtension = true
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
+	defer TeardownEncoderAndSchemaRegistry4Testing()
+	require.NoError(t, err)
+	require.NotNil(t, encoder)
+
+	tableColumns := []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
+		{Name: "name", Type: mysql.TypeVarchar},
+	}
+	tableInfo := model.BuildTableInfo("test", "person", tableColumns, [][]int{{0}})
+	event := &model.RowChangedEvent{
+		CommitTs:  1024,
+		TableInfo: tableInfo,
+		PreColumns: model.Columns2ColumnDatas([]*model.Column{
+			{Name: "id", Value: int64(1)},
+			{Name: "name", Value: "old"},
+		}, tableInfo),
+	}
+
+	topic := "default"
+	key, err := encoder.encodeKey(ctx, topic, event)
+	require.NoError(t, err)
+
+	decoder := NewDecoder(codecConfig, encoder.schemaM, topic, nil)
+	err = decoder.AddKeyValue(key, nil)
+	require.NoError(t, err)
+
+	decoded, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.True(t, decoded.IsDelete())
+	require.Nil(t, decoded.Checksum)
+	require.Empty(t, decoded.GetColumns())
+	require.Len(t, decoded.GetPreColumns(), 1)
+	require.Equal(t, "id", decoded.GetPreColumns()[0].Name)
+	require.Equal(t, int32(1), decoded.GetPreColumns()[0].Value)
 }
 
 func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
@@ -360,6 +422,7 @@ func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
 			afterName:  "new",
 			assertRow: func(t *testing.T, decoded *model.RowChangedEvent) {
 				require.True(t, decoded.IsUpdate())
+				require.Equal(t, "name", decoded.GetPreColumns()[1].Name)
 				require.Equal(t, "old", decoded.GetPreColumns()[1].Value)
 				require.Equal(t, "new", decoded.GetColumns()[1].Value)
 			},
@@ -373,9 +436,9 @@ func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
 			},
 			op:         deleteOperation,
 			beforeName: "old",
-			afterName:  "old",
 			assertRow: func(t *testing.T, decoded *model.RowChangedEvent) {
 				require.True(t, decoded.IsDelete())
+				require.Equal(t, "name", decoded.GetPreColumns()[1].Name)
 				require.Equal(t, "old", decoded.GetPreColumns()[1].Value)
 				require.Empty(t, decoded.GetColumns())
 			},
@@ -403,15 +466,17 @@ func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, int64(tc.event.CommitTs), m[tidbCommitTs])
 			require.Equal(t, tc.op, m[tidbOp])
-			require.Equal(t, tc.afterName, m["name"])
+			if tc.afterName == "" {
+				require.NotContains(t, m, "name")
+			} else {
+				require.Equal(t, tc.afterName, m["name"])
+			}
 
 			if tc.beforeName == "" {
-				require.Nil(t, m[ticdcBefore])
+				require.Contains(t, m, tidbBefore)
+				require.Nil(t, m[tidbBefore])
 			} else {
-				beforeUnion, ok := m[ticdcBefore].(map[string]interface{})
-				require.True(t, ok)
-				before, ok := beforeUnion[encoder.beforeValueRecordFullName(tableInfo.TableName)].(map[string]interface{})
-				require.True(t, ok)
+				before := requireAvroUnionRecord(t, m[tidbBefore])
 				require.Equal(t, int32(18), before["age"])
 				require.Equal(t, tc.beforeName, before["name"])
 			}
@@ -433,6 +498,113 @@ func TestAvroEncodeIncludeBeforeValue(t *testing.T) {
 			tc.assertRow(t, decoded)
 		})
 	}
+}
+
+func TestAvroEncodeIncludeBeforeValueSchema(t *testing.T) {
+	codecConfig := common.NewConfig(config.ProtocolAvro)
+	codecConfig.AvroIncludeBeforeValue = true
+	codecConfig.AvroDecimalHandlingMode = common.DecimalHandlingModeString
+	encoder := NewAvroEncoder("", nil, codecConfig).(*BatchEncoder)
+
+	tableColumns := []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
+		{Name: "name", Type: mysql.TypeVarchar},
+		{Name: "score", Type: mysql.TypeNewDecimal, Flag: model.NullableFlag},
+	}
+	tableInfo := model.BuildTableInfo("test", "users", tableColumns, [][]int{{0}})
+	columns := []*model.Column{
+		{Name: "id", Value: int64(1)},
+		{Name: "name", Value: "Alice"},
+		{Name: "score", Value: nil},
+	}
+	input := avroEncodeInput{
+		TableInfo: tableInfo,
+		columns:   model.Columns2ColumnDatas(columns, tableInfo),
+		colInfos:  tableInfo.GetColInfosForRowChangedEvent(),
+	}
+
+	schema, err := encoder.value2AvroSchema(tableInfo.TableName, input, updateOperation)
+	require.NoError(t, err)
+
+	var top map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(schema), &top))
+
+	beforeField := findAvroField(t, top, tidbBefore)
+	require.Contains(t, beforeField, "default")
+	require.Nil(t, beforeField["default"])
+
+	unionType, ok := beforeField["type"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, unionType, 2)
+	require.Equal(t, "null", unionType[0])
+
+	beforeRecord, ok := unionType[1].(map[string]interface{})
+	require.True(t, ok)
+	require.Equal(t, "record", beforeRecord["type"])
+	require.Equal(t, "users", beforeRecord["name"])
+	require.Equal(t, "test", beforeRecord["namespace"])
+
+	idField := findAvroField(t, beforeRecord, "id")
+	require.Equal(t, map[string]interface{}{
+		"connect.parameters": map[string]interface{}{"tidb_type": "INT"},
+		"type":               "int",
+	}, idField["type"])
+
+	nameField := findAvroField(t, beforeRecord, "name")
+	require.Equal(t, map[string]interface{}{
+		"connect.parameters": map[string]interface{}{"tidb_type": "TEXT"},
+		"type":               "string",
+	}, nameField["type"])
+
+	scoreField := findAvroField(t, beforeRecord, "score")
+	require.Contains(t, scoreField, "default")
+	require.Nil(t, scoreField["default"])
+	scoreUnion, ok := scoreField["type"].([]interface{})
+	require.True(t, ok)
+	require.Len(t, scoreUnion, 2)
+	require.Equal(t, "null", scoreUnion[0])
+	require.Equal(t, map[string]interface{}{
+		"connect.parameters": map[string]interface{}{"tidb_type": "DECIMAL"},
+		"type":               "string",
+	}, scoreUnion[1])
+}
+
+func findAvroField(t *testing.T, record map[string]interface{}, name string) map[string]interface{} {
+	t.Helper()
+
+	fields, ok := record["fields"].([]interface{})
+	require.True(t, ok)
+	for _, item := range fields {
+		field, ok := item.(map[string]interface{})
+		require.True(t, ok)
+		if field["name"] == name {
+			return field
+		}
+	}
+	require.FailNowf(t, "avro field not found", "field %s not found", name)
+	return nil
+}
+
+func checksumForSimpleColumns(id uint64, name string) uint32 {
+	checksum := crc32.Update(0, crc32.IEEETable, binary.LittleEndian.AppendUint64(nil, id))
+	buf := binary.LittleEndian.AppendUint32(nil, uint32(len(name)))
+	buf = append(buf, name...)
+	return crc32.Update(checksum, crc32.IEEETable, buf)
+}
+
+func requireAvroUnionRecord(t *testing.T, raw interface{}) map[string]interface{} {
+	t.Helper()
+
+	union, ok := raw.(map[string]interface{})
+	require.True(t, ok)
+	require.Len(t, union, 1)
+	for _, value := range union {
+		record, ok := value.(map[string]interface{})
+		require.True(t, ok)
+		return record
+	}
+	require.FailNow(t, "avro union record not found")
+	return nil
 }
 
 func TestAvroEnvelope(t *testing.T) {
@@ -534,6 +706,8 @@ func TestGetAvroNamespace(t *testing.T) {
 		"normalNamespace",
 		getAvroNamespace("normalNamespace", ""),
 	)
+	require.Equal(t, "normalSchema", getAvroNamespace("", "normalSchema"))
+	require.Equal(t, "", getAvroNamespace("", ""))
 }
 
 func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {

@@ -371,7 +371,14 @@ func (a *BatchEncoder) nativeValue(
 			log.Error("avro: converting before value to native failed", zap.Error(err))
 			return nil, errors.Trace(err)
 		}
-		native[tidbBefore] = before
+		recordName := common.SanitizeName(e.TableInfo.TableName.Table)
+		if namespace := getAvroNamespace(a.namespace, e.TableInfo.TableName.Schema); namespace != "" {
+			recordName = namespace + "." + recordName
+		}
+		// The logical _tidb_before value is the before row itself. goavro
+		// requires this wrapper only to select the non-null branch of the
+		// nullable Avro record when encoding binary data.
+		native[tidbBefore] = goavro.Union(recordName, before)
 	}
 
 	return native, nil
