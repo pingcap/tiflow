@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"encoding/binary"
+	"strings"
 
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -174,6 +175,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetCausalityKeySourceTable(s.causalityKeySourceTableNameForRowChange(param.sourceTable))
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
@@ -251,6 +253,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetCausalityKeySourceTable(s.causalityKeySourceTableNameForRowChange(param.sourceTable))
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
@@ -305,11 +308,22 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetCausalityKeySourceTable(s.causalityKeySourceTableNameForRowChange(param.sourceTable))
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
 	return dmls, nil
+}
+
+func (s *Syncer) causalityKeySourceTableNameForRowChange(sourceTable *filter.Table) *cdcmodel.TableName {
+	if !s.needForeignKeyCausality() || s.cfg.CaseSensitive {
+		return nil
+	}
+	return &cdcmodel.TableName{
+		Schema: strings.ToLower(sourceTable.Schema),
+		Table:  strings.ToLower(sourceTable.Name),
+	}
 }
 
 func castUnsigned(data interface{}, ft *types.FieldType) interface{} {

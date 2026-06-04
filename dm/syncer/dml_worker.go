@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -64,13 +64,7 @@ type DMLWorker struct {
 }
 
 func isForeignKeyChecksEnabled(session map[string]string) bool {
-	for key, value := range session {
-		if strings.EqualFold(key, "foreign_key_checks") {
-			trimmed := strings.Trim(value, " '\"")
-			return variable.TiDBOptOn(trimmed)
-		}
-	}
-	return false
+	return config.IsForeignKeyChecksEnabled(session)
 }
 
 func (w *DMLWorker) shouldDisableForeignKeyChecksForJob(j *job) bool {

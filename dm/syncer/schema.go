@@ -45,6 +45,13 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		Schema: req.Database,
 		Name:   req.Table,
 	}
+	schemaFlushed := false
+	defer func() {
+		if schemaFlushed {
+			s.resetForeignKeyRouteTopologyCheckCache()
+		}
+	}()
+
 	switch req.Op {
 	case pb.SchemaOp_ListMigrateTargets:
 		return s.listMigrateTargets(req)
@@ -142,6 +149,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		if err != nil {
 			return "", err
 		}
+		schemaFlushed = true
 
 		if req.Sync {
 			if s.cfg.ShardMode != config.ShardOptimistic {
