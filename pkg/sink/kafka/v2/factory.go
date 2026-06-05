@@ -25,7 +25,6 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/errors"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	pkafka "github.com/pingcap/tiflow/pkg/sink/kafka"
@@ -284,7 +283,7 @@ func (s *syncWriter) SendMessage(
 		Key:       message.Key,
 		Value:     message.Value,
 	})
-	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	return errors.WrapError(errors.ErrKafkaSendMessage, err)
 }
 
 // SendMessages produces a given set of messages, and returns only when all
@@ -302,7 +301,7 @@ func (s *syncWriter) SendMessages(ctx context.Context, topic string, partitionNu
 		}
 	}
 	err := s.w.WriteMessages(ctx, msgs...)
-	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	return errors.WrapError(errors.ErrKafkaSendMessage, err)
 }
 
 // Close shuts down the producer; you must call this function before a producer

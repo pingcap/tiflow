@@ -141,13 +141,6 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-<<<<<<< HEAD
-=======
-	var (
-		err          error
-		partitionNum int32
-	)
->>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	msg, err := k.encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
 		return err
@@ -160,7 +153,7 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return err
 		}
@@ -174,7 +167,7 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	}
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
-		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
 			return err
 		}
