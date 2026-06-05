@@ -23,6 +23,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -208,6 +210,7 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
+				ddl.TableInfo = setTableInfo(&item.data.RedoDDL)
 				select {
 				case <-egCtx.Done():
 					return errors.Trace(egCtx.Err())
@@ -394,4 +397,27 @@ func (h *logHeap) Pop() interface{} {
 	x := old[n-1]
 	*h = old[0 : n-1]
 	return x
+}
+
+func setTableInfo(ddl *model.RedoDDLEvent) *model.TableInfo {
+	columns := make([]*timodel.ColumnInfo, 0, len(ddl.Columns))
+	for _, col := range ddl.Columns {
+		colInfo := &timodel.ColumnInfo{
+			Name:    ast.NewCIStr(col.Name),
+			State:   timodel.StatePublic,
+			Version: col.Version,
+		}
+		colInfo.SetType(col.Type)
+		if err := colInfo.SetOriginDefaultValue(col.OriginDefaultValue); err != nil {
+			log.Panic("set origin default value failed",
+				zap.String("column", col.Name),
+				zap.Any("originDefaultValue", col.OriginDefaultValue),
+				zap.Error(err))
+		}
+		columns = append(columns, colInfo)
+	}
+	return model.WrapTableInfo(0, ddl.TableName.Schema, 100, &timodel.TableInfo{
+		Name:    ast.NewCIStr(ddl.TableName.Table),
+		Columns: columns,
+	})
 }

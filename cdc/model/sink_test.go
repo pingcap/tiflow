@@ -636,6 +636,8 @@ func TestTxnTrySplitAndSortUpdateEvent(t *testing.T) {
 }
 
 func TestToRedoLog(t *testing.T) {
+	t.Parallel()
+
 	cols := []*Column{
 		{
 			Name: "col1",
@@ -670,4 +672,25 @@ func TestToRedoLog(t *testing.T) {
 	require.Equal(t, event.TableInfo.GetSchemaName(), eventInRedoLog.RedoRow.Row.Table.Schema)
 	require.Equal(t, event.TableInfo.GetTableName(), eventInRedoLog.RedoRow.Row.Table.Table)
 	require.Equal(t, event.Columns, Columns2ColumnDatas(eventInRedoLog.RedoRow.Row.Columns, tableInfo))
+}
+
+func TestDDLToRedoLogWithoutInnerTableInfo(t *testing.T) {
+	t.Parallel()
+
+	ddl := &DDLEvent{
+		StartTs:  100,
+		CommitTs: 200,
+		Query:    "CREATE DATABASE test",
+		Type:     timodel.ActionCreateSchema,
+		TableInfo: &TableInfo{
+			TableName: TableName{Schema: "test"},
+			Version:   200,
+		},
+	}
+
+	redoLog := ddl.ToRedoLog()
+	require.NotNil(t, redoLog)
+	require.Equal(t, RedoLogTypeDDL, redoLog.Type)
+	require.Same(t, ddl, redoLog.RedoDDL.DDL)
+	require.Nil(t, redoLog.RedoDDL.Columns)
 }
