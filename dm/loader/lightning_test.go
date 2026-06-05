@@ -14,7 +14,6 @@
 package loader
 
 import (
-	"net/url"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -45,7 +44,7 @@ func TestSetLightningConfig(t *testing.T) {
 	require.Equal(t, stCfg.LoaderConfig.PoolSize, cfg.App.RegionConcurrency)
 }
 
-func TestMakeGlobalConfigStripsS3ExternalIDForImportInto(t *testing.T) {
+func TestMakeGlobalConfigKeepsS3ExternalIDForImportInto(t *testing.T) {
 	t.Parallel()
 
 	sourceDir := "s3://bucket/path?role-arn=arn%3Aaws%3Aiam%3A%3A123456789012%3Arole%2Fimport&external-id=cluster-1&force_path_style=0"
@@ -59,12 +58,7 @@ func TestMakeGlobalConfigStripsS3ExternalIDForImportInto(t *testing.T) {
 	lightningCfg := MakeGlobalConfig(stCfg)
 	require.Equal(t, lcfg.BackendImportInto, lightningCfg.TikvImporter.Backend)
 	require.Equal(t, sourceDir, stCfg.Dir)
-
-	u, err := url.Parse(lightningCfg.Mydumper.SourceDir)
-	require.NoError(t, err)
-	require.Empty(t, u.Query().Get("external-id"))
-	require.Equal(t, "arn:aws:iam::123456789012:role/import", u.Query().Get("role-arn"))
-	require.Equal(t, "0", u.Query().Get("force_path_style"))
+	require.Equal(t, sourceDir, lightningCfg.Mydumper.SourceDir)
 }
 
 func TestMakeGlobalConfigKeepsS3ExternalIDForNonImportInto(t *testing.T) {
