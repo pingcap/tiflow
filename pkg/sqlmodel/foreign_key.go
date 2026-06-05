@@ -22,6 +22,7 @@ import (
 // ChildColumnIdx indexes refer to the row values of the current table (excluding hidden columns).
 // ParentColumns and ParentTable describe the key the row should collide with after recursive lifting,
 // so ParentTable may represent a direct parent or a higher-level ancestor/root parent.
+// They are in the source-side causality key domain and may differ from the downstream table after routing.
 type ForeignKeyCausalityRelation struct {
 	ParentTable    string
 	ParentColumns  []*timodel.ColumnInfo
