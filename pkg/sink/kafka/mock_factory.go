@@ -119,9 +119,6 @@ func (m *MockSaramaSyncProducer) SendMessages(ctx context.Context, topic string,
 	return m.Producer.SendMessages(msgs)
 }
 
-// HeartbeatBrokers implement the SyncProducer interface.
-func (m *MockSaramaSyncProducer) HeartbeatBrokers() {}
-
 // Close implement the SyncProducer interface.
 func (m *MockSaramaSyncProducer) Close() {
 	m.Producer.Close()

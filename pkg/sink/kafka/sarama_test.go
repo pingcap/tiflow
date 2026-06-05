@@ -22,6 +22,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
@@ -54,6 +55,9 @@ func TestNewSaramaConfig(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, cc.expected, cfg.Producer.Compression)
 	}
+	cfg, err := NewSaramaConfig(ctx, options)
+	require.NoError(t, err)
+	require.Equal(t, defaultProducerMaxRetry, cfg.Producer.Retry.Max)
 
 	options.EnableTLS = true
 	options.Credential = &security.Credential{
@@ -73,12 +77,54 @@ func TestNewSaramaConfig(t *testing.T) {
 		SASLMechanism: sarama.SASLTypeSCRAMSHA256,
 	}
 
-	cfg, err := NewSaramaConfig(ctx, saslOptions)
+	cfg, err = NewSaramaConfig(ctx, saslOptions)
 	require.NoError(t, err)
 	require.NotNil(t, cfg)
 	require.Equal(t, "user", cfg.Net.SASL.User)
 	require.Equal(t, "password", cfg.Net.SASL.Password)
 	require.Equal(t, sarama.SASLMechanism("SCRAM-SHA-256"), cfg.Net.SASL.Mechanism)
+}
+
+func TestNewSaramaConfigMaxRetryFromSinkURI(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		sinkURI  string
+		expected int
+	}{
+		{
+			name:     "default max retry",
+			sinkURI:  "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0&kafka-client-id=unit-test",
+			expected: defaultProducerMaxRetry,
+		},
+		{
+			name: "set max retry",
+			sinkURI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0" +
+				"&kafka-client-id=unit-test&max-retry=7",
+			expected: 7,
+		},
+		{
+			name: "zero max retry",
+			sinkURI: "kafka://127.0.0.1:9092/abc?kafka-version=2.6.0" +
+				"&kafka-client-id=unit-test&max-retry=0",
+			expected: 0,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			sinkURI, err := url.Parse(test.sinkURI)
+			require.NoError(t, err)
+			options := NewOptions()
+			err = options.Apply(model.DefaultChangeFeedID("test"), sinkURI, config.GetDefaultReplicaConfig())
+			require.NoError(t, err)
+
+			cfg, err := NewSaramaConfig(context.Background(), options)
+			require.NoError(t, err)
+			require.Equal(t, test.expected, cfg.Producer.Retry.Max)
+		})
+	}
 }
 
 func TestApplySASL(t *testing.T) {
