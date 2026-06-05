@@ -3806,7 +3806,7 @@ func (s *Syncer) precheckForeignKeyRouteTopology(ctx context.Context) error {
 
 // foreignKeyRouteTopologyTableID returns the table ID used for one routed target table.
 func (s *Syncer) foreignKeyRouteTopologyTableID(table *filter.Table) string {
-	if table == nil || s.cfg.CaseSensitive {
+	if s.cfg.CaseSensitive {
 		return utils.GenTableID(table)
 	}
 	return utils.GenTableID(&filter.Table{
