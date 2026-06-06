@@ -154,12 +154,13 @@ function run() {
 	echo "start incremental_data_2"
 	incremental_data_2
 	echo "finish incremental_data_2"
-	sleep 30
+	sleep 75
 
 	resume_num=$(grep 'unit process error' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	echo "resume_num: $resume_num"
-	# because we check auto resume every 5 seconds...
-	[ $resume_num -ge 4 ]
+	# at least 2 retries over 75 seconds because we check auto resume every 5 seconds
+	# and it can take up to 30 seconds for connection refused retries to be spent
+	[ $resume_num -ge 2 ]
 	folder_size=$(du -d0 $WORK_DIR/worker1/ --exclude="$WORK_DIR/worker1/log" | cut -f1)
 	echo "folder_size: $folder_size"
 	# less than 10M

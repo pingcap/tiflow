@@ -4,6 +4,7 @@ ErrDBInvalidConn,[code=10003:class=database:scope=not-set:level=high], "Message:
 ErrDBUnExpect,[code=10004:class=database:scope=not-set:level=high], "Message: unexpect database error: %s"
 ErrDBQueryFailed,[code=10005:class=database:scope=not-set:level=high], "Message: query statement failed: %s"
 ErrDBExecuteFailed,[code=10006:class=database:scope=not-set:level=high], "Message: execute statement failed: %s"
+ErrDBExecuteFailedBegin,[code=10007:class=database:scope=not-set:level=high], "Message: execute statement failed: begin"
 ErrParseMydumperMeta,[code=11001:class=functional:scope=internal:level=high], "Message: parse mydumper metadata error: %s, metadata: %s"
 ErrGetFileSize,[code=11002:class=functional:scope=internal:level=high], "Message: get file %s size"
 ErrDropMultipleTables,[code=11003:class=functional:scope=internal:level=high], "Message: not allowed operation: drop multiple tables in one statement, Workaround: It is recommended to include only one DDL operation in a statement executed upstream. Please manually handle it using dmctl (skipping the DDL statement or replacing the DDL statement with a specified DDL statement). For details, see https://docs.pingcap.com/tidb-data-migration/stable/handle-failed-sql-statements"
