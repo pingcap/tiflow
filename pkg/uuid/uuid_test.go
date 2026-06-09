@@ -47,7 +47,7 @@ func TestConstGenerator(t *testing.T) {
 
 	uid := "const-uuid"
 	gen := NewConstGenerator(uid)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		require.Equal(t, uid, gen.NewString())
 	}
 }

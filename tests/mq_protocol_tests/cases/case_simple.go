@@ -45,7 +45,7 @@ func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
 	// Get a handle of an existing table
 	table := ctx.SQLHelper().GetTable("test")
 	// Create an SQL request, send it to the upstream, wait for completion and check the correctness of replication
-	err = table.Insert(map[string]interface{}{
+	err = table.Insert(map[string]any{
 		"id":    0,
 		"value": 0,
 	}).Send().Wait().Check()
@@ -57,7 +57,7 @@ func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
 	reqs := make([]framework.Awaitable, 0)
 	for i := 1; i < 1000; i++ {
 		// Only send, do not wait
-		req := table.Insert(map[string]interface{}{
+		req := table.Insert(map[string]any{
 			"id":    i,
 			"value": i,
 		}).Send()
@@ -70,7 +70,7 @@ func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
 		return err
 	}
 
-	err = table.Upsert(map[string]interface{}{
+	err = table.Upsert(map[string]any{
 		"id":    0,
 		"value": 1,
 	}).Send().Wait().Check()
@@ -78,7 +78,7 @@ func (s *SimpleCase) Run(ctx *framework.TaskContext) error {
 		return err
 	}
 
-	err = table.Delete(map[string]interface{}{
+	err = table.Delete(map[string]any{
 		"id": 0,
 	}).Send().Wait().Check()
 	return err

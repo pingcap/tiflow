@@ -29,13 +29,13 @@ func TestSlotsTrivial(t *testing.T) {
 	slots := NewSlots(8)
 	nodes := make([]*Node, 0, 1000)
 
-	for i := 0; i < count; i++ {
+	for range count {
 		node := newNodeForTest(1, 2, 3, 4, 5)
 		slots.Add(node)
 		nodes = append(nodes, node)
 	}
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		slots.Remove(nodes[i])
 	}
 
@@ -53,7 +53,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 	slots := NewSlots(8)
 	freeNodeChan := make(chan *Node, N)
 	inuseNodeChan := make(chan *Node, N)
-	for i := 0; i < N; i++ {
+	for range N {
 		freeNodeChan <- newNodeForTest(1, 9, 17, 25, 33)
 	}
 
@@ -62,9 +62,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 
 	// test concurrent add and remove won't panic
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -75,11 +73,9 @@ func TestSlotsConcurrentOps(t *testing.T) {
 				inuseNodeChan <- node
 			}
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -90,7 +86,7 @@ func TestSlotsConcurrentOps(t *testing.T) {
 				freeNodeChan <- newNodeForTest(1, 9, 17, 25, 33)
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 }

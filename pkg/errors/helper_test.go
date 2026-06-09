@@ -33,13 +33,13 @@ func TestWrapError(t *testing.T) {
 			err      error
 			isNil    bool
 			expected string
-			args     []interface{}
+			args     []any
 		}{
 			{ErrDecodeFailed, nil, true, "", nil},
 			{
 				ErrDecodeFailed, err, false,
 				"[CDC:ErrDecodeFailed]decode failed: args data: cause error",
-				[]interface{}{"args data"},
+				[]any{"args data"},
 			},
 		}
 	)

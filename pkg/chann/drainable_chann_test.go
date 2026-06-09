@@ -17,7 +17,7 @@ import "testing"
 
 func TestCloseAndDrain(t *testing.T) {
 	ch := NewAutoDrainChann[int]()
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		ch.In() <- i
 	}
 

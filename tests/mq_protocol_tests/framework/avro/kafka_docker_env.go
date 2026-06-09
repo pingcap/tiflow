@@ -54,7 +54,7 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 			return err
 		}
 
-		m := make(map[string]interface{})
+		m := make(map[string]any)
 		err = json.Unmarshal(bytes, &m)
 		if err != nil {
 			return err

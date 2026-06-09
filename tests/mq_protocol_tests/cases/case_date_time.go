@@ -80,7 +80,7 @@ func (s *DateTimeCase) Run(ctx *framework.TaskContext) error {
 
 	// Zero value case
 	zeroValue := time.Unix(0, 0)
-	data := map[string]interface{}{
+	data := map[string]any{
 		"id":          0,
 		"t_date":      zeroValue,
 		"t_datetime":  zeroValue,

@@ -30,11 +30,11 @@ import (
 )
 
 type mockService struct {
-	callCount int32
+	callCount atomic.Int32
 }
 
 func (s *mockService) SendMessage(server p2p.CDCPeerToPeer_SendMessageServer) error {
-	atomic.AddInt32(&s.callCount, 1)
+	s.callCount.Add(1)
 	return nil
 }
 
@@ -52,11 +52,9 @@ func TestClientConnector(t *testing.T) {
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, mockService)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
 	cc := newClientConnector()
 
@@ -72,7 +70,7 @@ func TestClientConnector(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		return atomic.LoadInt32(&mockService.callCount) == 1
+		return mockService.callCount.Load() == 1
 	}, time.Second*5, time.Millisecond*100)
 
 	cancel()

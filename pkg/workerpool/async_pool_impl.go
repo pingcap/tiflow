@@ -31,8 +31,8 @@ const (
 
 type defaultAsyncPoolImpl struct {
 	workers      []*asyncWorker
-	nextWorkerID int32
-	isRunning    int32
+	nextWorkerID atomic.Int32
+	isRunning    atomic.Int32
 	runningLock  sync.RWMutex
 }
 
@@ -68,17 +68,17 @@ func (p *defaultAsyncPoolImpl) doGo(ctx context.Context, f func()) error {
 	p.runningLock.RLock()
 	defer p.runningLock.RUnlock()
 
-	if atomic.LoadInt32(&p.isRunning) == 0 {
+	if p.isRunning.Load() == 0 {
 		return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
 	}
 
 	task := &asyncTask{f: f}
-	worker := p.workers[int(atomic.AddInt32(&p.nextWorkerID, 1))%len(p.workers)]
+	worker := p.workers[int(p.nextWorkerID.Add(1))%len(p.workers)]
 
 	worker.chLock.RLock()
 	defer worker.chLock.RUnlock()
 
-	if atomic.LoadInt32(&worker.isClosed) == 1 {
+	if worker.isClosed.Load() == 1 {
 		return cerrors.ErrAsyncPoolExited.GenWithStackByArgs()
 	}
 
@@ -96,12 +96,12 @@ func (p *defaultAsyncPoolImpl) Run(ctx context.Context) error {
 	errg := errgroup.Group{}
 
 	p.runningLock.Lock()
-	atomic.StoreInt32(&p.isRunning, 1)
+	p.isRunning.Store(1)
 	p.runningLock.Unlock()
 
 	defer func() {
 		p.runningLock.Lock()
-		atomic.StoreInt32(&p.isRunning, 0)
+		p.isRunning.Store(0)
 		p.runningLock.Unlock()
 	}()
 
@@ -149,7 +149,7 @@ type asyncTask struct {
 
 type asyncWorker struct {
 	inputCh  chan *asyncTask
-	isClosed int32
+	isClosed atomic.Int32
 	chLock   sync.RWMutex
 }
 
@@ -168,7 +168,7 @@ func (w *asyncWorker) run() error {
 }
 
 func (w *asyncWorker) close() {
-	if atomic.SwapInt32(&w.isClosed, 1) == 1 {
+	if w.isClosed.Swap(1) == 1 {
 		return
 	}
 

@@ -15,6 +15,7 @@ package bootstrap
 
 import (
 	"context"
+	"slices"
 	"sort"
 
 	"github.com/coreos/go-semver/semver"
@@ -66,8 +67,8 @@ func (upgrader *DefaultUpgrader) Upgrade(ctx context.Context, fromVer semver.Ver
 		}
 	}
 	if err != nil {
-		for i := len(rollbackFuncs) - 1; i >= 0; i-- {
-			rollback := rollbackFuncs[i]
+		for _, rollback := range slices.Backward(rollbackFuncs) {
+
 			if rollback != nil {
 				if err2 := rollback(ctx); err2 != nil {
 					upgrader.logger.Error("rollback failed", zap.Error(err2))
