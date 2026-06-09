@@ -14,14 +14,12 @@
 package pessimism
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-type testLockKeeper struct{}
-
-var _ = check.Suite(&testLockKeeper{})
-
-func (t *testLockKeeper) TestLockKeeper(c *check.C) {
+func TestLockKeeper(t *testing.T) {
 	var (
 		lk      = NewLockKeeper()
 		schema  = "foo"
@@ -38,47 +36,47 @@ func (t *testLockKeeper) TestLockKeeper(c *check.C) {
 
 	// lock with 2 sources.
 	lockID1, synced, remain, err := lk.TrySync(info11, []string{source1, source2})
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID1, check.Equals, "task1-`foo`.`bar`")
-	c.Assert(synced, check.IsFalse)
-	c.Assert(remain, check.Equals, 1)
+	require.NoError(t, err)
+	require.Equal(t, "task1-`foo`.`bar`", lockID1)
+	require.False(t, synced)
+	require.Equal(t, 1, remain)
 	lockID1, synced, remain, err = lk.TrySync(info12, []string{source1, source2})
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID1, check.Equals, "task1-`foo`.`bar`")
-	c.Assert(synced, check.IsTrue)
-	c.Assert(remain, check.Equals, 0)
+	require.NoError(t, err)
+	require.Equal(t, "task1-`foo`.`bar`", lockID1)
+	require.True(t, synced)
+	require.Equal(t, 0, remain)
 
 	// lock with only 1 source.
 	lockID2, synced, remain, err := lk.TrySync(info21, []string{source1})
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID2, check.Equals, "task2-`foo`.`bar`")
-	c.Assert(synced, check.IsTrue)
-	c.Assert(remain, check.Equals, 0)
+	require.NoError(t, err)
+	require.Equal(t, "task2-`foo`.`bar`", lockID2)
+	require.True(t, synced)
+	require.Equal(t, 0, remain)
 
 	// find lock.
 	lock1 := lk.FindLock(lockID1)
-	c.Assert(lock1, check.NotNil)
-	c.Assert(lock1.ID, check.Equals, lockID1)
+	require.NotNil(t, lock1)
+	require.Equal(t, lockID1, lock1.ID)
 	lock2 := lk.FindLock(lockID2)
-	c.Assert(lock2, check.NotNil)
-	c.Assert(lock2.ID, check.Equals, lockID2)
+	require.NotNil(t, lock2)
+	require.Equal(t, lockID2, lock2.ID)
 	lockIDNotExists := "lock-not-exists"
-	c.Assert(lk.FindLock(lockIDNotExists), check.IsNil)
+	require.Nil(t, lk.FindLock(lockIDNotExists))
 
 	// all locks.
 	locks := lk.Locks()
-	c.Assert(locks, check.HasLen, 2)
-	c.Assert(locks[lockID1], check.Equals, lock1) // compare pointer
-	c.Assert(locks[lockID2], check.Equals, lock2)
+	require.Len(t, locks, 2)
+	require.Equal(t, lock1, locks[lockID1]) // compare pointer
+	require.Equal(t, lock2, locks[lockID2])
 
 	// remove lock.
-	c.Assert(lk.RemoveLock(lockID1), check.IsTrue)
-	c.Assert(lk.RemoveLock(lockIDNotExists), check.IsFalse)
-	c.Assert(lk.Locks(), check.HasLen, 1)
+	require.True(t, lk.RemoveLock(lockID1))
+	require.False(t, lk.RemoveLock(lockIDNotExists))
+	require.Len(t, lk.Locks(), 1)
 
 	// clear locks.
 	lk.Clear()
 
 	// no locks exist.
-	c.Assert(lk.Locks(), check.HasLen, 0)
+	require.Len(t, lk.Locks(), 0)
 }

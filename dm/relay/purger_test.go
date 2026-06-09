@@ -19,56 +19,62 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/suite"
 )
 
-var _ = check.Suite(&testPurgerSuite{
-	uuids: []string{
+func TestPurgerSuite(t *testing.T) {
+	suite.Run(t, new(testPurgerSuite))
+}
+
+type testPurgerSuite struct {
+	suite.Suite
+	uuids          []string
+	relayFiles     [][]string
+	activeRelayLog *streamer.RelayLogInfo
+}
+
+func (t *testPurgerSuite) SetupTest() {
+	t.uuids = []string{
 		"c6ae5afe-c7a3-11e8-a19d-0242ac130006.000001",
 		"e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
 		"195c342f-f46e-11e8-927c-0242ac150008.000003",
-	},
-	relayFiles: [][]string{
+	}
+	t.relayFiles = [][]string{
 		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
 		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
 		{"mysql-bin.000001", "mysql-bin.000002", "mysql-bin.000003"},
-	},
-	activeRelayLog: &streamer.RelayLogInfo{
+	}
+	t.activeRelayLog = &streamer.RelayLogInfo{
 		TaskName:     fakeStrategyTaskName,
 		SubDir:       "e9540a0d-f16d-11e8-8cb7-0242ac130008.000002",
 		SubDirSuffix: 2,
 		Filename:     "mysql-bin.000003", // last in second sub dir
-	},
-})
-
-type testPurgerSuite struct {
-	uuids          []string
-	relayFiles     [][]string
-	activeRelayLog *streamer.RelayLogInfo
+	}
 }
 
 func (t *testPurgerSuite) EarliestActiveRelayLog() *streamer.RelayLogInfo {
 	return t.activeRelayLog
 }
 
-func (t *testPurgerSuite) TestPurgeManuallyInactive(c *check.C) {
+func (t *testPurgerSuite) TestPurgeManuallyInactive() {
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 
 	// prepare files and directories
-	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
-	c.Assert(len(relayDirsPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath[2]), check.Equals, 3)
+	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(baseDir, -1, -1)
+	t.Require().Equal(3, len(relayDirsPath))
+	t.Require().Equal(3, len(relayFilesPath))
+	t.Require().Equal(3, len(relayFilesPath[2]))
 
 	err := t.genUUIDIndexFile(baseDir)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfg := config.PurgeConfig{
 		Interval: 0, // disable automatically
@@ -80,32 +86,32 @@ func (t *testPurgerSuite) TestPurgeManuallyInactive(c *check.C) {
 		Inactive: true,
 	}
 	err = purger.Do(context.Background(), req)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
+	t.Require().False(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
 
-	c.Assert(utils.IsFileExists(relayFilesPath[1][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][1]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][2]), check.IsTrue)
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][0]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[1][2]))
 	for _, fp := range relayFilesPath[2] {
-		c.Assert(utils.IsFileExists(fp), check.IsTrue)
+		t.Require().True(utils.IsFileExists(fp))
 	}
 }
 
-func (t *testPurgerSuite) TestPurgeManuallyTime(c *check.C) {
+func (t *testPurgerSuite) TestPurgeManuallyTime() {
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 
 	// prepare files and directories
-	relayDirsPath, relayFilesPath, safeTime := t.genRelayLogFiles(c, baseDir, 1, 0)
-	c.Assert(len(relayDirsPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath[2]), check.Equals, 3)
+	relayDirsPath, relayFilesPath, safeTime := t.genRelayLogFiles(baseDir, 1, 0)
+	t.Require().Equal(3, len(relayDirsPath))
+	t.Require().Equal(3, len(relayFilesPath))
+	t.Require().Equal(3, len(relayFilesPath[2]))
 
 	err := t.genUUIDIndexFile(baseDir)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfg := config.PurgeConfig{
 		Interval: 0, // disable automatically
@@ -117,32 +123,32 @@ func (t *testPurgerSuite) TestPurgeManuallyTime(c *check.C) {
 		Time: safeTime.Unix(),
 	}
 	err = purger.Do(context.Background(), req)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
+	t.Require().False(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
 
-	c.Assert(utils.IsFileExists(relayFilesPath[1][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][1]), check.IsTrue)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][2]), check.IsTrue)
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][0]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[1][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[1][2]))
 	for _, fp := range relayFilesPath[2] {
-		c.Assert(utils.IsFileExists(fp), check.IsTrue)
+		t.Require().True(utils.IsFileExists(fp))
 	}
 }
 
-func (t *testPurgerSuite) TestPurgeManuallyFilename(c *check.C) {
+func (t *testPurgerSuite) TestPurgeManuallyFilename() {
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 
 	// prepare files and directories
-	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
-	c.Assert(len(relayDirsPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath[2]), check.Equals, 3)
+	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(baseDir, -1, -1)
+	t.Require().Equal(3, len(relayDirsPath))
+	t.Require().Equal(3, len(relayFilesPath))
+	t.Require().Equal(3, len(relayFilesPath[2]))
 
 	err := t.genUUIDIndexFile(baseDir)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfg := config.PurgeConfig{
 		Interval: 0, // disable automatically
@@ -155,35 +161,35 @@ func (t *testPurgerSuite) TestPurgeManuallyFilename(c *check.C) {
 		SubDir:   t.uuids[0],
 	}
 	err = purger.Do(context.Background(), req)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
+	t.Require().True(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
 
-	c.Assert(utils.IsFileExists(relayFilesPath[0][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[0][1]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[0][2]), check.IsTrue)
+	t.Require().False(utils.IsFileExists(relayFilesPath[0][0]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[0][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[0][2]))
 	for _, fp := range relayFilesPath[1] {
-		c.Assert(utils.IsFileExists(fp), check.IsTrue)
+		t.Require().True(utils.IsFileExists(fp))
 	}
 	for _, fp := range relayFilesPath[2] {
-		c.Assert(utils.IsFileExists(fp), check.IsTrue)
+		t.Require().True(utils.IsFileExists(fp))
 	}
 }
 
-func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *check.C) {
+func (t *testPurgerSuite) TestPurgeAutomaticallyTime() {
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 
 	// prepare files and directories
-	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
-	c.Assert(len(relayDirsPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath[2]), check.Equals, 3)
+	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(baseDir, -1, -1)
+	t.Require().Equal(3, len(relayDirsPath))
+	t.Require().Equal(3, len(relayFilesPath))
+	t.Require().Equal(3, len(relayFilesPath[2]))
 
 	err := t.genUUIDIndexFile(baseDir)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfg := config.PurgeConfig{
 		Interval: 1, // enable automatically
@@ -196,7 +202,7 @@ func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *check.C) {
 	for _, fps := range relayFilesPath {
 		for _, fp := range fps {
 			err = os.Chtimes(fp, aTime, mTime)
-			c.Assert(err, check.IsNil)
+			t.Require().NoError(err)
 		}
 	}
 
@@ -205,33 +211,33 @@ func (t *testPurgerSuite) TestPurgeAutomaticallyTime(c *check.C) {
 	time.Sleep(2 * time.Second) // sleep enough time to purge all inactive relay log files
 	purger.Close()
 
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
+	t.Require().False(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
 
-	c.Assert(utils.IsFileExists(relayFilesPath[1][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][1]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][2]), check.IsTrue)
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][0]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[1][2]))
 	for _, fp := range relayFilesPath[2] {
-		c.Assert(utils.IsFileExists(fp), check.IsTrue)
+		t.Require().True(utils.IsFileExists(fp))
 	}
 }
 
-func (t *testPurgerSuite) TestPurgeAutomaticallySpace(c *check.C) {
+func (t *testPurgerSuite) TestPurgeAutomaticallySpace() {
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 
 	// prepare files and directories
-	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
-	c.Assert(len(relayDirsPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath), check.Equals, 3)
-	c.Assert(len(relayFilesPath[2]), check.Equals, 3)
+	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(baseDir, -1, -1)
+	t.Require().Equal(3, len(relayDirsPath))
+	t.Require().Equal(3, len(relayFilesPath))
+	t.Require().Equal(3, len(relayFilesPath[2]))
 
 	err := t.genUUIDIndexFile(baseDir)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	storageSize, err := utils.GetStorageSize(baseDir)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfg := config.PurgeConfig{
 		Interval:    1,                                                  // enable automatically
@@ -243,19 +249,19 @@ func (t *testPurgerSuite) TestPurgeAutomaticallySpace(c *check.C) {
 	time.Sleep(2 * time.Second) // sleep enough time to purge all inactive relay log files
 	purger.Close()
 
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
+	t.Require().False(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
 
-	c.Assert(utils.IsFileExists(relayFilesPath[1][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][1]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][2]), check.IsTrue)
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][0]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[1][2]))
 	for _, fp := range relayFilesPath[2] {
-		c.Assert(utils.IsFileExists(fp), check.IsTrue)
+		t.Require().True(utils.IsFileExists(fp))
 	}
 }
 
-func (t *testPurgerSuite) genRelayLogFiles(c *check.C, baseDir string, safeTimeIdxI, safeTimeIdxJ int) ([]string, [][]string, time.Time) {
+func (t *testPurgerSuite) genRelayLogFiles(baseDir string, safeTimeIdxI, safeTimeIdxJ int) ([]string, [][]string, time.Time) {
 	var (
 		relayDirsPath  = make([]string, 0, 3)
 		relayFilesPath = make([][]string, 0, 3)
@@ -265,7 +271,7 @@ func (t *testPurgerSuite) genRelayLogFiles(c *check.C, baseDir string, safeTimeI
 	for _, uuid := range t.uuids {
 		dir := filepath.Join(baseDir, uuid)
 		err := os.Mkdir(dir, 0o700)
-		c.Assert(err, check.IsNil)
+		t.Require().NoError(err)
 		relayDirsPath = append(relayDirsPath, dir)
 	}
 
@@ -276,7 +282,7 @@ func (t *testPurgerSuite) genRelayLogFiles(c *check.C, baseDir string, safeTimeI
 		for j, fn := range t.relayFiles[i] {
 			fp := filepath.Join(dir, fn)
 			err2 := os.WriteFile(fp, []byte("meaningless file content"), 0o644)
-			c.Assert(err2, check.IsNil)
+			t.Require().Nil(err2)
 			relayFilesPath[i] = append(relayFilesPath[i], fp)
 
 			if i == safeTimeIdxI && j == safeTimeIdxJ {
@@ -316,7 +322,7 @@ func (i *fakeInterceptor) ForbidPurge() (bool, string) {
 	return true, i.msg
 }
 
-func (t *testPurgerSuite) TestPurgerInterceptor(c *check.C) {
+func (t *testPurgerSuite) TestPurgerInterceptor() {
 	cfg := config.PurgeConfig{}
 	interceptor := newFakeInterceptor()
 
@@ -326,6 +332,6 @@ func (t *testPurgerSuite) TestPurgerInterceptor(c *check.C) {
 		Inactive: true,
 	}
 	err := purger.Do(context.Background(), req)
-	c.Assert(err, check.NotNil)
-	c.Assert(strings.Contains(err.Error(), interceptor.msg), check.IsTrue)
+	t.Require().Error(err)
+	t.Require().True(strings.Contains(err.Error(), interceptor.msg))
 }

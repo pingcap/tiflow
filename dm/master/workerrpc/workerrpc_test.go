@@ -19,36 +19,28 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/utils/tempurl"
 )
 
-var _ = check.Suite(&testWorkerRPCSuite{})
-
-type testWorkerRPCSuite struct{}
-
-func TestWorkerRPC(t *testing.T) {
-	check.TestingT(t)
-}
-
-func (t *testWorkerRPCSuite) TestGRPCClient(c *check.C) {
+func TestGRPCClient(t *testing.T) {
 	timeout := 3 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	ctrl := gomock.NewController(c)
+	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	// get a random address for DM-worker
 	addr := tempurl.Alloc()[len("http://"):]
 	// NOTE: we don't wait for the gRPC connection establish now, in other words no need to wait for the DM-worker instance become online.
 	rpcCli, err := NewGRPCClient(addr, security.Security{})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// replace the underlying DM-worker client.
 	workerCli := pbmock.NewMockWorkerClient(ctrl)
@@ -91,25 +83,25 @@ OUTER:
 			if req.Type == cmd {
 				// supported cmd
 				_, err = rpcCli.SendRequest(ctx, req, timeout)
-				c.Assert(err, check.IsNil)
+				require.NoError(t, err)
 				continue OUTER
 			}
 		}
 		_, err = rpcCli.SendRequest(ctx, &Request{Type: cmd}, timeout)
-		c.Assert(terror.ErrMasterGRPCInvalidReqType.Equal(err), check.IsTrue)
+		require.True(t, terror.ErrMasterGRPCInvalidReqType.Equal(err))
 	}
 
 	// got an error from the underlying RPC.
 	err2 := errors.New("mock error")
 	workerCli.EXPECT().QueryStatus(gomock.Any(), reqs[0].QueryStatus).Return(nil, err2)
 	_, err = rpcCli.SendRequest(ctx, reqs[0], timeout)
-	c.Assert(terror.ErrMasterGRPCRequestError.Equal(err), check.IsTrue)
-	c.Assert(errors.Cause(err), check.Equals, err2)
+	require.True(t, terror.ErrMasterGRPCRequestError.Equal(err))
+	require.Equal(t, err2, errors.Cause(err))
 
 	// close the cli.
-	c.Assert(rpcCli.Close(), check.IsNil)
+	require.NoError(t, rpcCli.Close())
 
 	// can't send request any more.
 	_, err = rpcCli.SendRequest(ctx, reqs[0], timeout)
-	c.Assert(terror.ErrMasterGRPCSendOnCloseConn.Equal(err), check.IsTrue)
+	require.True(t, terror.ErrMasterGRPCSendOnCloseConn.Equal(err))
 }

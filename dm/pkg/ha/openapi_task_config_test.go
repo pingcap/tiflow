@@ -14,77 +14,76 @@
 package ha
 
 import (
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
-func (t *testForEtcd) TestOpenAPITaskConfigEtcd(c *check.C) {
-	defer clearTestInfoOperation(c)
+func (s *testForEtcd) TestOpenAPITaskConfigEtcd() {
+	defer clearTestInfoOperation(s.T())
 
 	task1, err := fixtures.GenNoShardOpenAPITaskForTest()
 	task1.Name = "test-1"
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	task2, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	task2.Name = "test-2"
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	// no openapi task config exist.
 	task1InEtcd, err := GetOpenAPITaskTemplate(etcdTestCli, task1.Name)
-	c.Assert(err, check.IsNil)
-	c.Assert(task1InEtcd, check.IsNil)
+	s.Require().NoError(err)
+	s.Require().Nil(task1InEtcd)
 
 	task2InEtcd, err := GetOpenAPITaskTemplate(etcdTestCli, task2.Name)
-	c.Assert(err, check.IsNil)
-	c.Assert(task2InEtcd, check.IsNil)
+	s.Require().NoError(err)
+	s.Require().Nil(task2InEtcd)
 
 	tasks, err := GetAllOpenAPITaskTemplate(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(tasks, check.HasLen, 0)
+	s.Require().NoError(err)
+	s.Require().Len(tasks, 0)
 
 	// put openapi task config .
-	c.Assert(PutOpenAPITaskTemplate(etcdTestCli, task1, false), check.IsNil)
-	c.Assert(PutOpenAPITaskTemplate(etcdTestCli, task2, false), check.IsNil)
+	s.Require().NoError(PutOpenAPITaskTemplate(etcdTestCli, task1, false))
+	s.Require().NoError(PutOpenAPITaskTemplate(etcdTestCli, task2, false))
 
 	task1InEtcd, err = GetOpenAPITaskTemplate(etcdTestCli, task1.Name)
-	c.Assert(err, check.IsNil)
-	c.Assert(*task1InEtcd, check.DeepEquals, task1)
+	s.Require().NoError(err)
+	s.Require().Equal(task1, *task1InEtcd)
 
 	task2InEtcd, err = GetOpenAPITaskTemplate(etcdTestCli, task2.Name)
-	c.Assert(err, check.IsNil)
-	c.Assert(*task2InEtcd, check.DeepEquals, task2)
+	s.Require().NoError(err)
+	s.Require().Equal(task2, *task2InEtcd)
 
 	tasks, err = GetAllOpenAPITaskTemplate(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(tasks, check.HasLen, 2)
+	s.Require().NoError(err)
+	s.Require().Len(tasks, 2)
 
 	// put openapi task config again without overwrite will fail
-	c.Assert(terror.ErrOpenAPITaskConfigExist.Equal(PutOpenAPITaskTemplate(etcdTestCli, task1, false)), check.IsTrue)
+	s.Require().True(terror.ErrOpenAPITaskConfigExist.Equal(PutOpenAPITaskTemplate(etcdTestCli, task1, false)))
 
 	// in overwrite mode, it will overwrite the old one.
 	task1.TaskMode = openapi.TaskTaskModeFull
-	c.Assert(PutOpenAPITaskTemplate(etcdTestCli, task1, true), check.IsNil)
+	s.Require().NoError(PutOpenAPITaskTemplate(etcdTestCli, task1, true))
 	task1InEtcd, err = GetOpenAPITaskTemplate(etcdTestCli, task1.Name)
-	c.Assert(err, check.IsNil)
-	c.Assert(*task1InEtcd, check.DeepEquals, task1)
+	s.Require().NoError(err)
+	s.Require().Equal(task1, *task1InEtcd)
 
 	// put task config that not exist will fail
 	task3, err := fixtures.GenNoShardOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	task3.Name = "test-3"
-	c.Assert(terror.ErrOpenAPITaskConfigNotExist.Equal(UpdateOpenAPITaskTemplate(etcdTestCli, task3)), check.IsTrue)
+	s.Require().True(terror.ErrOpenAPITaskConfigNotExist.Equal(UpdateOpenAPITaskTemplate(etcdTestCli, task3)))
 
 	// update exist openapi task config will success
 	task1.TaskMode = openapi.TaskTaskModeAll
-	c.Assert(UpdateOpenAPITaskTemplate(etcdTestCli, task1), check.IsNil)
+	s.Require().NoError(UpdateOpenAPITaskTemplate(etcdTestCli, task1))
 	task1InEtcd, err = GetOpenAPITaskTemplate(etcdTestCli, task1.Name)
-	c.Assert(err, check.IsNil)
-	c.Assert(*task1InEtcd, check.DeepEquals, task1)
+	s.Require().NoError(err)
+	s.Require().Equal(task1, *task1InEtcd)
 
 	// delete task config
-	c.Assert(DeleteOpenAPITaskTemplate(etcdTestCli, task1.Name), check.IsNil)
+	s.Require().NoError(DeleteOpenAPITaskTemplate(etcdTestCli, task1.Name))
 	tasks, err = GetAllOpenAPITaskTemplate(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(tasks, check.HasLen, 1)
+	s.Require().NoError(err)
+	s.Require().Len(tasks, 1)
 }

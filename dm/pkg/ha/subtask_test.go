@@ -16,15 +16,14 @@ package ha
 import (
 	"context"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 )
 
-func (t *testForEtcd) TestSubTaskEtcd(c *check.C) {
-	defer clearTestInfoOperation(c)
+func (s *testForEtcd) TestSubTaskEtcd() {
+	defer clearTestInfoOperation(s.T())
 
 	cfg1 := config.SubTaskConfig{}
-	c.Assert(cfg1.Decode(config.SampleSubtaskConfig, true), check.IsNil)
+	s.Require().NoError(cfg1.Decode(config.SampleSubtaskConfig, true))
 	source := cfg1.SourceID
 	taskName1 := cfg1.Name
 
@@ -32,76 +31,76 @@ func (t *testForEtcd) TestSubTaskEtcd(c *check.C) {
 	cfg2 := cfg1
 	cfg2.Name = taskName2
 	err := cfg2.Adjust(true)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	// no subtask config exist.
 	tsm1, rev1, err := GetSubTaskCfg(etcdTestCli, source, taskName1, 0)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev1, check.Greater, int64(0))
-	c.Assert(tsm1, check.HasLen, 0)
+	s.Require().NoError(err)
+	s.Require().Greater(rev1, int64(0))
+	s.Require().Len(tsm1, 0)
 
 	// put subtask configs.
 	rev2, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg1, cfg2}, []Stage{}, nil)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
+	s.Require().NoError(err)
+	s.Require().Greater(rev2, rev1)
 
 	// get single config back.
 	tsm2, rev3, err := GetSubTaskCfg(etcdTestCli, source, taskName1, 0)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev3, check.Equals, rev2)
-	c.Assert(tsm2, check.HasLen, 1)
-	c.Assert(tsm2, check.HasKey, taskName1)
-	c.Assert(tsm2[taskName1], check.DeepEquals, cfg1)
+	s.Require().NoError(err)
+	s.Require().Equal(rev2, rev3)
+	s.Require().Len(tsm2, 1)
+	s.Require().Contains(tsm2, taskName1)
+	s.Require().Equal(cfg1, tsm2[taskName1])
 
 	tsm3, rev4, err := GetSubTaskCfg(etcdTestCli, source, "", 0)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev4, check.Equals, rev3)
-	c.Assert(tsm3, check.HasLen, 2)
-	c.Assert(tsm3, check.HasKey, taskName1)
-	c.Assert(tsm3, check.HasKey, taskName2)
-	c.Assert(tsm3[taskName1], check.DeepEquals, cfg1)
-	c.Assert(tsm3[taskName2], check.DeepEquals, cfg2)
+	s.Require().NoError(err)
+	s.Require().Equal(rev3, rev4)
+	s.Require().Len(tsm3, 2)
+	s.Require().Contains(tsm3, taskName1)
+	s.Require().Contains(tsm3, taskName2)
+	s.Require().Equal(cfg1, tsm3[taskName1])
+	s.Require().Equal(cfg2, tsm3[taskName2])
 
 	// get all subtask configs.
 	stmm, rev4, err := GetAllSubTaskCfg(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev4, check.Equals, rev3)
-	c.Assert(stmm, check.HasLen, 1)
-	c.Assert(stmm[source], check.HasLen, 2)
-	c.Assert(stmm[source][taskName1], check.DeepEquals, cfg1)
-	c.Assert(stmm[source][taskName2], check.DeepEquals, cfg2)
+	s.Require().NoError(err)
+	s.Require().Equal(rev3, rev4)
+	s.Require().Len(stmm, 1)
+	s.Require().Len(stmm[source], 2)
+	s.Require().Equal(cfg1, stmm[source][taskName1])
+	s.Require().Equal(cfg2, stmm[source][taskName2])
 
 	// delete the config.
 	deleteOps := deleteSubTaskCfgOp(cfg1)
 	_, err = etcdTestCli.Txn(context.Background()).Then(deleteOps...).Commit()
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	deleteOps = deleteSubTaskCfgOp(cfg2)
 	deleteResp, err := etcdTestCli.Txn(context.Background()).Then(deleteOps...).Commit()
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	// get again, not exists now.
 	tsm4, rev5, err := GetSubTaskCfg(etcdTestCli, source, taskName1, 0)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev5, check.Equals, deleteResp.Header.Revision)
-	c.Assert(tsm4, check.HasLen, 0)
+	s.Require().NoError(err)
+	s.Require().Equal(deleteResp.Header.Revision, rev5)
+	s.Require().Len(tsm4, 0)
 
 	// put subtask config.
 	rev6, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg1}, []Stage{}, nil)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev6, check.Greater, int64(0))
+	s.Require().NoError(err)
+	s.Require().Greater(rev6, int64(0))
 
 	// update subtask config.
 	cfg3 := cfg1
 	cfg3.SourceID = "testForRevision"
 	rev7, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{cfg3}, []Stage{}, nil)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev7, check.Greater, rev6)
+	s.Require().NoError(err)
+	s.Require().Greater(rev7, rev6)
 
 	// get subtask from rev6. shoule be equal to cfg1
 	tsm5, rev8, err := GetSubTaskCfg(etcdTestCli, source, taskName1, rev6)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev8, check.Equals, rev7)
-	c.Assert(tsm5, check.HasLen, 1)
-	c.Assert(tsm5, check.HasKey, taskName1)
-	c.Assert(tsm5[taskName1], check.DeepEquals, cfg1)
+	s.Require().NoError(err)
+	s.Require().Equal(rev7, rev8)
+	s.Require().Len(tsm5, 1)
+	s.Require().Contains(tsm5, taskName1)
+	s.Require().Equal(cfg1, tsm5[taskName1])
 }

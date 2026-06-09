@@ -13,12 +13,8 @@
 
 package worker
 
-import (
-	"github.com/pingcap/check"
-)
-
-func (t *testServer) testConidtionHub(c *check.C, s *Server) {
+func (t *testServer) testConidtionHub(s *Server) {
 	// test condition hub
-	c.Assert(GetConditionHub(), check.NotNil)
-	c.Assert(GetConditionHub().w, check.DeepEquals, s.getSourceWorker(true))
+	t.Require().NotNil(GetConditionHub())
+	t.Require().Equal(s.getSourceWorker(true), GetConditionHub().w)
 }

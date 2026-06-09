@@ -18,24 +18,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/stretchr/testify/require"
 )
 
-func (t *testForEtcd) TestSourceTablesJSON(c *check.C) {
+func TestSourceTablesJSON(t *testing.T) {
 	st1 := NewSourceTables("test", "mysql-replica-1")
 	st1.AddTable("db1", "tbl1", "db", "tbl")
 	j, err := st1.toJSON()
-	c.Assert(err, check.IsNil)
-	c.Assert(j, check.Equals, `{"task":"test","source":"mysql-replica-1","tables":{"db":{"tbl":{"db1":{"tbl1":{}}}}}}`)
-	c.Assert(j, check.Equals, st1.String())
+	require.NoError(t, err)
+	require.Equal(t, `{"task":"test","source":"mysql-replica-1","tables":{"db":{"tbl":{"db1":{"tbl1":{}}}}}}`, j)
+	require.Equal(t, st1.String(), j)
 
 	st2, err := sourceTablesFromJSON(j)
-	c.Assert(err, check.IsNil)
-	c.Assert(st2, check.DeepEquals, st1)
+	require.NoError(t, err)
+	require.Equal(t, st1, st2)
 }
 
-func (t *testForEtcd) TestSourceTablesAddRemove(c *check.C) {
+func TestSourceTablesAddRemove(t *testing.T) {
 	var (
 		task       = "task"
 		source     = "mysql-replica-1"
@@ -46,39 +45,37 @@ func (t *testForEtcd) TestSourceTablesAddRemove(c *check.C) {
 	)
 
 	// no target table exist.
-	c.Assert(st.TargetTable(downSchema, downTable1).IsEmpty(), check.IsTrue)
-	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), check.IsTrue)
+	require.True(t, st.TargetTable(downSchema, downTable1).IsEmpty())
+	require.True(t, st.TargetTable(downSchema, downTable2).IsEmpty())
 
 	// add a table for downTable1.
-	c.Assert(st.AddTable("foo1", "bar1", downSchema, downTable1), check.IsTrue)
-	c.Assert(st.AddTable("foo1", "bar1", downSchema, downTable1), check.IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable1), check.DeepEquals,
-		newTargetTable(task, source, downSchema, downTable1, map[string]map[string]struct{}{
-			"foo1": {"bar1": struct{}{}},
-		}))
-	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), check.IsTrue)
+	require.True(t, st.AddTable("foo1", "bar1", downSchema, downTable1))
+	require.False(t, st.AddTable("foo1", "bar1", downSchema, downTable1))
+	require.Equal(t, newTargetTable(task, source, downSchema, downTable1, map[string]map[string]struct{}{
+		"foo1": {"bar1": struct{}{}},
+	}), st.TargetTable(downSchema, downTable1))
+	require.True(t, st.TargetTable(downSchema, downTable2).IsEmpty())
 
 	// add a table for downTable2.
-	c.Assert(st.AddTable("foo2", "bar2", downSchema, downTable2), check.IsTrue)
-	c.Assert(st.AddTable("foo2", "bar2", downSchema, downTable2), check.IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable2), check.DeepEquals,
-		newTargetTable(task, source, downSchema, downTable2, map[string]map[string]struct{}{
-			"foo2": {"bar2": struct{}{}},
-		}))
+	require.True(t, st.AddTable("foo2", "bar2", downSchema, downTable2))
+	require.False(t, st.AddTable("foo2", "bar2", downSchema, downTable2))
+	require.Equal(t, newTargetTable(task, source, downSchema, downTable2, map[string]map[string]struct{}{
+		"foo2": {"bar2": struct{}{}},
+	}), st.TargetTable(downSchema, downTable2))
 
 	// remove a table for downTable1.
-	c.Assert(st.RemoveTable("foo1", "bar1", downSchema, downTable1), check.IsTrue)
-	c.Assert(st.RemoveTable("foo1", "bar1", downSchema, downTable1), check.IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable1).IsEmpty(), check.IsTrue)
+	require.True(t, st.RemoveTable("foo1", "bar1", downSchema, downTable1))
+	require.False(t, st.RemoveTable("foo1", "bar1", downSchema, downTable1))
+	require.True(t, st.TargetTable(downSchema, downTable1).IsEmpty())
 
 	// remove a table for downTable2.
-	c.Assert(st.RemoveTable("foo2", "bar2", downSchema, downTable2), check.IsTrue)
-	c.Assert(st.RemoveTable("foo2", "bar2", downSchema, downTable2), check.IsFalse)
-	c.Assert(st.TargetTable(downSchema, downTable2).IsEmpty(), check.IsTrue)
+	require.True(t, st.RemoveTable("foo2", "bar2", downSchema, downTable2))
+	require.False(t, st.RemoveTable("foo2", "bar2", downSchema, downTable2))
+	require.True(t, st.TargetTable(downSchema, downTable2).IsEmpty())
 }
 
-func (t *testForEtcd) TestSourceTablesEtcd(c *check.C) {
-	defer clearTestInfoOperation(c)
+func TestSourceTablesEtcd(t *testing.T) {
+	defer clearTestInfoOperation(t)
 
 	var (
 		watchTimeout = 2 * time.Second
@@ -98,19 +95,19 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *check.C) {
 
 	// put two SourceTables.
 	rev1, err := PutSourceTables(etcdTestCli, st1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	rev2, err := PutSourceTables(etcdTestCli, st2)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
+	require.NoError(t, err)
+	require.Greater(t, rev2, rev1)
 
 	// get with two SourceTables.
 	stm, rev3, err := GetAllSourceTables(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev3, check.Equals, rev2)
-	c.Assert(stm, check.HasLen, 1)
-	c.Assert(stm[task], check.HasLen, 2)
-	c.Assert(stm[task][source1], check.DeepEquals, st1)
-	c.Assert(stm[task][source2], check.DeepEquals, st2)
+	require.NoError(t, err)
+	require.Equal(t, rev2, rev3)
+	require.Len(t, stm, 1)
+	require.Len(t, stm[task], 2)
+	require.Equal(t, st1, stm[task][source1])
+	require.Equal(t, st2, stm[task][source2])
 
 	// watch with an older revision for all SourceTables.
 	wch := make(chan SourceTables, 10)
@@ -122,22 +119,22 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *check.C) {
 	close(ech)
 
 	// get two source tables.
-	c.Assert(len(wch), check.Equals, 2)
-	c.Assert(<-wch, check.DeepEquals, st1)
-	c.Assert(<-wch, check.DeepEquals, st2)
-	c.Assert(len(ech), check.Equals, 0)
+	require.Equal(t, 2, len(wch))
+	require.Equal(t, st1, <-wch)
+	require.Equal(t, st2, <-wch)
+	require.Equal(t, 0, len(ech))
 
 	// delete tow sources tables.
 	_, err = DeleteSourceTables(etcdTestCli, st1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	rev4, err := DeleteSourceTables(etcdTestCli, st2)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// get without SourceTables.
 	stm, rev5, err := GetAllSourceTables(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev5, check.Equals, rev4)
-	c.Assert(stm, check.HasLen, 0)
+	require.NoError(t, err)
+	require.Equal(t, rev4, rev5)
+	require.Len(t, stm, 0)
 
 	// watch the deletion for SourceTables.
 	wch = make(chan SourceTables, 10)
@@ -147,12 +144,12 @@ func (t *testForEtcd) TestSourceTablesEtcd(c *check.C) {
 	cancel()
 	close(wch)
 	close(ech)
-	c.Assert(len(wch), check.Equals, 1)
+	require.Equal(t, 1, len(wch))
 	std := <-wch
-	c.Assert(std.IsDeleted, check.IsTrue)
-	c.Assert(std.Task, check.Equals, st2.Task)
-	c.Assert(std.Source, check.Equals, st2.Source)
-	c.Assert(len(ech), check.Equals, 0)
+	require.True(t, std.IsDeleted)
+	require.Equal(t, st2.Task, std.Task)
+	require.Equal(t, st2.Source, std.Source)
+	require.Equal(t, 0, len(ech))
 }
 
 func TestToRouteTable(t *testing.T) {

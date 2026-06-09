@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/mock"
@@ -59,7 +58,7 @@ func randString(n int) string {
 	return string(b)
 }
 
-func (s *testSyncerSuite) TestCompactJob(c *check.C) {
+func (s *testSyncerSuite) TestCompactJob() {
 	compactor := &compactor{
 		bufferSize:         10000,
 		logger:             log.L(),
@@ -76,7 +75,7 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 	targetTable := &cdcmodel.TableName{Schema: "test", Table: "tb"}
 	schemaStr := "create table test.tb(id int primary key, col1 int, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schemaStr)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	var dml *sqlmodel.RowChange
 	var dmls []*sqlmodel.RowChange
@@ -152,29 +151,29 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 		noCompactNumber := end - i
 		compactNumber := 0
 		for _, dml := range dmls[i:end] {
-			c.Logf("before compact, dml: %s", dml.String())
+			s.T().Logf("before compact, dml: %s", dml.String())
 		}
 		for _, j := range compactor.buffer {
 			if j != nil {
 				compactKV = mockExecute(compactKV, []*sqlmodel.RowChange{j.dml})
 				compactNumber++
-				c.Logf("after compact, dml: %s", j.dml.String())
+				s.T().Logf("after compact, dml: %s", j.dml.String())
 			}
 		}
-		c.Logf("before compact: %d, after compact: %d", noCompactNumber, compactNumber)
-		c.Assert(compactKV, check.DeepEquals, kv)
+		s.T().Logf("before compact: %d, after compact: %d", noCompactNumber, compactNumber)
+		s.Require().Equal(kv, compactKV)
 		compactor.keyMap = make(map[string]map[string]int)
 		compactor.buffer = compactor.buffer[0:0]
 	}
 }
 
-func (s *testSyncerSuite) TestCompactorSafeMode(c *check.C) {
+func (s *testSyncerSuite) TestCompactorSafeMode() {
 	p := parser.New()
 	se := mock.NewContext()
 	sourceTable := &cdcmodel.TableName{Schema: "test", Table: "tb"}
 	schemaStr := "create table test.tb(id int primary key, col1 int, name varchar(24))"
 	ti, err := createTableInfo(p, se, 0, schemaStr)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	testCases := []struct {
 		input  []*job
@@ -282,7 +281,7 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *check.C) {
 		metricsProxies: metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source"),
 	}
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SkipFlushCompactor", `return()`), check.IsNil)
+	s.Require().Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/syncer/SkipFlushCompactor", `return()`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/SkipFlushCompactor")
 
@@ -293,16 +292,16 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *check.C) {
 			inCh <- j
 		}
 		inCh <- newFlushJob(syncer.cfg.WorkerCount, 1)
-		c.Assert(
+		s.Require().Equal(true,
 			utils.WaitSomething(10, time.Millisecond, func() bool {
 				return len(outCh) == len(tc.output)+1
-			}), check.Equals, true)
+			}))
 		for i := 0; i <= len(tc.output); i++ {
 			j := <-outCh
 			if i < len(tc.output) {
-				c.Assert(j.String(), check.Equals, tc.output[i].String())
+				s.Require().Equal(tc.output[i].String(), j.String())
 			} else {
-				c.Assert(j.tp, check.Equals, flush)
+				s.Require().Equal(flush, j.tp)
 			}
 		}
 	}

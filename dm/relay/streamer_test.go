@@ -15,24 +15,21 @@ package relay
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&testStreamerSuite{})
-
-type testStreamerSuite struct{}
-
-func (t *testStreamerSuite) TestStreamer(c *check.C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval", "return(10000)"), check.IsNil)
+func TestStreamer(t *testing.T) {
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval", "return(10000)"))
 	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval"), check.IsNil)
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval"))
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -44,75 +41,75 @@ func (t *testStreamerSuite) TestStreamer(c *check.C) {
 		ServerID:  11,
 	}
 	ev, err := event.GenFormatDescriptionEvent(header, 4)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// 1. get event and error
 	s := newLocalStreamer() // with buffer
 	s.ch <- ev
 	ev2, err := s.GetEvent(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(ev2, check.DeepEquals, ev)
+	require.NoError(t, err)
+	require.Equal(t, ev, ev2)
 
 	// read error
 	errIn := errors.New("error use for streamer test 1")
 	s.ech <- errIn
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(err, check.Equals, errIn)
-	c.Assert(ev2, check.IsNil)
+	require.Equal(t, errIn, err)
+	require.Nil(t, ev2)
 
 	// can not get event anymore because got error
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(terror.ErrNeedSyncAgain.Equal(err), check.IsTrue)
-	c.Assert(ev2, check.IsNil)
+	require.True(t, terror.ErrNeedSyncAgain.Equal(err))
+	require.Nil(t, ev2)
 
 	// 2. close with error
 	s = newLocalStreamer()
 	errClose := errors.New("error use for streamer test 2")
 	s.closeWithError(errClose)
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(err, check.Equals, errClose)
-	c.Assert(ev2, check.IsNil)
+	require.Equal(t, errClose, err)
+	require.Nil(t, ev2)
 
 	// can not get event anymore
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(terror.ErrNeedSyncAgain.Equal(err), check.IsTrue)
-	c.Assert(ev2, check.IsNil)
+	require.True(t, terror.ErrNeedSyncAgain.Equal(err))
+	require.Nil(t, ev2)
 
 	// 3. close without error
 	s = newLocalStreamer()
 	s.close()
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(terror.ErrSyncClosed.Equal(err), check.IsTrue)
-	c.Assert(ev2, check.IsNil)
+	require.True(t, terror.ErrSyncClosed.Equal(err))
+	require.Nil(t, ev2)
 
 	// can not get event anymore
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(terror.ErrNeedSyncAgain.Equal(err), check.IsTrue)
-	c.Assert(ev2, check.IsNil)
+	require.True(t, terror.ErrNeedSyncAgain.Equal(err))
+	require.Nil(t, ev2)
 
 	// 4. close with nil error
 	s = newLocalStreamer()
 	s.closeWithError(nil)
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(terror.ErrSyncClosed.Equal(err), check.IsTrue)
-	c.Assert(ev2, check.IsNil)
+	require.True(t, terror.ErrSyncClosed.Equal(err))
+	require.Nil(t, ev2)
 
 	// can not get event anymore
 	ev2, err = s.GetEvent(ctx)
-	c.Assert(terror.ErrNeedSyncAgain.Equal(err), check.IsTrue)
-	c.Assert(ev2, check.IsNil)
+	require.True(t, terror.ErrNeedSyncAgain.Equal(err))
+	require.Nil(t, ev2)
 }
 
-func (t *testStreamerSuite) TestHeartbeat(c *check.C) {
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval", "return(1)"), check.IsNil)
+func TestHeartbeat(t *testing.T) {
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval", "return(1)"))
 	defer func() {
-		c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval"), check.IsNil)
+		require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/relay/SetHeartbeatInterval"))
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	s := newLocalStreamer()
 	ev, err := s.GetEvent(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(ev.Header.EventType, check.Equals, replication.HEARTBEAT_EVENT)
+	require.NoError(t, err)
+	require.Equal(t, replication.HEARTBEAT_EVENT, ev.Header.EventType)
 }

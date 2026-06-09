@@ -15,8 +15,9 @@ package config
 
 import (
 	"encoding/json"
+	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
 type testStruct struct {
@@ -29,7 +30,7 @@ func (t *testStruct) ToJSON() string {
 	return string(cfg)
 }
 
-func (t *testConfig) TestTaskCliArgsDowngrade(c *check.C) {
+func TestTaskCliArgsDowngrade(t *testing.T) {
 	s := testStruct{
 		TaskCliArgs: TaskCliArgs{"123", "1s", "1s"},
 		FutureField: "456",
@@ -37,38 +38,38 @@ func (t *testConfig) TestTaskCliArgsDowngrade(c *check.C) {
 	data := s.ToJSON()
 
 	expected := `{"start_time":"123","safe_mode_duration":"1s","wait_time_on_stop":"1s","future_field":"456"}`
-	c.Assert(data, check.Equals, expected)
+	require.Equal(t, expected, data)
 
 	afterDowngrade := &TaskCliArgs{}
-	c.Assert(afterDowngrade.Decode([]byte(data)), check.IsNil)
-	c.Assert(afterDowngrade.StartTime, check.Equals, "123")
+	require.NoError(t, afterDowngrade.Decode([]byte(data)))
+	require.Equal(t, "123", afterDowngrade.StartTime)
 }
 
-func (t *testConfig) TestTaskCliArgsVerify(c *check.C) {
+func TestTaskCliArgsVerify(t *testing.T) {
 	empty := TaskCliArgs{}
-	c.Assert(empty.Verify(), check.IsNil)
+	require.NoError(t, empty.Verify())
 	rightStartTime := TaskCliArgs{StartTime: "2006-01-02T15:04:05"}
-	c.Assert(rightStartTime.Verify(), check.IsNil)
+	require.NoError(t, rightStartTime.Verify())
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05"}
-	c.Assert(rightStartTime.Verify(), check.IsNil)
+	require.NoError(t, rightStartTime.Verify())
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02T15:04:05+08:00"}
-	c.Assert(rightStartTime.Verify(), check.IsNil)
+	require.NoError(t, rightStartTime.Verify())
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05+08:00"}
-	c.Assert(rightStartTime.Verify(), check.IsNil)
+	require.NoError(t, rightStartTime.Verify())
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02T15:04:05+0800"}
-	c.Assert(rightStartTime.Verify(), check.IsNil)
+	require.NoError(t, rightStartTime.Verify())
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05+0800"}
-	c.Assert(rightStartTime.Verify(), check.IsNil)
+	require.NoError(t, rightStartTime.Verify())
 	wrongStartTime := TaskCliArgs{StartTime: "15:04:05"}
-	c.Assert(wrongStartTime.Verify(), check.NotNil)
+	require.Error(t, wrongStartTime.Verify())
 
 	rightSafeModeDuration := TaskCliArgs{SafeModeDuration: "1s"}
-	c.Assert(rightSafeModeDuration.Verify(), check.IsNil)
+	require.NoError(t, rightSafeModeDuration.Verify())
 	wrongSafeModeDuration := TaskCliArgs{SafeModeDuration: "1"}
-	c.Assert(wrongSafeModeDuration.Verify(), check.NotNil)
+	require.Error(t, wrongSafeModeDuration.Verify())
 
 	rightWaitTimeOnStop := TaskCliArgs{WaitTimeOnStop: "1s"}
-	c.Assert(rightWaitTimeOnStop.Verify(), check.IsNil)
+	require.NoError(t, rightWaitTimeOnStop.Verify())
 	wrongWaitTimeOnStop := TaskCliArgs{WaitTimeOnStop: "1"}
-	c.Assert(wrongWaitTimeOnStop.Verify(), check.NotNil)
+	require.Error(t, wrongWaitTimeOnStop.Verify())
 }

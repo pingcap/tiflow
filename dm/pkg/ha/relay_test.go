@@ -14,50 +14,50 @@
 package ha
 
 import (
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 )
 
-func (t *testForEtcd) TestGetRelayConfigEtcd(c *check.C) {
-	defer clearTestInfoOperation(c)
+func (s *testForEtcd) TestGetRelayConfigEtcd() {
+	defer clearTestInfoOperation(s.T())
 
 	var (
 		worker = "dm-worker-1"
 		source = "mysql-replica-1"
 	)
 	cfg, err := config.LoadFromFile(sourceSampleFilePath)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	cfg.SourceID = source
 	// no relay source and config
 	cfg1, rev1, err := GetRelayConfig(etcdTestCli, worker)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev1, check.Greater, int64(0))
-	c.Assert(cfg1, check.IsNil)
+	s.Require().NoError(err)
+	s.Require().Greater(rev1, int64(0))
+	s.Require().Nil(cfg1)
 
 	rev2, err := PutRelayConfig(etcdTestCli, source, worker)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
+	s.Require().NoError(err)
+	s.Require().Greater(rev2, rev1)
 
 	// get relay source and config, but config is empty
 	_, _, err = GetRelayConfig(etcdTestCli, worker)
-	c.Assert(err, check.ErrorMatches, ".*doesn't have related source config in etcd.*")
+	s.Require().Error(err)
+	s.Require().Regexp(".*doesn't have related source config in etcd.*", err.Error())
 
 	rev3, err := PutSourceCfg(etcdTestCli, cfg)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev3, check.Greater, rev2)
+	s.Require().NoError(err)
+	s.Require().Greater(rev3, rev2)
 	// get relay source and config
 	cfg2, rev4, err := GetRelayConfig(etcdTestCli, worker)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev4, check.Equals, rev3)
-	c.Assert(cfg2, check.DeepEquals, cfg)
+	s.Require().NoError(err)
+	s.Require().Equal(rev3, rev4)
+	s.Require().Equal(cfg, cfg2)
 
 	rev5, err := DeleteRelayConfig(etcdTestCli, worker)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev5, check.Greater, rev4)
+	s.Require().NoError(err)
+	s.Require().Greater(rev5, rev4)
 
 	// though source config is saved in etcd, relay source is deleted so return nothing
 	cfg3, rev6, err := GetRelayConfig(etcdTestCli, worker)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev6, check.Equals, rev5)
-	c.Assert(cfg3, check.IsNil)
+	s.Require().NoError(err)
+	s.Require().Equal(rev5, rev6)
+	s.Require().Nil(cfg3)
 }

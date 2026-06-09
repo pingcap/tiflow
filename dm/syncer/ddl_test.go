@@ -21,7 +21,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -40,11 +39,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var _ = check.Suite(&testDDLSuite{})
-
-type testDDLSuite struct{}
-
-func (s *testDDLSuite) newSubTaskCfg(dbCfg dbconfig.DBConfig) *config.SubTaskConfig {
+func newSubTaskCfg(dbCfg dbconfig.DBConfig) *config.SubTaskConfig {
 	return &config.SubTaskConfig{
 		From:             dbCfg,
 		To:               dbCfg,
@@ -58,7 +53,7 @@ func (s *testDDLSuite) newSubTaskCfg(dbCfg dbconfig.DBConfig) *config.SubTaskCon
 	}
 }
 
-func (s *testDDLSuite) TestAnsiQuotes(c *check.C) {
+func TestAnsiQuotes(t *testing.T) {
 	ansiQuotesCases := []string{
 		"create database `test`",
 		"create table `test`.`test`(id int)",
@@ -73,18 +68,18 @@ func (s *testDDLSuite) TestAnsiQuotes(c *check.C) {
 	mock.ExpectQuery("SHOW VARIABLES LIKE").
 		WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 			AddRow("sql_mode", "ANSI_QUOTES"))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	parser, err := conn.GetParser(tcontext.Background(), conn.NewBaseDBForTest(db))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	for _, sql := range ansiQuotesCases {
 		_, err = parser.ParseOneStmt(sql, "", "")
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 	}
 }
 
-func (s *testDDLSuite) TestDDLWithDashComments(c *check.C) {
+func TestDDLWithDashComments(t *testing.T) {
 	sql := `--
 -- this is a comment.
 --
@@ -92,10 +87,10 @@ CREATE TABLE test.test_table_with_c (id int);
 `
 	parser := parser.New()
 	_, err := parserpkg.Parse(parser, sql, "", "")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 }
 
-func (s *testDDLSuite) TestCommentQuote(c *check.C) {
+func TestCommentQuote(t *testing.T) {
 	sql := "ALTER TABLE schemadb.ep_edu_course_message_auto_reply MODIFY answer JSON COMMENT '回复的内容-格式为list，有两个字段：\"answerType\"：//''发送客服消息类型：1-文本消息，2-图片，3-图文链接''；  answer：回复内容';"
 	expectedSQL := "ALTER TABLE `schemadb`.`ep_edu_course_message_auto_reply` MODIFY COLUMN `answer` JSON COMMENT '回复的内容-格式为list，有两个字段：\"answerType\"：//''发送客服消息类型：1-文本消息，2-图片，3-图文链接''；  answer：回复内容'"
 
@@ -110,26 +105,26 @@ func (s *testDDLSuite) TestCommentQuote(c *check.C) {
 		p:            parser.New(),
 	}
 	stmt, err := parseOneStmt(qec)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
-	c.Assert(syncer.genRouter(), check.IsNil)
+	require.NoError(t, syncer.genRouter())
 
 	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for _, sql := range qec.splitDDLs {
 		sqls, err := ddlWorker.processOneDDL(qec, sql)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 	}
-	c.Assert(len(qec.appliedDDLs), check.Equals, 1)
-	c.Assert(qec.appliedDDLs[0], check.Equals, expectedSQL)
+	require.Equal(t, 1, len(qec.appliedDDLs))
+	require.Equal(t, expectedSQL, qec.appliedDDLs[0])
 }
 
-func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
+func TestResolveDDLSQL(t *testing.T) {
 	// duplicate with pkg/parser
 	sqls := []string{
 		"create schema `s1`",
@@ -224,7 +219,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 	syncer.tctx = tctx
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(false, []*router.TableRule{
 		{
@@ -232,7 +227,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 			TargetSchema:  "xs1",
 		},
 	})
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	testEC := &eventContext{
 		tctx: tctx,
@@ -250,13 +245,13 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 			eventStatusVars: statusVars,
 		}
 		stmt, err := parseOneStmt(qec)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		for _, sql2 := range qec.splitDDLs {
 			sqls, err := ddlWorker.processOneDDL(qec, sql2)
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 			for _, sql3 := range sqls {
 				if len(sql3) == 0 {
 					continue
@@ -264,17 +259,17 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 				qec.appliedDDLs = append(qec.appliedDDLs, sql3)
 			}
 		}
-		c.Assert(qec.appliedDDLs, check.DeepEquals, expectedSQLs[i])
-		c.Assert(targetSQLs[i], check.HasLen, len(qec.appliedDDLs))
+		require.Equal(t, expectedSQLs[i], qec.appliedDDLs)
+		require.Len(t, targetSQLs[i], len(qec.appliedDDLs))
 		for j, sql2 := range qec.appliedDDLs {
 			ddlInfo, err2 := ddlWorker.genDDLInfo(qec, sql2)
-			c.Assert(err2, check.IsNil)
-			c.Assert(targetSQLs[i][j], check.Equals, ddlInfo.routedDDL)
+			require.NoError(t, err2)
+			require.Equal(t, ddlInfo.routedDDL, targetSQLs[i][j])
 		}
 	}
 }
 
-func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
+func TestRejectForeignKeyDDL(t *testing.T) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestRejectForeignKeyDDL")))
 	testEC := &eventContext{tctx: tctx}
 
@@ -286,7 +281,7 @@ func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
 	}
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.tctx = tctx
-	c.Assert(syncer.genRouter(), check.IsNil)
+	require.NoError(t, syncer.genRouter())
 
 	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	cases := []string{
@@ -301,8 +296,8 @@ func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
 			p:            parser.New(),
 		}
 		_, err := ddlWorker.genDDLInfo(qec, sql)
-		c.Assert(err, check.NotNil)
-		c.Assert(err.Error(), check.Matches, ".*foreign_key_checks=1.*")
+		require.Error(t, err)
+		require.Regexp(t, ".*foreign_key_checks=1.*", err.Error())
 	}
 
 	cfgOff := &config.SubTaskConfig{
@@ -313,7 +308,7 @@ func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
 	}
 	syncerOff := NewSyncer(cfgOff, nil, nil)
 	syncerOff.tctx = tctx
-	c.Assert(syncerOff.genRouter(), check.IsNil)
+	require.NoError(t, syncerOff.genRouter())
 
 	ddlWorkerOff := NewDDLWorker(&tctx.Logger, syncerOff)
 	qecOff := &queryEventContext{
@@ -323,10 +318,10 @@ func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
 		p:            parser.New(),
 	}
 	_, err := ddlWorkerOff.genDDLInfo(qecOff, cases[0])
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 }
 
-func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
+func TestParseOneStmt(t *testing.T) {
 	cases := []struct {
 		sql      string
 		isDDL    bool
@@ -410,16 +405,16 @@ func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 		qec.originSQL = cs.sql
 		stmt, err := parseOneStmt(qec)
 		if cs.hasError {
-			c.Assert(err, check.NotNil)
+			require.Error(t, err)
 		} else {
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 		}
 		_, ok := stmt.(ast.DDLNode)
-		c.Assert(ok, check.Equals, cs.isDDL)
+		require.Equal(t, cs.isDDL, ok)
 	}
 }
 
-func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *check.C) {
+func TestResolveGeneratedColumnSQL(t *testing.T) {
 	testCases := []struct {
 		sql      string
 		expected string
@@ -437,7 +432,7 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *check.C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestResolveGeneratedColumnSQL")))
 	syncer := NewSyncer(&config.SubTaskConfig{Flavor: mysql.MySQLFlavor}, nil, nil)
 	syncer.tctx = tctx
-	c.Assert(syncer.genRouter(), check.IsNil)
+	require.Nil(t, syncer.genRouter())
 	p := parser.New()
 	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for _, tc := range testCases {
@@ -451,22 +446,22 @@ func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *check.C) {
 			p:           p,
 		}
 		stmt, err := parseOneStmt(qec)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		for _, sql := range qec.splitDDLs {
 			sqls, err := ddlWorker.processOneDDL(qec, sql)
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
 
-		c.Assert(len(qec.appliedDDLs), check.Equals, 1)
-		c.Assert(qec.appliedDDLs[0], check.Equals, tc.expected)
+		require.Equal(t, 1, len(qec.appliedDDLs))
+		require.Equal(t, tc.expected, qec.appliedDDLs[0])
 	}
 }
 
-func (s *testDDLSuite) TestResolveOnlineDDL(c *check.C) {
+func TestResolveOnlineDDL(t *testing.T) {
 	cases := []struct {
 		sql       string
 		expectSQL string
@@ -505,23 +500,23 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *check.C) {
 
 	testEC := &eventContext{tctx: tctx}
 	cluster, err := conn.NewCluster()
-	c.Assert(err, check.IsNil)
-	c.Assert(cluster.Start(), check.IsNil)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Start())
 	mockClusterPort := cluster.Port
 	dbCfg := config.GetDBConfigForTest()
 	dbCfg.Port = mockClusterPort
 	dbCfg.Password = ""
-	cfg := s.newSubTaskCfg(dbCfg)
+	cfg := newSubTaskCfg(dbCfg)
 
 	var qec *queryEventContext
 	for _, ca := range cases {
 		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		syncer := NewSyncer(cfg, nil, nil)
 		syncer.tctx = tctx
 		syncer.onlineDDL = plugin
-		c.Assert(plugin.Clear(tctx), check.IsNil)
-		c.Assert(syncer.genRouter(), check.IsNil)
+		require.Nil(t, plugin.Clear(tctx))
+		require.Nil(t, syncer.genRouter())
 		qec = &queryEventContext{
 			eventContext: testEC,
 			ddlSchema:    "test",
@@ -530,26 +525,26 @@ func (s *testDDLSuite) TestResolveOnlineDDL(c *check.C) {
 		}
 		qec.originSQL = ca.sql
 		stmt, err := parseOneStmt(qec)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		_, ok := stmt.(ast.DDLNode)
-		c.Assert(ok, check.IsTrue)
+		require.True(t, ok)
 		qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 		for _, sql := range qec.splitDDLs {
 			sqls, err := ddlWorker.processOneDDL(qec, sql)
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 			qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 		}
 		if len(ca.expectSQL) != 0 {
-			c.Assert(qec.appliedDDLs, check.HasLen, 1)
-			c.Assert(qec.appliedDDLs[0], check.Equals, ca.expectSQL)
+			require.Len(t, qec.appliedDDLs, 1)
+			require.Equal(t, ca.expectSQL, qec.appliedDDLs[0])
 		}
 	}
 	cluster.Stop()
 }
 
-func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *check.C) {
+func TestMistakeOnlineDDLRegex(t *testing.T) {
 	cases := []struct {
 		onlineType string
 		trashName  string
@@ -586,21 +581,21 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *check.C) {
 
 	ec := eventContext{tctx: tctx}
 	cluster, err := conn.NewCluster()
-	c.Assert(err, check.IsNil)
-	c.Assert(cluster.Start(), check.IsNil)
+	require.NoError(t, err)
+	require.Nil(t, cluster.Start())
 	mockClusterPort := cluster.Port
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	dbCfg := config.GetDBConfigForTest()
 	dbCfg.Port = mockClusterPort
 	dbCfg.Password = ""
-	cfg := s.newSubTaskCfg(dbCfg)
+	cfg := newSubTaskCfg(dbCfg)
 	for _, ca := range cases {
 		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		syncer := NewSyncer(cfg, nil, nil)
-		c.Assert(syncer.genRouter(), check.IsNil)
+		require.Nil(t, syncer.genRouter())
 		syncer.onlineDDL = plugin
-		c.Assert(plugin.Clear(tctx), check.IsNil)
+		require.Nil(t, plugin.Clear(tctx))
 
 		// ghost table
 		sql := fmt.Sprintf("ALTER TABLE `test`.`%s` ADD COLUMN `n` INT", ca.ghostname)
@@ -611,16 +606,16 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *check.C) {
 		}
 		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 		sqls, err := ddlWorker.processOneDDL(qec, sql)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		table := ca.ghostname
 		matchRules := config.ShadowTableRules
 		if ca.matchGho {
-			c.Assert(sqls, check.HasLen, 0)
+			require.Len(t, sqls, 0)
 			table = ca.trashName
 			matchRules = config.TrashTableRules
 		} else {
-			c.Assert(sqls, check.HasLen, 1)
-			c.Assert(sqls[0], check.Equals, sql)
+			require.Len(t, sqls, 1)
+			require.Equal(t, sql, sqls[0])
 		}
 		sql = fmt.Sprintf("RENAME TABLE `test`.`t1` TO `test`.`%s`, `test`.`%s` TO `test`.`t1`", ca.trashName, ca.ghostname)
 		qec = &queryEventContext{
@@ -629,14 +624,15 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *check.C) {
 			p:            p,
 		}
 		sqls, err = ddlWorker.processOneDDL(qec, sql)
-		c.Assert(terror.ErrConfigOnlineDDLMistakeRegex.Equal(err), check.IsTrue)
-		c.Assert(sqls, check.HasLen, 0)
-		c.Assert(err, check.ErrorMatches, ".*"+sql+".*"+table+".*"+matchRules+".*")
+		require.True(t, terror.ErrConfigOnlineDDLMistakeRegex.Equal(err))
+		require.Len(t, sqls, 0)
+		require.Error(t, err)
+		require.Regexp(t, ".*"+sql+".*"+table+".*"+matchRules+".*", err.Error())
 	}
 	cluster.Stop()
 }
 
-func (s *testDDLSuite) TestDropSchemaInSharding(c *check.C) {
+func TestDropSchemaInSharding(t *testing.T) {
 	var (
 		targetTable = &filter.Table{
 			Schema: "target_db",
@@ -648,22 +644,22 @@ func (s *testDDLSuite) TestDropSchemaInSharding(c *check.C) {
 		tctx     = tcontext.Background()
 	)
 	dbCfg := config.GetDBConfigForTest()
-	cfg := s.newSubTaskCfg(dbCfg)
+	cfg := newSubTaskCfg(dbCfg)
 	cfg.ShardMode = config.ShardPessimistic
 	syncer := NewSyncer(cfg, nil, nil)
 	// nolint:dogsled
 	_, _, _, _, err := syncer.sgk.AddGroup(targetTable, []string{source1}, nil, true)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	// nolint:dogsled
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
-	c.Assert(err, check.IsNil)
-	c.Assert(syncer.sgk.Groups(), check.HasLen, 2)
+	require.NoError(t, err)
+	require.Len(t, syncer.sgk.Groups(), 2)
 	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
-	c.Assert(pessimist.dropSchemaInSharding(tctx, sourceDB), check.IsNil)
-	c.Assert(syncer.sgk.Groups(), check.HasLen, 0)
+	require.Nil(t, pessimist.dropSchemaInSharding(tctx, sourceDB))
+	require.Len(t, syncer.sgk.Groups(), 0)
 }
 
-func (s *testDDLSuite) TestClearOnlineDDL(c *check.C) {
+func TestClearOnlineDDL(t *testing.T) {
 	var (
 		targetTable = &filter.Table{
 			Schema: "target_db",
@@ -676,7 +672,7 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *check.C) {
 		tctx    = tcontext.Background()
 	)
 	dbCfg := config.GetDBConfigForTest()
-	cfg := s.newSubTaskCfg(dbCfg)
+	cfg := newSubTaskCfg(dbCfg)
 	cfg.ShardMode = config.ShardPessimistic
 	syncer := NewSyncer(cfg, nil, nil)
 	mock := mockOnlinePlugin{
@@ -686,17 +682,17 @@ func (s *testDDLSuite) TestClearOnlineDDL(c *check.C) {
 
 	// nolint:dogsled
 	_, _, _, _, err := syncer.sgk.AddGroup(targetTable, []string{source1}, nil, true)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	// nolint:dogsled
 	_, _, _, _, err = syncer.sgk.AddGroup(targetTable, []string{source2}, nil, true)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	pessimist := NewPessimistDDL(&syncer.tctx.Logger, syncer)
-	c.Assert(pessimist.clearOnlineDDL(tctx, targetTable), check.IsNil)
-	c.Assert(mock.toFinish, check.HasLen, 0)
+	require.Nil(t, pessimist.clearOnlineDDL(tctx, targetTable))
+	require.Len(t, mock.toFinish, 0)
 }
 
-func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
+func TestAdjustDatabaseCollation(t *testing.T) {
 	statusVarsArray := [][]byte{
 		{
 			4, 0, 0, 0, 0, 46, 0,
@@ -752,13 +748,13 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 				targetTables: []*filter.Table{tab},
 			}
 			stmt, err := p.ParseOneStmt(sql, "", "")
-			c.Assert(err, check.IsNil)
-			c.Assert(stmt, check.NotNil)
+			require.NoError(t, err)
+			require.NotNil(t, stmt)
 			ddlInfo.stmtCache = stmt
 			ddlWorker.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
 			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
-			c.Assert(err, check.IsNil)
-			c.Assert(routedDDL, check.Equals, expectedSQLs[i][j])
+			require.NoError(t, err)
+			require.Equal(t, expectedSQLs[i][j], routedDDL)
 		}
 	}
 }

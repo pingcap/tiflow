@@ -15,9 +15,9 @@ package syncer
 
 import (
 	"sync"
+	"testing"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -27,14 +27,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/pingcap/tiflow/dm/syncer/shardddl"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
-var _ = check.Suite(&statusSuite{})
-
-type statusSuite struct{}
-
-func (t *statusSuite) TestStatusRace(c *check.C) {
+func TestStatusRace(t *testing.T) {
 	s := &Syncer{}
 
 	l := log.With(zap.String("unit test", "TestStatueRace"))
@@ -62,8 +59,8 @@ func (t *statusSuite) TestStatusRace(c *check.C) {
 			defer wg.Done()
 			ret := s.Status(sourceStatus)
 			status := ret.(*pb.SyncStatus)
-			c.Assert(status.MasterBinlog, check.Equals, "(mysql-bin.000123, 223)")
-			c.Assert(status.SyncerBinlog, check.Equals, "(mysql-bin.000123, 123)")
+			require.Equal(t, "(mysql-bin.000123, 223)", status.MasterBinlog)
+			require.Equal(t, "(mysql-bin.000123, 123)", status.SyncerBinlog)
 		}()
 	}
 	wg.Wait()

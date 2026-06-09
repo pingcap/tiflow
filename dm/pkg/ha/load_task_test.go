@@ -16,11 +16,9 @@ package ha
 import (
 	"context"
 	"time"
-
-	"github.com/pingcap/check"
 )
 
-func (t *testForEtcd) TestLoadTaskEtcd(c *check.C) {
+func (s *testForEtcd) TestLoadTaskEtcd() {
 	var (
 		worker1      = "worker1"
 		worker2      = "worker2"
@@ -30,81 +28,81 @@ func (t *testForEtcd) TestLoadTaskEtcd(c *check.C) {
 		task2        = "task2"
 		watchTimeout = 2 * time.Second
 	)
-	defer clearTestInfoOperation(c)
+	defer clearTestInfoOperation(s.T())
 
 	// no load worker exist.
 	tlswm, rev1, err := GetAllLoadTask(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(tlswm, check.HasLen, 0)
+	s.Require().NoError(err)
+	s.Require().Len(tlswm, 0)
 
 	// put load worker for task1, source1, worker1
 	rev2, err := PutLoadTask(etcdTestCli, task1, source1, worker1)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
+	s.Require().NoError(err)
+	s.Require().Greater(rev2, rev1)
 
 	// get worker for task1, source1
 	worker, rev3, err := GetLoadTask(etcdTestCli, task1, source1)
-	c.Assert(err, check.IsNil)
-	c.Assert(worker, check.Equals, worker1)
-	c.Assert(rev3, check.Equals, rev2)
+	s.Require().NoError(err)
+	s.Require().Equal(worker1, worker)
+	s.Require().Equal(rev2, rev3)
 
 	// put load worker for task1, source1, worker1 again
 	rev4, err := PutLoadTask(etcdTestCli, task1, source1, worker1)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev4, check.Greater, rev3)
+	s.Require().NoError(err)
+	s.Require().Greater(rev4, rev3)
 
 	// get worker for task1, source1 again
 	worker, rev5, err := GetLoadTask(etcdTestCli, task1, source1)
-	c.Assert(err, check.IsNil)
-	c.Assert(worker, check.Equals, worker1)
-	c.Assert(rev5, check.Equals, rev4)
+	s.Require().NoError(err)
+	s.Require().Equal(worker1, worker)
+	s.Require().Equal(rev4, rev5)
 
 	// put load worker for task1, source2, worker2
 	rev6, err := PutLoadTask(etcdTestCli, task1, source2, worker2)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev6, check.Greater, rev5)
+	s.Require().NoError(err)
+	s.Require().Greater(rev6, rev5)
 
 	// get all load worker
 	tlswm, rev7, err := GetAllLoadTask(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev7, check.Equals, rev6)
-	c.Assert(tlswm, check.HasLen, 1)
-	c.Assert(tlswm, check.HasKey, task1)
-	c.Assert(tlswm[task1], check.HasKey, source1)
-	c.Assert(tlswm[task1], check.HasKey, source2)
-	c.Assert(tlswm[task1][source1], check.Equals, worker1)
-	c.Assert(tlswm[task1][source2], check.Equals, worker2)
+	s.Require().NoError(err)
+	s.Require().Equal(rev6, rev7)
+	s.Require().Len(tlswm, 1)
+	s.Require().Contains(tlswm, task1)
+	s.Require().Contains(tlswm[task1], source1)
+	s.Require().Contains(tlswm[task1], source2)
+	s.Require().Equal(worker1, tlswm[task1][source1])
+	s.Require().Equal(worker2, tlswm[task1][source2])
 
 	// Delete load worker for task1, source1
 	rev8, succ, err := DelLoadTask(etcdTestCli, task1, source1)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev8, check.Greater, rev7)
-	c.Assert(succ, check.IsTrue)
+	s.Require().NoError(err)
+	s.Require().Greater(rev8, rev7)
+	s.Require().True(succ)
 
 	worker, rev9, err := GetLoadTask(etcdTestCli, task1, source1)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev9, check.Equals, rev8)
-	c.Assert(worker, check.Equals, "")
+	s.Require().NoError(err)
+	s.Require().Equal(rev8, rev9)
+	s.Require().Equal("", worker)
 
 	worker, rev10, err := GetLoadTask(etcdTestCli, task1, source2)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev10, check.Equals, rev9)
-	c.Assert(worker, check.Equals, worker2)
+	s.Require().NoError(err)
+	s.Require().Equal(rev9, rev10)
+	s.Require().Equal(worker2, worker)
 
 	// Delete load worker by task
 	rev11, succ, err := DelLoadTaskByTask(etcdTestCli, task1)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev11, check.Greater, rev10)
-	c.Assert(succ, check.IsTrue)
+	s.Require().NoError(err)
+	s.Require().Greater(rev11, rev10)
+	s.Require().True(succ)
 
 	tslwm, rev12, err := GetAllLoadTask(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev12, check.Equals, rev11)
-	c.Assert(tslwm, check.HasLen, 0)
+	s.Require().NoError(err)
+	s.Require().Equal(rev11, rev12)
+	s.Require().Len(tslwm, 0)
 
 	rev13, err := PutLoadTask(etcdTestCli, task2, source1, worker2)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev13, check.Greater, rev12)
+	s.Require().NoError(err)
+	s.Require().Greater(rev13, rev12)
 
 	// watch operations for the load worker.
 	loadTaskCh := make(chan LoadTask, 10)
@@ -114,18 +112,18 @@ func (t *testForEtcd) TestLoadTaskEtcd(c *check.C) {
 	cancel()
 	close(loadTaskCh)
 	close(errCh)
-	c.Assert(len(loadTaskCh), check.Equals, 3)
+	s.Require().Equal(3, len(loadTaskCh))
 	delLoadTask1 := <-loadTaskCh
-	c.Assert(delLoadTask1.Task, check.Equals, task1)
-	c.Assert(delLoadTask1.Source, check.Equals, source1)
-	c.Assert(delLoadTask1.IsDelete, check.IsTrue)
+	s.Require().Equal(task1, delLoadTask1.Task)
+	s.Require().Equal(source1, delLoadTask1.Source)
+	s.Require().True(delLoadTask1.IsDelete)
 	DelLoadTask2 := <-loadTaskCh
-	c.Assert(DelLoadTask2.Task, check.Equals, task1)
-	c.Assert(DelLoadTask2.Source, check.Equals, source2)
-	c.Assert(DelLoadTask2.IsDelete, check.IsTrue)
+	s.Require().Equal(task1, DelLoadTask2.Task)
+	s.Require().Equal(source2, DelLoadTask2.Source)
+	s.Require().True(DelLoadTask2.IsDelete)
 	putLoadTask := <-loadTaskCh
-	c.Assert(putLoadTask.Task, check.Equals, task2)
-	c.Assert(putLoadTask.Source, check.Equals, source1)
-	c.Assert(putLoadTask.IsDelete, check.IsFalse)
-	c.Assert(putLoadTask.Worker, check.Equals, worker2)
+	s.Require().Equal(task2, putLoadTask.Task)
+	s.Require().Equal(source1, putLoadTask.Source)
+	s.Require().False(putLoadTask.IsDelete)
+	s.Require().Equal(worker2, putLoadTask.Worker)
 }

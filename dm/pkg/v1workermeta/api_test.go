@@ -18,18 +18,15 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/require"
 )
 
-type testAPI struct{}
-
-var _ = check.Suite(&testAPI{})
-
-func (t *testAPI) TestAPI(c *check.C) {
+func TestAPI(t *testing.T) {
 	// nolint:dogsled
 	_, currFile, _, _ := runtime.Caller(0)
 	srcMetaPath := filepath.Join(filepath.Dir(currFile), "v106_data_for_test")
@@ -42,116 +39,116 @@ func (t *testAPI) TestAPI(c *check.C) {
 		dbPath = oldDBPath
 	}()
 
-	metaPath = c.MkDir()
+	metaPath = t.TempDir()
 	dbPath = filepath.Join(metaPath, "kv")
 
 	// copy test data to a temp directory.
-	copyDir(c, dbPath, srcDBPath)
+	copyDir(t, dbPath, srcDBPath)
 
 	// get subtasks meta.
 	meta, err := GetSubtasksMeta()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// verify tasks meta.
 	// - task_single:
 	//   - no shard task, Running stage.
 	// - task_shard
 	//   - shard task, Paused stage.
-	c.Assert(meta, check.HasLen, 2)
-	c.Assert(meta, check.HasKey, "task_single")
-	c.Assert(meta, check.HasKey, "task_shard")
-	c.Assert(meta["task_single"].Stage, check.Equals, pb.Stage_Running)
-	c.Assert(meta["task_shard"].Stage, check.Equals, pb.Stage_Paused)
+	require.Len(t, meta, 2)
+	require.Contains(t, meta, "task_single")
+	require.Contains(t, meta, "task_shard")
+	require.Equal(t, pb.Stage_Running, meta["task_single"].Stage)
+	require.Equal(t, pb.Stage_Paused, meta["task_shard"].Stage)
 
 	taskSingleCfg, err := SubTaskConfigFromV1TOML(meta["task_single"].Task)
-	c.Assert(err, check.IsNil)
-	c.Assert(taskSingleCfg.IsSharding, check.IsFalse)
-	c.Assert(taskSingleCfg.MydumperConfig.ChunkFilesize, check.Equals, "64")
+	require.NoError(t, err)
+	require.False(t, taskSingleCfg.IsSharding)
+	require.Equal(t, "64", taskSingleCfg.MydumperConfig.ChunkFilesize)
 
 	taskShardCfg, err := SubTaskConfigFromV1TOML(meta["task_shard"].Task)
-	c.Assert(err, check.IsNil)
-	c.Assert(taskShardCfg.IsSharding, check.IsTrue)
-	c.Assert(taskSingleCfg.MydumperConfig.ChunkFilesize, check.Equals, "64")
+	require.NoError(t, err)
+	require.True(t, taskShardCfg.IsSharding)
+	require.Equal(t, "64", taskSingleCfg.MydumperConfig.ChunkFilesize)
 
 	// try to get meta again, the same as before.
 	meta2, err := GetSubtasksMeta()
-	c.Assert(err, check.IsNil)
-	c.Assert(meta2, check.DeepEquals, meta)
+	require.NoError(t, err)
+	require.Equal(t, meta, meta2)
 
 	// remove all metadata.
-	c.Assert(RemoveSubtasksMeta(), check.IsNil)
+	require.NoError(t, RemoveSubtasksMeta())
 
 	// verify removed.
-	c.Assert(utils.IsDirExists(metaPath), check.IsFalse)
+	require.False(t, utils.IsDirExists(metaPath))
 
 	// try to get meta again, nothing exists.
 	meta3, err := GetSubtasksMeta()
-	c.Assert(err, check.IsNil)
-	c.Assert(meta3, check.IsNil)
+	require.NoError(t, err)
+	require.Nil(t, meta3)
 
 	// remove empty path is invalid.
-	c.Assert(terror.ErrInvalidV1WorkerMetaPath.Equal(RemoveSubtasksMeta()), check.IsTrue)
+	require.True(t, terror.ErrInvalidV1WorkerMetaPath.Equal(RemoveSubtasksMeta()))
 
 	// remove an invalid meta path.
-	metaPath = c.MkDir()
+	metaPath = t.TempDir()
 	dbPath = filepath.Join(metaPath, "kv")
-	c.Assert(os.Mkdir(dbPath, 0o644), check.IsNil)
-	c.Assert(terror.ErrInvalidV1WorkerMetaPath.Equal(RemoveSubtasksMeta()), check.IsTrue)
+	require.NoError(t, os.Mkdir(dbPath, 0o644))
+	require.True(t, terror.ErrInvalidV1WorkerMetaPath.Equal(RemoveSubtasksMeta()))
 }
 
-func copyDir(c *check.C, dst, src string) {
+func copyDir(t *testing.T, dst, src string) {
 	si, err := os.Stat(src)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	if !si.IsDir() {
-		c.Fatalf("source %s is not a directory", src)
+		t.Fatalf("source %s is not a directory", src)
 	}
 
 	_, err = os.Stat(dst)
 	if err != nil && !os.IsNotExist(err) {
-		c.Fatalf("fail to get stat for source %s", src)
+		t.Fatalf("fail to get stat for source %s", src)
 	}
 	if err == nil {
-		c.Fatalf("destination %s already exists", dst)
+		t.Fatalf("destination %s already exists", dst)
 	}
 
 	err = os.MkdirAll(dst, si.Mode())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	entries, err := os.ReadDir(src)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	for _, entry := range entries {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
 		if entry.IsDir() {
-			copyDir(c, dstPath, srcPath)
+			copyDir(t, dstPath, srcPath)
 		} else {
 			info, err := entry.Info()
-			c.Assert(err, check.IsNil)
+			require.NoError(t, err)
 			// Skip symlinks.
 			if info.Mode()&os.ModeSymlink != 0 {
 				continue
 			}
-			copyFile(c, dstPath, srcPath)
+			copyFile(t, dstPath, srcPath)
 		}
 	}
 }
 
-func copyFile(c *check.C, dst, src string) {
+func copyFile(t *testing.T, dst, src string) {
 	in, err := os.Open(src)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	defer in.Close()
 
 	out, err := os.Create(dst)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	defer out.Close()
 
 	_, err = io.Copy(out, in)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	si, err := os.Stat(src)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	err = os.Chmod(dst, si.Mode())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 }

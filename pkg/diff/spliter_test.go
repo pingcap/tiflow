@@ -15,28 +15,25 @@ package diff
 
 import (
 	"fmt"
+	"testing"
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	ttypes "github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
+	"github.com/stretchr/testify/require"
 )
-
-var _ = check.Suite(&testSpliterSuite{})
-
-type testSpliterSuite struct{}
 
 type chunkResult struct {
 	chunkStr string
 	args     []string
 }
 
-func (s *testSpliterSuite) TestSplitRangeByRandom(c *check.C) {
+func TestSplitRangeByRandom(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	testCases := []struct {
 		createTableSQL string
@@ -118,26 +115,26 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *check.C) {
 
 	for i, testCase := range testCases {
 		tableInfo, err := dbutiltest.GetTableInfoBySQL(testCase.createTableSQL, parser.New())
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 
 		splitCols, err := getSplitFields(tableInfo, nil)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		createFakeResultForRandomSplit(mock, 0, testCase.randomValues)
 
 		chunks, err := splitRangeByRandom(db, testCase.originChunk, testCase.splitCount, "test", "test", splitCols, "", "")
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		for j, chunk := range chunks {
 			chunkStr, args := chunk.toString("")
-			c.Log(i, j, chunkStr, args)
-			c.Assert(chunkStr, check.Equals, testCase.expectResult[j].chunkStr)
-			c.Assert(args, check.DeepEquals, testCase.expectResult[j].args)
+			t.Log(i, j, chunkStr, args)
+			require.Equal(t, testCase.expectResult[j].chunkStr, chunkStr)
+			require.Equal(t, testCase.expectResult[j].args, args)
 		}
 	}
 }
 
-func (s *testSpliterSuite) TestRandomSpliter(c *check.C) {
+func TestRandomSpliter(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	testCases := []struct {
 		createTableSQL string
@@ -205,7 +202,7 @@ func (s *testSpliterSuite) TestRandomSpliter(c *check.C) {
 
 	for i, testCase := range testCases {
 		tableInfo, err := dbutiltest.GetTableInfoBySQL(testCase.createTableSQL, parser.New())
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 
 		tableInstance := &TableInstance{
 			Conn:   db,
@@ -215,19 +212,19 @@ func (s *testSpliterSuite) TestRandomSpliter(c *check.C) {
 		}
 
 		splitCols, err := getSplitFields(tableInfo, nil)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 
 		createFakeResultForRandomSplit(mock, testCase.count, testCase.randomValues)
 
 		rSpliter := new(randomSpliter)
 		chunks, err := rSpliter.split(tableInstance, splitCols, 2, "TRUE", "")
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 
 		for j, chunk := range chunks {
 			chunkStr, args := chunk.toString("")
-			c.Log(i, j, chunkStr, args)
-			c.Assert(chunkStr, check.Equals, testCase.expectResult[j].chunkStr)
-			c.Assert(args, check.DeepEquals, testCase.expectResult[j].args)
+			t.Log(i, j, chunkStr, args)
+			require.Equal(t, testCase.expectResult[j].chunkStr, chunkStr)
+			require.Equal(t, testCase.expectResult[j].args, args)
 		}
 	}
 }
@@ -249,13 +246,13 @@ func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValue
 	}
 }
 
-func (s *testSpliterSuite) TestBucketSpliter(c *check.C) {
+func TestBucketSpliter(t *testing.T) {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
 	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	testCases := []struct {
 		chunkSize     int
@@ -429,12 +426,12 @@ func (s *testSpliterSuite) TestBucketSpliter(c *check.C) {
 		createFakeResultForBucketSplit(mock, testCase.aRandomValues, testCase.bRandomValues)
 		bSpliter := new(bucketSpliter)
 		chunks, err := bSpliter.split(tableInstance, testCase.chunkSize, "TRUE", "")
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		for j, chunk := range chunks {
 			chunkStr, args := chunk.toString("")
-			c.Log(i, j, chunkStr, args)
-			c.Assert(chunkStr, check.Equals, testCase.expectResult[j].chunkStr)
-			c.Assert(args, check.DeepEquals, testCase.expectResult[j].args)
+			t.Log(i, j, chunkStr, args)
+			require.Equal(t, testCase.expectResult[j].chunkStr, chunkStr)
+			require.Equal(t, testCase.expectResult[j].args, args)
 		}
 	}
 }

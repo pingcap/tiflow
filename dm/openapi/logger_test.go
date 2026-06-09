@@ -19,20 +19,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
 
-var _ = check.Suite(&zapLoggerSuite{})
-
-type zapLoggerSuite struct{}
-
 func TestZapLogger(t *testing.T) {
-	check.TestingT(t)
-}
-
-func (t *zapLoggerSuite) TestZapLogger(c *check.C) {
 	r := gin.New()
 	obs, logs := observer.New(zap.DebugLevel)
 	logger := zap.New(obs)
@@ -46,14 +38,14 @@ func (t *zapLoggerSuite) TestZapLogger(c *check.C) {
 	r.ServeHTTP(res, req)
 
 	logFields := logs.All()[0].ContextMap()
-	c.Assert(logFields["method"], check.Equals, "GET")
-	c.Assert(logFields["request"], check.Equals, "GET /something")
-	c.Assert(logFields["status"], check.Equals, int64(200))
-	c.Assert(logFields["duration"], check.NotNil)
-	c.Assert(logFields["host"], check.NotNil)
-	c.Assert(logFields["protocol"], check.NotNil)
-	c.Assert(logFields["remote_ip"], check.NotNil)
-	c.Assert(logFields["user_agent"], check.NotNil)
-	c.Assert(logFields["request"], check.NotNil)
-	c.Assert(logFields["error"], check.IsNil)
+	require.Equal(t, "GET", logFields["method"])
+	require.Equal(t, "GET /something", logFields["request"])
+	require.Equal(t, int64(200), logFields["status"])
+	require.NotNil(t, logFields["duration"])
+	require.NotNil(t, logFields["host"])
+	require.NotNil(t, logFields["protocol"])
+	require.NotNil(t, logFields["remote_ip"])
+	require.NotNil(t, logFields["user_agent"])
+	require.NotNil(t, logFields["request"])
+	require.Nil(t, logFields["error"])
 }

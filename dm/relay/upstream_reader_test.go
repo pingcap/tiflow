@@ -15,19 +15,16 @@ package relay
 
 import (
 	"context"
+	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&testRemoteReaderSuite{})
-
-type testRemoteReaderSuite struct{}
-
-func (t *testRemoteReaderSuite) TestInterface(c *check.C) {
+func TestInterface(t *testing.T) {
 	cases := []*replication.BinlogEvent{
 		{RawData: []byte{1}},
 		{RawData: []byte{2}},
@@ -43,26 +40,26 @@ func (t *testRemoteReaderSuite) TestInterface(c *check.C) {
 
 	// test with position
 	r := NewUpstreamReader(cfg)
-	t.testInterfaceWithReader(c, r, cases)
+	testInterfaceWithReader(t, r, cases)
 
 	// test with GTID
 	cfg.EnableGTID = true
 	r = NewUpstreamReader(cfg)
-	t.testInterfaceWithReader(c, r, cases)
+	testInterfaceWithReader(t, r, cases)
 }
 
-func (t *testRemoteReaderSuite) testInterfaceWithReader(c *check.C, r Reader, cases []*replication.BinlogEvent) {
+func testInterfaceWithReader(t *testing.T, r Reader, cases []*replication.BinlogEvent) {
 	// replace underlying reader with a mock reader for testing
 	concreteR := r.(*upstreamReader)
-	c.Assert(concreteR, check.NotNil)
+	require.NotNil(t, concreteR)
 	mockR := reader.NewMockReader()
 	concreteR.in = mockR
 
 	// start reader
 	err := r.Start()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	err = r.Start() // call multi times
-	c.Assert(err, check.NotNil)
+	require.Error(t, err)
 
 	// getEvent by pushing event to mock reader
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -70,33 +67,33 @@ func (t *testRemoteReaderSuite) testInterfaceWithReader(c *check.C, r Reader, ca
 	concreteMR := mockR.(*reader.MockReader)
 	go func() {
 		for _, cs := range cases {
-			c.Assert(concreteMR.PushEvent(ctx, cs), check.IsNil)
+			require.NoError(t, concreteMR.PushEvent(ctx, cs))
 		}
 	}()
 	obtained := make([]*replication.BinlogEvent, 0, len(cases))
 	for {
 		result, err2 := r.GetEvent(ctx)
-		c.Assert(err2, check.IsNil)
+		require.Nil(t, err2)
 		obtained = append(obtained, result.Event)
 		if len(obtained) == len(cases) {
 			break
 		}
 	}
-	c.Assert(obtained, check.DeepEquals, cases)
+	require.Equal(t, cases, obtained)
 
 	// close reader
 	err = r.Close()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	err = r.Close()
-	c.Assert(err, check.NotNil) // call multi times
+	require.Error(t, err) // call multi times
 
 	// getEvent from a closed reader
 	result, err := r.GetEvent(ctx)
-	c.Assert(err, check.NotNil)
-	c.Assert(result.Event, check.IsNil)
+	require.Error(t, err)
+	require.Nil(t, result.Event)
 }
 
-func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
+func TestGetEventWithError(t *testing.T) {
 	cfg := &RConfig{
 		SyncConfig: replication.BinlogSyncerConfig{
 			ServerID: 101,
@@ -107,7 +104,7 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 	r := NewUpstreamReader(cfg)
 	// replace underlying reader with a mock reader for testing
 	concreteR := r.(*upstreamReader)
-	c.Assert(concreteR, check.NotNil)
+	require.NotNil(t, concreteR)
 	mockR := reader.NewMockReader()
 	concreteR.in = mockR
 
@@ -122,7 +119,7 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 	}
 
 	err := r.Start()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// getEvent by pushing event to mock reader
 	ctx, cancel := context.WithCancel(context.Background())
@@ -130,18 +127,18 @@ func (t *testRemoteReaderSuite) TestGetEventWithError(c *check.C) {
 	concreteMR := mockR.(*reader.MockReader)
 	go func() {
 		for _, cs := range in {
-			c.Assert(concreteMR.PushError(ctx, cs), check.IsNil)
+			require.NoError(t, concreteMR.PushError(ctx, cs))
 		}
 	}()
 
 	results := make([]error, 0, len(expected))
 	for {
 		_, err2 := r.GetEvent(ctx)
-		c.Assert(err2, check.NotNil)
+		require.NotNil(t, err2)
 		results = append(results, errors.Cause(err2))
 		if err2 == errOther {
 			break // all received
 		}
 	}
-	c.Assert(results, check.DeepEquals, expected)
+	require.Equal(t, expected, results)
 }

@@ -18,33 +18,32 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
-func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *check.C) {
+func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile() {
 	// UUID mismatch
 	safeRelay := &streamer.RelayLogInfo{
 		SubDir: "not-found-uuid",
 	}
 	files, err := getRelayFilesBeforeFile(log.L(), "", t.uuids, safeRelay)
-	c.Assert(err, check.NotNil)
-	c.Assert(files, check.IsNil)
+	t.Require().Error(err)
+	t.Require().Nil(files)
 
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 	// empty relay log dirs
 	safeRelay = &streamer.RelayLogInfo{
 		SubDir: t.uuids[len(t.uuids)-1],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
-	c.Assert(err, check.NotNil)
-	c.Assert(files, check.IsNil)
+	t.Require().Error(err)
+	t.Require().Nil(files)
 
 	// create relay log files
-	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(c, baseDir, -1, -1)
+	relayDirsPath, relayFilesPath, _ := t.genRelayLogFiles(baseDir, -1, -1)
 
 	// no older
 	safeRelay = &streamer.RelayLogInfo{
@@ -52,8 +51,8 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *check.C) {
 		Filename: t.relayFiles[0][0],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
-	c.Assert(err, check.IsNil)
-	c.Assert(files, check.DeepEquals, []*subRelayFiles{})
+	t.Require().NoError(err)
+	t.Require().Equal([]*subRelayFiles{}, files)
 
 	// only relay files in first sub dir
 	safeRelay = &streamer.RelayLogInfo{
@@ -61,11 +60,11 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *check.C) {
 		Filename: t.relayFiles[1][0],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(files), check.Equals, 1)
-	c.Assert(files[0].dir, check.Equals, relayDirsPath[0])
-	c.Assert(files[0].files, check.DeepEquals, relayFilesPath[0])
-	c.Assert(files[0].hasAll, check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().Equal(1, len(files))
+	t.Require().Equal(relayDirsPath[0], files[0].dir)
+	t.Require().Equal(relayFilesPath[0], files[0].files)
+	t.Require().True(files[0].hasAll)
 
 	// relay files in first sub dir, and some in second sub dir
 	safeRelay = &streamer.RelayLogInfo{
@@ -73,14 +72,14 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *check.C) {
 		Filename: t.relayFiles[1][len(t.relayFiles[1])-1],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(files), check.Equals, 2)
-	c.Assert(files[0].dir, check.Equals, relayDirsPath[0])
-	c.Assert(files[0].files, check.DeepEquals, relayFilesPath[0])
-	c.Assert(files[0].hasAll, check.IsTrue)
-	c.Assert(files[1].dir, check.Equals, relayDirsPath[1])
-	c.Assert(files[1].files, check.DeepEquals, relayFilesPath[1][:len(t.relayFiles[1])-1])
-	c.Assert(files[1].hasAll, check.IsFalse)
+	t.Require().NoError(err)
+	t.Require().Equal(2, len(files))
+	t.Require().Equal(relayDirsPath[0], files[0].dir)
+	t.Require().Equal(relayFilesPath[0], files[0].files)
+	t.Require().True(files[0].hasAll)
+	t.Require().Equal(relayDirsPath[1], files[1].dir)
+	t.Require().Equal(relayFilesPath[1][:len(t.relayFiles[1])-1], files[1].files)
+	t.Require().False(files[1].hasAll)
 
 	// relay files in first and second sub dir, and some in third sub dir
 	safeRelay = &streamer.RelayLogInfo{
@@ -88,47 +87,47 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFile(c *check.C) {
 		Filename: t.relayFiles[2][1],
 	}
 	files, err = getRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(files), check.Equals, 3)
-	c.Assert(files[0].dir, check.Equals, relayDirsPath[0])
-	c.Assert(files[0].files, check.DeepEquals, relayFilesPath[0])
-	c.Assert(files[0].hasAll, check.IsTrue)
-	c.Assert(files[1].dir, check.Equals, relayDirsPath[1])
-	c.Assert(files[1].files, check.DeepEquals, relayFilesPath[1])
-	c.Assert(files[1].hasAll, check.IsTrue)
-	c.Assert(files[2].dir, check.Equals, relayDirsPath[2])
-	c.Assert(files[2].files, check.DeepEquals, relayFilesPath[2][:1])
-	c.Assert(files[2].hasAll, check.IsFalse)
+	t.Require().NoError(err)
+	t.Require().Equal(3, len(files))
+	t.Require().Equal(relayDirsPath[0], files[0].dir)
+	t.Require().Equal(relayFilesPath[0], files[0].files)
+	t.Require().True(files[0].hasAll)
+	t.Require().Equal(relayDirsPath[1], files[1].dir)
+	t.Require().Equal(relayFilesPath[1], files[1].files)
+	t.Require().True(files[1].hasAll)
+	t.Require().Equal(relayDirsPath[2], files[2].dir)
+	t.Require().Equal(relayFilesPath[2][:1], files[2].files)
+	t.Require().False(files[2].hasAll)
 
 	// write a fake meta file to first sub dir
 	fakeMeta := filepath.Join(relayDirsPath[0], utils.MetaFilename)
-	c.Assert(os.WriteFile(fakeMeta, []byte{}, 0o666), check.IsNil)
+	t.Require().Nil(os.WriteFile(fakeMeta, []byte{}, 0o666))
 
 	// purge all relay log files in first and second sub dir, and some in third sub dir
 	err = purgeRelayFilesBeforeFile(log.L(), baseDir, t.uuids, safeRelay)
-	c.Assert(err, check.IsNil)
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
-	c.Assert(utils.IsFileExists(relayFilesPath[2][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[2][1]), check.IsTrue)
-	c.Assert(utils.IsFileExists(relayFilesPath[2][2]), check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().False(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().False(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[2][0]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[2][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[2][2]))
 }
 
-func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *check.C) {
+func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime() {
 	// create relay log dir
-	baseDir := c.MkDir()
+	baseDir := t.T().TempDir()
 
 	// empty relay log dirs
 	safeRelay := &streamer.RelayLogInfo{
 		SubDir: t.uuids[len(t.uuids)-1],
 	}
 	files, err := getRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, time.Now())
-	c.Assert(err, check.NotNil)
-	c.Assert(files, check.IsNil)
+	t.Require().Error(err)
+	t.Require().Nil(files)
 
 	// create relay log files
-	relayDirsPath, relayFilesPath, safeTime := t.genRelayLogFiles(c, baseDir, 1, 1)
+	relayDirsPath, relayFilesPath, safeTime := t.genRelayLogFiles(baseDir, 1, 1)
 
 	// safeRelay older than safeTime
 	safeRelay = &streamer.RelayLogInfo{
@@ -136,11 +135,11 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *check.C) {
 		Filename: t.relayFiles[1][0],
 	}
 	files, err = getRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, safeTime)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(files), check.Equals, 1)
-	c.Assert(files[0].dir, check.Equals, relayDirsPath[0])
-	c.Assert(files[0].files, check.DeepEquals, relayFilesPath[0])
-	c.Assert(files[0].hasAll, check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().Equal(1, len(files))
+	t.Require().Equal(relayDirsPath[0], files[0].dir)
+	t.Require().Equal(relayFilesPath[0], files[0].files)
+	t.Require().True(files[0].hasAll)
 
 	// safeRelay newer than safeTime
 	safeRelay = &streamer.RelayLogInfo{
@@ -148,26 +147,26 @@ func (t *testPurgerSuite) TestPurgeRelayFilesBeforeFileAndTime(c *check.C) {
 		Filename: t.relayFiles[2][0],
 	}
 	files, err = getRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, safeTime)
-	c.Assert(err, check.IsNil)
-	c.Assert(len(files), check.Equals, 2)
-	c.Assert(files[0].dir, check.Equals, relayDirsPath[0])
-	c.Assert(files[0].files, check.DeepEquals, relayFilesPath[0])
-	c.Assert(files[0].hasAll, check.IsTrue)
-	c.Assert(files[1].dir, check.Equals, relayDirsPath[1])
-	c.Assert(files[1].files, check.DeepEquals, relayFilesPath[1][:2])
-	c.Assert(files[1].hasAll, check.IsFalse)
+	t.Require().NoError(err)
+	t.Require().Equal(2, len(files))
+	t.Require().Equal(relayDirsPath[0], files[0].dir)
+	t.Require().Equal(relayFilesPath[0], files[0].files)
+	t.Require().True(files[0].hasAll)
+	t.Require().Equal(relayDirsPath[1], files[1].dir)
+	t.Require().Equal(relayFilesPath[1][:2], files[1].files)
+	t.Require().False(files[1].hasAll)
 
 	// write a fake meta file to first sub dir
 	fakeMeta := filepath.Join(relayDirsPath[0], utils.MetaFilename)
-	c.Assert(os.WriteFile(fakeMeta, []byte{}, 0o666), check.IsNil)
+	t.Require().Nil(os.WriteFile(fakeMeta, []byte{}, 0o666))
 
 	// purge all relay log files in first and second sub dir, and some in third sub dir
 	err = purgeRelayFilesBeforeFileAndTime(log.L(), baseDir, t.uuids, safeRelay, safeTime)
-	c.Assert(err, check.IsNil)
-	c.Assert(utils.IsDirExists(relayDirsPath[0]), check.IsFalse)
-	c.Assert(utils.IsDirExists(relayDirsPath[1]), check.IsTrue)
-	c.Assert(utils.IsDirExists(relayDirsPath[2]), check.IsTrue)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][0]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][1]), check.IsFalse)
-	c.Assert(utils.IsFileExists(relayFilesPath[1][2]), check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().False(utils.IsDirExists(relayDirsPath[0]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[1]))
+	t.Require().True(utils.IsDirExists(relayDirsPath[2]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][0]))
+	t.Require().False(utils.IsFileExists(relayFilesPath[1][1]))
+	t.Require().True(utils.IsFileExists(relayFilesPath[1][2]))
 }

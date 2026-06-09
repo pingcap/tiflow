@@ -18,18 +18,10 @@ import (
 	"path"
 	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func TestCommon(t *testing.T) {
-	check.TestingT(t)
-}
-
-type testCommon struct{}
-
-var _ = check.Suite(&testCommon{})
-
-func (t *testCommon) TestKeyAdapter(c *check.C) {
+func TestKeyAdapter(t *testing.T) {
 	testCases := []struct {
 		keys    []string
 		adapter KeyAdapter
@@ -84,14 +76,14 @@ func (t *testCommon) TestKeyAdapter(c *check.C) {
 
 	for _, ca := range testCases {
 		encKey := ca.adapter.Encode(ca.keys...)
-		c.Assert(encKey, check.Equals, ca.want)
+		require.Equal(t, ca.want, encKey)
 		decKey, err := ca.adapter.Decode(encKey)
-		c.Assert(err, check.IsNil)
-		c.Assert(decKey, check.DeepEquals, ca.keys)
+		require.NoError(t, err)
+		require.Equal(t, ca.keys, decKey)
 	}
 }
 
-func (t *testCommon) TestEncodeAsPrefix(c *check.C) {
+func TestEncodeAsPrefix(t *testing.T) {
 	testCases := []struct {
 		keys    []string
 		adapter KeyAdapter
@@ -106,22 +98,22 @@ func (t *testCommon) TestEncodeAsPrefix(c *check.C) {
 
 	for _, ca := range testCases {
 		encKey := ca.adapter.Encode(ca.keys...)
-		c.Assert(encKey, check.Equals, ca.want)
+		require.Equal(t, ca.want, encKey)
 		_, err := ca.adapter.Decode(encKey)
-		c.Assert(err, check.NotNil)
+		require.NotNil(t, err)
 	}
 }
 
-func (t *testCommon) TestIsErrNetClosing(c *check.C) {
+func TestIsErrNetClosing(t *testing.T) {
 	server, err := net.Listen("tcp", "localhost:0")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	err = server.Close()
-	c.Assert(IsErrNetClosing(err), check.IsFalse)
+	require.False(t, IsErrNetClosing(err))
 	_, err = server.Accept()
-	c.Assert(IsErrNetClosing(err), check.IsTrue)
+	require.True(t, IsErrNetClosing(err))
 }
 
-func (t *testCommon) TestJoinUseSlash(c *check.C) {
+func TestJoinUseSlash(t *testing.T) {
 	// because we use "/" in Encode
-	c.Assert(path.Join("a", "b"), check.Equals, "a/b")
+	require.Equal(t, "a/b", path.Join("a", "b"))
 }

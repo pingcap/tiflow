@@ -21,20 +21,21 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
+	"github.com/stretchr/testify/suite"
 )
 
 func TestSuite(t *testing.T) {
-	check.TestingT(t)
+	suite.Run(t, new(testSchema))
 }
 
 type testSchema struct {
+	suite.Suite
 	host     string
 	port     int
 	user     string
@@ -43,17 +44,15 @@ type testSchema struct {
 	mockDB   sqlmock.Sqlmock
 }
 
-var _ = check.Suite(&testSchema{})
-
-func (t *testSchema) SetUpSuite(c *check.C) {
-	t.setUpDBConn(c)
+func (t *testSchema) SetupSuite() {
+	t.setUpDBConn()
 }
 
-func (t *testSchema) TestTearDown(c *check.C) {
+func (t *testSchema) TestTearDown() {
 	t.db.Close()
 }
 
-func (t *testSchema) setUpDBConn(c *check.C) {
+func (t *testSchema) setUpDBConn() {
 	t.host = os.Getenv("MYSQL_HOST")
 	if t.host == "" {
 		t.host = "127.0.0.1"
@@ -78,12 +77,12 @@ func (t *testSchema) setUpDBConn(c *check.C) {
 	cfg.Adjust()
 
 	var err error
-	t.mockDB = conn.InitMockDB(c)
+	t.mockDB = conn.InitMockDB(t.T())
 	t.db, err = conn.GetUpstreamDB(cfg)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 }
 
-func (t *testSchema) TestSchemaV106ToV20x(c *check.C) {
+func (t *testSchema) TestSchemaV106ToV20x() {
 	var (
 		tctx = tcontext.Background()
 		cfg  = &config.SubTaskConfig{
@@ -101,10 +100,10 @@ func (t *testSchema) TestSchemaV106ToV20x(c *check.C) {
 		endGS, _ = gtid.ParserGTID(gmysql.MySQLFlavor, "ccb992ad-a557-11ea-ba6a-0242ac140002:1-16")
 	)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/v1dbschema/MockGetGTIDsForPos", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:10-16")`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/v1dbschema/MockGetGTIDsForPos", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:10-16")`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/v1dbschema/MockGetGTIDsForPos")
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:1-9")`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("ccb992ad-a557-11ea-ba6a-0242ac140002:1-9")`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged")
 
@@ -118,13 +117,13 @@ func (t *testSchema) TestSchemaV106ToV20x(c *check.C) {
 	t.mockDB.ExpectBegin()
 	t.mockDB.ExpectExec("UPDATE `dm_meta_v106_test`.`test_onlineddl`.*").WithArgs(cfg.SourceID, fmt.Sprint(cfg.ServerID)).WillReturnResult(sqlmock.NewErrorResult(nil))
 	t.mockDB.ExpectCommit()
-	c.Assert(UpdateSchema(tctx, t.db, cfg), check.IsNil)
-	c.Assert(t.mockDB.ExpectationsWereMet(), check.IsNil)
+	t.Require().NoError(UpdateSchema(tctx, t.db, cfg))
+	t.Require().NoError(t.mockDB.ExpectationsWereMet())
 
 	// update schema with GTID enabled.
 	cfg.EnableGTID = true
 	// reset mockDB conn because last UpdateSchema would close the conn.
-	t.setUpDBConn(c)
+	t.setUpDBConn()
 	// mock updateSyncerCheckpoint
 	t.mockDB.ExpectQuery("SELECT binlog_name, binlog_pos FROM `dm_meta_v106_test`.`test_syncer_checkpoint`.*").
 		WithArgs(cfg.SourceID, true).WillReturnRows(sqlmock.NewRows([]string{"binlog_name", "binlog_pos"}).
@@ -141,6 +140,6 @@ func (t *testSchema) TestSchemaV106ToV20x(c *check.C) {
 	t.mockDB.ExpectBegin()
 	t.mockDB.ExpectExec("UPDATE `dm_meta_v106_test`.`test_onlineddl`.*").WithArgs(cfg.SourceID, fmt.Sprint(cfg.ServerID)).WillReturnResult(sqlmock.NewErrorResult(nil))
 	t.mockDB.ExpectCommit()
-	c.Assert(UpdateSchema(tctx, t.db, cfg), check.IsNil)
-	c.Assert(t.mockDB.ExpectationsWereMet(), check.IsNil)
+	t.Require().NoError(UpdateSchema(tctx, t.db, cfg))
+	t.Require().NoError(t.mockDB.ExpectationsWereMet())
 }

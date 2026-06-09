@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
@@ -31,7 +30,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (s *testSyncerSuite) TestDetectConflict(c *check.C) {
+func (s *testSyncerSuite) TestDetectConflict() {
 	ca := &causality{
 		relation: newCausalityRelation(),
 	}
@@ -43,25 +42,25 @@ func (s *testSyncerSuite) TestDetectConflict(c *check.C) {
 	}
 
 	assertRelationsEq := func(expectMap map[string]string) {
-		c.Assert(ca.relation.len(), check.Equals, len(expectMap))
+		s.Require().Equal(len(expectMap), ca.relation.len())
 		for k, expV := range expectMap {
 			v, ok := ca.relation.get(k)
-			c.Assert(ok, check.IsTrue)
-			c.Assert(v, check.Equals, expV)
+			s.Require().True(ok)
+			s.Require().Equal(expV, v)
 		}
 	}
 
-	c.Assert(ca.detectConflict(caseData), check.IsFalse)
+	s.Require().False(ca.detectConflict(caseData))
 	ca.add(caseData)
 	assertRelationsEq(excepted)
-	c.Assert(ca.detectConflict([]string{"test_4"}), check.IsFalse)
+	s.Require().False(ca.detectConflict([]string{"test_4"}))
 	ca.add([]string{"test_4"})
 	excepted["test_4"] = "test_4"
 	assertRelationsEq(excepted)
 	conflictData := []string{"test_4", "test_3"}
-	c.Assert(ca.detectConflict(conflictData), check.IsTrue)
+	s.Require().True(ca.detectConflict(conflictData))
 	ca.relation.clear()
-	c.Assert(ca.relation.len(), check.Equals, 0)
+	s.Require().Equal(0, ca.relation.len())
 }
 
 func TestCausality(t *testing.T) {
@@ -127,10 +126,10 @@ func TestCausality(t *testing.T) {
 	}
 }
 
-func (s *testSyncerSuite) TestCasualityRelation(c *check.C) {
+func (s *testSyncerSuite) TestCasualityRelation() {
 	rm := newCausalityRelation()
-	c.Assert(rm.len(), check.Equals, 0)
-	c.Assert(len(rm.groups), check.Equals, 1)
+	s.Require().Equal(0, rm.len())
+	s.Require().Equal(1, len(rm.groups))
 
 	testCases := []struct {
 		key string
@@ -154,17 +153,17 @@ func (s *testSyncerSuite) TestCasualityRelation(c *check.C) {
 		rm.set(testcase.key, testcase.val)
 	}
 
-	c.Assert(rm.len(), check.Equals, len(testCases))
+	s.Require().Equal(len(testCases), rm.len())
 
 	for _, testcase := range testCases {
 		val, ok := rm.get(testcase.key)
-		c.Assert(ok, check.Equals, true)
-		c.Assert(val, check.Equals, testcase.val)
+		s.Require().Equal(true, ok)
+		s.Require().Equal(testcase.val, val)
 	}
 
 	rm.rotate(1)
 	rm.gc(1)
-	c.Assert(rm.len(), check.Equals, 0)
+	s.Require().Equal(0, rm.len())
 
 	// test gc max
 	for _, testcase := range testCases {
@@ -172,7 +171,7 @@ func (s *testSyncerSuite) TestCasualityRelation(c *check.C) {
 	}
 
 	rm.gc(math.MaxInt64)
-	c.Assert(rm.len(), check.Equals, 0)
+	s.Require().Equal(0, rm.len())
 
 	// test with rotate
 	for index, testcase := range testCases {
@@ -180,27 +179,27 @@ func (s *testSyncerSuite) TestCasualityRelation(c *check.C) {
 		rm.rotate(int64(index))
 	}
 
-	c.Assert(rm.len(), check.Equals, len(testCases))
+	s.Require().Equal(len(testCases), rm.len())
 
 	for _, testcase := range testCases {
 		val, ok := rm.get(testcase.key)
-		c.Assert(ok, check.Equals, true)
-		c.Assert(val, check.Equals, testcase.val)
+		s.Require().Equal(true, ok)
+		s.Require().Equal(testcase.val, val)
 	}
 
 	for index := range testCases {
 		rm.gc(int64(index))
 
 		for _, rmMap := range rm.groups[1:] {
-			c.Assert(rmMap.prevFlushJobSeq, check.Not(check.Equals), int64(index))
+			s.Require().NotEqual(int64(index), rmMap.prevFlushJobSeq)
 		}
 
 		for ti := 0; ti < index; ti++ {
 			_, ok := rm.get(testCases[ti].key)
-			c.Assert(ok, check.Equals, false)
+			s.Require().Equal(false, ok)
 		}
 	}
 
 	rm.clear()
-	c.Assert(rm.len(), check.Equals, 0)
+	s.Require().Equal(0, rm.len())
 }

@@ -26,33 +26,34 @@ import (
 	"testing"
 
 	capturer "github.com/kami-zh/go-capturer"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
-var _ = check.Suite(&testConfigSuite{})
-
-type testConfigSuite struct{}
-
-func (t *testConfigSuite) SetUpSuite(c *check.C) {
-	// initialized the logger to make genEmbedEtcdConfig working.
-	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
+type testConfigSuite struct {
+	suite.Suite
 }
 
-func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
+func (t *testConfigSuite) SetupSuite() {
+	// initialized the logger to make genEmbedEtcdConfig working.
+	t.Require().NoError(log.InitLogger(&log.Config{}))
+}
+
+func (t *testConfigSuite) TestPrintSampleConfig() {
 	// test print sample config
 	out := capturer.CaptureStdout(func() {
 		cfg := NewConfig()
 		err := cfg.Parse([]string{"-print-sample-config"})
-		c.Assert(err, check.ErrorMatches, flag.ErrHelp.Error())
+		t.Require().Error(err)
+		t.Require().Regexp(flag.ErrHelp.Error(), err.Error())
 	})
-	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(SampleConfig))
+	t.Require().Equal(strings.TrimSpace(SampleConfig), strings.TrimSpace(out))
 }
 
-func (t *testConfigSuite) TestConfig(c *check.C) {
+func (t *testConfigSuite) TestConfig() {
 	var (
 		err        error
 		cfg        = &Config{}
@@ -81,106 +82,110 @@ func (t *testConfigSuite) TestConfig(c *check.C) {
 	)
 
 	err = cfg.FromContent(SampleConfig)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	err = cfg.Reload()
-	c.Assert(err, check.IsNil)
-	c.Assert(cfg.MasterAddr, check.Equals, masterAddr)
+	t.Require().NoError(err)
+	t.Require().Equal(masterAddr, cfg.MasterAddr)
 
 	for _, tc := range cases {
 		cfg = NewConfig()
 		err = cfg.Parse(tc.args)
 		if tc.hasError {
-			c.Assert(err, check.ErrorMatches, tc.errorReg)
+			t.Require().Error(err)
+			t.Require().Regexp(tc.errorReg, err.Error())
 		}
 	}
 }
 
-func (t *testConfigSuite) TestInvalidConfig(c *check.C) {
+func (t *testConfigSuite) TestInvalidConfig() {
 	var (
 		err error
 		cfg = NewConfig()
 	)
 
-	filepath := path.Join(c.MkDir(), "test_invalid_config.toml")
+	filepath := path.Join(t.T().TempDir(), "test_invalid_config.toml")
 	// field still remain undecoded in config will cause verify failed
 	configContent := []byte(`
 master-addr = ":8261"
 advertise-addr = "127.0.0.1:8261"
 aaa = "xxx"`)
 	err = os.WriteFile(filepath, configContent, 0o644)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	err = cfg.configFromFile(filepath)
-	c.Assert(err, check.NotNil)
-	c.Assert(err, check.ErrorMatches, "*master config contained unknown configuration options: aaa.*")
+	t.Require().Error(err)
+	t.Require().Regexp("*master config contained unknown configuration options: aaa.*", err.Error())
 
 	// invalid `master-addr`
-	filepath2 := path.Join(c.MkDir(), "test_invalid_config.toml")
+	filepath2 := path.Join(t.T().TempDir(), "test_invalid_config.toml")
 	configContent2 := []byte(`master-addr = ""`)
 	err = os.WriteFile(filepath2, configContent2, 0o644)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	err = cfg.configFromFile(filepath2)
-	c.Assert(err, check.IsNil)
-	c.Assert(terror.ErrMasterHostPortNotValid.Equal(cfg.adjust()), check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().True(terror.ErrMasterHostPortNotValid.Equal(cfg.adjust()))
 }
 
-func (t *testConfigSuite) TestGenEmbedEtcdConfig(c *check.C) {
+func (t *testConfigSuite) TestGenEmbedEtcdConfig() {
 	hostname, err := os.Hostname()
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfg1 := NewConfig()
 	cfg1.MasterAddr = ":8261"
 	cfg1.AdvertiseAddr = "127.0.0.1:8261"
 	cfg1.InitialClusterState = embed.ClusterStateFlagExisting
-	c.Assert(cfg1.adjust(), check.IsNil)
+	t.Require().NoError(cfg1.adjust())
 	etcdCfg, err := cfg1.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.Name, check.Equals, fmt.Sprintf("dm-master-%s", hostname))
-	c.Assert(etcdCfg.Dir, check.Equals, fmt.Sprintf("default.%s", etcdCfg.Name))
-	c.Assert(etcdCfg.ListenClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "0.0.0.0:8261"}})
-	c.Assert(etcdCfg.AdvertiseClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8261"}})
-	c.Assert(etcdCfg.ListenPeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
-	c.Assert(etcdCfg.AdvertisePeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}})
-	c.Assert(etcdCfg.InitialCluster, check.DeepEquals, fmt.Sprintf("dm-master-%s=http://127.0.0.1:8291", hostname))
-	c.Assert(etcdCfg.ClusterState, check.Equals, embed.ClusterStateFlagExisting)
-	c.Assert(etcdCfg.AutoCompactionMode, check.Equals, "periodic")
-	c.Assert(etcdCfg.AutoCompactionRetention, check.Equals, "1h")
-	c.Assert(etcdCfg.QuotaBackendBytes, check.Equals, int64(2*1024*1024*1024))
+	t.Require().NoError(err)
+	t.Require().Equal(fmt.Sprintf("dm-master-%s", hostname), etcdCfg.Name)
+	t.Require().Equal(fmt.Sprintf("default.%s", etcdCfg.Name), etcdCfg.Dir)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "0.0.0.0:8261"}}, etcdCfg.ListenClientUrls)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "127.0.0.1:8261"}}, etcdCfg.AdvertiseClientUrls)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}}, etcdCfg.ListenPeerUrls)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "127.0.0.1:8291"}}, etcdCfg.AdvertisePeerUrls)
+	t.Require().Equal(fmt.Sprintf("dm-master-%s=http://127.0.0.1:8291", hostname), etcdCfg.InitialCluster)
+	t.Require().Equal(embed.ClusterStateFlagExisting, etcdCfg.ClusterState)
+	t.Require().Equal("periodic", etcdCfg.AutoCompactionMode)
+	t.Require().Equal("1h", etcdCfg.AutoCompactionRetention)
+	t.Require().Equal(int64(2*1024*1024*1024), etcdCfg.QuotaBackendBytes)
 
 	cfg2 := *cfg1
 	cfg2.MasterAddr = "127.0.0.1\n:8261"
 	cfg2.AdvertiseAddr = "127.0.0.1:8261"
 	_, err = cfg2.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, "(?m).*invalid master-addr.*")
+	t.Require().True(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp("(?m).*invalid master-addr.*", err.Error())
 	cfg2.MasterAddr = "172.100.8.8:8261"
 	cfg2.AdvertiseAddr = "172.100.8.8:8261"
 	etcdCfg, err = cfg2.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.ListenClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
-	c.Assert(etcdCfg.AdvertiseClientUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}})
+	t.Require().NoError(err)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}}, etcdCfg.ListenClientUrls)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "172.100.8.8:8261"}}, etcdCfg.AdvertiseClientUrls)
 
 	cfg3 := *cfg1
 	cfg3.PeerUrls = "127.0.0.1:\n8291"
 	_, err = cfg3.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, "(?m).*invalid peer-urls.*")
+	t.Require().True(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp("(?m).*invalid peer-urls.*", err.Error())
 	cfg3.PeerUrls = "http://172.100.8.8:8291"
 	etcdCfg, err = cfg3.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.ListenPeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
+	t.Require().NoError(err)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}}, etcdCfg.ListenPeerUrls)
 
 	cfg4 := *cfg1
 	cfg4.AdvertisePeerUrls = "127.0.0.1:\n8291"
 	_, err = cfg4.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, "(?m).*invalid advertise-peer-urls.*")
+	t.Require().True(terror.ErrMasterGenEmbedEtcdConfigFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp("(?m).*invalid advertise-peer-urls.*", err.Error())
 	cfg4.AdvertisePeerUrls = "http://172.100.8.8:8291"
 	etcdCfg, err = cfg4.genEmbedEtcdConfig(embed.NewConfig())
-	c.Assert(err, check.IsNil)
-	c.Assert(etcdCfg.AdvertisePeerUrls, check.DeepEquals, []url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}})
+	t.Require().NoError(err)
+	t.Require().Equal([]url.URL{{Scheme: "http", Host: "172.100.8.8:8291"}}, etcdCfg.AdvertisePeerUrls)
 }
 
-func (t *testConfigSuite) TestParseURLs(c *check.C) {
+func (t *testConfigSuite) TestParseURLs() {
 	cases := []struct {
 		str    string
 		urls   []url.URL
@@ -245,59 +250,59 @@ func (t *testConfigSuite) TestParseURLs(c *check.C) {
 	}
 
 	for _, cs := range cases {
-		c.Logf("raw string %s", cs.str)
+		t.T().Logf("raw string %s", cs.str)
 		urls, err := parseURLs(cs.str)
 		if cs.hasErr {
-			c.Assert(terror.ErrMasterParseURLFail.Equal(err), check.IsTrue)
+			t.Require().True(terror.ErrMasterParseURLFail.Equal(err))
 		} else {
-			c.Assert(err, check.IsNil)
-			c.Assert(urls, check.DeepEquals, cs.urls)
+			t.Require().NoError(err)
+			t.Require().Equal(cs.urls, urls)
 		}
 	}
 }
 
-func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
+func (t *testConfigSuite) TestAdjustAddr() {
 	cfg := NewConfig()
-	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
-	c.Assert(cfg.adjust(), check.IsNil)
+	t.Require().NoError(cfg.FromContent(SampleConfig))
+	t.Require().NoError(cfg.adjust())
 
 	// invalid `advertise-addr`
 	cfg.AdvertiseAddr = "127.0.0.1"
-	c.Assert(terror.ErrMasterAdvertiseAddrNotValid.Equal(cfg.adjust()), check.IsTrue)
+	t.Require().True(terror.ErrMasterAdvertiseAddrNotValid.Equal(cfg.adjust()))
 	cfg.AdvertiseAddr = "0.0.0.0:8261"
-	c.Assert(terror.ErrMasterAdvertiseAddrNotValid.Equal(cfg.adjust()), check.IsTrue)
+	t.Require().True(terror.ErrMasterAdvertiseAddrNotValid.Equal(cfg.adjust()))
 
 	// clear `advertise-addr`, still invalid because no `host` in `master-addr`.
 	cfg.AdvertiseAddr = ""
-	c.Assert(terror.ErrMasterHostPortNotValid.Equal(cfg.adjust()), check.IsTrue)
+	t.Require().True(terror.ErrMasterHostPortNotValid.Equal(cfg.adjust()))
 
 	cfg.MasterAddr = "127.0.0.1:8261"
-	c.Assert(cfg.adjust(), check.IsNil)
-	c.Assert(cfg.AdvertiseAddr, check.Equals, cfg.MasterAddr)
+	t.Require().NoError(cfg.adjust())
+	t.Require().Equal(cfg.MasterAddr, cfg.AdvertiseAddr)
 }
 
-func (t *testConfigSuite) TestAdjustOpenAPI(c *check.C) {
+func (t *testConfigSuite) TestAdjustOpenAPI() {
 	cfg := NewConfig()
-	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
-	c.Assert(cfg.adjust(), check.IsNil)
+	t.Require().NoError(cfg.FromContent(SampleConfig))
+	t.Require().NoError(cfg.adjust())
 
 	// test default value
-	c.Assert(cfg.OpenAPI, check.Equals, false)
-	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+	t.Require().Equal(false, cfg.OpenAPI)
+	t.Require().Equal(false, cfg.ExperimentalFeatures.OpenAPI)
 
 	// adjust openapi from experimental-features
 	cfg.ExperimentalFeatures.OpenAPI = true
-	c.Assert(cfg.adjust(), check.IsNil)
-	c.Assert(cfg.OpenAPI, check.Equals, true)
-	c.Assert(cfg.ExperimentalFeatures.OpenAPI, check.Equals, false)
+	t.Require().NoError(cfg.adjust())
+	t.Require().Equal(true, cfg.OpenAPI)
+	t.Require().Equal(false, cfg.ExperimentalFeatures.OpenAPI)
 
 	// test from flags
-	c.Assert(cfg.Parse([]string{"--openapi=false", "--master-addr=127.0.0.1:8261"}), check.IsNil)
-	c.Assert(cfg.adjust(), check.IsNil)
-	c.Assert(cfg.OpenAPI, check.Equals, false)
-	c.Assert(cfg.Parse([]string{"--openapi=true", "--master-addr=127.0.0.1:8261"}), check.IsNil)
-	c.Assert(cfg.adjust(), check.IsNil)
-	c.Assert(cfg.OpenAPI, check.Equals, true)
+	t.Require().NoError(cfg.Parse([]string{"--openapi=false", "--master-addr=127.0.0.1:8261"}))
+	t.Require().NoError(cfg.adjust())
+	t.Require().Equal(false, cfg.OpenAPI)
+	t.Require().NoError(cfg.Parse([]string{"--openapi=true", "--master-addr=127.0.0.1:8261"}))
+	t.Require().NoError(cfg.adjust())
+	t.Require().Equal(true, cfg.OpenAPI)
 }
 
 func TestAdjustSecretKeyPath(t *testing.T) {

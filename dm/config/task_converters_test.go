@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
@@ -28,7 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
+func TestTaskGetTargetDBCfg(t *testing.T) {
 	certAllowedCn := []string{"test"}
 	task := &openapi.Task{
 		TargetConfig: openapi.TaskTargetDataBase{
@@ -40,24 +39,24 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 		},
 	}
 	dbCfg := GetTargetDBCfgFromOpenAPITask(task)
-	c.Assert(dbCfg.Host, check.Equals, task.TargetConfig.Host)
-	c.Assert(dbCfg.Password, check.Equals, task.TargetConfig.Password)
-	c.Assert(dbCfg.Port, check.Equals, task.TargetConfig.Port)
-	c.Assert(dbCfg.User, check.Equals, task.TargetConfig.User)
-	c.Assert(dbCfg.Security, check.NotNil)
-	c.Assert([]string{dbCfg.Security.CertAllowedCN[0]}, check.DeepEquals, certAllowedCn)
+	require.Equal(t, task.TargetConfig.Host, dbCfg.Host)
+	require.Equal(t, task.TargetConfig.Password, dbCfg.Password)
+	require.Equal(t, task.TargetConfig.Port, dbCfg.Port)
+	require.Equal(t, task.TargetConfig.User, dbCfg.User)
+	require.NotNil(t, dbCfg.Security)
+	require.Equal(t, certAllowedCn, []string{dbCfg.Security.CertAllowedCN[0]})
 }
 
-func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
-	testNoShardTaskToSubTaskConfigs(c)
-	testShardAndFilterTaskToSubTaskConfigs(c)
+func TestOpenAPITaskToSubTaskConfigs(t *testing.T) {
+	testNoShardTaskToSubTaskConfigs(t)
+	testShardAndFilterTaskToSubTaskConfigs(t)
 }
 
-func testNoShardTaskToSubTaskConfigs(c *check.C) {
+func testNoShardTaskToSubTaskConfigs(t *testing.T) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
@@ -77,33 +76,33 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	newMeta := "new_dm_meta"
 	task.MetaSchema = &newMeta
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
-	c.Assert(err, check.IsNil)
-	c.Assert(subTaskConfigList, check.HasLen, 1)
+	require.NoError(t, err)
+	require.Len(t, subTaskConfigList, 1)
 	subTaskConfig := subTaskConfigList[0]
 	// check task name and mode
-	c.Assert(subTaskConfig.Name, check.Equals, task.Name)
+	require.Equal(t, task.Name, subTaskConfig.Name)
 	// check task meta
-	c.Assert(subTaskConfig.MetaSchema, check.Equals, *task.MetaSchema)
-	c.Assert(subTaskConfig.Meta, check.IsNil)
+	require.Equal(t, *task.MetaSchema, subTaskConfig.MetaSchema)
+	require.Nil(t, subTaskConfig.Meta)
 	// check shard config
-	c.Assert(subTaskConfig.ShardMode, check.Equals, "")
+	require.Equal(t, "", subTaskConfig.ShardMode)
 	// check online schema change
-	c.Assert(subTaskConfig.OnlineDDL, check.Equals, true)
+	require.Equal(t, true, subTaskConfig.OnlineDDL)
 	// check case sensitive
-	c.Assert(subTaskConfig.CaseSensitive, check.Equals, sourceCfg1.CaseSensitive)
+	require.Equal(t, sourceCfg1.CaseSensitive, subTaskConfig.CaseSensitive)
 	// check from
-	c.Assert(subTaskConfig.From.Host, check.Equals, sourceCfg1.From.Host)
+	require.Equal(t, sourceCfg1.From.Host, subTaskConfig.From.Host)
 	// check to
-	c.Assert(subTaskConfig.To.Host, check.Equals, toDBCfg.Host)
+	require.Equal(t, toDBCfg.Host, subTaskConfig.To.Host)
 	// check dumpling loader syncer config
-	c.Assert(subTaskConfig.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
-	c.Assert(subTaskConfig.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
-		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name))
-	c.Assert(subTaskConfig.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
-	c.Assert(subTaskConfig.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
-	c.Assert(subTaskConfig.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	require.Equal(t, *task.SourceConfig.FullMigrateConf.ExportThreads, subTaskConfig.MydumperConfig.Threads)
+	require.Equal(t, fmt.Sprintf(
+		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name), subTaskConfig.LoaderConfig.Dir)
+	require.Equal(t, *task.SourceConfig.FullMigrateConf.ImportThreads, subTaskConfig.LoaderConfig.PoolSize)
+	require.Equal(t, *task.SourceConfig.IncrMigrateConf.ReplThreads, subTaskConfig.SyncerConfig.WorkerCount)
+	require.Equal(t, *task.SourceConfig.IncrMigrateConf.ReplBatch, subTaskConfig.SyncerConfig.Batch)
 	// check route
-	c.Assert(subTaskConfig.RouteRules, check.HasLen, 1)
+	require.Len(t, subTaskConfig.RouteRules, 1)
 	rule := subTaskConfig.RouteRules[0]
 
 	sourceSchema := task.TableMigrateRule[0].Source.Schema
@@ -111,45 +110,45 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	tartgetSchema := task.TableMigrateRule[0].Target.Schema
 	tartgetTable := task.TableMigrateRule[0].Target.Table
 
-	c.Assert(rule.SchemaPattern, check.Equals, sourceSchema)
-	c.Assert(rule.TablePattern, check.Equals, sourceTable)
-	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
+	require.Equal(t, sourceSchema, rule.SchemaPattern)
+	require.Equal(t, sourceTable, rule.TablePattern)
+	require.Equal(t, *tartgetSchema, rule.TargetSchema)
+	require.Equal(t, *tartgetTable, rule.TargetTable)
 	// check filter
-	c.Assert(subTaskConfig.FilterRules, check.HasLen, 0)
+	require.Len(t, subTaskConfig.FilterRules, 0)
 	// check balist
-	c.Assert(subTaskConfig.BAList, check.NotNil)
+	require.NotNil(t, subTaskConfig.BAList)
 	bAListFromOpenAPITask := &filter.Rules{
 		DoTables: []*filter.Table{{Schema: sourceSchema, Name: sourceTable}},
 	}
-	c.Assert(subTaskConfig.BAList, check.DeepEquals, bAListFromOpenAPITask)
+	require.Equal(t, bAListFromOpenAPITask, subTaskConfig.BAList)
 	// check ignore check items
-	c.Assert(subTaskConfig.IgnoreCheckingItems, check.IsNil)
+	require.Nil(t, subTaskConfig.IgnoreCheckingItems)
 	// check io total bytes counter and uuid
-	c.Assert(subTaskConfig.IOTotalBytes, check.NotNil)
-	c.Assert(subTaskConfig.DumpIOTotalBytes, check.NotNil)
-	c.Assert(subTaskConfig.IOTotalBytes.Load(), check.Equals, uint64(0))
-	c.Assert(subTaskConfig.DumpIOTotalBytes.Load(), check.Equals, uint64(0))
-	c.Assert(subTaskConfig.UUID, check.HasLen, len(uuid.NewString()))
-	c.Assert(subTaskConfig.DumpUUID, check.HasLen, len(uuid.NewString()))
+	require.NotNil(t, subTaskConfig.IOTotalBytes)
+	require.NotNil(t, subTaskConfig.DumpIOTotalBytes)
+	require.Equal(t, uint64(0), subTaskConfig.IOTotalBytes.Load())
+	require.Equal(t, uint64(0), subTaskConfig.DumpIOTotalBytes.Load())
+	require.Len(t, subTaskConfig.UUID, len(uuid.NewString()))
+	require.Len(t, subTaskConfig.DumpUUID, len(uuid.NewString()))
 	// check security items
-	c.Assert(string(subTaskConfig.To.Security.SSLCABytes), check.Equals, task.TargetConfig.Security.SslCaContent)
-	c.Assert(string(subTaskConfig.To.Security.SSLCertBytes), check.Equals, task.TargetConfig.Security.SslCertContent)
-	c.Assert(string(subTaskConfig.To.Security.SSLKeyBytes), check.Equals, task.TargetConfig.Security.SslKeyContent)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCABytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCaContent)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLCertBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslCertContent)
-	c.Assert(string(subTaskConfig.LoaderConfig.Security.SSLKeyBytes), check.Equals, task.SourceConfig.FullMigrateConf.Security.SslKeyContent)
+	require.Equal(t, task.TargetConfig.Security.SslCaContent, string(subTaskConfig.To.Security.SSLCABytes))
+	require.Equal(t, task.TargetConfig.Security.SslCertContent, string(subTaskConfig.To.Security.SSLCertBytes))
+	require.Equal(t, task.TargetConfig.Security.SslKeyContent, string(subTaskConfig.To.Security.SSLKeyBytes))
+	require.Equal(t, task.SourceConfig.FullMigrateConf.Security.SslCaContent, string(subTaskConfig.LoaderConfig.Security.SSLCABytes))
+	require.Equal(t, task.SourceConfig.FullMigrateConf.Security.SslCertContent, string(subTaskConfig.LoaderConfig.Security.SSLCertBytes))
+	require.Equal(t, task.SourceConfig.FullMigrateConf.Security.SslKeyContent, string(subTaskConfig.LoaderConfig.Security.SSLKeyBytes))
 }
 
-func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
+func testShardAndFilterTaskToSubTaskConfigs(t *testing.T) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = source1Name
 	sourceCfg2, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
 
@@ -161,54 +160,54 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	}
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1, source2Name: sourceCfg2}
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
-	c.Assert(err, check.IsNil)
-	c.Assert(subTaskConfigList, check.HasLen, 2)
+	require.NoError(t, err)
+	require.Len(t, subTaskConfigList, 2)
 
 	// check sub task 1
 	subTask1Config := subTaskConfigList[0]
 	// check task name and mode
-	c.Assert(subTask1Config.Name, check.Equals, task.Name)
+	require.Equal(t, task.Name, subTask1Config.Name)
 	// check task meta
-	c.Assert(subTask1Config.MetaSchema, check.Equals, *task.MetaSchema)
-	c.Assert(subTask1Config.Meta, check.NotNil)
-	c.Assert(subTask1Config.Meta.BinLogGTID, check.Equals, *task.SourceConfig.SourceConf[0].BinlogGtid)
-	c.Assert(subTask1Config.Meta.BinLogName, check.Equals, *task.SourceConfig.SourceConf[0].BinlogName)
-	c.Assert(subTask1Config.Meta.BinLogPos, check.Equals, uint32(*task.SourceConfig.SourceConf[0].BinlogPos))
+	require.Equal(t, *task.MetaSchema, subTask1Config.MetaSchema)
+	require.NotNil(t, subTask1Config.Meta)
+	require.Equal(t, *task.SourceConfig.SourceConf[0].BinlogGtid, subTask1Config.Meta.BinLogGTID)
+	require.Equal(t, *task.SourceConfig.SourceConf[0].BinlogName, subTask1Config.Meta.BinLogName)
+	require.Equal(t, uint32(*task.SourceConfig.SourceConf[0].BinlogPos), subTask1Config.Meta.BinLogPos)
 
 	// check shard config
-	c.Assert(subTask1Config.ShardMode, check.Equals, string(openapi.TaskShardModeOptimistic))
-	c.Assert(subTask1Config.StrictOptimisticShardMode, check.IsTrue)
+	require.Equal(t, string(openapi.TaskShardModeOptimistic), subTask1Config.ShardMode)
+	require.True(t, subTask1Config.StrictOptimisticShardMode)
 	// check online schema change
-	c.Assert(subTask1Config.OnlineDDL, check.Equals, true)
+	require.Equal(t, true, subTask1Config.OnlineDDL)
 	// check case sensitive
-	c.Assert(subTask1Config.CaseSensitive, check.Equals, sourceCfg1.CaseSensitive)
+	require.Equal(t, sourceCfg1.CaseSensitive, subTask1Config.CaseSensitive)
 	// check from
-	c.Assert(subTask1Config.From.Host, check.Equals, sourceCfg1.From.Host)
+	require.Equal(t, sourceCfg1.From.Host, subTask1Config.From.Host)
 	// check to
-	c.Assert(subTask1Config.To.Host, check.Equals, toDBCfg.Host)
+	require.Equal(t, toDBCfg.Host, subTask1Config.To.Host)
 	// check dumpling loader syncer config
-	c.Assert(subTask1Config.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
-	c.Assert(subTask1Config.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
-		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name))
-	c.Assert(subTask1Config.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
-	c.Assert(subTask1Config.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
-	c.Assert(subTask1Config.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	require.Equal(t, *task.SourceConfig.FullMigrateConf.ExportThreads, subTask1Config.MydumperConfig.Threads)
+	require.Equal(t, fmt.Sprintf(
+		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name), subTask1Config.LoaderConfig.Dir)
+	require.Equal(t, *task.SourceConfig.FullMigrateConf.ImportThreads, subTask1Config.LoaderConfig.PoolSize)
+	require.Equal(t, *task.SourceConfig.IncrMigrateConf.ReplThreads, subTask1Config.SyncerConfig.WorkerCount)
+	require.Equal(t, *task.SourceConfig.IncrMigrateConf.ReplBatch, subTask1Config.SyncerConfig.Batch)
 	// check route
-	c.Assert(subTask1Config.RouteRules, check.HasLen, 1)
+	require.Len(t, subTask1Config.RouteRules, 1)
 	rule := subTask1Config.RouteRules[0]
 	source1Schema := task.TableMigrateRule[0].Source.Schema
 	source1Table := task.TableMigrateRule[0].Source.Table
 	tartgetSchema := task.TableMigrateRule[0].Target.Schema
 	tartgetTable := task.TableMigrateRule[0].Target.Table
-	c.Assert(rule.SchemaPattern, check.Equals, source1Schema)
-	c.Assert(rule.TablePattern, check.Equals, source1Table)
-	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
+	require.Equal(t, source1Schema, rule.SchemaPattern)
+	require.Equal(t, source1Table, rule.TablePattern)
+	require.Equal(t, *tartgetSchema, rule.TargetSchema)
+	require.Equal(t, *tartgetTable, rule.TargetTable)
 	// check filter
 	filterARule, ok := task.BinlogFilterRule.Get("filterA")
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	filterIgnoreEvents := *filterARule.IgnoreEvent
-	c.Assert(filterIgnoreEvents, check.HasLen, 1)
+	require.Len(t, filterIgnoreEvents, 1)
 	filterEvents := []bf.EventType{bf.EventType(filterIgnoreEvents[0])}
 	filterRulesFromOpenAPITask := &bf.BinlogEventRule{
 		Action:        bf.Ignore,
@@ -217,79 +216,79 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 		SchemaPattern: source1Schema,
 		TablePattern:  source1Table,
 	}
-	c.Assert(filterRulesFromOpenAPITask.Valid(), check.IsNil)
-	c.Assert(subTask1Config.FilterRules, check.HasLen, 1)
-	c.Assert(subTask1Config.FilterRules[0], check.DeepEquals, filterRulesFromOpenAPITask)
+	require.NoError(t, filterRulesFromOpenAPITask.Valid())
+	require.Len(t, subTask1Config.FilterRules, 1)
+	require.Equal(t, filterRulesFromOpenAPITask, subTask1Config.FilterRules[0])
 
 	// check balist
-	c.Assert(subTask1Config.BAList, check.NotNil)
+	require.NotNil(t, subTask1Config.BAList)
 	bAListFromOpenAPITask := &filter.Rules{
 		DoTables: []*filter.Table{{Schema: source1Schema, Name: source1Table}},
 	}
-	c.Assert(subTask1Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
+	require.Equal(t, bAListFromOpenAPITask, subTask1Config.BAList)
 	// check ignore check items
-	c.Assert(subTask1Config.IgnoreCheckingItems, check.IsNil)
+	require.Nil(t, subTask1Config.IgnoreCheckingItems)
 
 	// check sub task 2
 	subTask2Config := subTaskConfigList[1]
 	// check task name and mode
-	c.Assert(subTask2Config.Name, check.Equals, task.Name)
+	require.Equal(t, task.Name, subTask2Config.Name)
 	// check task meta
-	c.Assert(subTask2Config.MetaSchema, check.Equals, *task.MetaSchema)
-	c.Assert(subTask2Config.Meta, check.NotNil)
-	c.Assert(subTask2Config.Meta.BinLogGTID, check.Equals, *task.SourceConfig.SourceConf[1].BinlogGtid)
-	c.Assert(subTask2Config.Meta.BinLogName, check.Equals, *task.SourceConfig.SourceConf[1].BinlogName)
-	c.Assert(subTask2Config.Meta.BinLogPos, check.Equals, uint32(*task.SourceConfig.SourceConf[1].BinlogPos))
+	require.Equal(t, *task.MetaSchema, subTask2Config.MetaSchema)
+	require.NotNil(t, subTask2Config.Meta)
+	require.Equal(t, *task.SourceConfig.SourceConf[1].BinlogGtid, subTask2Config.Meta.BinLogGTID)
+	require.Equal(t, *task.SourceConfig.SourceConf[1].BinlogName, subTask2Config.Meta.BinLogName)
+	require.Equal(t, uint32(*task.SourceConfig.SourceConf[1].BinlogPos), subTask2Config.Meta.BinLogPos)
 	// check shard config
-	c.Assert(subTask2Config.ShardMode, check.Equals, string(openapi.TaskShardModeOptimistic))
+	require.Equal(t, string(openapi.TaskShardModeOptimistic), subTask2Config.ShardMode)
 	// check online schema change
-	c.Assert(subTask2Config.OnlineDDL, check.Equals, true)
+	require.Equal(t, true, subTask2Config.OnlineDDL)
 	// check case sensitive
-	c.Assert(subTask2Config.CaseSensitive, check.Equals, sourceCfg2.CaseSensitive)
+	require.Equal(t, sourceCfg2.CaseSensitive, subTask2Config.CaseSensitive)
 	// check from
-	c.Assert(subTask2Config.From.Host, check.Equals, sourceCfg2.From.Host)
+	require.Equal(t, sourceCfg2.From.Host, subTask2Config.From.Host)
 	// check to
-	c.Assert(subTask2Config.To.Host, check.Equals, toDBCfg.Host)
+	require.Equal(t, toDBCfg.Host, subTask2Config.To.Host)
 	// check dumpling loader syncer config
-	c.Assert(subTask2Config.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
-	c.Assert(subTask2Config.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
-		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name))
-	c.Assert(subTask2Config.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
-	c.Assert(subTask2Config.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
-	c.Assert(subTask2Config.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	require.Equal(t, *task.SourceConfig.FullMigrateConf.ExportThreads, subTask2Config.MydumperConfig.Threads)
+	require.Equal(t, fmt.Sprintf(
+		"%s.%s", *task.SourceConfig.FullMigrateConf.DataDir, task.Name), subTask2Config.LoaderConfig.Dir)
+	require.Equal(t, *task.SourceConfig.FullMigrateConf.ImportThreads, subTask2Config.LoaderConfig.PoolSize)
+	require.Equal(t, *task.SourceConfig.IncrMigrateConf.ReplThreads, subTask2Config.SyncerConfig.WorkerCount)
+	require.Equal(t, *task.SourceConfig.IncrMigrateConf.ReplBatch, subTask2Config.SyncerConfig.Batch)
 	// check route
-	c.Assert(subTask2Config.RouteRules, check.HasLen, 1)
+	require.Len(t, subTask2Config.RouteRules, 1)
 	rule = subTask2Config.RouteRules[0]
 	source2Schema := task.TableMigrateRule[1].Source.Schema
 	source2Table := task.TableMigrateRule[1].Source.Table
-	c.Assert(rule.SchemaPattern, check.Equals, source2Schema)
-	c.Assert(rule.TablePattern, check.Equals, source2Table)
-	c.Assert(rule.TargetSchema, check.Equals, *tartgetSchema)
-	c.Assert(rule.TargetTable, check.Equals, *tartgetTable)
+	require.Equal(t, source2Schema, rule.SchemaPattern)
+	require.Equal(t, source2Table, rule.TablePattern)
+	require.Equal(t, *tartgetSchema, rule.TargetSchema)
+	require.Equal(t, *tartgetTable, rule.TargetTable)
 	// check filter
 	_, ok = task.BinlogFilterRule.Get("filterB")
-	c.Assert(ok, check.IsFalse)
-	c.Assert(subTask2Config.FilterRules, check.HasLen, 0)
+	require.False(t, ok)
+	require.Len(t, subTask2Config.FilterRules, 0)
 	// check balist
-	c.Assert(subTask2Config.BAList, check.NotNil)
+	require.NotNil(t, subTask2Config.BAList)
 	bAListFromOpenAPITask = &filter.Rules{
 		DoTables: []*filter.Table{{Schema: source2Schema, Name: source2Table}},
 	}
-	c.Assert(subTask2Config.BAList, check.DeepEquals, bAListFromOpenAPITask)
+	require.Equal(t, bAListFromOpenAPITask, subTask2Config.BAList)
 	// check ignore check items
-	c.Assert(subTask2Config.IgnoreCheckingItems, check.IsNil)
+	require.Nil(t, subTask2Config.IgnoreCheckingItems)
 }
 
-func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
-	testNoShardSubTaskConfigsToOpenAPITask(c)
-	testShardAndFilterSubTaskConfigsToOpenAPITask(c)
+func TestSubTaskConfigsToOpenAPITask(t *testing.T) {
+	testNoShardSubTaskConfigsToOpenAPITask(t)
+	testShardAndFilterSubTaskConfigsToOpenAPITask(t)
 }
 
-func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
+func testNoShardSubTaskConfigsToOpenAPITask(t *testing.T) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
@@ -306,8 +305,8 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 		},
 	}
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
-	c.Assert(err, check.IsNil)
-	c.Assert(subTaskConfigList, check.HasLen, 1)
+	require.NoError(t, err)
+	require.Len(t, subTaskConfigList, 1)
 
 	// prepare sub task config
 	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
@@ -315,20 +314,20 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	subTaskConfigMap[task.Name][source1Name] = subTaskConfigList[0]
 
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
-	c.Assert(taskList, check.HasLen, 1)
+	require.Len(t, taskList, 1)
 	newTask := taskList[0]
-	c.Assert(&task, check.DeepEquals, newTask)
+	require.Equal(t, newTask, &task)
 }
 
-func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
+func testShardAndFilterSubTaskConfigsToOpenAPITask(t *testing.T) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = source1Name
 	sourceCfg2, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	source2Name := task.SourceConfig.SourceConf[1].SourceName
 	sourceCfg2.SourceID = source2Name
 
@@ -340,8 +339,8 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	}
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1, source2Name: sourceCfg2}
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
-	c.Assert(err, check.IsNil)
-	c.Assert(subTaskConfigList, check.HasLen, 2)
+	require.NoError(t, err)
+	require.Len(t, subTaskConfigList, 2)
 
 	// prepare sub task config
 	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
@@ -350,14 +349,14 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 	subTaskConfigMap[task.Name][source2Name] = subTaskConfigList[1]
 
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
-	c.Assert(taskList, check.HasLen, 1)
+	require.Len(t, taskList, 1)
 	newTask := taskList[0]
 
 	// because subtask config not have filter-rule-name, so we need to add it manually
 	oldRuleName := "filterA"
 	newRuleName := genFilterRuleName(source1Name, 0)
 	oldRule, ok := task.BinlogFilterRule.Get(oldRuleName)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	newRule := openapi.Task_BinlogFilterRule{}
 	newRule.Set(newRuleName, oldRule)
 	task.BinlogFilterRule = &newRule
@@ -372,7 +371,7 @@ func testShardAndFilterSubTaskConfigsToOpenAPITask(c *check.C) {
 		task.TableMigrateRule[0], task.TableMigrateRule[1] = task.TableMigrateRule[1], task.TableMigrateRule[0]
 	}
 
-	c.Assert(&task, check.DeepEquals, newTask)
+	require.Equal(t, newTask, &task)
 }
 
 func TestConvertWithIgnoreCheckItems(t *testing.T) {

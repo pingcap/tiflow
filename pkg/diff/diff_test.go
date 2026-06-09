@@ -17,24 +17,16 @@ import (
 	"testing"
 
 	_ "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/dbutil/dbutiltest"
+	"github.com/stretchr/testify/require"
 )
 
-func TestClient(t *testing.T) {
-	check.TestingT(t)
-}
-
-var _ = check.Suite(&testDiffSuite{})
-
-type testDiffSuite struct{}
-
-func (*testDiffSuite) TestGenerateSQLs(c *check.C) {
+func TestGenerateSQLs(t *testing.T) {
 	createTableSQL := "CREATE TABLE `diff_test`.`atest` (`id` int(24), `name` varchar(24), `birthday` datetime, `update_time` time, `money` decimal(20,2), `id_gen` int(11) GENERATED ALWAYS AS ((`id` + 1)) VIRTUAL, primary key(`id`, `name`))"
 	tableInfo, err := dbutiltest.GetTableInfoBySQL(createTableSQL, parser.New())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	rowsData := map[string]*dbutil.ColumnData{
 		"id":          {Data: []byte("1"), IsNull: false},
@@ -47,40 +39,40 @@ func (*testDiffSuite) TestGenerateSQLs(c *check.C) {
 
 	replaceSQL := generateDML("replace", rowsData, tableInfo, "diff_test")
 	deleteSQL := generateDML("delete", rowsData, tableInfo, "diff_test")
-	c.Assert(replaceSQL, check.Equals, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (1,'xxx','2018-01-01 00:00:00','10:10:10',11.1111);")
-	c.Assert(deleteSQL, check.Equals, "DELETE FROM `diff_test`.`atest` WHERE `id` = 1 AND `name` = 'xxx' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;")
+	require.Equal(t, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (1,'xxx','2018-01-01 00:00:00','10:10:10',11.1111);", replaceSQL)
+	require.Equal(t, "DELETE FROM `diff_test`.`atest` WHERE `id` = 1 AND `name` = 'xxx' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;", deleteSQL)
 
 	// test the unique key
 	createTableSQL2 := "CREATE TABLE `diff_test`.`atest` (`id` int(24), `name` varchar(24), `birthday` datetime, `update_time` time, `money` decimal(20,2), unique key(`id`, `name`))"
 	tableInfo2, err := dbutiltest.GetTableInfoBySQL(createTableSQL2, parser.New())
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	replaceSQL = generateDML("replace", rowsData, tableInfo2, "diff_test")
 	deleteSQL = generateDML("delete", rowsData, tableInfo2, "diff_test")
-	c.Assert(replaceSQL, check.Equals, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (1,'xxx','2018-01-01 00:00:00','10:10:10',11.1111);")
-	c.Assert(deleteSQL, check.Equals, "DELETE FROM `diff_test`.`atest` WHERE `id` = 1 AND `name` = 'xxx' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;")
+	require.Equal(t, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (1,'xxx','2018-01-01 00:00:00','10:10:10',11.1111);", replaceSQL)
+	require.Equal(t, "DELETE FROM `diff_test`.`atest` WHERE `id` = 1 AND `name` = 'xxx' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;", deleteSQL)
 
 	// test value is nil
 	rowsData["name"] = &dbutil.ColumnData{Data: []byte(""), IsNull: true}
 	replaceSQL = generateDML("replace", rowsData, tableInfo, "diff_test")
 	deleteSQL = generateDML("delete", rowsData, tableInfo, "diff_test")
-	c.Assert(replaceSQL, check.Equals, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (1,NULL,'2018-01-01 00:00:00','10:10:10',11.1111);")
-	c.Assert(deleteSQL, check.Equals, "DELETE FROM `diff_test`.`atest` WHERE `id` = 1 AND `name` is NULL AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;")
+	require.Equal(t, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (1,NULL,'2018-01-01 00:00:00','10:10:10',11.1111);", replaceSQL)
+	require.Equal(t, "DELETE FROM `diff_test`.`atest` WHERE `id` = 1 AND `name` is NULL AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;", deleteSQL)
 
 	rowsData["id"] = &dbutil.ColumnData{Data: []byte(""), IsNull: true}
 	replaceSQL = generateDML("replace", rowsData, tableInfo, "diff_test")
 	deleteSQL = generateDML("delete", rowsData, tableInfo, "diff_test")
-	c.Assert(replaceSQL, check.Equals, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,NULL,'2018-01-01 00:00:00','10:10:10',11.1111);")
-	c.Assert(deleteSQL, check.Equals, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` is NULL AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;")
+	require.Equal(t, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,NULL,'2018-01-01 00:00:00','10:10:10',11.1111);", replaceSQL)
+	require.Equal(t, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` is NULL AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;", deleteSQL)
 
 	// test value with "'"
 	rowsData["name"] = &dbutil.ColumnData{Data: []byte("a'a"), IsNull: false}
 	replaceSQL = generateDML("replace", rowsData, tableInfo, "diff_test")
 	deleteSQL = generateDML("delete", rowsData, tableInfo, "diff_test")
-	c.Assert(replaceSQL, check.Equals, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,'a\\'a','2018-01-01 00:00:00','10:10:10',11.1111);")
-	c.Assert(deleteSQL, check.Equals, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` = 'a\\'a' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;")
+	require.Equal(t, "REPLACE INTO `diff_test`.`atest`(`id`,`name`,`birthday`,`update_time`,`money`) VALUES (NULL,'a\\'a','2018-01-01 00:00:00','10:10:10',11.1111);", replaceSQL)
+	require.Equal(t, "DELETE FROM `diff_test`.`atest` WHERE `id` is NULL AND `name` = 'a\\'a' AND `birthday` = '2018-01-01 00:00:00' AND `update_time` = '10:10:10' AND `money` = 11.1111;", deleteSQL)
 }
 
-func (*testDiffSuite) TestConfigHash(c *check.C) {
+func TestConfigHash(t *testing.T) {
 	tbDiff := &TableDiff{
 		Range:     "a > 1",
 		ChunkSize: 1000,
@@ -91,10 +83,10 @@ func (*testDiffSuite) TestConfigHash(c *check.C) {
 	tbDiff.CheckThreadCount = 10
 	tbDiff.setConfigHash()
 	hash2 := tbDiff.configHash
-	c.Assert(hash1, check.Equals, hash2)
+	require.Equal(t, hash2, hash1)
 
 	tbDiff.Range = "b < 10"
 	tbDiff.setConfigHash()
 	hash3 := tbDiff.configHash
-	c.Assert(hash1 == hash3, check.Equals, false)
+	require.Equal(t, false, hash1 == hash3)
 }
