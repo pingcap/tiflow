@@ -15,6 +15,7 @@ package storage
 
 import (
 	"context"
+	goerrors "errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -23,6 +24,7 @@ import (
 	gstorage "cloud.google.com/go/storage"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/smithy-go"
 	"github.com/pingcap/errors"
 	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
@@ -191,6 +193,13 @@ func IsNotExistError(err error) bool {
 	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
+			return true
+		}
+	}
+	var apiErr smithy.APIError
+	if goerrors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchBucket", "NoSuchKey", "NotFound":
 			return true
 		}
 	}
