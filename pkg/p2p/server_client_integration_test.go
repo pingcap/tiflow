@@ -404,7 +404,6 @@ func TestTopicCongested(t *testing.T) {
 
 	var lastSeq atomic.Int64
 	wg.Go(func() {
-
 		for range 100 {
 			seq, err := client.SendMessage(ctx, "test-topic-1", &testTopicContent{})
 			require.NoError(t, err)

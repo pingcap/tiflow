@@ -60,7 +60,6 @@ func TestCallFuncCancel(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		resp, err := call.Do(ctx)
 		require.Nil(t, resp)
 		require.Error(t, err)
@@ -83,7 +82,6 @@ func TestCallRetryCancel(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		resp, err := call.Do(ctx)
 		require.Nil(t, resp)
 		require.Error(t, err)

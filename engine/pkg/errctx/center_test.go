@@ -28,7 +28,6 @@ func TestErrCenterMultipleErrCtx(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 10 {
 		wg.Go(func() {
-
 			ctx, cancel := center.WithCancelOnFirstError(context.Background())
 			defer cancel()
 			<-ctx.Done()
@@ -53,7 +52,6 @@ func TestErrCenterSingleErrCtx(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 10 {
 		wg.Go(func() {
-
 			<-ctx.Done()
 			require.Error(t, ctx.Err())
 			require.EqualError(t, ctx.Err(), "fake error")

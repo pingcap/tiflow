@@ -129,7 +129,6 @@ func TestWatchExecutors(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		err := WatchExecutors(ctx, watcher, user)
 		require.ErrorIs(t, err, context.Canceled)
 	})
