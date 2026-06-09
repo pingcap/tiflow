@@ -167,6 +167,51 @@ func TestDDL(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestDDLWithSpecificCreateTableOptions(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	p := parser.New()
+
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	err = tracker.Exec(ctx, "", parseSQL(t, p, "create database testdb;"))
+	require.NoError(t, err)
+
+	cases := []struct {
+		sql             string
+		table           string
+		expectedColumns int
+	}{
+		{
+			sql:             "create table t2 (id int primary key, c1 varchar(255)) transactional=0",
+			table:           "t2",
+			expectedColumns: 2,
+		},
+		{
+			sql:             "CREATE TABLE `help_topic` (`help_topic_id` int unsigned NOT NULL) ENGINE=Aria DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci PAGE_CHECKSUM=1 TRANSACTIONAL=0 COMMENT='help topics'",
+			table:           "help_topic",
+			expectedColumns: 1,
+		},
+		{
+			sql:             "create table t_auto (id int primary key) AUTOEXTEND_SIZE=4M",
+			table:           "t_auto",
+			expectedColumns: 1,
+		},
+	}
+	for _, tc := range cases {
+		stmt := parseSQL(t, p, tc.sql)
+		err = tracker.Exec(ctx, "testdb", stmt)
+		require.NoError(t, err)
+
+		ti, err := tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: tc.table})
+		require.NoError(t, err)
+		require.Len(t, ti.Columns, tc.expectedColumns)
+	}
+}
+
 func TestGetSingleColumnIndices(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
