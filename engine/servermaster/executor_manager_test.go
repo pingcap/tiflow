@@ -32,6 +32,22 @@ func TestExecutorManager(t *testing.T) {
 	t.Parallel()
 
 	metaClient := mock.NewMockClient(gomock.NewController(t))
+	deletedExecutors := make(map[model.ExecutorID]struct{})
+	var deletedMu sync.Mutex
+	recordDelete := func(id model.ExecutorID) {
+		deletedMu.Lock()
+		defer deletedMu.Unlock()
+		deletedExecutors[id] = struct{}{}
+	}
+	waitDeleted := func(id model.ExecutorID) {
+		require.Eventually(t, func() bool {
+			deletedMu.Lock()
+			defer deletedMu.Unlock()
+			_, ok := deletedExecutors[id]
+			return ok
+		}, time.Second*2, time.Millisecond*5)
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	heartbeatTTL := time.Millisecond * 100
 	checkInterval := time.Millisecond * 10
@@ -76,7 +92,11 @@ func TestExecutorManager(t *testing.T) {
 	require.NoError(t, err)
 
 	metaClient.EXPECT().QueryExecutors(gomock.Any()).Times(1).Return([]*ormModel.Executor{}, nil)
-	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).Return(nil)
+	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).
+		DoAndReturn(func(ctx context.Context, id model.ExecutorID) error {
+			recordDelete(id)
+			return nil
+		})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -88,6 +108,7 @@ func TestExecutorManager(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return mgr.ExecutorCount(model.Running) == 0
 	}, time.Second*2, time.Millisecond*50)
+	waitDeleted(executor.ID)
 
 	// test late heartbeat request after executor is offline
 	_, err = mgr.HandleHeartbeat(newHeartbeatReq())
@@ -102,6 +123,21 @@ func TestExecutorManagerWatch(t *testing.T) {
 	t.Parallel()
 
 	metaClient := mock.NewMockClient(gomock.NewController(t))
+	deletedExecutors := make(map[model.ExecutorID]struct{})
+	var deletedMu sync.Mutex
+	recordDelete := func(id model.ExecutorID) {
+		deletedMu.Lock()
+		defer deletedMu.Unlock()
+		deletedExecutors[id] = struct{}{}
+	}
+	waitDeleted := func(id model.ExecutorID) {
+		require.Eventually(t, func() bool {
+			deletedMu.Lock()
+			defer deletedMu.Unlock()
+			_, ok := deletedExecutors[id]
+			return ok
+		}, time.Second*2, time.Millisecond*5)
+	}
 
 	heartbeatTTL := time.Millisecond * 400
 	checkInterval := time.Millisecond * 50
@@ -193,8 +229,16 @@ func TestExecutorManagerWatch(t *testing.T) {
 			{ID: executorID1, Address: "127.0.0.1:10001"},
 			{ID: executorID2, Address: "127.0.0.1:10002"},
 		}, nil)
-	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID1).Times(1).Return(nil)
-	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID2).Times(1).Return(nil)
+	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID1).Times(1).
+		DoAndReturn(func(ctx context.Context, id model.ExecutorID) error {
+			recordDelete(id)
+			return nil
+		})
+	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID2).Times(1).
+		DoAndReturn(func(ctx context.Context, id model.ExecutorID) error {
+			recordDelete(id)
+			return nil
+		})
 
 	var mgrWg sync.WaitGroup
 	mgrWg.Add(1)
@@ -235,6 +279,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 		Tp:   model.EventExecutorOffline,
 		Addr: "127.0.0.1:10001",
 	}, event)
+	waitDeleted(executorID1)
 
 	// executor-2 will time out
 	cancel2()
@@ -245,6 +290,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 		Tp:   model.EventExecutorOffline,
 		Addr: "127.0.0.1:10002",
 	}, event)
+	waitDeleted(executorID2)
 
 	cancel()
 	mgrWg.Wait()
