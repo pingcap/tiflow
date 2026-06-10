@@ -36,8 +36,6 @@ for s in ${last_chunk_index_array[@]}; do
 done
 # chunkIndex should be the last Index
 [[ $((${last_chunk_index_array[2]} + 1)) -eq ${last_chunk_index_array[3]} ]] || exit 1
-bucket_index_right=$(echo ${last_chunk_index_array[1]} | awk -F '-' '{print $2}')
-echo $bucket_index_right
 
 rm -f $OUT_DIR/sync_diff.log
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()"
@@ -56,8 +54,7 @@ IFS="$OLD_IFS"
 for s in ${first_chunk_index_array[@]}; do
 	echo "$s"
 done
-first_bucket_index_left=$(echo ${first_chunk_index_array[1]} | awk -F '-' '{print $1}')
-[[ ${first_bucket_index_left} -gt ${bucket_index_right} ]] || exit 1
+# After resuming from the last chunk in a bucket, the next chunk should start a new bucket.
 [[ ${first_chunk_index_array[2]} -eq 0 ]] || exit 1
 
 echo "--------2. chunk is in the middle of the bucket--------"
@@ -86,10 +83,6 @@ for s in ${last_chunk_index_array[@]}; do
 done
 # chunkIndex should be the last Index
 [[ $((${last_chunk_index_array[2]} + 2)) -eq ${last_chunk_index_array[3]} ]] || exit 1
-# Save bucketIndexRight, which should be equal to bucketIndexLeft of the chunk first created in the next running.
-bucket_index_left=$(echo ${last_chunk_index_array[1]} | awk -F '-' '{print $1}')
-bucket_index_right=$(echo ${last_chunk_index_array[1]} | awk -F '-' '{print $2}')
-echo "${bucket_index_left}-${bucket_index_right}"
 
 rm -f $OUT_DIR/sync_diff.log
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()"
@@ -108,14 +101,8 @@ IFS="$OLD_IFS"
 for s in ${first_chunk_index_array[@]}; do
 	echo "$s"
 done
-if [[ ${first_chunk_index_array[1]} = "${bucket_index_left}-${bucket_index_right}" ]]; then
-	[[ ${first_chunk_index_array[2]} -eq $((${last_chunk_index_array[2]} + 1)) ]] || exit 1
-	[[ ${first_chunk_index_array[3]} -eq ${last_chunk_index_array[3]} ]] || exit 1
-else
-	first_bucket_index_left=$(echo ${first_chunk_index_array[1]} | awk -F '-' '{print $1}')
-	[[ ${first_bucket_index_left} -gt ${bucket_index_right} ]] || exit 1
-	[[ ${first_chunk_index_array[2]} -eq 0 ]] || exit 1
-fi
+[[ ${first_chunk_index_array[2]} -eq $((${last_chunk_index_array[2]} + 1)) ]] || exit 1
+[[ ${first_chunk_index_array[3]} -eq ${last_chunk_index_array[3]} ]] || exit 1
 
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_rand.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
 
