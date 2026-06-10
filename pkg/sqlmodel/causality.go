@@ -270,7 +270,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	exprCtx := r.tiSessionCtx.GetExprCtx()
 	// The expressions only depend on the schema, so they are built once and
 	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
-	exprs, ok := r.whereHandle.generatedColumnExprs(exprCtx, r.sourceTableInfo)
+	exprs, ok := r.whereHandle.generatedColumnExprs(exprCtx)
 	if !ok {
 		return values, false
 	}

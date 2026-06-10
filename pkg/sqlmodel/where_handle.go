@@ -41,31 +41,26 @@ type WhereHandle struct {
 	// generated expression at causality time.
 	CausalityIdxs []*model.IndexInfo
 
-	// genExprs caches the source table's generated-column expressions, keyed by
-	// column offset, built once and reused across row changes. It is invalidated
-	// together with the whole WhereHandle: a DDL drops the cached
-	// DownstreamTableInfo (see Tracker.RemoveDownstreamSchema), which rebuilds
-	// this handle from the new schema.
+	sourceTableInfo *model.TableInfo
+
+	// genExprs caches hidden generated-column expressions for this handle's
+	// source table schema, keyed by column offset.
 	genExprsOnce sync.Once
 	genExprs     map[int]expression.Expression
 	genExprsOK   bool
 }
 
 // generatedColumnExprs builds (once) and returns hidden generated-column
-// expressions of sourceTI, keyed by column offset. The expressions depend only
-// on the schema, so they are cached here and reused for every row change of the
-// table. The bool is false if any expression fails to build, in which case the
-// caller should fall back instead of evaluating.
-func (h *WhereHandle) generatedColumnExprs(
-	ctx expression.BuildContext, sourceTI *model.TableInfo,
-) (map[int]expression.Expression, bool) {
+// expressions keyed by column offset. The bool is false if any expression fails
+// to build, in which case the caller should fall back instead of evaluating.
+func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
 	h.genExprsOnce.Do(func() {
 		exprs := make(map[int]expression.Expression)
-		for _, col := range sourceTI.Columns {
+		for _, col := range h.sourceTableInfo.Columns {
 			if !col.Hidden || !col.IsGenerated() {
 				continue
 			}
-			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, sourceTI)
+			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, h.sourceTableInfo)
 			if err != nil {
 				log.Warn("cannot build generated column expression, "+
 					"its index will be skipped for causality",
@@ -83,7 +78,7 @@ func (h *WhereHandle) generatedColumnExprs(
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,
 // columns and state. Other component can cache the result.
 func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
-	ret := WhereHandle{}
+	ret := WhereHandle{sourceTableInfo: source}
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
