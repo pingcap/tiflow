@@ -21,6 +21,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -3573,12 +3574,30 @@ func normalizeTableFilterRulesForCompare(caseSensitive bool, rules *filter.Rules
 	if isEmptyTableFilterRules(rules) {
 		return tableFilterRulesConfig{}
 	}
+	doTables := normalizeFilterTablesForCompare(caseSensitive, rules.DoTables)
+	sortTableNamesForCompare(doTables)
+	doDBs := normalizeFilterSchemasForCompare(caseSensitive, rules.DoDBs)
+	sort.Strings(doDBs)
+	ignoreTables := normalizeFilterTablesForCompare(caseSensitive, rules.IgnoreTables)
+	sortTableNamesForCompare(ignoreTables)
+	ignoreDBs := normalizeFilterSchemasForCompare(caseSensitive, rules.IgnoreDBs)
+	sort.Strings(ignoreDBs)
+
 	return tableFilterRulesConfig{
-		DoTables:     normalizeFilterTablesForCompare(caseSensitive, rules.DoTables),
-		DoDBs:        normalizeFilterSchemasForCompare(caseSensitive, rules.DoDBs),
-		IgnoreTables: normalizeFilterTablesForCompare(caseSensitive, rules.IgnoreTables),
-		IgnoreDBs:    normalizeFilterSchemasForCompare(caseSensitive, rules.IgnoreDBs),
+		DoTables:     doTables,
+		DoDBs:        doDBs,
+		IgnoreTables: ignoreTables,
+		IgnoreDBs:    ignoreDBs,
 	}
+}
+
+func sortTableNamesForCompare(tables []tableNameConfig) {
+	sort.Slice(tables, func(i, j int) bool {
+		if tables[i].Schema != tables[j].Schema {
+			return tables[i].Schema < tables[j].Schema
+		}
+		return tables[i].Name < tables[j].Name
+	})
 }
 
 func normalizeFilterTablesForCompare(caseSensitive bool, tables []*filter.Table) []tableNameConfig {
@@ -3640,11 +3659,13 @@ func normalizeBinlogFilterRulesForCompare(caseSensitive bool, rules []*bf.Binlog
 			schemaPattern = strings.ToLower(schemaPattern)
 			tablePattern = strings.ToLower(tablePattern)
 		}
+		sqlPattern := append([]string(nil), rule.SQLPattern...)
+		sort.Strings(sqlPattern)
 		result = append(result, binlogFilterRuleConfig{
 			SchemaPattern: schemaPattern,
 			TablePattern:  tablePattern,
 			Events:        normalizeBinlogFilterEventsForCompare(rule.Events),
-			SQLPattern:    append([]string(nil), rule.SQLPattern...),
+			SQLPattern:    sqlPattern,
 			Action:        rule.Action,
 		})
 	}
@@ -3659,7 +3680,20 @@ func normalizeBinlogFilterEventsForCompare(events []bf.EventType) []string {
 	for _, event := range events {
 		result = append(result, strings.ToLower(string(event)))
 	}
+	if !containsNoneBinlogFilterEvent(result) {
+		sort.Strings(result)
+	}
 	return result
+}
+
+func containsNoneBinlogFilterEvent(events []string) bool {
+	for _, event := range events {
+		switch event {
+		case string(bf.NoneEvent), string(bf.NoneDDL), string(bf.NoneDML):
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Syncer) newForeignKeyCausalityConfigUpdateError(field string) error {
