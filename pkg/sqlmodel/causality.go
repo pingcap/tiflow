@@ -211,11 +211,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 	ret := make([]string, 0, len(pkAndUks))
 
-	var (
-		fullValues       []any
-		fullValuesLoaded bool
-		fullValuesOK     bool
-	)
+	fullValues, fullValuesOK := r.fillVirtualGeneratedValues(values)
 
 	for _, indexCols := range pkAndUks {
 		// TODO: should not support multi value index and generate the value
@@ -230,10 +226,6 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 		if needsFullValues {
-			if !fullValuesLoaded {
-				fullValues, fullValuesOK = r.fillVirtualGeneratedValues(values)
-				fullValuesLoaded = true
-			}
 			if !fullValuesOK {
 				continue
 			}
