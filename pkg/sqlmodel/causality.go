@@ -246,18 +246,11 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 // indexNeedsFullColumnValues reports whether the index cannot be read directly
 // from the compact row-value slice by TableInfo column offsets. This is true
-// when the index references a hidden generated column, or when a hidden column
-// appears before an indexed visible column.
+// when the index references a hidden generated column.
 func indexNeedsFullColumnValues(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) bool {
 	for _, idxCol := range index.Columns {
-		col := columns[idxCol.Offset]
-		if col.Hidden {
+		if columns[idxCol.Offset].Hidden {
 			return true
-		}
-		for _, precedingCol := range columns[:idxCol.Offset] {
-			if precedingCol.Hidden {
-				return true
-			}
 		}
 	}
 	return false
