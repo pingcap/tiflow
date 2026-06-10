@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
@@ -201,7 +203,7 @@ func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string 
 }
 
 func (r *RowChange) getCausalityString(values []interface{}) []string {
-	pkAndUks := r.whereHandle.UniqueIdxs
+	pkAndUks := r.whereHandle.CausalityIdxs
 	if len(pkAndUks) == 0 {
 		// the table has no PK/UK, all values of the row consists the causality key
 		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
@@ -209,13 +211,30 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 	ret := make([]string, 0, len(pkAndUks))
 
+	// Materialize hidden/virtual generated columns (e.g. the column backing an
+	// expression/functional index, which the binlog row image does not carry)
+	// once per row, so such an index can still take part in conflict detection.
+	// For a table without them this returns values unchanged; it returns nil
+	// only if the values could not be computed, in which case the affected index
+	// is skipped below rather than panicking the worker.
+	fullValues := r.fillVirtualGeneratedValues(values)
+
 	for _, indexCols := range pkAndUks {
 		// TODO: should not support multi value index and generate the value
 		// TODO: also fix https://github.com/pingcap/tiflow/issues/3286#issuecomment-971264282
 		if indexCols.MVIndex {
 			continue
 		}
-		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
+
+		idxValues := values
+		if indexNeedsGeneratedValue(indexCols, len(values)) {
+			if fullValues == nil {
+				continue
+			}
+			idxValues = fullValues
+		}
+
+		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, idxValues)
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
 		key := genKeyString(r.sourceTable.String(), cols, truncVals)
@@ -233,4 +252,72 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	}
 
 	return ret
+}
+
+// indexNeedsGeneratedValue reports whether the index references a column whose
+// offset is not covered by the binlog row image (length valueLen), i.e. a
+// hidden/virtual generated column appended after the stored columns.
+func indexNeedsGeneratedValue(index *timodel.IndexInfo, valueLen int) bool {
+	for _, col := range index.Columns {
+		if col.Offset >= valueLen {
+			return true
+		}
+	}
+	return false
+}
+
+// fillVirtualGeneratedValues returns a copy of values extended to the full
+// source column list, with hidden/virtual generated columns (such as the column
+// backing an expression index) evaluated from their generated expression. It
+// returns nil if any generated value cannot be computed, so the caller can skip
+// the affected index instead of indexing the row-value slice out of range.
+func (r *RowChange) fillVirtualGeneratedValues(values []any) []any {
+	cols := r.sourceTableInfo.Columns
+	if len(values) >= len(cols) {
+		return values
+	}
+
+	exprCtx := r.tiSessionCtx.GetExprCtx()
+	// The expressions only depend on the schema, so they are built once and
+	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
+	exprs, ok := r.whereHandle.generatedColumnExprs(exprCtx, r.sourceTableInfo)
+	if !ok {
+		return nil
+	}
+
+	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, cols)
+	if err != nil {
+		log.L().Warn("cannot adjust row for generated column evaluation",
+			zap.String("table", r.sourceTable.String()), zap.Error(err))
+		return nil
+	}
+	for len(datums) < len(cols) {
+		datums = append(datums, types.Datum{})
+	}
+
+	full := make([]any, len(cols))
+	copy(full, values)
+	// Columns are ordered by offset and a generated column may only depend on
+	// earlier columns, so a single forward pass is enough.
+	for _, col := range cols {
+		if col.Offset < len(values) {
+			continue
+		}
+		expr, ok := exprs[col.Offset]
+		if !ok {
+			// A non-generated column missing from the row image means the schema
+			// does not match the row; let the caller fall back to skipping.
+			return nil
+		}
+		d, err := expr.Eval(exprCtx.GetEvalCtx(), chunk.MutRowFromDatums(datums).ToRow())
+		if err != nil {
+			log.L().Warn("cannot evaluate generated column expression",
+				zap.String("table", r.sourceTable.String()),
+				zap.String("column", col.Name.O), zap.Error(err))
+			return nil
+		}
+		full[col.Offset] = d.GetValue()
+		datums[col.Offset] = d
+	}
+	return full
 }

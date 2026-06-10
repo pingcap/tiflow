@@ -14,11 +14,15 @@
 package sqlmodel
 
 import (
+	"sync"
+
 	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
+	"go.uber.org/zap"
 )
 
 // WhereHandle is used to generate a WHERE clause in SQL.
@@ -27,8 +31,53 @@ type WhereHandle struct {
 	// If the index and columns have no NOT NULL constraint, but all data is NOT
 	// NULL, we can still use it.
 	// every index that is UNIQUE should be added to UniqueIdxs, even for
-	// PK and NOT NULL.
+	// PK and NOT NULL. Indexes backed by a hidden column (e.g. the virtual
+	// generated column of an expression/functional index) are excluded here,
+	// because a hidden column is not addressable in a WHERE clause.
 	UniqueIdxs []*model.IndexInfo
+	// CausalityIdxs is the superset of UniqueIdxs that also keeps indexes backed
+	// by a hidden column. Causality computation needs every UNIQUE constraint to
+	// detect conflicts; the hidden column's value is materialized from its
+	// generated expression at causality time.
+	CausalityIdxs []*model.IndexInfo
+
+	// genExprs caches the source table's generated-column expressions, keyed by
+	// column offset, built once and reused across row changes. It is invalidated
+	// together with the whole WhereHandle: a DDL drops the cached
+	// DownstreamTableInfo (see Tracker.RemoveDownstreamSchema), which rebuilds
+	// this handle from the new schema.
+	genExprsOnce sync.Once
+	genExprs     map[int]expression.Expression
+	genExprsOK   bool
+}
+
+// generatedColumnExprs builds (once) and returns the generated-column
+// expressions of sourceTI, keyed by column offset. The expressions depend only
+// on the schema, so they are cached here and reused for every row change of the
+// table. The bool is false if any expression fails to build, in which case the
+// caller should fall back instead of evaluating.
+func (h *WhereHandle) generatedColumnExprs(
+	ctx expression.BuildContext, sourceTI *model.TableInfo,
+) (map[int]expression.Expression, bool) {
+	h.genExprsOnce.Do(func() {
+		exprs := make(map[int]expression.Expression)
+		for _, col := range sourceTI.Columns {
+			if !col.IsGenerated() {
+				continue
+			}
+			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, sourceTI)
+			if err != nil {
+				log.Warn("cannot build generated column expression, "+
+					"its index will be skipped for causality",
+					zap.String("column", col.Name.O), zap.Error(err))
+				return
+			}
+			exprs[col.Offset] = e
+		}
+		h.genExprs = exprs
+		h.genExprsOK = true
+	})
+	return h.genExprs, h.genExprsOK
 }
 
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,
@@ -55,6 +104,15 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 		if rewritten == nil {
 			continue
 		}
+		// Every UNIQUE constraint participates in causality.
+		ret.CausalityIdxs = append(ret.CausalityIdxs, rewritten)
+
+		// An index backed by a hidden column (an expression/functional index) is
+		// not usable for the WHERE clause: the hidden column has no addressable
+		// name. Keep it out of UniqueIdxs / UniqueNotNullIdx.
+		if indexHasHiddenColumn(rewritten, source) {
+			continue
+		}
 		ret.UniqueIdxs = append(ret.UniqueIdxs, rewritten)
 
 		if rewritten.Primary {
@@ -69,6 +127,17 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 		}
 	}
 	return &ret
+}
+
+// indexHasHiddenColumn reports whether the index references a hidden column in
+// source, e.g. the virtual generated column that backs an expression index.
+func indexHasHiddenColumn(index *model.IndexInfo, source *model.TableInfo) bool {
+	for _, key := range index.Columns {
+		if key.Offset < len(source.Columns) && source.Columns[key.Offset].Hidden {
+			return true
+		}
+	}
+	return false
 }
 
 // rewriteColsOffset rewrites index columns offset to those from source table.

@@ -214,3 +214,78 @@ func TestGetCausalityString(t *testing.T) {
 		require.Equal(t, ca.keys, change.getCausalityString(ca.values))
 	}
 }
+
+func TestCausalityKeysExpressionIndex(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	// A functional UNIQUE index is backed by a hidden generated column (#12696).
+	// The binlog row image carries only the two stored columns (id, name). The
+	// hidden column's value must be materialized from its expression so the
+	// expression index still participates in conflict detection, instead of
+	// panicking with "index out of range".
+	ti := mockTableInfo(t, "CREATE TABLE tb1 (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+
+	// name = 'Alice' -> the expression evaluates to 1, so the expression index
+	// produces a key; the PK produces another. Two different rows that collide on
+	// the expression value will share the expression key and be serialized.
+	change := NewRowChange(source, nil, nil, []any{1, "Alice"}, ti, nil, nil)
+	change.lazyInitWhereHandle()
+	var keys []string
+	require.NotPanics(t, func() {
+		keys = change.getCausalityString([]any{1, "Alice"})
+	})
+	require.Contains(t, keys, "1.id.db.tb1") // PK key
+	require.Len(t, keys, 2)                  // PK key + expression-index key
+
+	// A second, different row that also evaluates to 'Alice' collides on the
+	// expression value. The two rows must share the expression-index key so that
+	// they are serialized (skipping the index would lose this and could replicate
+	// them out of order, hitting a transient unique-key violation downstream).
+	other := NewRowChange(source, nil, nil, []any{9, "Alice"}, ti, nil, nil)
+	other.lazyInitWhereHandle()
+	otherKeys := other.getCausalityString([]any{9, "Alice"})
+	exprKey := func(ks []string) string {
+		for _, k := range ks {
+			if k != "1.id.db.tb1" && k != "9.id.db.tb1" {
+				return k
+			}
+		}
+		return ""
+	}
+	require.NotEmpty(t, exprKey(keys))
+	require.Equal(t, exprKey(keys), exprKey(otherKeys),
+		"rows colliding on the expression value must share the expression-index key")
+
+	// name = 'Bob' -> the expression evaluates to NULL, so the expression index
+	// contributes no key and only the PK key remains.
+	change = NewRowChange(source, nil, nil, []any{2, "Bob"}, ti, nil, nil)
+	change.lazyInitWhereHandle()
+	require.NotPanics(t, func() {
+		keys = change.getCausalityString([]any{2, "Bob"})
+	})
+	require.Equal(t, []string{"2.id.db.tb1"}, keys)
+}
+
+func TestCausalityKeysExpressionIndexNoRace(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+	// One shared WhereHandle so the cached generated-column expression is built
+	// once and read concurrently (run with -race).
+	handle := GetWhereHandle(ti, ti)
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			change := NewRowChange(source, nil, nil, []any{id, "Alice"}, ti, nil, nil)
+			change.SetWhereHandle(handle)
+			change.CausalityKeys()
+		}(i)
+	}
+	wg.Wait()
+}

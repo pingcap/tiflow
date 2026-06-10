@@ -215,3 +215,43 @@ CREATE TABLE t (
 	idx = handle.getWhereIdxByData([]interface{}{1, nil, 3, nil})
 	require.Nil(t, idx)
 }
+
+func TestGetWhereHandleExpressionIndex(t *testing.T) {
+	t.Parallel()
+
+	// A functional/expression UNIQUE index is backed by a hidden virtual
+	// generated column that is never present in the binlog row image. It must be
+	// kept for causality (so the constraint is still enforced for conflict
+	// detection) but excluded from the WHERE candidate set, because a hidden
+	// column has no addressable name. See issue #12696.
+	ti := mockTableInfo(t, "CREATE TABLE t (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+
+	// sanity: TiDB materialized the expression as a hidden generated column.
+	hasHidden := false
+	for _, c := range ti.Columns {
+		if c.Hidden {
+			hasHidden = true
+		}
+	}
+	require.True(t, hasHidden, "expression index should create a hidden generated column")
+
+	handle := GetWhereHandle(ti, ti)
+
+	// the expression index is a causality candidate ...
+	inCausality := false
+	for _, idx := range handle.CausalityIdxs {
+		if idx.Name.L == "only_one_alice" {
+			inCausality = true
+		}
+	}
+	require.True(t, inCausality, "expression index must be a causality candidate")
+
+	// ... but never a WHERE candidate (hidden column is not addressable).
+	for _, idx := range handle.UniqueIdxs {
+		require.NotEqual(t, "only_one_alice", idx.Name.L,
+			"expression index must not be a WHERE candidate")
+	}
+	require.NotNil(t, handle.UniqueNotNullIdx)
+	require.False(t, indexHasHiddenColumn(handle.UniqueNotNullIdx, ti))
+}
