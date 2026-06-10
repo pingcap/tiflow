@@ -107,6 +107,14 @@ func execTrackedDDL(t *testing.T, tracker *schema.Tracker, p *parser.Parser, db 
 	require.NoError(t, tracker.Exec(context.Background(), db, stmt))
 }
 
+func prepareSimpleParentChildSchema(t *testing.T, syncer *Syncer, p *parser.Parser) {
+	t.Helper()
+
+	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
+	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+}
+
 func expectDownstreamSQLModeInit(mock sqlmock.Sqlmock) {
 	mock.ExpectBegin()
 	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", tmysql.DefaultSQLMode)).
@@ -143,9 +151,7 @@ func TestPrepareDownStreamTableInfoSkipsFKCausalityForSingleWorkerRoute(t *testi
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 1)
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -170,9 +176,7 @@ func TestPrepareDownStreamTableInfoSkipsFKCausalityWhenForeignKeyChecksOff(t *te
 	syncer.cfg.To.Session = map[string]string{"foreign_key_checks": "0"}
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -199,9 +203,7 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithChildRoute(t *testing.T)
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -234,9 +236,7 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithChildAndParentRoute(t *t
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -581,9 +581,7 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithParentRoute(t *testing.T
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db", Name: "child"}
@@ -612,9 +610,7 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithoutRoute(t *testing.T) {
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db", Name: "child"}
@@ -649,9 +645,7 @@ func TestPrepareDownStreamTableInfoCachesForeignKeyRouteTopologyCheck(t *testing
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -688,9 +682,7 @@ func TestUpdateInvalidatesForeignKeyRouteTopologyCheckCache(t *testing.T) {
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -739,9 +731,7 @@ func TestPrepareDownStreamTableInfoRejectsSharedTargetRouteForMultiWorkerFKCausa
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -773,9 +763,7 @@ func TestPrepareDownStreamTableInfoRejectsCaseInsensitiveSharedTargetRoute(t *te
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
@@ -839,9 +827,7 @@ func TestPrepareDownStreamTableInfoRejectsTaskSharedTargetRouteBeforeUnrelatedDM
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table a(id int primary key)")
 	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table b(id int primary key)")
 
@@ -874,9 +860,7 @@ func TestPrepareDownStreamTableInfoRejectsSharedTargetParentRouteBeforeChildDML(
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "parent"}
 	targetTable := &filter.Table{Schema: "db_r", Name: "parent_r"}
@@ -940,9 +924,7 @@ func TestPrepareDownStreamTableInfoRejectsFilteredParentWithForeignKeyChecksSing
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db", Name: "child"}
@@ -968,9 +950,7 @@ func TestPrepareDownStreamTableInfoRejectsFilteredParentWithForeignKeyChecksMult
 	})
 	p := parser.New()
 
-	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database db")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table parent(id int primary key)")
-	execTrackedDDL(t, syncer.schemaTracker, p, "db", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))")
+	prepareSimpleParentChildSchema(t, syncer, p)
 
 	sourceTable := &filter.Table{Schema: "db", Name: "child"}
 	targetTable := &filter.Table{Schema: "db", Name: "child"}
