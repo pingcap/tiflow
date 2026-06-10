@@ -14,6 +14,8 @@
 package sqlmodel
 
 import (
+	"sync"
+
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
@@ -23,6 +25,8 @@ import (
 
 // WhereHandle is used to generate a WHERE clause in SQL.
 type WhereHandle struct {
+	mu sync.RWMutex
+
 	UniqueNotNullIdx *model.IndexInfo
 	// If the index and columns have no NOT NULL constraint, but all data is NOT
 	// NULL, we can still use it.
@@ -138,6 +142,9 @@ func (h *WhereHandle) getWhereIdxByData(data []interface{}) *model.IndexInfo {
 	if h.UniqueNotNullIdx != nil {
 		return h.UniqueNotNullIdx
 	}
+
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	for i, idx := range h.UniqueIdxs {
 		ok := true
 		for _, idxCol := range idx.Columns {
@@ -152,4 +159,14 @@ func (h *WhereHandle) getWhereIdxByData(data []interface{}) *model.IndexInfo {
 		}
 	}
 	return nil
+}
+
+func (h *WhereHandle) getUniqueIdxs() []*model.IndexInfo {
+	if h.UniqueNotNullIdx != nil {
+		return h.UniqueIdxs
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return append([]*model.IndexInfo(nil), h.UniqueIdxs...)
 }
