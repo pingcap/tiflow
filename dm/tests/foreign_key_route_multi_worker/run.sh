@@ -8,7 +8,7 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 
 function run() {
 	run_sql_tidb "set @@global.foreign_key_checks=1;"
-	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/source1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/tidb.prepare.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
@@ -32,7 +32,7 @@ function run() {
 	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_route_dst.child_r;" "COUNT(*): 4"
 	run_sql_tidb_with_retry "SELECT COUNT(*) FROM fk_route_dst.child_r c LEFT JOIN fk_route_dst.parent_r p ON c.parent_id=p.parent_id WHERE p.parent_id IS NULL;" "COUNT(*): 0"
 
-	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	run_sql_file $cur/data/source1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
