@@ -171,6 +171,11 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
+	foreignKeyRouteTopologyMu sync.Mutex
+	// foreignKeyRouteTopologyChecked records a successful task-level 1:1 route
+	// topology check for the current cache generation.
+	foreignKeyRouteTopologyChecked bool
+
 	running atomic.Bool
 	closed  atomic.Bool
 
@@ -389,6 +394,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
+	if err := config.CheckForeignKeyChecksSyncerOptions(s.cfg.To.Session, s.cfg.SyncerConfig); err != nil {
+		return err
+	}
 	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
 	if err != nil {
 		return err
@@ -921,6 +929,7 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, createStmt); err != nil {
 		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
 	}
+	s.resetForeignKeyRouteTopologyCheckCache()
 
 	return nil
 }
@@ -2813,7 +2822,13 @@ func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, tab
 }
 
 // trackDDL tracks ddl in schemaTracker.
-func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContext) error {
+func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContext) (errRet error) {
+	defer func() {
+		if errRet == nil {
+			s.resetForeignKeyRouteTopologyCheckCache()
+		}
+	}()
+
 	var (
 		srcTables    = trackInfo.sourceTables
 		targetTables = trackInfo.targetTables
@@ -3370,6 +3385,9 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
+	if err := config.CheckForeignKeyChecksSyncerOptions(newCfg.To.Session, newCfg.SyncerConfig); err != nil {
+		return err
+	}
 	// can't update when in sharding merge
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
@@ -3415,8 +3433,8 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 }
 
 func (s *Syncer) checkForeignKeyCausalityConfigUpdate(newCfg *config.SubTaskConfig) error {
-	oldNeedFKCausality := isForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
-	newNeedFKCausality := isForeignKeyChecksEnabled(newCfg.To.Session) && newCfg.WorkerCount > 1
+	oldNeedFKCausality := config.IsForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
+	newNeedFKCausality := config.IsForeignKeyChecksEnabled(newCfg.To.Session) && newCfg.WorkerCount > 1
 	if !oldNeedFKCausality && !newNeedFKCausality {
 		return nil
 	}
@@ -3441,7 +3459,7 @@ func (s *Syncer) checkForeignKeyCausalityConfigUpdate(newCfg *config.SubTaskConf
 	if !sameBinlogFilterRules(s.cfg.CaseSensitive, s.cfg.FilterRules, newCfg.FilterRules) {
 		return s.newForeignKeyCausalityConfigUpdateError("binlog filter rules")
 	}
-	if isForeignKeyChecksEnabled(s.cfg.To.Session) != isForeignKeyChecksEnabled(newCfg.To.Session) {
+	if config.IsForeignKeyChecksEnabled(s.cfg.To.Session) != config.IsForeignKeyChecksEnabled(newCfg.To.Session) {
 		return s.newForeignKeyCausalityConfigUpdateError("foreign_key_checks")
 	}
 	return nil
@@ -3707,9 +3725,12 @@ func (s *Syncer) newForeignKeyCausalityConfigUpdateError(field string) error {
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
-func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
+func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err error) {
 	s.Lock()
 	defer s.Unlock()
+	if err := config.CheckForeignKeyChecksSyncerOptions(cfg.To.Session, cfg.SyncerConfig); err != nil {
+		return err
+	}
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()
 		if len(tables) > 0 {
@@ -3721,7 +3742,6 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	}
 
 	var (
-		err             error
 		oldBaList       *filter.Filter
 		oldTableRouter  *regexprrouter.RouteTable
 		oldBinlogFilter *bf.BinlogEvent
@@ -3729,6 +3749,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 
 	defer func() {
 		if err == nil {
+			s.resetForeignKeyRouteTopologyCheckCache()
 			return
 		}
 		if oldBaList != nil {
@@ -4021,29 +4042,92 @@ func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, err
 }
 
 func (s *Syncer) needForeignKeyCausality() bool {
-	return isForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
+	return config.IsForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
 }
 
-func (s *Syncer) precheckForeignKeyCausality(
-	sourceTable *filter.Table,
-	targetTable *filter.Table,
-	downstreamTableInfo *schema.DownstreamTableInfo,
-) error {
-	if downstreamTableInfo == nil || downstreamTableInfo.TableInfo == nil {
+// precheckForeignKeyRouteTopology rejects many-to-one routes in this task.
+func (s *Syncer) precheckForeignKeyRouteTopology(ctx context.Context) error {
+	if len(s.cfg.RouteRules) == 0 {
 		return nil
 	}
-	if len(downstreamTableInfo.TableInfo.ForeignKeys) == 0 {
-		return nil
-	}
-	if sourceTable.Schema == targetTable.Schema && sourceTable.Name == targetTable.Name {
+	if s.isForeignKeyRouteTopologyChecked() {
 		return nil
 	}
 
-	return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
-		"foreign key causality with route under foreign_key_checks=1 and worker_count>1 is not supported yet; child table %s routes to %s; please use worker_count=1",
-		sourceTable.String(),
-		targetTable.String(),
-	)
+	if s.fromDB == nil {
+		// DML processing should have an upstream connection before topology validation.
+		return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
+			"foreign key causality with route under foreign_key_checks=1 and worker_count>1 requires source route topology check, but upstream connection is not initialized",
+		)
+	}
+
+	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.baList)
+	if err != nil {
+		return err
+	}
+
+	// FK causality in this mode requires the task-level route topology to be 1:1.
+	targetToSources := make(map[string][]string, len(sourceTables))
+	for schema, tables := range sourceTables {
+		for _, table := range tables {
+			source := &filter.Table{Schema: schema, Name: table}
+			targetID := s.foreignKeyRouteTopologyTableID(s.route(source))
+			sourceID := utils.GenTableID(source)
+			targetToSources[targetID] = append(targetToSources[targetID], sourceID)
+		}
+	}
+
+	targetIDs := make([]string, 0, len(targetToSources))
+	for targetID := range targetToSources {
+		targetIDs = append(targetIDs, targetID)
+	}
+	sort.Strings(targetIDs)
+	for _, targetID := range targetIDs {
+		sources := targetToSources[targetID]
+		if len(sources) <= 1 {
+			continue
+		}
+		sort.Strings(sources)
+		target := utils.UnpackTableID(targetID)
+		return terror.ErrSyncerUnitNotSupportedOperate.Generatef(
+			"foreign key causality with shared-target route under foreign_key_checks=1 and worker_count>1 is not supported; target table %s is mapped from source tables %s; only 1:1 route is supported",
+			target.String(),
+			strings.Join(sources, ", "),
+		)
+	}
+
+	s.markForeignKeyRouteTopologyChecked()
+	return nil
+}
+
+// foreignKeyRouteTopologyTableID returns the table ID used for one routed target table.
+func (s *Syncer) foreignKeyRouteTopologyTableID(table *filter.Table) string {
+	if s.cfg.CaseSensitive {
+		return utils.GenTableID(table)
+	}
+	return utils.GenTableID(&filter.Table{
+		Schema: strings.ToLower(table.Schema),
+		Name:   strings.ToLower(table.Name),
+	})
+}
+
+func (s *Syncer) isForeignKeyRouteTopologyChecked() bool {
+	s.foreignKeyRouteTopologyMu.Lock()
+	defer s.foreignKeyRouteTopologyMu.Unlock()
+	return s.foreignKeyRouteTopologyChecked
+}
+
+func (s *Syncer) markForeignKeyRouteTopologyChecked() {
+	s.foreignKeyRouteTopologyMu.Lock()
+	defer s.foreignKeyRouteTopologyMu.Unlock()
+	s.foreignKeyRouteTopologyChecked = true
+}
+
+// resetForeignKeyRouteTopologyCheckCache clears successful route topology checks.
+func (s *Syncer) resetForeignKeyRouteTopologyCheckCache() {
+	s.foreignKeyRouteTopologyMu.Lock()
+	defer s.foreignKeyRouteTopologyMu.Unlock()
+	s.foreignKeyRouteTopologyChecked = false
 }
 
 func (s *Syncer) precheckForeignKeyReferencedTables(
@@ -4053,7 +4137,7 @@ func (s *Syncer) precheckForeignKeyReferencedTables(
 	downstreamTableInfo *schema.DownstreamTableInfo,
 	visiting map[string]struct{},
 ) error {
-	if !isForeignKeyChecksEnabled(s.cfg.To.Session) {
+	if !config.IsForeignKeyChecksEnabled(s.cfg.To.Session) {
 		return nil
 	}
 	if currentTableInfo == nil || downstreamTableInfo == nil || downstreamTableInfo.TableInfo == nil {
@@ -4124,10 +4208,14 @@ func (s *Syncer) prepareDownStreamTableInfo(
 	if !s.needForeignKeyCausality() {
 		return basicDownStreamTableInfo(dti), nil
 	}
-	if err := s.precheckForeignKeyCausality(sourceTable, targetTable, dti); err != nil {
+	if err := s.precheckForeignKeyRouteTopology(tctx.Ctx); err != nil {
 		return nil, err
 	}
-	return s.schemaTracker.InitDownStreamForeignKeyRelations(tctx, sourceTable, targetTable, originTI, nil)
+	var routeResolver schema.TableRouteResolver
+	if len(s.cfg.RouteRules) > 0 {
+		routeResolver = s.route
+	}
+	return s.schemaTracker.InitDownStreamForeignKeyRelations(tctx, sourceTable, targetTable, originTI, routeResolver, s.cfg.CaseSensitive)
 }
 
 func (s *Syncer) getDownStreamTableInfo(
