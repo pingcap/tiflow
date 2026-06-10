@@ -41,26 +41,35 @@ type WhereHandle struct {
 	// generated expression at causality time.
 	CausalityIdxs []*model.IndexInfo
 
+	generatedColumns *generatedColumnCache
+}
+
+type generatedColumnCache struct {
 	sourceTableInfo *model.TableInfo
 
-	// genExprs caches hidden generated-column expressions for this handle's
-	// source table schema, keyed by column offset.
-	genExprsOnce sync.Once
-	genExprs     map[int]expression.Expression
-	genExprsOK   bool
+	once  sync.Once
+	exprs map[int]expression.Expression
+	ok    bool
 }
 
 // generatedColumnExprs builds (once) and returns hidden generated-column
 // expressions keyed by column offset. The bool is false if any expression fails
 // to build, in which case the caller should fall back instead of evaluating.
 func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
-	h.genExprsOnce.Do(func() {
+	if h.generatedColumns == nil {
+		return nil, false
+	}
+	return h.generatedColumns.exprsOf(ctx)
+}
+
+func (c *generatedColumnCache) exprsOf(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
+	c.once.Do(func() {
 		exprs := make(map[int]expression.Expression)
-		for _, col := range h.sourceTableInfo.Columns {
+		for _, col := range c.sourceTableInfo.Columns {
 			if !col.Hidden || !col.IsGenerated() {
 				continue
 			}
-			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, h.sourceTableInfo)
+			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, c.sourceTableInfo)
 			if err != nil {
 				log.Warn("cannot build generated column expression, "+
 					"its index will be skipped for causality",
@@ -69,16 +78,18 @@ func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int
 			}
 			exprs[col.Offset] = e
 		}
-		h.genExprs = exprs
-		h.genExprsOK = true
+		c.exprs = exprs
+		c.ok = true
 	})
-	return h.genExprs, h.genExprsOK
+	return c.exprs, c.ok
 }
 
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,
 // columns and state. Other component can cache the result.
 func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
-	ret := WhereHandle{sourceTableInfo: source}
+	ret := WhereHandle{
+		generatedColumns: &generatedColumnCache{sourceTableInfo: source},
+	}
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
