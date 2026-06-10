@@ -51,7 +51,7 @@ type WhereHandle struct {
 	genExprsOK   bool
 }
 
-// generatedColumnExprs builds (once) and returns the generated-column
+// generatedColumnExprs builds (once) and returns hidden generated-column
 // expressions of sourceTI, keyed by column offset. The expressions depend only
 // on the schema, so they are cached here and reused for every row change of the
 // table. The bool is false if any expression fails to build, in which case the
@@ -62,7 +62,7 @@ func (h *WhereHandle) generatedColumnExprs(
 	h.genExprsOnce.Do(func() {
 		exprs := make(map[int]expression.Expression)
 		for _, col := range sourceTI.Columns {
-			if !col.IsGenerated() {
+			if !col.Hidden || !col.IsGenerated() {
 				continue
 			}
 			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, sourceTI)

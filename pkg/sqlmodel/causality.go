@@ -211,13 +211,11 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 	ret := make([]string, 0, len(pkAndUks))
 
-	// Materialize hidden/virtual generated columns (e.g. the column backing an
-	// expression/functional index, which the binlog row image does not carry)
-	// once per row, so such an index can still take part in conflict detection.
-	// For a table without them this returns values unchanged; it returns nil
-	// only if the values could not be computed, in which case the affected index
-	// is skipped below rather than panicking the worker.
-	fullValues := r.fillVirtualGeneratedValues(values)
+	var (
+		fullValues       []any
+		fullValuesLoaded bool
+		fullValuesOK     bool
+	)
 
 	for _, indexCols := range pkAndUks {
 		// TODO: should not support multi value index and generate the value
@@ -227,8 +225,16 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		}
 
 		idxValues := values
-		if indexNeedsGeneratedValue(indexCols, len(values)) {
-			if fullValues == nil {
+		needsFullValues, validIndex := indexNeedsFullColumnValues(indexCols, r.sourceTableInfo.Columns)
+		if !validIndex {
+			continue
+		}
+		if needsFullValues {
+			if !fullValuesLoaded {
+				fullValues, fullValuesOK = r.fillVirtualGeneratedValues(values)
+				fullValuesLoaded = true
+			}
+			if !fullValuesOK {
 				continue
 			}
 			idxValues = fullValues
@@ -254,27 +260,41 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	return ret
 }
 
-// indexNeedsGeneratedValue reports whether the index references a column whose
-// offset is not covered by the binlog row image (length valueLen), i.e. a
-// hidden/virtual generated column appended after the stored columns.
-func indexNeedsGeneratedValue(index *timodel.IndexInfo, valueLen int) bool {
-	for _, col := range index.Columns {
-		if col.Offset >= valueLen {
-			return true
+// indexNeedsFullColumnValues reports whether the index cannot be read directly
+// from the compact row-value slice by TableInfo column offsets. This is true
+// when the index references a hidden generated column, or when a hidden column
+// appears before an indexed visible column. The returned bool is false if the
+// index metadata is not safe to use.
+func indexNeedsFullColumnValues(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) (bool, bool) {
+	for _, idxCol := range index.Columns {
+		if idxCol.Offset < 0 || idxCol.Offset >= len(columns) {
+			return false, false
+		}
+		col := columns[idxCol.Offset]
+		if col.Hidden {
+			if !col.IsGenerated() {
+				return false, false
+			}
+			return true, true
+		}
+		for _, precedingCol := range columns[:idxCol.Offset] {
+			if precedingCol.Hidden {
+				return true, true
+			}
 		}
 	}
-	return false
+	return false, true
 }
 
 // fillVirtualGeneratedValues returns a copy of values extended to the full
 // source column list, with hidden/virtual generated columns (such as the column
-// backing an expression index) evaluated from their generated expression. It
-// returns nil if any generated value cannot be computed, so the caller can skip
-// the affected index instead of indexing the row-value slice out of range.
-func (r *RowChange) fillVirtualGeneratedValues(values []any) []any {
+// backing an expression index) evaluated from their generated expression. The
+// bool is false if any generated value cannot be computed, so the caller can
+// skip the affected index instead of indexing the row-value slice out of range.
+func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	cols := r.sourceTableInfo.Columns
 	if len(values) >= len(cols) {
-		return values
+		return values, true
 	}
 
 	exprCtx := r.tiSessionCtx.GetExprCtx()
@@ -282,42 +302,64 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) []any {
 	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
 	exprs, ok := r.whereHandle.generatedColumnExprs(exprCtx, r.sourceTableInfo)
 	if !ok {
-		return nil
+		return nil, false
 	}
 
-	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, cols)
+	visibleCols := make([]*timodel.ColumnInfo, 0, len(values))
+	for _, col := range cols {
+		if !col.Hidden {
+			visibleCols = append(visibleCols, col)
+		}
+	}
+	if len(values) != len(visibleCols) {
+		log.L().Warn("row value count does not match visible column count",
+			zap.String("table", r.sourceTable.String()),
+			zap.Int("valueCount", len(values)),
+			zap.Int("visibleColumnCount", len(visibleCols)))
+		return nil, false
+	}
+
+	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, visibleCols)
 	if err != nil {
 		log.L().Warn("cannot adjust row for generated column evaluation",
 			zap.String("table", r.sourceTable.String()), zap.Error(err))
-		return nil
-	}
-	for len(datums) < len(cols) {
-		datums = append(datums, types.Datum{})
+		return nil, false
 	}
 
 	full := make([]any, len(cols))
-	copy(full, values)
-	// Columns are ordered by offset and a generated column may only depend on
-	// earlier columns, so a single forward pass is enough.
+	fullDatums := make([]types.Datum, len(cols))
+	visibleOffset := 0
 	for _, col := range cols {
-		if col.Offset < len(values) {
+		if col.Hidden {
+			continue
+		}
+		full[col.Offset] = values[visibleOffset]
+		fullDatums[col.Offset] = datums[visibleOffset]
+		visibleOffset++
+	}
+
+	// A generated column may depend on generated columns defined before it, so
+	// evaluate generated columns in column order after visible values are in
+	// their full TableInfo offsets.
+	for _, col := range cols {
+		if !col.Hidden || !col.IsGenerated() {
 			continue
 		}
 		expr, ok := exprs[col.Offset]
 		if !ok {
 			// A non-generated column missing from the row image means the schema
 			// does not match the row; let the caller fall back to skipping.
-			return nil
+			return nil, false
 		}
-		d, err := expr.Eval(exprCtx.GetEvalCtx(), chunk.MutRowFromDatums(datums).ToRow())
+		d, err := expr.Eval(exprCtx.GetEvalCtx(), chunk.MutRowFromDatums(fullDatums).ToRow())
 		if err != nil {
 			log.L().Warn("cannot evaluate generated column expression",
 				zap.String("table", r.sourceTable.String()),
 				zap.String("column", col.Name.O), zap.Error(err))
-			return nil
+			return nil, false
 		}
 		full[col.Offset] = d.GetValue()
-		datums[col.Offset] = d
+		fullDatums[col.Offset] = d
 	}
-	return full
+	return full, true
 }
