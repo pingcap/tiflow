@@ -1444,9 +1444,9 @@ func (s *testSyncerSuite) TestTrackDDL(c *check.C) {
 		c.Assert(err, check.IsNil)
 		ca.callback()
 
-		syncer.foreignKeyRouteTopologyChecked = map[string]struct{}{"cached": {}}
+		syncer.foreignKeyRouteTopologyChecked = true
 		c.Assert(syncer.trackDDL(testDB, ddlInfo, ec), check.IsNil)
-		c.Assert(syncer.foreignKeyRouteTopologyChecked, check.IsNil)
+		c.Assert(syncer.foreignKeyRouteTopologyChecked, check.Equals, false)
 		syncer.schemaTracker.Reset()
 		c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 		c.Assert(checkPointMock.ExpectationsWereMet(), check.IsNil)
@@ -1716,9 +1716,9 @@ func TestTrackDownstreamTableWontOverwrite(t *testing.T) {
 	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
 	require.NoError(t, err)
 	require.Len(t, ti.Columns, 2)
-	syncer.foreignKeyRouteTopologyChecked = map[string]struct{}{"cached": {}}
+	syncer.foreignKeyRouteTopologyChecked = true
 	require.NoError(t, syncer.trackTableInfoFromDownstream(tctx, upTable, downTable))
-	require.Nil(t, syncer.foreignKeyRouteTopologyChecked)
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
 	newTi, err := syncer.getTableInfo(tctx, upTable, downTable)
 	require.NoError(t, err)
 	require.Equal(t, ti, newTi)
@@ -2150,20 +2150,20 @@ func TestUpdateClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
 	cfg := genDefaultSubTaskConfig4Test()
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.timezone = time.UTC
-	syncer.foreignKeyRouteTopologyChecked = map[string]struct{}{"cached": {}}
+	syncer.foreignKeyRouteTopologyChecked = true
 
 	newCfg, err := cfg.Clone()
 	require.NoError(t, err)
 	newCfg.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "db", Action: bf.Ignore}}
 
 	require.NoError(t, syncer.Update(context.Background(), newCfg))
-	require.Nil(t, syncer.foreignKeyRouteTopologyChecked)
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
 }
 
 func TestOperateSchemaSetSchemaClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
 	cfg := genDefaultSubTaskConfig4Test()
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.foreignKeyRouteTopologyChecked = map[string]struct{}{"cached": {}}
+	syncer.foreignKeyRouteTopologyChecked = true
 	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 	require.NoError(t, syncer.genRouter())
 
@@ -2192,7 +2192,7 @@ func TestOperateSchemaSetSchemaClearsForeignKeyRouteTopologyCheckCache(t *testin
 		Schema:   "create table child(id int primary key, parent_id int, constraint fk_child_parent foreign key (parent_id) references parent(id))",
 	})
 	require.NoError(t, err)
-	require.Nil(t, syncer.foreignKeyRouteTopologyChecked)
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, checkPointMock.ExpectationsWereMet())
 }

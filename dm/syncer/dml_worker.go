@@ -63,10 +63,6 @@ type DMLWorker struct {
 	flushCh chan *job
 }
 
-func isForeignKeyChecksEnabled(session map[string]string) bool {
-	return config.IsForeignKeyChecksEnabled(session)
-}
-
 func (w *DMLWorker) shouldDisableForeignKeyChecksForJob(j *job) bool {
 	if !w.foreignKeyChecksEnabled {
 		return false
@@ -126,7 +122,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		syncCtx:                 syncer.syncCtx, // this ctx can be used to cancel all the workers
 		metricProxies:           syncer.metricsProxies,
 		toDBConns:               syncer.toDBConns,
-		foreignKeyChecksEnabled: isForeignKeyChecksEnabled(syncer.cfg.To.Session),
+		foreignKeyChecksEnabled: config.IsForeignKeyChecksEnabled(syncer.cfg.To.Session),
 		inCh:                    inCh,
 		flushCh:                 make(chan *job),
 	}

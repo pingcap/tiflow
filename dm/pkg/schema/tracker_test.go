@@ -1176,7 +1176,7 @@ func TestForeignKeyRelationRejectsSameNameDifferentColumns(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestForeignKeyRelationMatchesReferencedTableWhenNameAndOrderDiffer(t *testing.T) {
+func TestFKRelationMatchesRoutedRefTable(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
 
@@ -1235,7 +1235,7 @@ func TestForeignKeyRelationMatchesReferencedTableWhenNameAndOrderDiffer(t *testi
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestForeignKeyRelationMatchesReferencedSchemaWhenNameAndOrderDiffer(t *testing.T) {
+func TestFKRelationMatchesRoutedRefSchema(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
 
@@ -1298,7 +1298,7 @@ func TestForeignKeyRelationMatchesReferencedSchemaWhenNameAndOrderDiffer(t *test
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestForeignKeyRelationMatchesReferencedTableWithoutRouteWhenNameAndOrderDiffer(t *testing.T) {
+func TestFKRelationMatchesRefTableNoRoute(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
 

@@ -414,7 +414,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	} else if c.SyncerConfig.SafeMode && duration == 0 {
 		return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
 	}
-	if err := CheckUnsupportedForeignKeyChecksSyncerOptions(c.To.Session, c.SyncerConfig); err != nil {
+	if err := CheckForeignKeyChecksSyncerOptions(c.To.Session, c.SyncerConfig); err != nil {
 		return err
 	}
 

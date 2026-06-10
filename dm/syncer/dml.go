@@ -147,6 +147,7 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 		originalDataSeq = extendData
 	}
 
+	causalityKeySourceTable := s.causalityKeySourceTableNameForRowChange(param.sourceTable)
 RowLoop:
 	for _, data := range originalDataSeq {
 		originalValue, err := adjustValueFromBinlogData(data, ti)
@@ -175,7 +176,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
-		rowChange.SetCausalityKeySourceTable(s.causalityKeySourceTableNameForRowChange(param.sourceTable))
+		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
@@ -207,6 +208,7 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 		originalData = extendData
 	}
 
+	causalityKeySourceTable := s.causalityKeySourceTableNameForRowChange(param.sourceTable)
 RowLoop:
 	for i := 0; i < len(originalData); i += 2 {
 		oriOldData := originalData[i]
@@ -253,7 +255,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
-		rowChange.SetCausalityKeySourceTable(s.causalityKeySourceTableNameForRowChange(param.sourceTable))
+		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
@@ -280,6 +282,7 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 		dataSeq = extendData
 	}
 
+	causalityKeySourceTable := s.causalityKeySourceTableNameForRowChange(param.sourceTable)
 RowLoop:
 	for _, data := range dataSeq {
 		value, err := adjustValueFromBinlogData(data, ti)
@@ -308,7 +311,7 @@ RowLoop:
 			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
-		rowChange.SetCausalityKeySourceTable(s.causalityKeySourceTableNameForRowChange(param.sourceTable))
+		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}

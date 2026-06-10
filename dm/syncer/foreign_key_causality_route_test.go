@@ -328,7 +328,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T)
 	parentDMLs, err := syncer.genAndFilterInsertDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     parentSource,
 		targetTable:     parentTarget,
-		originalData:    [][]interface{}{{10}},
+		originalData:    [][]any{{10}},
 		sourceTableInfo: parentTI,
 	}, nil)
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T)
 	parentUpdateDMLs, err := syncer.genAndFilterUpdateDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     parentSource,
 		targetTable:     parentTarget,
-		originalData:    [][]interface{}{{10}, {10}},
+		originalData:    [][]any{{10}, {10}},
 		sourceTableInfo: parentTI,
 	}, nil, nil)
 	require.NoError(t, err)
@@ -348,7 +348,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T)
 	parentDeleteDMLs, err := syncer.genAndFilterDeleteDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     parentSource,
 		targetTable:     parentTarget,
-		originalData:    [][]interface{}{{10}},
+		originalData:    [][]any{{10}},
 		sourceTableInfo: parentTI,
 	}, nil)
 	require.NoError(t, err)
@@ -371,7 +371,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T)
 	childDMLs, err := syncer.genAndFilterInsertDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     childSource,
 		targetTable:     childTarget,
-		originalData:    [][]interface{}{{100, 10}},
+		originalData:    [][]any{{100, 10}},
 		sourceTableInfo: childTI,
 	}, nil)
 	require.NoError(t, err)
@@ -382,7 +382,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T)
 	childUpdateDMLs, err := syncer.genAndFilterUpdateDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     childSource,
 		targetTable:     childTarget,
-		originalData:    [][]interface{}{{100, 10}, {100, 10}},
+		originalData:    [][]any{{100, 10}, {100, 10}},
 		sourceTableInfo: childTI,
 	}, nil, nil)
 	require.NoError(t, err)
@@ -391,7 +391,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T)
 	childDeleteDMLs, err := syncer.genAndFilterDeleteDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     childSource,
 		targetTable:     childTarget,
-		originalData:    [][]interface{}{{100, 10}},
+		originalData:    [][]any{{100, 10}},
 		sourceTableInfo: childTI,
 	}, nil)
 	require.NoError(t, err)
@@ -445,7 +445,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	parentDMLs, err := syncer.genAndFilterInsertDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     parentSource,
 		targetTable:     parentSource,
-		originalData:    [][]interface{}{{10}},
+		originalData:    [][]any{{10}},
 		sourceTableInfo: parentTI,
 	}, nil)
 	require.NoError(t, err)
@@ -456,7 +456,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	parentUpdateDMLs, err := syncer.genAndFilterUpdateDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     parentSource,
 		targetTable:     parentSource,
-		originalData:    [][]interface{}{{10}, {10}},
+		originalData:    [][]any{{10}, {10}},
 		sourceTableInfo: parentTI,
 	}, nil, nil)
 	require.NoError(t, err)
@@ -465,7 +465,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	parentDeleteDMLs, err := syncer.genAndFilterDeleteDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     parentSource,
 		targetTable:     parentSource,
-		originalData:    [][]interface{}{{10}},
+		originalData:    [][]any{{10}},
 		sourceTableInfo: parentTI,
 	}, nil)
 	require.NoError(t, err)
@@ -487,7 +487,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	childDMLs, err := syncer.genAndFilterInsertDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     childSource,
 		targetTable:     childSource,
-		originalData:    [][]interface{}{{100, 10}},
+		originalData:    [][]any{{100, 10}},
 		sourceTableInfo: childTI,
 	}, nil)
 	require.NoError(t, err)
@@ -496,7 +496,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	childUpdateDMLs, err := syncer.genAndFilterUpdateDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     childSource,
 		targetTable:     childSource,
-		originalData:    [][]interface{}{{100, 10}, {100, 10}},
+		originalData:    [][]any{{100, 10}, {100, 10}},
 		sourceTableInfo: childTI,
 	}, nil, nil)
 	require.NoError(t, err)
@@ -505,7 +505,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	childDeleteDMLs, err := syncer.genAndFilterDeleteDMLs(tcontext.Background(), &genDMLParam{
 		sourceTable:     childSource,
 		targetTable:     childSource,
-		originalData:    [][]interface{}{{100, 10}},
+		originalData:    [][]any{{100, 10}},
 		sourceTableInfo: childTI,
 	}, nil)
 	require.NoError(t, err)

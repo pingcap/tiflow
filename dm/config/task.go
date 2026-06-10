@@ -432,8 +432,8 @@ func IsForeignKeyChecksEnabled(session map[string]string) bool {
 	return false
 }
 
-// CheckUnsupportedForeignKeyChecksSyncerOptions rejects syncer options that change DML statement boundaries.
-func CheckUnsupportedForeignKeyChecksSyncerOptions(session map[string]string, syncerCfg SyncerConfig) error {
+// CheckForeignKeyChecksSyncerOptions rejects syncer options that change DML statement boundaries.
+func CheckForeignKeyChecksSyncerOptions(session map[string]string, syncerCfg SyncerConfig) error {
 	if !IsForeignKeyChecksEnabled(session) {
 		return nil
 	}

@@ -171,8 +171,10 @@ type Syncer struct {
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 
-	foreignKeyRouteTopologyMu      sync.Mutex
-	foreignKeyRouteTopologyChecked map[string]struct{}
+	foreignKeyRouteTopologyMu sync.Mutex
+	// foreignKeyRouteTopologyChecked records a successful task-level 1:1 route
+	// topology check for the current cache generation.
+	foreignKeyRouteTopologyChecked bool
 
 	running atomic.Bool
 	closed  atomic.Bool
@@ -392,7 +394,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
-	if err := config.CheckUnsupportedForeignKeyChecksSyncerOptions(s.cfg.To.Session, s.cfg.SyncerConfig); err != nil {
+	if err := config.CheckForeignKeyChecksSyncerOptions(s.cfg.To.Session, s.cfg.SyncerConfig); err != nil {
 		return err
 	}
 	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
@@ -3383,7 +3385,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
-	if err := config.CheckUnsupportedForeignKeyChecksSyncerOptions(newCfg.To.Session, newCfg.SyncerConfig); err != nil {
+	if err := config.CheckForeignKeyChecksSyncerOptions(newCfg.To.Session, newCfg.SyncerConfig); err != nil {
 		return err
 	}
 	// can't update when in sharding merge
@@ -3433,7 +3435,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err error) {
 	s.Lock()
 	defer s.Unlock()
-	if err := config.CheckUnsupportedForeignKeyChecksSyncerOptions(cfg.To.Session, cfg.SyncerConfig); err != nil {
+	if err := config.CheckForeignKeyChecksSyncerOptions(cfg.To.Session, cfg.SyncerConfig); err != nil {
 		return err
 	}
 	if s.cfg.ShardMode == config.ShardPessimistic {
@@ -3744,17 +3746,15 @@ func (s *Syncer) getTrackedTableInfo(table *filter.Table) (*model.TableInfo, err
 }
 
 func (s *Syncer) needForeignKeyCausality() bool {
-	return isForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
+	return config.IsForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
 }
-
-const foreignKeyRouteTopologyTaskCacheKey = "task"
 
 // precheckForeignKeyRouteTopology rejects many-to-one routes in this task.
 func (s *Syncer) precheckForeignKeyRouteTopology(ctx context.Context) error {
 	if len(s.cfg.RouteRules) == 0 {
 		return nil
 	}
-	if s.isForeignKeyRouteTopologyChecked(foreignKeyRouteTopologyTaskCacheKey) {
+	if s.isForeignKeyRouteTopologyChecked() {
 		return nil
 	}
 
@@ -3770,7 +3770,7 @@ func (s *Syncer) precheckForeignKeyRouteTopology(ctx context.Context) error {
 		return err
 	}
 
-	// FK causality in this mode requires the task route topology to be 1:1.
+	// FK causality in this mode requires the task-level route topology to be 1:1.
 	targetToSources := make(map[string][]string, len(sourceTables))
 	for schema, tables := range sourceTables {
 		for _, table := range tables {
@@ -3800,7 +3800,7 @@ func (s *Syncer) precheckForeignKeyRouteTopology(ctx context.Context) error {
 		)
 	}
 
-	s.markForeignKeyRouteTopologyChecked(foreignKeyRouteTopologyTaskCacheKey)
+	s.markForeignKeyRouteTopologyChecked()
 	return nil
 }
 
@@ -3815,27 +3815,23 @@ func (s *Syncer) foreignKeyRouteTopologyTableID(table *filter.Table) string {
 	})
 }
 
-func (s *Syncer) isForeignKeyRouteTopologyChecked(cacheKey string) bool {
+func (s *Syncer) isForeignKeyRouteTopologyChecked() bool {
 	s.foreignKeyRouteTopologyMu.Lock()
 	defer s.foreignKeyRouteTopologyMu.Unlock()
-	_, ok := s.foreignKeyRouteTopologyChecked[cacheKey]
-	return ok
+	return s.foreignKeyRouteTopologyChecked
 }
 
-func (s *Syncer) markForeignKeyRouteTopologyChecked(cacheKey string) {
+func (s *Syncer) markForeignKeyRouteTopologyChecked() {
 	s.foreignKeyRouteTopologyMu.Lock()
 	defer s.foreignKeyRouteTopologyMu.Unlock()
-	if s.foreignKeyRouteTopologyChecked == nil {
-		s.foreignKeyRouteTopologyChecked = make(map[string]struct{})
-	}
-	s.foreignKeyRouteTopologyChecked[cacheKey] = struct{}{}
+	s.foreignKeyRouteTopologyChecked = true
 }
 
 // resetForeignKeyRouteTopologyCheckCache clears successful route topology checks.
 func (s *Syncer) resetForeignKeyRouteTopologyCheckCache() {
 	s.foreignKeyRouteTopologyMu.Lock()
 	defer s.foreignKeyRouteTopologyMu.Unlock()
-	s.foreignKeyRouteTopologyChecked = nil
+	s.foreignKeyRouteTopologyChecked = false
 }
 
 func (s *Syncer) precheckForeignKeyReferencedTables(
@@ -3845,7 +3841,7 @@ func (s *Syncer) precheckForeignKeyReferencedTables(
 	downstreamTableInfo *schema.DownstreamTableInfo,
 	visiting map[string]struct{},
 ) error {
-	if !isForeignKeyChecksEnabled(s.cfg.To.Session) {
+	if !config.IsForeignKeyChecksEnabled(s.cfg.To.Session) {
 		return nil
 	}
 	if currentTableInfo == nil || downstreamTableInfo == nil || downstreamTableInfo.TableInfo == nil {
