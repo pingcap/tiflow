@@ -174,6 +174,7 @@ func TestShouldDisableForeignKeyChecksForJob(t *testing.T) {
 	require.False(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
 }
 
+<<<<<<< HEAD
 func TestIsForeignKeyChecksEnabled(t *testing.T) {
 	t.Parallel()
 
@@ -199,6 +200,8 @@ func TestIsForeignKeyChecksEnabled(t *testing.T) {
 	}
 }
 
+=======
+>>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
 func TestShouldDisableForeignKeyChecks(t *testing.T) {
 	t.Parallel()
 
