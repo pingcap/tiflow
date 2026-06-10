@@ -163,71 +163,6 @@ func TestSubTaskAdjustFail(t *testing.T) {
 			},
 			"Message: online scheme rtc not supported",
 		},
-<<<<<<< HEAD
-=======
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.ShardMode = ShardPessimistic
-				cfg.LoaderConfig.ImportMode = LoadModeImportInto
-				return cfg
-			},
-			"Message: import-into mode does not support sharding",
-		},
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.ShardMode = ShardPessimistic
-				cfg.LoaderConfig.ImportMode = "ImPorT-InTo"
-				return cfg
-			},
-			"Message: import-into mode does not support sharding",
-		},
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.IsSharding = true
-				cfg.LoaderConfig.ImportMode = LoadModeImportInto
-				return cfg
-			},
-			"Message: import-into mode does not support sharding",
-		},
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.LoaderConfig.ImportMode = LoadModeImportInto
-				cfg.LoaderConfig.Dir = "/local/path"
-				return cfg
-			},
-			"Message: import-into mode requires shared storage",
-		},
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.LoaderConfig.ImportMode = "ImPorT-InTo"
-				cfg.LoaderConfig.Dir = "/local/path"
-				return cfg
-			},
-			"Message: import-into mode requires shared storage",
-		},
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.LoaderConfig.ImportMode = LoadModeImportInto
-				cfg.LoaderConfig.Dir = "./relative/path"
-				return cfg
-			},
-			"Message: import-into mode requires shared storage",
-		},
-		{
-			func() *SubTaskConfig {
-				cfg := newSubTaskConfig()
-				cfg.LoaderConfig.ImportMode = LoadModeImportInto
-				cfg.LoaderConfig.Dir = ""
-				return cfg
-			},
-			"Message: import-into mode requires shared storage",
-		},
 		{
 			func() *SubTaskConfig {
 				cfg := newSubTaskConfig()
@@ -246,7 +181,6 @@ func TestSubTaskAdjustFail(t *testing.T) {
 			},
 			"Message: `multiple-rows` is not supported when foreign_key_checks=1",
 		},
->>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
 	}
 
 	for _, tc := range testCases {

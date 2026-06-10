@@ -200,12 +200,7 @@ ErrConfigColumnMappingDeprecated,[code=20064:class=config:scope=internal:level=h
 ErrConfigInvalidLoadAnalyze,[code=20065:class=config:scope=internal:level=medium], "Message: invalid load analyze option '%s', Workaround: Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
 ErrConfigStrictOptimisticShardMode,[code=20066:class=config:scope=internal:level=medium], "Message: cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`, Workaround: Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`."
 ErrConfigSecretKeyPath,[code=20067:class=config:scope=internal:level=high], "Message: invalid secret key path or content: %v, Workaround: Please check whether the path is valid, and has required permission to read the file, and the key is correct."
-<<<<<<< HEAD
-=======
-ErrConfigImportIntoShardingNotSupport,[code=20068:class=config:scope=internal:level=high], "Message: import-into mode does not support sharding (multi-source) scenario, Workaround: Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'."
-ErrConfigImportIntoRequiresSharedStorage,[code=20069:class=config:scope=internal:level=high], "Message: import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s', Workaround: Please use a shared storage URI like s3://bucket/path"
 ErrConfigUnsupportedForeignKeyChecksOption,[code=20070:class=config:scope=internal:level=medium], "Message: `%s` is not supported when foreign_key_checks=1, Workaround: Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
->>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]

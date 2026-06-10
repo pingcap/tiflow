@@ -1509,15 +1509,6 @@ func TestForeignKeyRelationDoesNotFallbackFromSameNameReferencedTableMismatch(t 
 }
 
 func TestForeignKeyRelationNilResolverKeepsParentRouteUnsupportedError(t *testing.T) {
-<<<<<<< HEAD
-	err := runForeignKeyRelationInitErrorTest(
-		t,
-		"create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))",
-		"create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))",
-	)
-	require.ErrorContains(t, err, "not supported yet")
-	require.ErrorContains(t, err, "upstream parent table")
-=======
 	ctx := context.Background()
 	p := parser.New()
 
@@ -1551,7 +1542,6 @@ func TestForeignKeyRelationNilResolverKeepsParentRouteUnsupportedError(t *testin
 	require.ErrorContains(t, err, "requires aligned parent tables")
 	require.ErrorContains(t, err, "source parent table")
 	require.ErrorContains(t, err, "downstream parent table")
->>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
 	require.ErrorContains(t, err, "`db`.`parent`")
 	require.ErrorContains(t, err, "`db`.`parent_r`")
 }

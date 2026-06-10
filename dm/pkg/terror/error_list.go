@@ -272,12 +272,7 @@ const (
 	codeConfigInvalidLoadAnalyze
 	codeConfigStrictOptimisticShardMode
 	codeConfigSecretKeyPath
-<<<<<<< HEAD
-=======
-	codeConfigImportIntoShardingNotSupport
-	codeConfigImportIntoRequiresSharedStorage
-	codeConfigUnsupportedForeignKeyChecksOption
->>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
+	codeConfigUnsupportedForeignKeyChecksOption ErrCode = 20070
 )
 
 // Binlog operation error code list.
@@ -991,12 +986,7 @@ var (
 	ErrConfigInvalidLoadAnalyze                 = New(codeConfigInvalidLoadAnalyze, ClassConfig, ScopeInternal, LevelMedium, "invalid load analyze option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
 	ErrConfigStrictOptimisticShardMode          = New(codeConfigStrictOptimisticShardMode, ClassConfig, ScopeInternal, LevelMedium, "cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`", "Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`.")
 	ErrConfigSecretKeyPath                      = New(codeConfigSecretKeyPath, ClassConfig, ScopeInternal, LevelHigh, "invalid secret key path or content: %v", "Please check whether the path is valid, and has required permission to read the file, and the key is correct.")
-<<<<<<< HEAD
-=======
-	ErrConfigImportIntoShardingNotSupport       = New(codeConfigImportIntoShardingNotSupport, ClassConfig, ScopeInternal, LevelHigh, "import-into mode does not support sharding (multi-source) scenario", "Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'.")
-	ErrConfigImportIntoRequiresSharedStorage    = New(codeConfigImportIntoRequiresSharedStorage, ClassConfig, ScopeInternal, LevelHigh, "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'", "Please use a shared storage URI like s3://bucket/path")
 	ErrConfigUnsupportedForeignKeyChecksOption  = New(codeConfigUnsupportedForeignKeyChecksOption, ClassConfig, ScopeInternal, LevelMedium, "`%s` is not supported when foreign_key_checks=1", "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file.")
->>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

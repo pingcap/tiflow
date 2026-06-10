@@ -1216,27 +1216,12 @@ description = ""
 workaround = "Please check whether the path is valid, and has required permission to read the file, and the key is correct."
 tags = ["internal", "high"]
 
-<<<<<<< HEAD
-=======
-[error.DM-config-20068]
-message = "import-into mode does not support sharding (multi-source) scenario"
-description = ""
-workaround = "Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'."
-tags = ["internal", "high"]
-
-[error.DM-config-20069]
-message = "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'"
-description = ""
-workaround = "Please use a shared storage URI like s3://bucket/path"
-tags = ["internal", "high"]
-
 [error.DM-config-20070]
 message = "`%s` is not supported when foreign_key_checks=1"
 description = ""
 workaround = "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
 tags = ["internal", "medium"]
 
->>>>>>> 3450f5d3d7 (dm: support FK causality for one-to-one routes (#12675))
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
