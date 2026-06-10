@@ -58,6 +58,8 @@ func (t RowChangeType) String() string {
 type RowChange struct {
 	sourceTable *cdcmodel.TableName
 	targetTable *cdcmodel.TableName
+	// Optional source table name used only by CausalityKeys.
+	causalityKeySourceTable *cdcmodel.TableName
 
 	preValues  []interface{}
 	postValues []interface{}
@@ -211,6 +213,11 @@ func (r *RowChange) SetWhereHandle(whereHandle *WhereHandle) {
 // SetForeignKeyRelations sets the precomputed foreign key relations to build causality keys.
 func (r *RowChange) SetForeignKeyRelations(relations []ForeignKeyCausalityRelation) {
 	r.foreignKeyRelations = relations
+}
+
+// SetCausalityKeySourceTable sets the source table name used by CausalityKeys.
+func (r *RowChange) SetCausalityKeySourceTable(table *cdcmodel.TableName) {
+	r.causalityKeySourceTable = table
 }
 
 // GetApproximateDataSize returns internal approximateDataSize, it could be zero
