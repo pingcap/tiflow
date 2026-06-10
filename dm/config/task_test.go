@@ -52,7 +52,6 @@ func TestIsForeignKeyChecksEnabled(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, c.expected, IsForeignKeyChecksEnabled(c.session))

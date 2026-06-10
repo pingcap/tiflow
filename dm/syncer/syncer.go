@@ -379,7 +379,8 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}()
 
 	tctx := s.tctx.WithContext(ctx)
-	if err := config.CheckForeignKeyChecksSyncerOptions(s.cfg.To.Session, s.cfg.SyncerConfig); err != nil {
+	err = config.CheckForeignKeyChecksSyncerOptions(s.cfg.To.Session, s.cfg.SyncerConfig)
+	if err != nil {
 		return err
 	}
 	s.upstreamTZ, s.upstreamTZStr, err = str2TimezoneOrFromDB(tctx, "", conn.UpstreamDBConfig(&s.cfg.From))
@@ -3414,7 +3415,8 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err error) {
 	s.Lock()
 	defer s.Unlock()
-	if err := config.CheckForeignKeyChecksSyncerOptions(cfg.To.Session, cfg.SyncerConfig); err != nil {
+	err = config.CheckForeignKeyChecksSyncerOptions(cfg.To.Session, cfg.SyncerConfig)
+	if err != nil {
 		return err
 	}
 	if s.cfg.ShardMode == config.ShardPessimistic {

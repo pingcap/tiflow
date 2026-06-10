@@ -90,9 +90,10 @@ func setForeignKeyRouteTestRoutes(t *testing.T, syncer *Syncer, rules []*router.
 	require.NoError(t, err)
 }
 
-func setForeignKeyRouteTestSourceTableNamesFlavor(t *testing.T, syncer *Syncer, flavor conn.LowerCaseTableNamesFlavor) {
+func setForeignKeyRouteTestSourceTableNamesInsensitive(t *testing.T, syncer *Syncer) {
 	t.Helper()
 
+	flavor := conn.LowerCaseTableNamesFlavor(conn.LCTableNamesInsensitive)
 	syncer.schemaTracker.Close()
 	syncer.SourceTableNamesFlavor = flavor
 	syncer.schemaTracker = schema.NewTracker()
@@ -132,6 +133,72 @@ func expectFetchAllDoTables(mock sqlmock.Sqlmock, schema string, tables ...strin
 	}
 	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).
 		WillReturnRows(rows)
+}
+
+func requirePreparedFKRelationForRoute(
+	t *testing.T,
+	mock sqlmock.Sqlmock,
+	syncer *Syncer,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	parentTable *filter.Table,
+	targetCreateSQL string,
+	parentCreateSQL string,
+	expectedParent string,
+) {
+	t.Helper()
+
+	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
+	require.NoError(t, err)
+
+	expectDownstreamSQLModeInit(mock)
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow(targetTable.Name, targetCreateSQL),
+	)
+	expectFetchAllDoTables(mock, sourceTable.Schema, "parent", "child")
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(parentTable)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow(parentTable.Name, parentCreateSQL),
+	)
+
+	dti, err := syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+	require.Equal(t, expectedParent, dti.ForeignKeyRelations[0].ParentTable)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func requireSharedTargetRouteRejected(
+	t *testing.T,
+	mock sqlmock.Sqlmock,
+	syncer *Syncer,
+	sourceTable *filter.Table,
+	targetTable *filter.Table,
+	targetCreateSQL string,
+	doTables []string,
+	expectedTarget string,
+	expectedSources ...string,
+) {
+	t.Helper()
+
+	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
+	require.NoError(t, err)
+
+	expectDownstreamSQLModeInit(mock)
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow(targetTable.Name, targetCreateSQL),
+	)
+	expectFetchAllDoTables(mock, sourceTable.Schema, doTables...)
+
+	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
+	require.ErrorContains(t, err, "shared-target route")
+	require.ErrorContains(t, err, expectedTarget)
+	for _, expectedSource := range expectedSources {
+		require.ErrorContains(t, err, expectedSource)
+	}
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func requireNextCausalityJob(t *testing.T, causalityCh <-chan *job) *job {
@@ -205,27 +272,17 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithChildRoute(t *testing.T)
 
 	prepareSimpleParentChildSchema(t, syncer, p)
 
-	sourceTable := &filter.Table{Schema: "db", Name: "child"}
-	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
-	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
-	require.NoError(t, err)
-
-	expectDownstreamSQLModeInit(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("child_r", "create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references `db`.`parent`(id))"),
+	requirePreparedFKRelationForRoute(
+		t,
+		mock,
+		syncer,
+		&filter.Table{Schema: "db", Name: "child"},
+		&filter.Table{Schema: "db_r", Name: "child_r"},
+		&filter.Table{Schema: "db", Name: "parent"},
+		"create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references `db`.`parent`(id))",
+		"create table parent(id int primary key)",
+		"db.parent",
 	)
-	expectFetchAllDoTables(mock, "db", "parent", "child")
-	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(&filter.Table{Schema: "db", Name: "parent"})).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("parent", "create table parent(id int primary key)"),
-	)
-
-	dti, err := syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
-	require.NoError(t, err)
-	require.Len(t, dti.ForeignKeyRelations, 1)
-	require.Equal(t, "db.parent", dti.ForeignKeyRelations[0].ParentTable)
-	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestPrepareDownStreamTableInfoBuildsFKRelationsWithChildAndParentRoute(t *testing.T) {
@@ -264,7 +321,7 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithChildAndParentRoute(t *t
 func TestPrepareDownStreamTableInfoBuildsFKRelationsWithCaseInsensitiveRoute(t *testing.T) {
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
 	require.False(t, syncer.cfg.CaseSensitive)
-	setForeignKeyRouteTestSourceTableNamesFlavor(t, syncer, conn.LCTableNamesInsensitive)
+	setForeignKeyRouteTestSourceTableNamesInsensitive(t, syncer)
 	setForeignKeyRouteTestRoutes(t, syncer, []*router.TableRule{
 		{SchemaPattern: "db", TablePattern: "parent", TargetSchema: "db_r", TargetTable: "parent_r"},
 		{SchemaPattern: "db", TablePattern: "child", TargetSchema: "db_r", TargetTable: "child_r"},
@@ -302,7 +359,7 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithCaseInsensitiveRoute(t *
 func TestGenDMLUsesCaseInsensitiveSourceDomainForRoutedFKCausality(t *testing.T) {
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
 	require.False(t, syncer.cfg.CaseSensitive)
-	setForeignKeyRouteTestSourceTableNamesFlavor(t, syncer, conn.LCTableNamesInsensitive)
+	setForeignKeyRouteTestSourceTableNamesInsensitive(t, syncer)
 	setForeignKeyRouteTestRoutes(t, syncer, []*router.TableRule{
 		{SchemaPattern: "db", TablePattern: "parent", TargetSchema: "db_r", TargetTable: "parent_r"},
 		{SchemaPattern: "db", TablePattern: "child", TargetSchema: "db_r", TargetTable: "child_r"},
@@ -425,7 +482,7 @@ func TestGenDMLUsesCaseInsensitiveSourceDomainWithoutRouteForFKCausality(t *test
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
 	require.False(t, syncer.cfg.CaseSensitive)
 	require.Empty(t, syncer.cfg.RouteRules)
-	setForeignKeyRouteTestSourceTableNamesFlavor(t, syncer, conn.LCTableNamesInsensitive)
+	setForeignKeyRouteTestSourceTableNamesInsensitive(t, syncer)
 	p := parser.New()
 
 	execTrackedDDL(t, syncer.schemaTracker, p, "", "create database DB")
@@ -544,7 +601,7 @@ func TestPrepareDownStreamTableInfoRejectsCaseMismatchWithCaseSensitiveRoute(t *
 	var err error
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
 	require.NoError(t, err)
-	setForeignKeyRouteTestSourceTableNamesFlavor(t, syncer, conn.LCTableNamesInsensitive)
+	setForeignKeyRouteTestSourceTableNamesInsensitive(t, syncer)
 	setForeignKeyRouteTestRoutes(t, syncer, []*router.TableRule{
 		{SchemaPattern: "DB", TablePattern: "Parent", TargetSchema: "db_r", TargetTable: "parent_r"},
 		{SchemaPattern: "DB", TablePattern: "Child", TargetSchema: "db_r", TargetTable: "child_r"},
@@ -583,27 +640,17 @@ func TestPrepareDownStreamTableInfoBuildsFKRelationsWithParentRoute(t *testing.T
 
 	prepareSimpleParentChildSchema(t, syncer, p)
 
-	sourceTable := &filter.Table{Schema: "db", Name: "child"}
-	targetTable := &filter.Table{Schema: "db", Name: "child"}
-	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
-	require.NoError(t, err)
-
-	expectDownstreamSQLModeInit(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("child", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"),
+	requirePreparedFKRelationForRoute(
+		t,
+		mock,
+		syncer,
+		&filter.Table{Schema: "db", Name: "child"},
+		&filter.Table{Schema: "db", Name: "child"},
+		&filter.Table{Schema: "db", Name: "parent_r"},
+		"create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))",
+		"create table parent_r(id int primary key)",
+		"db.parent",
 	)
-	expectFetchAllDoTables(mock, "db", "parent", "child")
-	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(&filter.Table{Schema: "db", Name: "parent_r"})).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("parent_r", "create table parent_r(id int primary key)"),
-	)
-
-	dti, err := syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
-	require.NoError(t, err)
-	require.Len(t, dti.ForeignKeyRelations, 1)
-	require.Equal(t, "db.parent", dti.ForeignKeyRelations[0].ParentTable)
-	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestPrepareDownStreamTableInfoBuildsFKRelationsWithoutRoute(t *testing.T) {
@@ -733,24 +780,18 @@ func TestPrepareDownStreamTableInfoRejectsSharedTargetRouteForMultiWorkerFKCausa
 
 	prepareSimpleParentChildSchema(t, syncer, p)
 
-	sourceTable := &filter.Table{Schema: "db", Name: "child"}
-	targetTable := &filter.Table{Schema: "db_r", Name: "child_r"}
-	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
-	require.NoError(t, err)
-
-	expectDownstreamSQLModeInit(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("child_r", "create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"),
+	requireSharedTargetRouteRejected(
+		t,
+		mock,
+		syncer,
+		&filter.Table{Schema: "db", Name: "child"},
+		&filter.Table{Schema: "db_r", Name: "child_r"},
+		"create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))",
+		[]string{"parent", "child", "child_shadow"},
+		"`db_r`.`child_r`",
+		"`db`.`child`",
+		"`db`.`child_shadow`",
 	)
-	expectFetchAllDoTables(mock, "db", "parent", "child", "child_shadow")
-
-	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
-	require.ErrorContains(t, err, "shared-target route")
-	require.ErrorContains(t, err, "`db_r`.`child_r`")
-	require.ErrorContains(t, err, "`db`.`child`")
-	require.ErrorContains(t, err, "`db`.`child_shadow`")
-	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestPrepareDownStreamTableInfoRejectsCaseInsensitiveSharedTargetRoute(t *testing.T) {
@@ -862,24 +903,18 @@ func TestPrepareDownStreamTableInfoRejectsSharedTargetParentRouteBeforeChildDML(
 
 	prepareSimpleParentChildSchema(t, syncer, p)
 
-	sourceTable := &filter.Table{Schema: "db", Name: "parent"}
-	targetTable := &filter.Table{Schema: "db_r", Name: "parent_r"}
-	originTI, err := syncer.schemaTracker.GetTableInfo(sourceTable)
-	require.NoError(t, err)
-
-	expectDownstreamSQLModeInit(mock)
-	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetTable)).WillReturnRows(
-		sqlmock.NewRows([]string{"Table", "Create Table"}).
-			AddRow("parent_r", "create table parent_r(id int primary key)"),
+	requireSharedTargetRouteRejected(
+		t,
+		mock,
+		syncer,
+		&filter.Table{Schema: "db", Name: "parent"},
+		&filter.Table{Schema: "db_r", Name: "parent_r"},
+		"create table parent_r(id int primary key)",
+		[]string{"parent", "parent_shadow", "child"},
+		"`db_r`.`parent_r`",
+		"`db`.`parent`",
+		"`db`.`parent_shadow`",
 	)
-	expectFetchAllDoTables(mock, "db", "parent", "parent_shadow", "child")
-
-	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
-	require.ErrorContains(t, err, "shared-target route")
-	require.ErrorContains(t, err, "`db_r`.`parent_r`")
-	require.ErrorContains(t, err, "`db`.`parent`")
-	require.ErrorContains(t, err, "`db`.`parent_shadow`")
-	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestPrepareDownStreamTableInfoRejectsSharedTargetAncestorRouteForMultiWorkerFKCausality(t *testing.T) {
