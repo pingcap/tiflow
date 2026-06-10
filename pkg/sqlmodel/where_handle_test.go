@@ -243,14 +243,10 @@ func TestGetWhereHandleExpressionIndex(t *testing.T) {
 	for _, idx := range handle.CausalityIdxs {
 		if idx.Name.L == "only_one_alice" {
 			inCausality = true
-			needsFullValues, valid := indexNeedsFullColumnValues(idx, ti.Columns)
-			require.True(t, valid)
-			require.True(t, needsFullValues,
+			require.True(t, indexNeedsFullColumnValues(idx, ti.Columns),
 				"expression index needs a full row with its hidden generated column materialized")
 		} else {
-			needsFullValues, valid := indexNeedsFullColumnValues(idx, ti.Columns)
-			require.True(t, valid)
-			require.False(t, needsFullValues)
+			require.False(t, indexNeedsFullColumnValues(idx, ti.Columns))
 		}
 	}
 	require.True(t, inCausality, "expression index must be a causality candidate")

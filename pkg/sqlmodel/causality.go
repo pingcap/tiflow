@@ -220,14 +220,8 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 
-		needsFullValues, validIndex := indexNeedsFullColumnValues(indexCols, r.sourceTableInfo.Columns)
-		if !validIndex {
+		if indexNeedsFullColumnValues(indexCols, r.sourceTableInfo.Columns) && !fullValuesOK {
 			continue
-		}
-		if needsFullValues {
-			if !fullValuesOK {
-				continue
-			}
 		}
 
 		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
@@ -253,27 +247,20 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 // indexNeedsFullColumnValues reports whether the index cannot be read directly
 // from the compact row-value slice by TableInfo column offsets. This is true
 // when the index references a hidden generated column, or when a hidden column
-// appears before an indexed visible column. The returned bool is false if the
-// index metadata is not safe to use.
-func indexNeedsFullColumnValues(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) (bool, bool) {
+// appears before an indexed visible column.
+func indexNeedsFullColumnValues(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) bool {
 	for _, idxCol := range index.Columns {
-		if idxCol.Offset < 0 || idxCol.Offset >= len(columns) {
-			return false, false
-		}
 		col := columns[idxCol.Offset]
 		if col.Hidden {
-			if !col.IsGenerated() {
-				return false, false
-			}
-			return true, true
+			return true
 		}
 		for _, precedingCol := range columns[:idxCol.Offset] {
 			if precedingCol.Hidden {
-				return true, true
+				return true
 			}
 		}
 	}
-	return false, true
+	return false
 }
 
 // fillVirtualGeneratedValues returns a copy of values extended to the full
