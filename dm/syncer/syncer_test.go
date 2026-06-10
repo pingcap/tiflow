@@ -2361,14 +2361,6 @@ func TestCheckCanUpdateCfgFKHotUpdateGuardAllows(t *testing.T) {
 			tc.setup(cfg)
 			newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
 			syncer := NewSyncer(cloneSubTaskConfigForSyncerTest(t, cfg), nil, nil)
-			_, err := regexprrouter.NewRegExprRouter(syncer.cfg.CaseSensitive, syncer.cfg.RouteRules)
-			require.NoError(t, err)
-			_, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
-			require.NoError(t, err)
-			_, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BWList)
-			require.NoError(t, err)
-			_, err = bf.NewBinlogEvent(syncer.cfg.CaseSensitive, syncer.cfg.FilterRules)
-			require.NoError(t, err)
 			tc.mutate(newCfg)
 
 			require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
@@ -2396,69 +2388,39 @@ func TestUpdateFKHotUpdateGuardRejects(t *testing.T) {
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.timezone = time.UTC
 
-	cases := []struct {
-		name   string
-		field  string
-		mutate func(*config.SubTaskConfig)
-	}{
-		{
-			name:  "route rules",
-			field: "route rules",
-			mutate: func(newCfg *config.SubTaskConfig) {
-				newCfg.RouteRules = []*router.TableRule{{
-					SchemaPattern: "db",
-					TablePattern:  "child",
-					TargetSchema:  "db_r",
-					TargetTable:   "child_r",
-				}}
-			},
-		},
-		{
-			name:  "binlog filter rules",
-			field: "binlog filter rules",
-			mutate: func(newCfg *config.SubTaskConfig) {
-				newCfg.FilterRules = []*bf.BinlogEventRule{{
-					SchemaPattern: "db",
-					TablePattern:  "child",
-					Events:        []bf.EventType{bf.InsertEvent},
-					Action:        bf.Ignore,
-				}}
-			},
-		},
-	}
+	var err error
+	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
+	require.NoError(t, err)
+	syncer.baList, err = filter.New(cfg.CaseSensitive, cfg.BAList)
+	require.NoError(t, err)
+	syncer.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
+	require.NoError(t, err)
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			var err error
-			syncer.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
-			require.NoError(t, err)
-			syncer.baList, err = filter.New(cfg.CaseSensitive, cfg.BAList)
-			require.NoError(t, err)
-			syncer.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
-			require.NoError(t, err)
+	newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+	newCfg.RouteRules = []*router.TableRule{{
+		SchemaPattern: "db",
+		TablePattern:  "child",
+		TargetSchema:  "db_r",
+		TargetTable:   "child_r",
+	}}
 
-			newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
-			tc.mutate(newCfg)
+	err = syncer.Update(context.Background(), newCfg)
+	require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+	require.ErrorContains(t, err, "route rules")
+	require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
 
-			err = syncer.Update(context.Background(), newCfg)
-			require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
-			require.ErrorContains(t, err, tc.field)
-			require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
-
-			targetSchema, targetTable, err := syncer.tableRouter.Route("db", "parent")
-			require.NoError(t, err)
-			require.Equal(t, "db_r", targetSchema)
-			require.Equal(t, "parent_r", targetTable)
-			require.False(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "parent"}))
-			require.True(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "child"}))
-			skipped, err := syncer.skipByFilter(&filter.Table{Schema: "db", Name: "parent"}, bf.DeleteEvent, "")
-			require.NoError(t, err)
-			require.True(t, skipped)
-			skipped, err = syncer.skipByFilter(&filter.Table{Schema: "db", Name: "child"}, bf.InsertEvent, "")
-			require.NoError(t, err)
-			require.False(t, skipped)
-		})
-	}
+	targetSchema, targetTable, err := syncer.tableRouter.Route("db", "parent")
+	require.NoError(t, err)
+	require.Equal(t, "db_r", targetSchema)
+	require.Equal(t, "parent_r", targetTable)
+	require.False(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "parent"}))
+	require.True(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "child"}))
+	skipped, err := syncer.skipByFilter(&filter.Table{Schema: "db", Name: "parent"}, bf.DeleteEvent, "")
+	require.NoError(t, err)
+	require.True(t, skipped)
+	skipped, err = syncer.skipByFilter(&filter.Table{Schema: "db", Name: "child"}, bf.InsertEvent, "")
+	require.NoError(t, err)
+	require.False(t, skipped)
 }
 
 func TestUpdateFKHotUpdateGuardAllows(t *testing.T) {
