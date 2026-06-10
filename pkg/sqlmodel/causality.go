@@ -220,7 +220,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 
-		if indexNeedsFullColumnValues(indexCols, r.sourceTableInfo.Columns) && !fullValuesOK {
+		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
 			continue
 		}
 
@@ -244,18 +244,6 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	return ret
 }
 
-// indexNeedsFullColumnValues reports whether the index cannot be read directly
-// from the compact row-value slice by TableInfo column offsets. This is true
-// when the index references a hidden generated column.
-func indexNeedsFullColumnValues(index *timodel.IndexInfo, columns []*timodel.ColumnInfo) bool {
-	for _, idxCol := range index.Columns {
-		if columns[idxCol.Offset].Hidden {
-			return true
-		}
-	}
-	return false
-}
-
 // fillVirtualGeneratedValues returns a copy of values extended to the full
 // source column list, with hidden/virtual generated columns (such as the column
 // backing an expression index) evaluated from their generated expression. The
@@ -275,21 +263,10 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		return values, false
 	}
 
-	visibleCols := make([]*timodel.ColumnInfo, 0, len(values))
-	for _, col := range cols {
-		if !col.Hidden {
-			visibleCols = append(visibleCols, col)
-		}
-	}
-	if len(values) != len(visibleCols) {
-		log.L().Warn("row value count does not match visible column count",
-			zap.String("table", r.sourceTable.String()),
-			zap.Int("valueCount", len(values)),
-			zap.Int("visibleColumnCount", len(visibleCols)))
-		return values, false
-	}
-
-	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, visibleCols)
+	// DM row values are compacted by dropping hidden columns. TiDB keeps hidden
+	// expression-index columns at the end of TableInfo.Columns, so the row image
+	// corresponds to the visible prefix.
+	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, cols[:len(values)])
 	if err != nil {
 		log.L().Warn("cannot adjust row for generated column evaluation",
 			zap.String("table", r.sourceTable.String()), zap.Error(err))
@@ -297,16 +274,9 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	}
 
 	full := make([]any, len(cols))
+	copy(full, values)
 	fullDatums := make([]types.Datum, len(cols))
-	visibleOffset := 0
-	for _, col := range cols {
-		if col.Hidden {
-			continue
-		}
-		full[col.Offset] = values[visibleOffset]
-		fullDatums[col.Offset] = datums[visibleOffset]
-		visibleOffset++
-	}
+	copy(fullDatums, datums)
 
 	// A generated column may depend on generated columns defined before it, so
 	// evaluate generated columns in column order after visible values are in
@@ -317,8 +287,6 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		}
 		expr, ok := exprs[col.Offset]
 		if !ok {
-			// A non-generated column missing from the row image means the schema
-			// does not match the row; let the caller fall back to skipping.
 			return values, false
 		}
 		d, err := expr.Eval(exprCtx.GetEvalCtx(), chunk.MutRowFromDatums(fullDatums).ToRow())
