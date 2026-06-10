@@ -211,7 +211,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 	ret := make([]string, 0, len(pkAndUks))
 
-	fullValues, fullValuesOK := r.fillVirtualGeneratedValues(values)
+	values, fullValuesOK := r.fillVirtualGeneratedValues(values)
 
 	for _, indexCols := range pkAndUks {
 		// TODO: should not support multi value index and generate the value
@@ -220,7 +220,6 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 
-		idxValues := values
 		needsFullValues, validIndex := indexNeedsFullColumnValues(indexCols, r.sourceTableInfo.Columns)
 		if !validIndex {
 			continue
@@ -229,10 +228,9 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			if !fullValuesOK {
 				continue
 			}
-			idxValues = fullValues
 		}
 
-		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, idxValues)
+		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
 		key := genKeyString(r.sourceTable.String(), cols, truncVals)
@@ -294,7 +292,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
 	exprs, ok := r.whereHandle.generatedColumnExprs(exprCtx, r.sourceTableInfo)
 	if !ok {
-		return nil, false
+		return values, false
 	}
 
 	visibleCols := make([]*timodel.ColumnInfo, 0, len(values))
@@ -308,14 +306,14 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 			zap.String("table", r.sourceTable.String()),
 			zap.Int("valueCount", len(values)),
 			zap.Int("visibleColumnCount", len(visibleCols)))
-		return nil, false
+		return values, false
 	}
 
 	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, visibleCols)
 	if err != nil {
 		log.L().Warn("cannot adjust row for generated column evaluation",
 			zap.String("table", r.sourceTable.String()), zap.Error(err))
-		return nil, false
+		return values, false
 	}
 
 	full := make([]any, len(cols))
@@ -341,14 +339,14 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		if !ok {
 			// A non-generated column missing from the row image means the schema
 			// does not match the row; let the caller fall back to skipping.
-			return nil, false
+			return values, false
 		}
 		d, err := expr.Eval(exprCtx.GetEvalCtx(), chunk.MutRowFromDatums(fullDatums).ToRow())
 		if err != nil {
 			log.L().Warn("cannot evaluate generated column expression",
 				zap.String("table", r.sourceTable.String()),
 				zap.String("column", col.Name.O), zap.Error(err))
-			return nil, false
+			return values, false
 		}
 		full[col.Offset] = d.GetValue()
 		fullDatums[col.Offset] = d
