@@ -3376,6 +3376,9 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
 		}
 	}
+	if err := s.checkForeignKeyCausalityConfigUpdate(newCfg); err != nil {
+		return err
+	}
 
 	oldCfg, err := s.cfg.Clone()
 	if err != nil {
@@ -3410,6 +3413,263 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	return nil
 }
 
+func (s *Syncer) checkForeignKeyCausalityConfigUpdate(newCfg *config.SubTaskConfig) error {
+	oldNeedFKCausality := isForeignKeyChecksEnabled(s.cfg.To.Session) && s.cfg.WorkerCount > 1
+	newNeedFKCausality := isForeignKeyChecksEnabled(newCfg.To.Session) && newCfg.WorkerCount > 1
+	if !oldNeedFKCausality && !newNeedFKCausality {
+		return nil
+	}
+
+	// Compare config semantics rather than runtime router/filter objects. The
+	// helpers below normalize rules into comparable config snapshots.
+	if s.cfg.WorkerCount != newCfg.WorkerCount {
+		return s.newForeignKeyCausalityConfigUpdateError("worker-count")
+	}
+	if s.cfg.CaseSensitive != newCfg.CaseSensitive {
+		return s.newForeignKeyCausalityConfigUpdateError("case-sensitive")
+	}
+	if !sameRouteRules(s.cfg.CaseSensitive, s.cfg.RouteRules, newCfg.RouteRules) {
+		return s.newForeignKeyCausalityConfigUpdateError("route rules")
+	}
+	if !sameTableFilterRules(s.cfg.CaseSensitive, s.cfg.BAList, newCfg.BAList) {
+		return s.newForeignKeyCausalityConfigUpdateError("block-allow-list")
+	}
+	if !sameTableFilterRules(s.cfg.CaseSensitive, s.cfg.BWList, newCfg.BWList) {
+		return s.newForeignKeyCausalityConfigUpdateError("black-white-list")
+	}
+	if !sameBinlogFilterRules(s.cfg.CaseSensitive, s.cfg.FilterRules, newCfg.FilterRules) {
+		return s.newForeignKeyCausalityConfigUpdateError("binlog filter rules")
+	}
+	if isForeignKeyChecksEnabled(s.cfg.To.Session) != isForeignKeyChecksEnabled(newCfg.To.Session) {
+		return s.newForeignKeyCausalityConfigUpdateError("foreign_key_checks")
+	}
+	return nil
+}
+
+type routeRuleConfig struct {
+	Nil             bool
+	TableExtractor  *routeExtractorConfig
+	SchemaExtractor *routeExtractorConfig
+	SourceExtractor *routeExtractorConfig
+	SchemaPattern   string
+	TablePattern    string
+	TargetSchema    string
+	TargetTable     string
+}
+
+type routeExtractorConfig struct {
+	TargetColumn string
+	Regexp       string
+}
+
+type tableFilterRulesConfig struct {
+	DoTables     []tableNameConfig
+	DoDBs        []string
+	IgnoreTables []tableNameConfig
+	IgnoreDBs    []string
+}
+
+type tableNameConfig struct {
+	Schema string
+	Name   string
+}
+
+type binlogFilterRuleConfig struct {
+	Nil           bool
+	SchemaPattern string
+	TablePattern  string
+	Events        []string
+	SQLPattern    []string
+	Action        bf.ActionType
+}
+
+func sameRouteRules(caseSensitive bool, a, b []*router.TableRule) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(
+		normalizeRouteRulesForCompare(caseSensitive, a),
+		normalizeRouteRulesForCompare(caseSensitive, b),
+	)
+}
+
+func normalizeRouteRulesForCompare(caseSensitive bool, rules []*router.TableRule) []routeRuleConfig {
+	if len(rules) == 0 {
+		return nil
+	}
+	result := make([]routeRuleConfig, 0, len(rules))
+	for _, rule := range rules {
+		if rule == nil {
+			result = append(result, routeRuleConfig{Nil: true})
+			continue
+		}
+		schemaPattern, tablePattern := rule.SchemaPattern, rule.TablePattern
+		if !caseSensitive {
+			schemaPattern = strings.ToLower(schemaPattern)
+			tablePattern = strings.ToLower(tablePattern)
+		}
+		result = append(result, routeRuleConfig{
+			TableExtractor:  tableExtractorConfig(rule.TableExtractor),
+			SchemaExtractor: schemaExtractorConfig(rule.SchemaExtractor),
+			SourceExtractor: sourceExtractorConfig(rule.SourceExtractor),
+			SchemaPattern:   schemaPattern,
+			TablePattern:    tablePattern,
+			TargetSchema:    rule.TargetSchema,
+			TargetTable:     rule.TargetTable,
+		})
+	}
+	return result
+}
+
+func tableExtractorConfig(extractor *router.TableExtractor) *routeExtractorConfig {
+	if extractor == nil {
+		return nil
+	}
+	return &routeExtractorConfig{
+		TargetColumn: extractor.TargetColumn,
+		Regexp:       extractor.TableRegexp,
+	}
+}
+
+func schemaExtractorConfig(extractor *router.SchemaExtractor) *routeExtractorConfig {
+	if extractor == nil {
+		return nil
+	}
+	return &routeExtractorConfig{
+		TargetColumn: extractor.TargetColumn,
+		Regexp:       extractor.SchemaRegexp,
+	}
+}
+
+func sourceExtractorConfig(extractor *router.SourceExtractor) *routeExtractorConfig {
+	if extractor == nil {
+		return nil
+	}
+	return &routeExtractorConfig{
+		TargetColumn: extractor.TargetColumn,
+		Regexp:       extractor.SourceRegexp,
+	}
+}
+
+func sameTableFilterRules(caseSensitive bool, a, b *filter.Rules) bool {
+	if isEmptyTableFilterRules(a) && isEmptyTableFilterRules(b) {
+		return true
+	}
+	return reflect.DeepEqual(
+		normalizeTableFilterRulesForCompare(caseSensitive, a),
+		normalizeTableFilterRulesForCompare(caseSensitive, b),
+	)
+}
+
+func isEmptyTableFilterRules(r *filter.Rules) bool {
+	return r == nil ||
+		len(r.DoTables) == 0 &&
+			len(r.DoDBs) == 0 &&
+			len(r.IgnoreTables) == 0 &&
+			len(r.IgnoreDBs) == 0
+}
+
+func normalizeTableFilterRulesForCompare(caseSensitive bool, rules *filter.Rules) tableFilterRulesConfig {
+	if isEmptyTableFilterRules(rules) {
+		return tableFilterRulesConfig{}
+	}
+	return tableFilterRulesConfig{
+		DoTables:     normalizeFilterTablesForCompare(caseSensitive, rules.DoTables),
+		DoDBs:        normalizeFilterSchemasForCompare(caseSensitive, rules.DoDBs),
+		IgnoreTables: normalizeFilterTablesForCompare(caseSensitive, rules.IgnoreTables),
+		IgnoreDBs:    normalizeFilterSchemasForCompare(caseSensitive, rules.IgnoreDBs),
+	}
+}
+
+func normalizeFilterTablesForCompare(caseSensitive bool, tables []*filter.Table) []tableNameConfig {
+	if len(tables) == 0 {
+		return nil
+	}
+	result := make([]tableNameConfig, 0, len(tables))
+	for _, table := range tables {
+		if table == nil {
+			result = append(result, tableNameConfig{})
+			continue
+		}
+		schema, name := table.Schema, table.Name
+		if !caseSensitive {
+			schema = strings.ToLower(schema)
+			name = strings.ToLower(name)
+		}
+		result = append(result, tableNameConfig{Schema: schema, Name: name})
+	}
+	return result
+}
+
+func normalizeFilterSchemasForCompare(caseSensitive bool, schemas []string) []string {
+	if len(schemas) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(schemas))
+	for _, schema := range schemas {
+		if !caseSensitive {
+			schema = strings.ToLower(schema)
+		}
+		result = append(result, schema)
+	}
+	return result
+}
+
+func sameBinlogFilterRules(caseSensitive bool, a, b []*bf.BinlogEventRule) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	return reflect.DeepEqual(
+		normalizeBinlogFilterRulesForCompare(caseSensitive, a),
+		normalizeBinlogFilterRulesForCompare(caseSensitive, b),
+	)
+}
+
+func normalizeBinlogFilterRulesForCompare(caseSensitive bool, rules []*bf.BinlogEventRule) []binlogFilterRuleConfig {
+	if len(rules) == 0 {
+		return nil
+	}
+	result := make([]binlogFilterRuleConfig, 0, len(rules))
+	for _, rule := range rules {
+		if rule == nil {
+			result = append(result, binlogFilterRuleConfig{Nil: true})
+			continue
+		}
+		schemaPattern, tablePattern := rule.SchemaPattern, rule.TablePattern
+		if !caseSensitive {
+			schemaPattern = strings.ToLower(schemaPattern)
+			tablePattern = strings.ToLower(tablePattern)
+		}
+		result = append(result, binlogFilterRuleConfig{
+			SchemaPattern: schemaPattern,
+			TablePattern:  tablePattern,
+			Events:        normalizeBinlogFilterEventsForCompare(rule.Events),
+			SQLPattern:    append([]string(nil), rule.SQLPattern...),
+			Action:        rule.Action,
+		})
+	}
+	return result
+}
+
+func normalizeBinlogFilterEventsForCompare(events []bf.EventType) []string {
+	if len(events) == 0 {
+		return nil
+	}
+	result := make([]string, 0, len(events))
+	for _, event := range events {
+		result = append(result, strings.ToLower(string(event)))
+	}
+	return result
+}
+
+func (s *Syncer) newForeignKeyCausalityConfigUpdateError(field string) error {
+	return terror.ErrWorkerUpdateSubTaskConfig.Generatef(
+		"can't update %s when foreign_key_checks=1 and worker-count>1, task: %s; please stop and restart the task with the new config",
+		field,
+		s.cfg.Name,
+	)
+}
+
 // Update implements Unit.Update
 // now, only support to update config for routes, filters, column-mappings, block-allow-list
 // now no config diff implemented, so simply re-init use new config.
@@ -3421,6 +3681,9 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 		if len(tables) > 0 {
 			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
 		}
+	}
+	if err := s.checkForeignKeyCausalityConfigUpdate(cfg); err != nil {
+		return err
 	}
 
 	var (
