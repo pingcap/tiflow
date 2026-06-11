@@ -58,17 +58,10 @@ type generatedColumnCache struct {
 // expressions keyed by column offset. The bool is false if any expression fails
 // to build, in which case the caller should fall back instead of evaluating.
 func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
-	return h.generatedColumns.exprsOf(ctx)
+	return h.generatedColumns.getOrBuildExprs(ctx)
 }
 
-func (h *WhereHandle) warnSkipHiddenCausalityIndex(table string, index *model.IndexInfo, valueCount int) {
-	if h.generatedColumns == nil {
-		return
-	}
-	h.generatedColumns.warnSkipHiddenCausalityIndex(table, index, valueCount)
-}
-
-func (c *generatedColumnCache) exprsOf(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
+func (c *generatedColumnCache) getOrBuildExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
 	c.once.Do(func() {
 		exprs := make(map[int]expression.Expression)
 		for _, col := range c.sourceTableInfo.Columns {
@@ -88,17 +81,6 @@ func (c *generatedColumnCache) exprsOf(ctx expression.BuildContext) (map[int]exp
 		c.ok = true
 	})
 	return c.exprs, c.ok
-}
-
-func (c *generatedColumnCache) warnSkipHiddenCausalityIndex(table string, index *model.IndexInfo, valueCount int) {
-	c.skipHiddenCausalityWarnOnce.Do(func() {
-		log.Warn("skip unique index backed by hidden generated column for causality "+
-			"because generated column value cannot be materialized",
-			zap.String("table", table),
-			zap.String("index", index.Name.O),
-			zap.Int("valueCount", valueCount),
-			zap.Int("columnCount", len(c.sourceTableInfo.Columns)))
-	})
 }
 
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,

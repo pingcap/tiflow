@@ -221,7 +221,16 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		}
 
 		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
-			r.whereHandle.warnSkipHiddenCausalityIndex(r.sourceTable.String(), indexCols, len(values))
+			if r.whereHandle.generatedColumns != nil {
+				r.whereHandle.generatedColumns.skipHiddenCausalityWarnOnce.Do(func() {
+					log.L().Warn("skip unique index backed by hidden generated column for causality "+
+						"because generated column value cannot be materialized",
+						zap.String("table", r.sourceTable.String()),
+						zap.String("index", indexCols.Name.O),
+						zap.Int("valueCount", len(values)),
+						zap.Int("columnCount", len(r.sourceTableInfo.Columns)))
+				})
+			}
 			continue
 		}
 
