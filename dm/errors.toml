@@ -1216,6 +1216,12 @@ description = ""
 workaround = "Please check whether the path is valid, and has required permission to read the file, and the key is correct."
 tags = ["internal", "high"]
 
+[error.DM-config-20070]
+message = "`%s` is not supported when foreign_key_checks=1"
+description = ""
+workaround = "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

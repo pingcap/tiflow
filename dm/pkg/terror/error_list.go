@@ -272,6 +272,7 @@ const (
 	codeConfigInvalidLoadAnalyze
 	codeConfigStrictOptimisticShardMode
 	codeConfigSecretKeyPath
+	codeConfigUnsupportedForeignKeyChecksOption ErrCode = 20070
 )
 
 // Binlog operation error code list.
@@ -985,6 +986,7 @@ var (
 	ErrConfigInvalidLoadAnalyze                 = New(codeConfigInvalidLoadAnalyze, ClassConfig, ScopeInternal, LevelMedium, "invalid load analyze option '%s'", "Please choose a valid value in ['required', 'optional', 'off'] or leave it empty.")
 	ErrConfigStrictOptimisticShardMode          = New(codeConfigStrictOptimisticShardMode, ClassConfig, ScopeInternal, LevelMedium, "cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`", "Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`.")
 	ErrConfigSecretKeyPath                      = New(codeConfigSecretKeyPath, ClassConfig, ScopeInternal, LevelHigh, "invalid secret key path or content: %v", "Please check whether the path is valid, and has required permission to read the file, and the key is correct.")
+	ErrConfigUnsupportedForeignKeyChecksOption  = New(codeConfigUnsupportedForeignKeyChecksOption, ClassConfig, ScopeInternal, LevelMedium, "`%s` is not supported when foreign_key_checks=1", "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

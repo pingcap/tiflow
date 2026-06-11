@@ -379,6 +379,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	} else if c.SyncerConfig.SafeMode && duration == 0 {
 		return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
 	}
+	if err := CheckForeignKeyChecksSyncerOptions(c.To.Session, c.SyncerConfig); err != nil {
+		return err
+	}
 
 	c.From.AdjustWithTimeZone(c.Timezone)
 	c.To.AdjustWithTimeZone(c.Timezone)
