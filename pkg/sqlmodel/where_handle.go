@@ -50,8 +50,6 @@ type generatedColumnCache struct {
 	once  sync.Once
 	exprs map[int]expression.Expression
 	ok    bool
-
-	skipHiddenCausalityWarnOnce sync.Once
 }
 
 // generatedColumnExprs builds (once) and returns hidden generated-column
