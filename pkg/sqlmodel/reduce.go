@@ -14,6 +14,7 @@
 package sqlmodel
 
 import (
+	"reflect"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -112,7 +113,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 			return true
 		}
 		for i := range pre {
-			if pre[i] != post[i] {
+			if !reflect.DeepEqual(pre[i], post[i]) {
 				return true
 			}
 		}
@@ -137,11 +138,11 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		preOK, postOK bool
 	)
 
-	if r.whereHandle.generatedColumns != nil {
+	if r.whereHandle.hiddenGeneratedColumnExprs != nil {
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
 		if preOK && postOK {
-			checkIndexes = r.whereHandle.CausalityIdxs
+			checkIndexes = r.whereHandle.causalityIdxs
 		}
 	}
 	for _, idx := range checkIndexes {

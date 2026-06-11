@@ -17,6 +17,7 @@ import (
 	"sync"
 	"testing"
 
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -282,6 +283,23 @@ func TestCausalityKeysExpressionIndex(t *testing.T) {
 	require.Equal(t, []string{"2.id.db.tb1"}, keys)
 }
 
+func TestCausalityKeysExpressionIndexMaterializeFailure(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+	corruptHiddenGeneratedExpr(t, ti)
+
+	change := NewRowChange(source, nil, nil, []any{1, "Alice"}, ti, nil, nil)
+
+	var keys []string
+	require.NotPanics(t, func() {
+		keys = change.CausalityKeys()
+	})
+	require.Equal(t, []string{"1.id.db.tb1"}, keys)
+}
+
 func TestCausalityKeysExpressionIndexNoRace(t *testing.T) {
 	t.Parallel()
 
@@ -301,4 +319,17 @@ func TestCausalityKeysExpressionIndexNoRace(t *testing.T) {
 		})
 	}
 	require.NoError(t, g.Wait())
+}
+
+func corruptHiddenGeneratedExpr(t *testing.T, ti *timodel.TableInfo) {
+	t.Helper()
+
+	found := false
+	for _, col := range ti.Columns {
+		if col.Hidden && col.IsGenerated() {
+			col.GeneratedExprString = "not a valid expression +"
+			found = true
+		}
+	}
+	require.True(t, found, "expression index should create a hidden generated column")
 }

@@ -208,7 +208,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		// Only causality keys use this table name; r.sourceTable keeps the original source table.
 		sourceTable = r.causalityKeySourceTable
 	}
-	pkAndUks := r.whereHandle.CausalityIdxs
+	pkAndUks := r.whereHandle.causalityIdxs
 	if len(pkAndUks) == 0 {
 		// the table has no PK/UK, all values of the row consists the causality key
 		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
@@ -259,14 +259,14 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	if len(values) >= len(cols) {
 		return values, true
 	}
-	if r.whereHandle.generatedColumns == nil {
+	if r.whereHandle.hiddenGeneratedColumnExprs == nil {
 		return values, false
 	}
 
 	exprCtx := r.tiSessionCtx.GetExprCtx()
 	// The expressions only depend on the schema, so they are built once and
 	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
-	exprs, ok := r.whereHandle.generatedColumns.getOrBuildExprs(exprCtx)
+	exprs, ok := r.whereHandle.hiddenGeneratedColumnExprs.getOrBuildExprs(exprCtx)
 	if !ok {
 		return values, false
 	}
@@ -289,10 +289,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	// A generated column may depend on generated columns defined before it, so
 	// evaluate generated columns in column order after visible values are in
 	// their full TableInfo offsets.
-	for _, col := range cols {
-		if !col.Hidden || !col.IsGenerated() {
-			continue
-		}
+	for _, col := range r.whereHandle.hiddenGeneratedColumnExprs.columns {
 		expr, ok := exprs[col.Offset]
 		if !ok {
 			return values, false
@@ -304,8 +301,16 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 				zap.String("column", col.Name.O), zap.Error(err))
 			return values, false
 		}
-		full[col.Offset] = d.GetValue()
+		full[col.Offset] = datumValue(d)
 		fullDatums[col.Offset] = d
 	}
 	return full, true
+}
+
+func datumValue(d types.Datum) any {
+	value := d.GetValue()
+	if bs, ok := value.([]byte); ok {
+		return string(bs)
+	}
+	return value
 }

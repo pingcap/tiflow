@@ -25,7 +25,9 @@ import (
 	"go.uber.org/zap"
 )
 
-// WhereHandle is used to generate a WHERE clause in SQL.
+// WhereHandle is used to generate a WHERE clause in SQL and select causality
+// keys. It also caches generated-column expressions needed to materialize
+// hidden columns backing unique expression indexes.
 type WhereHandle struct {
 	UniqueNotNullIdx *model.IndexInfo
 	// If the index and columns have no NOT NULL constraint, but all data is NOT
@@ -33,18 +35,33 @@ type WhereHandle struct {
 	// every index that is UNIQUE should be added to UniqueIdxs, even for
 	// PK and NOT NULL. Indexes backed by a hidden column are excluded here.
 	UniqueIdxs []*model.IndexInfo
-	// CausalityIdxs is the superset of UniqueIdxs that also keeps indexes backed
-	// by a hidden column to detect conflicts.
-	CausalityIdxs []*model.IndexInfo
 
-	generatedColumns *generatedColumnCache
+	causalityIdxs              []*model.IndexInfo
+	hiddenGeneratedColumnExprs *generatedColumnCache
 }
 
 type generatedColumnCache struct {
 	sourceTableInfo *model.TableInfo
+	columns         []*model.ColumnInfo
 	once            sync.Once
 	exprs           map[int]expression.Expression
 	ok              bool
+}
+
+func newGeneratedColumnCache(source *model.TableInfo) *generatedColumnCache {
+	cols := make([]*model.ColumnInfo, 0)
+	for _, col := range source.Columns {
+		if col.Hidden && col.IsGenerated() {
+			cols = append(cols, col)
+		}
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	return &generatedColumnCache{
+		sourceTableInfo: source,
+		columns:         cols,
+	}
 }
 
 func (c *generatedColumnCache) getOrBuildExprs(
@@ -52,10 +69,7 @@ func (c *generatedColumnCache) getOrBuildExprs(
 ) (map[int]expression.Expression, bool) {
 	c.once.Do(func() {
 		exprs := make(map[int]expression.Expression)
-		for _, col := range c.sourceTableInfo.Columns {
-			if !col.Hidden || !col.IsGenerated() {
-				continue
-			}
+		for _, col := range c.columns {
 			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, c.sourceTableInfo)
 			if err != nil {
 				log.Warn("cannot build generated column expression, "+
@@ -96,10 +110,10 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 			continue
 		}
 
-		ret.CausalityIdxs = append(ret.CausalityIdxs, rewritten)
+		ret.causalityIdxs = append(ret.causalityIdxs, rewritten)
 		if indexHasHiddenColumn(rewritten, source) {
-			if ret.generatedColumns == nil {
-				ret.generatedColumns = &generatedColumnCache{sourceTableInfo: source}
+			if ret.hiddenGeneratedColumnExprs == nil {
+				ret.hiddenGeneratedColumnExprs = newGeneratedColumnCache(source)
 			}
 			continue
 		}

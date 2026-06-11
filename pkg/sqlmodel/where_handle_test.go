@@ -240,7 +240,7 @@ func TestGetWhereHandleExpressionIndex(t *testing.T) {
 
 	// the expression index is a causality candidate ...
 	inCausality := false
-	for _, idx := range handle.CausalityIdxs {
+	for _, idx := range handle.causalityIdxs {
 		if idx.Name.L == "only_one_alice" {
 			inCausality = true
 			require.True(t, indexHasHiddenColumn(idx, ti),

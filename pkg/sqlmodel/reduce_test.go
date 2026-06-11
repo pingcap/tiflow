@@ -120,6 +120,14 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 			postValues: []any{1, -7, 20},
 			updated:    true,
 		},
+		{
+			name: "binary expression index changed",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, payload VARBINARY(16), " +
+				"UNIQUE KEY uk_payload_expr ((CAST(payload AS BINARY(16)))))",
+			preValues:  []any{1, []byte("alice")},
+			postValues: []any{1, []byte("bob")},
+			updated:    true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -132,6 +140,29 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 			require.Equal(t, tc.updated, change.IsPrimaryOrUniqueKeyUpdated())
 		})
 	}
+}
+
+func TestPrimaryOrUniqueKeyUpdatedExpressionIndexMaterializeFailure(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, email VARCHAR(255) UNIQUE, name VARCHAR(255), "+
+		"UNIQUE KEY lower_name ((lower(name))))")
+	corruptHiddenGeneratedExpr(t, sourceTI)
+
+	change := NewRowChange(source, nil,
+		[]any{1, "a@example.com", "Bob"},
+		[]any{1, "b@example.com", "Alice"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]any{1, "a@example.com", "Bob"},
+		[]any{1, "a@example.com", "Alice"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
 }
 
 func TestSplit(t *testing.T) {
