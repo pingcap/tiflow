@@ -720,7 +720,7 @@ func TestPrepareDownStreamTableInfoCachesForeignKeyRouteTopologyCheck(t *testing
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUpdateInvalidatesForeignKeyRouteTopologyCheckCache(t *testing.T) {
+func TestUpdateRejectsFKRouteChangeAfterTopologyCheck(t *testing.T) {
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
 	syncer.timezone = time.UTC
 	setForeignKeyRouteTestRoutes(t, syncer, []*router.TableRule{
@@ -750,6 +750,7 @@ func TestUpdateInvalidatesForeignKeyRouteTopologyCheckCache(t *testing.T) {
 	dti, err := syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
 	require.NoError(t, err)
 	require.Len(t, dti.ForeignKeyRelations, 1)
+	require.True(t, syncer.isForeignKeyRouteTopologyChecked())
 
 	newCfg, err := syncer.cfg.Clone()
 	require.NoError(t, err)
@@ -758,14 +759,10 @@ func TestUpdateInvalidatesForeignKeyRouteTopologyCheckCache(t *testing.T) {
 		{SchemaPattern: "db", TablePattern: "child", TargetSchema: "db_r", TargetTable: "child_r"},
 		{SchemaPattern: "db", TablePattern: "child_shadow", TargetSchema: "db_r", TargetTable: "child_r"},
 	}
-	require.NoError(t, syncer.Update(context.Background(), newCfg))
-
-	expectFetchAllDoTables(mock, "db", "parent", "child", "child_shadow")
-	_, err = syncer.prepareDownStreamTableInfo(tcontext.Background(), sourceTable, targetTable, originTI)
-	require.ErrorContains(t, err, "shared-target route")
-	require.ErrorContains(t, err, "`db_r`.`child_r`")
-	require.ErrorContains(t, err, "`db`.`child`")
-	require.ErrorContains(t, err, "`db`.`child_shadow`")
+	err = syncer.Update(context.Background(), newCfg)
+	require.ErrorContains(t, err, "route rules")
+	require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
+	require.True(t, syncer.isForeignKeyRouteTopologyChecked())
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
