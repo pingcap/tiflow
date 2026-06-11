@@ -75,16 +75,63 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 	t.Parallel()
 
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
-	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, name VARCHAR(255), "+
-		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+	cases := []struct {
+		name       string
+		createSQL  string
+		preValues  []any
+		postValues []any
+		updated    bool
+	}{
+		{
+			name: "expression unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, name VARCHAR(255), " +
+				"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))",
+			preValues:  []any{1, "Bob"},
+			postValues: []any{1, "Charlie"},
+		},
+		{
+			name: "expression changed",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, name VARCHAR(255), " +
+				"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))",
+			preValues:  []any{1, "Bob"},
+			postValues: []any{1, "Alice"},
+			updated:    true,
+		},
+		{
+			name: "ordinary unique changed with lower expression index",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, email VARCHAR(255) UNIQUE, name VARCHAR(255), " +
+				"UNIQUE KEY lower_name ((lower(name))))",
+			preValues:  []any{1, "a@example.com", "Bob"},
+			postValues: []any{1, "b@example.com", "Bob"},
+			updated:    true,
+		},
+		{
+			name: "arithmetic expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, code INT, name VARCHAR(255), " +
+				"UNIQUE KEY next_code ((code + 1)))",
+			preValues:  []any{1, 10, "Bob"},
+			postValues: []any{1, 10, "Alice"},
+		},
+		{
+			name: "composite expression index changed by visible column",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, score INT, code INT, " +
+				"UNIQUE KEY next_score_code ((score + 1), code))",
+			preValues:  []any{1, -7, 10},
+			postValues: []any{1, -7, 20},
+			updated:    true,
+		},
+	}
 
-	change := NewRowChange(source, nil, []interface{}{1, "Bob"}, []interface{}{1, "Charlie"}, sourceTI, nil, nil)
-	require.False(t, change.IsIdentityUpdated())
-	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	change = NewRowChange(source, nil, []interface{}{1, "Bob"}, []interface{}{1, "Alice"}, sourceTI, nil, nil)
-	require.False(t, change.IsIdentityUpdated())
-	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+			sourceTI := mockTableInfo(t, tc.createSQL)
+			change := NewRowChange(source, nil, tc.preValues, tc.postValues, sourceTI, nil, nil)
+			require.False(t, change.IsIdentityUpdated())
+			require.Equal(t, tc.updated, change.IsPrimaryOrUniqueKeyUpdated())
+		})
+	}
 }
 
 func TestSplit(t *testing.T) {

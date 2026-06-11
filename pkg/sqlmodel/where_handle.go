@@ -40,17 +40,11 @@ type WhereHandle struct {
 	generatedColumns *generatedColumnCache
 }
 
-// generatedColumnExprs builds hidden generated-column expressions.
-func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
-	return h.generatedColumns.getOrBuildExprs(ctx)
-}
-
-
 type generatedColumnCache struct {
 	sourceTableInfo *model.TableInfo
-	once  sync.Once
-	exprs map[int]expression.Expression
-	ok    bool
+	once            sync.Once
+	exprs           map[int]expression.Expression
+	ok              bool
 }
 
 func (c *generatedColumnCache) getOrBuildExprs(
@@ -102,7 +96,7 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 			continue
 		}
 
-		ret.CausalityIdxs = append(ret.CausalityIdxs, rewritten)	
+		ret.CausalityIdxs = append(ret.CausalityIdxs, rewritten)
 		if indexHasHiddenColumn(rewritten, source) {
 			if ret.generatedColumns == nil {
 				ret.generatedColumns = &generatedColumnCache{sourceTableInfo: source}

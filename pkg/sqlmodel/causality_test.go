@@ -19,6 +19,7 @@ import (
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 )
 
 func TestCausalityKeys(t *testing.T) {
@@ -277,15 +278,14 @@ func TestCausalityKeysExpressionIndexNoRace(t *testing.T) {
 	// One shared WhereHandle so the cached generated-column expression is built
 	// once and read concurrently (run with -race).
 	handle := GetWhereHandle(ti, ti)
-	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			change := NewRowChange(source, nil, nil, []any{id, "Alice"}, ti, nil, nil)
+	var g errgroup.Group
+	for i := range 50 {
+		g.Go(func() error {
+			change := NewRowChange(source, nil, nil, []any{i, "Alice"}, ti, nil, nil)
 			change.SetWhereHandle(handle)
 			change.CausalityKeys()
-		}(i)
+			return nil
+		})
 	}
-	wg.Wait()
+	require.NoError(t, g.Wait())
 }

@@ -131,9 +131,9 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	var (
-		preValues = r.preValues
-		postValues = r.postValues
-		checkIndexes = r.whereHandle.UniqueIdxs
+		preValues     = r.preValues
+		postValues    = r.postValues
+		checkIndexes  = r.whereHandle.UniqueIdxs
 		preOK, postOK bool
 	)
 
@@ -141,10 +141,10 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
 		if preOK && postOK {
-			uniqueIndexes = r.whereHandle.CausalityIdxs
+			checkIndexes = r.whereHandle.CausalityIdxs
 		}
 	}
-	for _, idx := range uniqueIndexes {
+	for _, idx := range checkIndexes {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx {
 			continue
 		}
