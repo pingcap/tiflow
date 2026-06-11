@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pingcap/tidb/pkg/expression/exprstatic"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -263,7 +264,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		return values, false
 	}
 
-	exprCtx := r.tiSessionCtx.GetExprCtx()
+	exprCtx := r.generatedColumnExprContext()
 	// The expressions only depend on the schema, so they are built once and
 	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
 	exprs, ok := r.whereHandle.hiddenGeneratedColumnExprs.getOrBuildExprs(exprCtx)
@@ -313,4 +314,16 @@ func datumValue(d types.Datum) any {
 		return string(bs)
 	}
 	return value
+}
+
+func (r *RowChange) generatedColumnExprContext() *exprstatic.ExprContext {
+	vars := r.tiSessionCtx.GetSessionVars()
+	charset, collation := vars.GetCharsetInfo()
+	return exprstatic.NewExprContext(
+		exprstatic.WithCharset(charset, collation),
+		exprstatic.WithEvalCtx(exprstatic.NewEvalContext(
+			exprstatic.WithLocation(vars.Location()),
+			exprstatic.WithSQLMode(vars.SQLMode),
+		)),
+	)
 }

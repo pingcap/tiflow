@@ -27,9 +27,9 @@ delete from t1 where gen_id > 124;
 -- test unique functional index backed by a hidden generated column
 create table t_expr_unique (
     id int primary key,
-    name varchar(64),
-    unique key uk_lower_name ((lower(name)))
+    name varchar(64)
 );
+/*!80013 alter table t_expr_unique add unique key uk_lower_name ((lower(name))) */;
 insert into t_expr_unique values (1, 'Alice'), (3, 'Bob');
 replace into t_expr_unique values (2, 'ALICE');
 update t_expr_unique set name = 'BOB' where id = 3;
