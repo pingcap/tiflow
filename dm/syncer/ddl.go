@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	ddlrewriter "github.com/pingcap/tiflow/dm/pkg/ddl/rewriter"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
@@ -81,6 +82,7 @@ type DDLWorker struct {
 	idAndCollationMap          map[int]string
 	baList                     *filter.Filter
 	foreignKeyChecksEnabled    bool
+	ddlRewriter                *ddlrewriter.Rewriter
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)
@@ -111,6 +113,7 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		idAndCollationMap:          syncer.idAndCollationMap,
 		baList:                     syncer.baList,
 		foreignKeyChecksEnabled:    config.IsForeignKeyChecksEnabled(syncer.cfg.To.Session),
+		ddlRewriter:                syncer.ddlRewriter,
 		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
 		trackDDL:                   syncer.trackDDL,
 		saveTablePoint:             syncer.saveTablePoint,
@@ -241,6 +244,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		eventContext:    &ec,
 		ddlSchema:       string(ev.Schema),
 		originSQL:       utils.TrimCtrlChars(originSQL),
+		ddlRewriter:     ddl.ddlRewriter,
 		splitDDLs:       make([]string, 0),
 		appliedDDLs:     make([]string, 0),
 		sourceTbls:      make(map[string]map[string]struct{}),
@@ -964,7 +968,20 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	if len(stmts) == 0 {
 		return nil, nil
 	}
-	return stmts[0], nil
+	stmt = stmts[0]
+	if qec.ddlRewriter == nil {
+		return stmt, nil
+	}
+	changed, err := qec.ddlRewriter.RewriteStmt(stmt)
+	if err != nil {
+		return nil, terror.ErrRewriteSQL.Delegate(err, qec.originSQL)
+	}
+	if changed {
+		qec.tctx.L().Info("rewrite MariaDB DDL with AST compatibility rules",
+			zap.String("event", "query"),
+			zap.String("originSQL", qec.originSQL))
+	}
+	return stmt, nil
 }
 
 // copy from https://github.com/pingcap/tidb/blob/fc4f8a1d8f5342cd01f78eb460e47d78d177ed20/ddl/column.go#L366

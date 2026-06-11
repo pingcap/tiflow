@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	ddlrewriter "github.com/pingcap/tiflow/dm/pkg/ddl/rewriter"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -417,6 +418,24 @@ func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 		_, ok := stmt.(ast.DDLNode)
 		c.Assert(ok, check.Equals, cs.isDDL)
 	}
+}
+
+func TestParseOneStmtWithMariaDBASTRewriter(t *testing.T) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestParseOneStmtWithMariaDBASTRewriter")))
+	qec := &queryEventContext{
+		eventContext: &eventContext{tctx: tctx},
+		ddlSchema:    "test",
+		originSQL:    "CREATE TABLE t(c VARCHAR(100) DEFAULT current_timestamp())",
+		p:            parser.New(),
+		ddlRewriter:  ddlrewriter.NewRewriterForFlavor("mariadb"),
+	}
+
+	stmt, err := parseOneStmt(qec)
+	require.NoError(t, err)
+	sqls, err := parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	require.NoError(t, err)
+	require.Len(t, sqls, 1)
+	require.NotContains(t, strings.ToLower(sqls[0]), "default")
 }
 
 func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *check.C) {
