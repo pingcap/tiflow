@@ -511,19 +511,19 @@ func TestJoinTables(t *testing.T) {
 	// no conflict
 	joined, err := g.joinTables(normal)
 	require.NoError(t, err)
-	require.Equal(t, "CREATE TABLE `tbl`(`col1` INT(11), `col2` INT(11)) CHARSET UTF8MB4 COLLATE UTF8MB4_BIN", joined.String())
+	require.Equal(t, "CREATE TABLE `tbl`(`col1` INT(11), `col2` INT(11)) COLLATE utf8mb4_bin", joined.String())
 	joined, err = g.joinTables(final)
 	require.NoError(t, err)
-	require.Equal(t, "CREATE TABLE `tbl`(`col1` INT(11), `col2` INT(11)) CHARSET UTF8MB4 COLLATE UTF8MB4_BIN", joined.String())
+	require.Equal(t, "CREATE TABLE `tbl`(`col1` INT(11), `col2` INT(11)) COLLATE utf8mb4_bin", joined.String())
 
 	// has conflict
 	g.conflictTables[tb3] = genCreateStmt("col1 varchar(255)", "col2 int")
 	joined, err = g.joinTables(normal)
 	require.NoError(t, err)
-	require.Equal(t, "CREATE TABLE `tbl`(`col1` INT(11), `col2` INT(11)) CHARSET UTF8MB4 COLLATE UTF8MB4_BIN", joined.String())
+	require.Equal(t, "CREATE TABLE `tbl`(`col1` INT(11), `col2` INT(11)) COLLATE utf8mb4_bin", joined.String())
 	joined, err = g.joinTables(conflict)
 	require.NoError(t, err)
-	require.Equal(t, "CREATE TABLE `tbl`(`col1` VARCHAR(255) CHARACTER SET UTF8MB4 COLLATE utf8mb4_bin, `col2` INT(11)) CHARSET UTF8MB4 COLLATE UTF8MB4_BIN", joined.String())
+	require.Equal(t, "CREATE TABLE `tbl`(`col1` VARCHAR(255) CHARACTER SET UTF8MB4 COLLATE utf8mb4_bin, `col2` INT(11)) COLLATE utf8mb4_bin", joined.String())
 	_, err = g.joinTables(final)
 	require.Error(t, err)
 }
