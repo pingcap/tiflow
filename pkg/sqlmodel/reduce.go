@@ -16,6 +16,7 @@ package sqlmodel
 import (
 	"strings"
 
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -40,14 +41,7 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 		return r.preValues, r.postValues
 	}
 
-	var pre, post []interface{}
-	if r.preValues != nil {
-		_, pre = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, r.preValues)
-	}
-	if r.postValues != nil {
-		_, post = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, r.postValues)
-	}
-	return pre, post
+	return r.identityValuesByIndex(indexInfo, r.preValues, r.postValues)
 }
 
 // RowIdentity returns the identity of this row change, caller should
@@ -126,8 +120,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	if idx := r.whereHandle.UniqueNotNullIdx; idx != nil {
-		_, pre := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, r.preValues)
-		_, post := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, r.postValues)
+		pre, post := r.identityValuesByIndex(idx, r.preValues, r.postValues)
 		if identityUpdated(pre, post) {
 			return true
 		}
@@ -159,14 +152,28 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx || idx.MVIndex {
 			continue
 		}
-		_, pre := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, preValues)
-		_, post := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, postValues)
+		pre, post := r.identityValuesByIndex(idx, preValues, postValues)
 		if identityUpdated(pre, post) {
 			return true
 		}
 	}
 
 	return false
+}
+
+func (r *RowChange) identityValuesByIndex(
+	indexInfo *timodel.IndexInfo,
+	preValues []interface{},
+	postValues []interface{},
+) ([]interface{}, []interface{}) {
+	var pre, post []interface{}
+	if preValues != nil {
+		_, pre = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, preValues)
+	}
+	if postValues != nil {
+		_, post = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, postValues)
+	}
+	return pre, post
 }
 
 // genKey gens key by values e.g. "a.1.b".
