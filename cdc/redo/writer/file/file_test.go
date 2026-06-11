@@ -234,6 +234,8 @@ func TestNewFileWriter(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockobjstore.NewMockStorage(controller)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log",
+		gomock.Any()).Return(nil).Times(1)
 
 	changefeed := model.ChangeFeedID{
 		Namespace: "abcd",
@@ -280,6 +282,11 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockobjstore.NewMockStorage(controller)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_100_uuid-2.log",
+		gomock.Any()).Return(nil).Times(1)
 
 	dir := t.TempDir()
 	uuidGen := uuid.NewMock()
@@ -341,6 +348,11 @@ func TestRotateFileWithoutFileAllocator(t *testing.T) {
 
 	controller := gomock.NewController(t)
 	mockStorage := mockobjstore.NewMockStorage(controller)
+
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_uuid-2.log",
+		gomock.Any()).Return(nil).Times(1)
+	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_100_uuid-4.log",
+		gomock.Any()).Return(nil).Times(1)
 
 	dir := t.TempDir()
 	uuidGen := uuid.NewMock()
