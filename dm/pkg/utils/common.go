@@ -201,7 +201,6 @@ var ZeroSessionCtx sessionctx.Context
 // NewSessionCtx return a session context with specified session variables.
 func NewSessionCtx(vars map[string]string) sessionctx.Context {
 	variables := variable.NewSessionVars(nil)
-	variables.StmtCtx.SetTimeZone(variables.TimeZone)
 	for k, v := range vars {
 		_ = variables.SetSystemVar(k, v)
 		if strings.EqualFold(k, "time_zone") {
