@@ -109,7 +109,6 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		return nil, err
 	}
 	config.MetricRegistry = f.registry
-
 	client, err := newSaramaClientImpl(f.option.BrokerEndpoints, config)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -119,7 +118,6 @@ func (f *saramaFactory) SyncProducer(ctx context.Context) (SyncProducer, error) 
 		closeSaramaClientOnFailure(f.changefeedID, client, "close sarama client after sync producer init failed")
 		return nil, errors.Trace(err)
 	}
-
 	return &saramaSyncProducer{
 		id:       f.changefeedID,
 		producer: p,

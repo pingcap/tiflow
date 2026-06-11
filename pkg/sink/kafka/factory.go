@@ -98,10 +98,10 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(message.Value),
 		Partition: partitionNum,
 	})
-	return err
+	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
-func (p *saramaSyncProducer) SendMessages(ctx context.Context, topic string, partitionNum int32, message *common.Message) error {
+func (p *saramaSyncProducer) SendMessages(_ context.Context, topic string, partitionNum int32, message *common.Message) error {
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
@@ -111,7 +111,8 @@ func (p *saramaSyncProducer) SendMessages(ctx context.Context, topic string, par
 			Partition: int32(i),
 		}
 	}
-	return p.producer.SendMessages(msgs)
+	err := p.producer.SendMessages(msgs)
+	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
 }
 
 func (p *saramaSyncProducer) Close() {

@@ -277,12 +277,13 @@ func (s *syncWriter) SendMessage(
 	topic string, partitionNum int32,
 	message *common.Message,
 ) error {
-	return s.w.WriteMessages(ctx, kafka.Message{
+	err := s.w.WriteMessages(ctx, kafka.Message{
 		Topic:     topic,
 		Partition: int(partitionNum),
 		Key:       message.Key,
 		Value:     message.Value,
 	})
+	return errors.WrapError(errors.ErrKafkaSendMessage, err)
 }
 
 // SendMessages produces a given set of messages, and returns only when all
@@ -299,19 +300,17 @@ func (s *syncWriter) SendMessages(ctx context.Context, topic string, partitionNu
 			Partition: i,
 		}
 	}
-	return s.w.WriteMessages(ctx, msgs...)
+	err := s.w.WriteMessages(ctx, msgs...)
+	return errors.WrapError(errors.ErrKafkaSendMessage, err)
 }
 
 // Close shuts down the producer; you must call this function before a producer
 // object passes out of scope, as it may otherwise leak memory.
 // You must call this before calling Close on the underlying client.
 func (s *syncWriter) Close() {
-	log.Info("kafka sync producer start closing",
-		zap.String("namespace", s.changefeedID.Namespace),
-		zap.String("changefeed", s.changefeedID.ID))
 	start := time.Now()
 	if err := s.w.Close(); err != nil {
-		log.Warn("Close kafka sync producer failed",
+		log.Warn("Close kafka sync producer meet error",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
 			zap.Duration("duration", time.Since(start)),
