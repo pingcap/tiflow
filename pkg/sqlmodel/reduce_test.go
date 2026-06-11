@@ -71,6 +71,22 @@ func TestIdentityUpdatedWithUniqueKeys(t *testing.T) {
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 }
 
+func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+
+	change := NewRowChange(source, nil, []interface{}{1, "Bob"}, []interface{}{1, "Charlie"}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{1, "Bob"}, []interface{}{1, "Alice"}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
 func TestSplit(t *testing.T) {
 	t.Parallel()
 

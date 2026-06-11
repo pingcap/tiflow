@@ -130,11 +130,33 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		}
 	}
 
-	for _, idx := range r.whereHandle.UniqueIdxs {
-		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx {
+	preValues, postValues := r.preValues, r.postValues
+	fullValuesReady := false
+	fullValuesAvailable := false
+	ensureFullValues := func() bool {
+		if fullValuesReady {
+			return fullValuesAvailable
+		}
+		fullValuesReady = true
+		var preOK bool
+		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
+		if !preOK {
+			return false
+		}
+		var postOK bool
+		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
+		fullValuesAvailable = postOK
+		return fullValuesAvailable
+	}
+
+	for _, idx := range r.whereHandle.CausalityIdxs {
+		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx || idx.MVIndex {
 			continue
 		}
-		pre, post := r.identityValuesByIndex(idx)
+		if indexHasHiddenColumn(idx, r.sourceTableInfo) && !ensureFullValues() {
+			return true
+		}
+		pre, post := identityValuesByIndex(idx, preValues, postValues)
 		if identityUpdated(pre, post) {
 			return true
 		}
@@ -145,15 +167,23 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 
 // identityValuesByIndex extra pre and post column values of given index
 func (r *RowChange) identityValuesByIndex(indexInfo *timodel.IndexInfo) ([]interface{}, []interface{}) {
+	return identityValuesByIndex(indexInfo, r.preValues, r.postValues)
+}
+
+func identityValuesByIndex(
+	indexInfo *timodel.IndexInfo,
+	preValues []interface{},
+	postValues []interface{},
+) ([]interface{}, []interface{}) {
 	pre := make([]interface{}, 0, len(indexInfo.Columns))
 	post := make([]interface{}, 0, len(indexInfo.Columns))
 
 	for _, column := range indexInfo.Columns {
-		if r.preValues != nil {
-			pre = append(pre, r.preValues[column.Offset])
+		if preValues != nil {
+			pre = append(pre, preValues[column.Offset])
 		}
-		if r.postValues != nil {
-			post = append(post, r.postValues[column.Offset])
+		if postValues != nil {
+			post = append(post, postValues[column.Offset])
 		}
 	}
 	return pre, post
