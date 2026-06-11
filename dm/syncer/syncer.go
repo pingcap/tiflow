@@ -3428,7 +3428,8 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err err
 			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
 		}
 	}
-	if err := s.checkForeignKeyCausalityConfigUpdate(cfg); err != nil {
+	err = s.checkForeignKeyCausalityConfigUpdate(cfg)
+	if err != nil {
 		return err
 	}
 
