@@ -255,6 +255,9 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	if len(values) >= len(cols) {
 		return values, true
 	}
+	if r.whereHandle.generatedColumns == nil {
+		return values, false
+	}
 
 	exprCtx := r.tiSessionCtx.GetExprCtx()
 	// The expressions only depend on the schema, so they are built once and

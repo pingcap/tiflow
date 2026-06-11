@@ -58,9 +58,6 @@ type generatedColumnCache struct {
 // expressions keyed by column offset. The bool is false if any expression fails
 // to build, in which case the caller should fall back instead of evaluating.
 func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
-	if h.generatedColumns == nil {
-		return nil, false
-	}
 	return h.generatedColumns.exprsOf(ctx)
 }
 
