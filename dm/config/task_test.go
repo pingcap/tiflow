@@ -35,6 +35,32 @@ import (
 	"go.uber.org/atomic"
 )
 
+func TestIsForeignKeyChecksEnabled(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		session  map[string]string
+		expected bool
+	}{
+		{name: "nil session", session: nil, expected: false},
+		{name: "disabled", session: map[string]string{"foreign_key_checks": "0"}, expected: false},
+		{name: "enabled numeric", session: map[string]string{"foreign_key_checks": "1"}, expected: true},
+		{name: "enabled literal", session: map[string]string{"FOREIGN_KEY_CHECKS": "ON"}, expected: true},
+		{name: "enabled quoted", session: map[string]string{"foreign_key_checks": "'1'"}, expected: true},
+		{name: "other value", session: map[string]string{"foreign_key_checks": "off"}, expected: false},
+		{name: "unrelated", session: map[string]string{"sql_mode": ""}, expected: false},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, c.expected, IsForeignKeyChecksEnabled(c.session))
+		})
+	}
+}
+
 var correctTaskConfig = `---
 name: test
 task-mode: all

@@ -12,11 +12,13 @@ aliases:
     - D3Hunter
     - GMHDBJD
     - lance6716
+    - joechenrh
   sig-approvers-engine:
     - Benjamin2037
     - D3Hunter
     - GMHDBJD
     - lance6716
+    - joechenrh
   sig-community-reviewers:
     - MoCuishle28
     - ben1009
@@ -73,3 +75,4 @@ aliases:
     - zhangjinpeng87
     - zhaoxinyu
     - zwj-coder
+    - joechenrh

@@ -229,6 +229,24 @@ func TestSubTaskAdjustFail(t *testing.T) {
 			},
 			"Message: import-into mode requires shared storage",
 		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.SyncerConfig.Compact = true
+				return cfg
+			},
+			"Message: `compact` is not supported when foreign_key_checks=1",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.SyncerConfig.MultipleRows = true
+				return cfg
+			},
+			"Message: `multiple-rows` is not supported when foreign_key_checks=1",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -236,6 +254,21 @@ func TestSubTaskAdjustFail(t *testing.T) {
 		err := cfg.Adjust(true)
 		require.ErrorContains(t, err, tc.errMsg)
 	}
+}
+
+func TestSubTaskAdjustAllowsDMLBoundaryOptionsWhenForeignKeyChecksOff(t *testing.T) {
+	cfg := &SubTaskConfig{
+		Name:     "test-task",
+		SourceID: "mysql-instance-01",
+		To: dbconfig.DBConfig{
+			Session: map[string]string{"foreign_key_checks": "0"},
+		},
+		SyncerConfig: SyncerConfig{
+			Compact:      true,
+			MultipleRows: true,
+		},
+	}
+	require.NoError(t, cfg.Adjust(false))
 }
 
 func TestSubTaskBlockAllowList(t *testing.T) {

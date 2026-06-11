@@ -19,7 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
+	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -61,16 +61,6 @@ type DMLWorker struct {
 	// channel
 	inCh    chan *job
 	flushCh chan *job
-}
-
-func isForeignKeyChecksEnabled(session map[string]string) bool {
-	for key, value := range session {
-		if strings.EqualFold(key, "foreign_key_checks") {
-			trimmed := strings.Trim(value, " '\"")
-			return variable.TiDBOptOn(trimmed)
-		}
-	}
-	return false
 }
 
 func (w *DMLWorker) shouldDisableForeignKeyChecksForJob(j *job) bool {
@@ -132,7 +122,7 @@ func dmlWorkerWrap(inCh chan *job, syncer *Syncer) chan *job {
 		syncCtx:                 syncer.syncCtx, // this ctx can be used to cancel all the workers
 		metricProxies:           syncer.metricsProxies,
 		toDBConns:               syncer.toDBConns,
-		foreignKeyChecksEnabled: isForeignKeyChecksEnabled(syncer.cfg.To.Session),
+		foreignKeyChecksEnabled: config.IsForeignKeyChecksEnabled(syncer.cfg.To.Session),
 		inCh:                    inCh,
 		flushCh:                 make(chan *job),
 	}
