@@ -1444,7 +1444,9 @@ func (s *testSyncerSuite) TestTrackDDL(c *check.C) {
 		c.Assert(err, check.IsNil)
 		ca.callback()
 
+		syncer.foreignKeyRouteTopologyChecked = true
 		c.Assert(syncer.trackDDL(testDB, ddlInfo, ec), check.IsNil)
+		c.Assert(syncer.foreignKeyRouteTopologyChecked, check.Equals, false)
 		syncer.schemaTracker.Reset()
 		c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 		c.Assert(checkPointMock.ExpectationsWereMet(), check.IsNil)
@@ -1714,7 +1716,9 @@ func TestTrackDownstreamTableWontOverwrite(t *testing.T) {
 	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
 	require.NoError(t, err)
 	require.Len(t, ti.Columns, 2)
+	syncer.foreignKeyRouteTopologyChecked = true
 	require.NoError(t, syncer.trackTableInfoFromDownstream(tctx, upTable, downTable))
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
 	newTi, err := syncer.getTableInfo(tctx, upTable, downTable)
 	require.NoError(t, err)
 	require.Equal(t, ti, newTi)
@@ -2036,4 +2040,159 @@ func TestCheckCanUpdateCfg(t *testing.T) {
 	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
 	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
 	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+}
+
+func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	cases := []struct {
+		name string
+		set  func(*config.SyncerConfig)
+	}{
+		{
+			name: "compact",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.Compact = true
+			},
+		},
+		{
+			name: "multiple-rows",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.MultipleRows = true
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		tc.set(&newCfg.SyncerConfig)
+
+		err = syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrConfigUnsupportedForeignKeyChecksOption.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, tc.name)
+	}
+
+	newCfg, err := cfg.Clone()
+	require.NoError(t, err)
+	newCfg.To.Session = map[string]string{"foreign_key_checks": "0"}
+	newCfg.SyncerConfig.Compact = true
+	newCfg.SyncerConfig.MultipleRows = true
+	require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
+}
+
+func TestUpdateRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	cases := []struct {
+		name string
+		set  func(*config.SyncerConfig)
+	}{
+		{
+			name: "compact",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.Compact = true
+			},
+		},
+		{
+			name: "multiple-rows",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.MultipleRows = true
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		tc.set(&newCfg.SyncerConfig)
+
+		err = syncer.Update(context.Background(), newCfg)
+		require.Truef(t, terror.ErrConfigUnsupportedForeignKeyChecksOption.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, tc.name)
+	}
+}
+
+func TestInitRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*config.SyncerConfig)
+	}{
+		{
+			name: "compact",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.Compact = true
+			},
+		},
+		{
+			name: "multiple-rows",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.MultipleRows = true
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		cfg := genDefaultSubTaskConfig4Test()
+		cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		tc.set(&cfg.SyncerConfig)
+
+		syncer := NewSyncer(cfg, nil, nil)
+		err := syncer.Init(context.Background())
+		require.Truef(t, terror.ErrConfigUnsupportedForeignKeyChecksOption.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, tc.name)
+	}
+}
+
+func TestUpdateClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+	syncer.foreignKeyRouteTopologyChecked = true
+
+	newCfg, err := cfg.Clone()
+	require.NoError(t, err)
+	newCfg.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "db", Action: bf.Ignore}}
+
+	require.NoError(t, syncer.Update(context.Background(), newCfg))
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
+}
+
+func TestOperateSchemaSetSchemaClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.foreignKeyRouteTopologyChecked = true
+	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
+	require.NoError(t, syncer.genRouter())
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDBForTest(db)}
+
+	checkPointDB, checkPointMock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer checkPointDB.Close()
+	checkPointDBConn, err := checkPointDB.Conn(context.Background())
+	require.NoError(t, err)
+	syncer.checkpoint.(*RemoteCheckPoint).dbConn = dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(checkPointDBConn, &retry.FiniteRetryStrategy{}))
+
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	checkPointMock.ExpectBegin()
+	checkPointMock.ExpectExec(".*INSERT INTO .* VALUES.* ON DUPLICATE KEY UPDATE.*").WillReturnResult(sqlmock.NewResult(0, 1))
+	checkPointMock.ExpectCommit()
+
+	_, err = syncer.OperateSchema(context.Background(), &pb.OperateWorkerSchemaRequest{
+		Op:       pb.SchemaOp_SetSchema,
+		Database: "db",
+		Table:    "child",
+		Schema:   "create table child(id int primary key, parent_id int, constraint fk_child_parent foreign key (parent_id) references parent(id))",
+	})
+	require.NoError(t, err)
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, checkPointMock.ExpectationsWereMet())
 }

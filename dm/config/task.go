@@ -30,6 +30,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -418,6 +419,31 @@ type SyncerConfig struct {
 	SafeModeDuration string `yaml:"safe-mode-duration" toml:"safe-mode-duration" json:"safe-mode-duration"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
+}
+
+// IsForeignKeyChecksEnabled reports whether the downstream session keeps FK checks on.
+func IsForeignKeyChecksEnabled(session map[string]string) bool {
+	for key, value := range session {
+		if strings.EqualFold(key, "foreign_key_checks") {
+			trimmed := strings.Trim(value, " '\"")
+			return variable.TiDBOptOn(trimmed)
+		}
+	}
+	return false
+}
+
+// CheckForeignKeyChecksSyncerOptions rejects syncer options that change DML statement boundaries.
+func CheckForeignKeyChecksSyncerOptions(session map[string]string, syncerCfg SyncerConfig) error {
+	if !IsForeignKeyChecksEnabled(session) {
+		return nil
+	}
+	if syncerCfg.Compact {
+		return terror.ErrConfigUnsupportedForeignKeyChecksOption.Generate("compact")
+	}
+	if syncerCfg.MultipleRows {
+		return terror.ErrConfigUnsupportedForeignKeyChecksOption.Generate("multiple-rows")
+	}
+	return nil
 }
 
 // DefaultSyncerConfig return default syncer config for task.

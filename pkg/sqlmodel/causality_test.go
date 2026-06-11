@@ -86,6 +86,19 @@ func TestCausalityKeys(t *testing.T) {
 	}
 }
 
+func TestCausalityKeysWithCausalityKeySourceTable(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "DB", Table: "Parent"}
+	causalityKeySource := &cdcmodel.TableName{Schema: "db", Table: "parent"}
+	ti := mockTableInfo(t, "CREATE TABLE parent (id INT PRIMARY KEY)")
+	change := NewRowChange(source, nil, nil, []interface{}{10}, ti, nil, nil)
+	change.SetCausalityKeySourceTable(causalityKeySource)
+
+	require.Equal(t, []string{"10.id.db.parent"}, change.CausalityKeys())
+	require.Equal(t, source, change.GetSourceTable())
+}
+
 func TestCausalityKeysNoRace(t *testing.T) {
 	t.Parallel()
 

@@ -110,7 +110,7 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		charsetAndDefaultCollation: syncer.charsetAndDefaultCollation,
 		idAndCollationMap:          syncer.idAndCollationMap,
 		baList:                     syncer.baList,
-		foreignKeyChecksEnabled:    isForeignKeyChecksEnabled(syncer.cfg.To.Session),
+		foreignKeyChecksEnabled:    config.IsForeignKeyChecksEnabled(syncer.cfg.To.Session),
 		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
 		trackDDL:                   syncer.trackDDL,
 		saveTablePoint:             syncer.saveTablePoint,

@@ -201,10 +201,15 @@ func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string 
 }
 
 func (r *RowChange) getCausalityString(values []interface{}) []string {
+	sourceTable := r.sourceTable
+	if r.causalityKeySourceTable != nil {
+		// Only causality keys use this table name; r.sourceTable keeps the original source table.
+		sourceTable = r.causalityKeySourceTable
+	}
 	pkAndUks := r.whereHandle.UniqueIdxs
 	if len(pkAndUks) == 0 {
 		// the table has no PK/UK, all values of the row consists the causality key
-		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
+		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
 	}
 
 	ret := make([]string, 0, len(pkAndUks))
@@ -218,7 +223,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
-		key := genKeyString(r.sourceTable.String(), cols, truncVals)
+		key := genKeyString(sourceTable.String(), cols, truncVals)
 		if len(key) > 0 { // ignore `null` value.
 			ret = append(ret, key)
 		} else {
@@ -229,7 +234,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	if len(ret) == 0 {
 		// the table has no PK/UK, or all UK are NULL. all values of the row
 		// consists the causality key
-		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
+		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
 	}
 
 	return ret
