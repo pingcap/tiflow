@@ -124,8 +124,8 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 			name: "binary expression index changed",
 			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, payload VARBINARY(16), " +
 				"UNIQUE KEY uk_payload_expr ((CAST(payload AS BINARY(16)))))",
-			preValues:  []any{1, []byte("alice")},
-			postValues: []any{1, []byte("bob")},
+			preValues:  []any{1, "alice"},
+			postValues: []any{1, "bob"},
 			updated:    true,
 		},
 	}

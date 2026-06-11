@@ -14,7 +14,6 @@
 package sqlmodel
 
 import (
-	"reflect"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -113,7 +112,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 			return true
 		}
 		for i := range pre {
-			if !reflect.DeepEqual(pre[i], post[i]) {
+			if pre[i] != post[i] {
 				return true
 			}
 		}
