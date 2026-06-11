@@ -50,6 +50,8 @@ type generatedColumnCache struct {
 	once  sync.Once
 	exprs map[int]expression.Expression
 	ok    bool
+
+	skipHiddenCausalityWarnOnce sync.Once
 }
 
 // generatedColumnExprs builds (once) and returns hidden generated-column
@@ -60,6 +62,13 @@ func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int
 		return nil, false
 	}
 	return h.generatedColumns.exprsOf(ctx)
+}
+
+func (h *WhereHandle) warnSkipHiddenCausalityIndex(table string, index *model.IndexInfo, valueCount int) {
+	if h.generatedColumns == nil {
+		return
+	}
+	h.generatedColumns.warnSkipHiddenCausalityIndex(table, index, valueCount)
 }
 
 func (c *generatedColumnCache) exprsOf(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
@@ -82,6 +91,17 @@ func (c *generatedColumnCache) exprsOf(ctx expression.BuildContext) (map[int]exp
 		c.ok = true
 	})
 	return c.exprs, c.ok
+}
+
+func (c *generatedColumnCache) warnSkipHiddenCausalityIndex(table string, index *model.IndexInfo, valueCount int) {
+	c.skipHiddenCausalityWarnOnce.Do(func() {
+		log.Warn("skip unique index backed by hidden generated column for causality "+
+			"because generated column value cannot be materialized",
+			zap.String("table", table),
+			zap.String("index", index.Name.O),
+			zap.Int("valueCount", valueCount),
+			zap.Int("columnCount", len(c.sourceTableInfo.Columns)))
+	})
 }
 
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,

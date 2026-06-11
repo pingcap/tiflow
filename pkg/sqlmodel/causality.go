@@ -221,6 +221,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		}
 
 		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
+			r.whereHandle.warnSkipHiddenCausalityIndex(r.sourceTable.String(), indexCols, len(values))
 			continue
 		}
 
