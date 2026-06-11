@@ -3381,6 +3381,9 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
 		}
 	}
+	if err := s.checkForeignKeyCausalityConfigUpdate(newCfg); err != nil {
+		return err
+	}
 
 	oldCfg, err := s.cfg.Clone()
 	if err != nil {
@@ -3424,6 +3427,9 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err err
 		if len(tables) > 0 {
 			return terror.ErrSyncerUnitUpdateConfigInSharding.Generate(tables)
 		}
+	}
+	if err := s.checkForeignKeyCausalityConfigUpdate(cfg); err != nil {
+		return err
 	}
 
 	var (
