@@ -106,7 +106,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	r.lazyInitWhereHandle()
-	identityUpdated := func(pre, post []interface{}) bool {
+	identityUpdated := func(pre, post []any) bool {
 		if len(pre) != len(post) {
 			// should not happen
 			return true
@@ -131,19 +131,19 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	preValues, postValues := r.preValues, r.postValues
+	uniqueIndexes := r.whereHandle.UniqueIdxs
 	if r.whereHandle.generatedColumns != nil {
 		var preOK bool
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
-		if !preOK {
-			return true
-		}
 		var postOK bool
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
-		if !postOK {
-			return true
+		if preOK && postOK {
+			uniqueIndexes = r.whereHandle.CausalityIdxs
+		} else {
+			preValues, postValues = r.preValues, r.postValues
 		}
 	}
-	for _, idx := range r.whereHandle.CausalityIdxs {
+	for _, idx := range uniqueIndexes {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx || idx.MVIndex {
 			continue
 		}
@@ -158,10 +158,10 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 
 func (r *RowChange) identityValuesByIndex(
 	indexInfo *timodel.IndexInfo,
-	preValues []interface{},
-	postValues []interface{},
-) ([]interface{}, []interface{}) {
-	var pre, post []interface{}
+	preValues []any,
+	postValues []any,
+) ([]any, []any) {
+	var pre, post []any
 	if preValues != nil {
 		_, pre = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, preValues)
 	}
