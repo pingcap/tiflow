@@ -41,7 +41,7 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 		return r.preValues, r.postValues
 	}
 
-	return r.identityValuesByIndex(indexInfo)
+	return identityValuesByIndex(indexInfo, r.preValues, r.postValues)
 }
 
 // RowIdentity returns the identity of this row change, caller should
@@ -120,7 +120,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	if idx := r.whereHandle.UniqueNotNullIdx; idx != nil {
-		pre, post := r.identityValuesByIndex(idx)
+		pre, post := identityValuesByIndex(idx, r.preValues, r.postValues)
 		if identityUpdated(pre, post) {
 			return true
 		}
@@ -131,30 +131,26 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	preValues, postValues := r.preValues, r.postValues
-	fullValuesReady := false
-	fullValuesAvailable := false
-	ensureFullValues := func() bool {
-		if fullValuesReady {
-			return fullValuesAvailable
+	for _, idx := range r.whereHandle.CausalityIdxs {
+		if idx == nil || idx.MVIndex || !indexHasHiddenColumn(idx, r.sourceTableInfo) {
+			continue
 		}
-		fullValuesReady = true
 		var preOK bool
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
 		if !preOK {
-			return false
+			return true
 		}
 		var postOK bool
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
-		fullValuesAvailable = postOK
-		return fullValuesAvailable
+		if !postOK {
+			return true
+		}
+		break
 	}
 
 	for _, idx := range r.whereHandle.CausalityIdxs {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx || idx.MVIndex {
 			continue
-		}
-		if indexHasHiddenColumn(idx, r.sourceTableInfo) && !ensureFullValues() {
-			return true
 		}
 		pre, post := identityValuesByIndex(idx, preValues, postValues)
 		if identityUpdated(pre, post) {
@@ -165,11 +161,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	return false
 }
 
-// identityValuesByIndex extra pre and post column values of given index
-func (r *RowChange) identityValuesByIndex(indexInfo *timodel.IndexInfo) ([]interface{}, []interface{}) {
-	return identityValuesByIndex(indexInfo, r.preValues, r.postValues)
-}
-
+// identityValuesByIndex extracts pre and post column values of the given index.
 func identityValuesByIndex(
 	indexInfo *timodel.IndexInfo,
 	preValues []interface{},
