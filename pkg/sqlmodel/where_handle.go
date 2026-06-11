@@ -31,35 +31,31 @@ type WhereHandle struct {
 	// If the index and columns have no NOT NULL constraint, but all data is NOT
 	// NULL, we can still use it.
 	// every index that is UNIQUE should be added to UniqueIdxs, even for
-	// PK and NOT NULL. Indexes backed by a hidden column (e.g. the virtual
-	// generated column of an expression/functional index) are excluded here,
-	// because a hidden column is not addressable in a WHERE clause.
+	// PK and NOT NULL. Indexes backed by a hidden column are excluded here.
 	UniqueIdxs []*model.IndexInfo
 	// CausalityIdxs is the superset of UniqueIdxs that also keeps indexes backed
-	// by a hidden column. Causality computation needs every UNIQUE constraint to
-	// detect conflicts; the hidden column's value is materialized from its
-	// generated expression at causality time.
+	// by a hidden column to detect conflicts.
 	CausalityIdxs []*model.IndexInfo
 
 	generatedColumns *generatedColumnCache
 }
 
+// generatedColumnExprs builds hidden generated-column expressions.
+func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
+	return h.generatedColumns.getOrBuildExprs(ctx)
+}
+
+
 type generatedColumnCache struct {
 	sourceTableInfo *model.TableInfo
-
 	once  sync.Once
 	exprs map[int]expression.Expression
 	ok    bool
 }
 
-// generatedColumnExprs builds (once) and returns hidden generated-column
-// expressions keyed by column offset. The bool is false if any expression fails
-// to build, in which case the caller should fall back instead of evaluating.
-func (h *WhereHandle) generatedColumnExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
-	return h.generatedColumns.getOrBuildExprs(ctx)
-}
-
-func (c *generatedColumnCache) getOrBuildExprs(ctx expression.BuildContext) (map[int]expression.Expression, bool) {
+func (c *generatedColumnCache) getOrBuildExprs(
+	ctx expression.BuildContext,
+) (map[int]expression.Expression, bool) {
 	c.once.Do(func() {
 		exprs := make(map[int]expression.Expression)
 		for _, col := range c.sourceTableInfo.Columns {
@@ -105,14 +101,10 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 		if rewritten == nil {
 			continue
 		}
-		// Every UNIQUE constraint participates in causality.
-		ret.CausalityIdxs = append(ret.CausalityIdxs, rewritten)
 
-		// An index backed by a hidden column (an expression/functional index) is
-		// not usable for the WHERE clause: the hidden column has no addressable
-		// name. Keep it out of UniqueIdxs / UniqueNotNullIdx.
+		ret.CausalityIdxs = append(ret.CausalityIdxs, rewritten)	
 		if indexHasHiddenColumn(rewritten, source) {
-			if !rewritten.MVIndex && ret.generatedColumns == nil {
+			if ret.generatedColumns == nil {
 				ret.generatedColumns = &generatedColumnCache{sourceTableInfo: source}
 			}
 			continue
