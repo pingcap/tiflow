@@ -84,9 +84,7 @@ func (c *generatedColumnCache) getOrBuildExprs(ctx expression.BuildContext) (map
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,
 // columns and state. Other component can cache the result.
 func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
-	ret := WhereHandle{
-		generatedColumns: &generatedColumnCache{sourceTableInfo: source},
-	}
+	ret := WhereHandle{}
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
@@ -114,6 +112,9 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 		// not usable for the WHERE clause: the hidden column has no addressable
 		// name. Keep it out of UniqueIdxs / UniqueNotNullIdx.
 		if indexHasHiddenColumn(rewritten, source) {
+			if !rewritten.MVIndex && ret.generatedColumns == nil {
+				ret.generatedColumns = &generatedColumnCache{sourceTableInfo: source}
+			}
 			continue
 		}
 		ret.UniqueIdxs = append(ret.UniqueIdxs, rewritten)

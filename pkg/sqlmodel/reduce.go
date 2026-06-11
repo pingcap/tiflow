@@ -131,23 +131,21 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	preValues, postValues := r.preValues, r.postValues
-	fullValuesReady := false
+	if r.whereHandle.generatedColumns != nil {
+		var preOK bool
+		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
+		if !preOK {
+			return true
+		}
+		var postOK bool
+		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
+		if !postOK {
+			return true
+		}
+	}
 	for _, idx := range r.whereHandle.CausalityIdxs {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx || idx.MVIndex {
 			continue
-		}
-		if indexHasHiddenColumn(idx, r.sourceTableInfo) && !fullValuesReady {
-			var preOK bool
-			preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
-			if !preOK {
-				return true
-			}
-			var postOK bool
-			postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
-			if !postOK {
-				return true
-			}
-			fullValuesReady = true
 		}
 		pre, post := r.identityValuesByIndex(idx, preValues, postValues)
 		if identityUpdated(pre, post) {
