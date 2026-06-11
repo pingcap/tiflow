@@ -130,6 +130,9 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
+	if cfg.LoaderConfig.ImportMode == config.LoadModeImportInto {
+		lightningCfg.Mydumper.SourceDir = storage.StripS3ExternalID(cfg.Dir)
+	}
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
 	return lightningCfg
 }
