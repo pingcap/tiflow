@@ -16,7 +16,6 @@ package sqlmodel
 import (
 	"strings"
 
-	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -41,7 +40,14 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 		return r.preValues, r.postValues
 	}
 
-	return identityValuesByIndex(indexInfo, r.preValues, r.postValues)
+	var pre, post []interface{}
+	if r.preValues != nil {
+		_, pre = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, r.preValues)
+	}
+	if r.postValues != nil {
+		_, post = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, r.postValues)
+	}
+	return pre, post
 }
 
 // RowIdentity returns the identity of this row change, caller should
@@ -120,7 +126,8 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	if idx := r.whereHandle.UniqueNotNullIdx; idx != nil {
-		pre, post := identityValuesByIndex(idx, r.preValues, r.postValues)
+		_, pre := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, r.preValues)
+		_, post := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, r.postValues)
 		if identityUpdated(pre, post) {
 			return true
 		}
@@ -152,33 +159,14 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx || idx.MVIndex {
 			continue
 		}
-		pre, post := identityValuesByIndex(idx, preValues, postValues)
+		_, pre := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, preValues)
+		_, post := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, idx, postValues)
 		if identityUpdated(pre, post) {
 			return true
 		}
 	}
 
 	return false
-}
-
-// identityValuesByIndex extracts pre and post column values of the given index.
-func identityValuesByIndex(
-	indexInfo *timodel.IndexInfo,
-	preValues []interface{},
-	postValues []interface{},
-) ([]interface{}, []interface{}) {
-	pre := make([]interface{}, 0, len(indexInfo.Columns))
-	post := make([]interface{}, 0, len(indexInfo.Columns))
-
-	for _, column := range indexInfo.Columns {
-		if preValues != nil {
-			pre = append(pre, preValues[column.Offset])
-		}
-		if postValues != nil {
-			post = append(post, postValues[column.Offset])
-		}
-	}
-	return pre, post
 }
 
 // genKey gens key by values e.g. "a.1.b".
