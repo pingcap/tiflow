@@ -60,6 +60,9 @@ func (s *testDBSuite) SetupSuite() {
 	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8", s.cfg.From.User, s.cfg.From.Password, s.cfg.From.Host, s.cfg.From.Port)
 	s.db, err = sql.Open("mysql", dbAddr)
 	s.Require().NoError(err)
+	if err = s.db.Ping(); err != nil {
+		s.T().Skipf("skipping suite, upstream MySQL is not available: %v", err)
+	}
 
 	s.resetBinlogSyncer()
 	_, err = s.db.Exec("SET GLOBAL binlog_format = 'ROW';")

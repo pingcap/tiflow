@@ -253,7 +253,7 @@ func TestCheckIsDuplicateEvent(t *testing.T) {
 	require.NoError(t, err)
 	duplicate, err = checkIsDuplicateEvent(filename, dummyEv)
 	require.Error(t, err)
-	require.Regexp(t, "*diff from passed-in event.*", err.Error())
+	require.Regexp(t, ".*diff from passed-in event.*", err.Error())
 	require.False(t, duplicate)
 
 	// event's start/end pos matched, but content mismatched, invalid

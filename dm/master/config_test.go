@@ -113,7 +113,7 @@ aaa = "xxx"`)
 	t.Require().NoError(err)
 	err = cfg.configFromFile(filepath)
 	t.Require().Error(err)
-	t.Require().Regexp("*master config contained unknown configuration options: aaa.*", err.Error())
+	t.Require().Regexp(".*master config contained unknown configuration options: aaa.*", err.Error())
 
 	// invalid `master-addr`
 	filepath2 := path.Join(t.T().TempDir(), "test_invalid_config.toml")

@@ -16,6 +16,7 @@ package optimism
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"os"
 	"sync"
 	"testing"
@@ -37,6 +38,9 @@ import (
 var etcdTestCli *clientv3.Client
 
 func TestMain(m *testing.M) {
+	// integration.NewClusterV3 consults testing.Short, which panics if
+	// called before the testing flags are parsed.
+	flag.Parse()
 	mockCluster := integration.NewClusterV3(&testing.T{}, &integration.ClusterConfig{Size: 1})
 	etcdTestCli = mockCluster.RandClient()
 
