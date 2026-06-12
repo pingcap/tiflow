@@ -242,9 +242,7 @@ func TestMySQLLogger(t *testing.T) {
 	// packets.go; v1.8.x logs from connection.go.
 	out := buffer.Stripped()
 	require.Contains(t, out, "[ERROR]")
-	require.True(t,
-		strings.Contains(out, "packets.go") ||
-			strings.Contains(out, "connection.go"))
+	require.Regexp(t, out, `(packets|connection)\.go`)
 	require.Contains(t, out, "unexpected EOF")
 	require.Contains(t, out, "[mysql]")
 	wg.Wait()
