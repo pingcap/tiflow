@@ -14,50 +14,52 @@
 package master
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
 	"github.com/spf13/cobra"
+	"github.com/stretchr/testify/require"
 )
 
-func (t *testCtlMaster) TestParseBatchTaskParameters(c *check.C) {
+func TestParseBatchTaskParameters(t *testing.T) {
 	{
 		cmd := prepareTestCmd()
 		_ = cmd.ParseFlags([]string{"task-name"})
 		_, _, err := parseOperateSourceTaskParams(cmd)
-		c.Assert(err, check.Not(check.IsNil))
+		require.Error(t, err)
 	}
 	{
 		cmd := prepareTestCmd()
 		_, _, err := parseOperateSourceTaskParams(cmd)
-		c.Assert(err, check.Not(check.IsNil))
+		require.Error(t, err)
 	}
 	{
 		cmd := prepareTestCmd()
 		_ = cmd.ParseFlags([]string{"-s", "source-name", "-s", "source-name2"})
 		_, _, err := parseOperateSourceTaskParams(cmd)
-		c.Assert(err, check.Not(check.IsNil))
+		require.Error(t, err)
 	}
 	{
 		cmd := prepareTestCmd()
 		_ = cmd.ParseFlags([]string{"-s", "source-name"})
 		source, _, err := parseOperateSourceTaskParams(cmd)
-		c.Assert(source, check.Equals, "source-name")
-		c.Assert(err, check.IsNil)
+		require.Equal(t, "source-name", source)
+		require.NoError(t, err)
 	}
 	{
 		cmd := prepareTestCmd()
 		_ = cmd.ParseFlags([]string{"-s", "source-name"})
 		source, batchSize, err := parseOperateSourceTaskParams(cmd)
-		c.Assert(source, check.Equals, "source-name")
-		c.Assert(batchSize, check.Equals, defaultBatchSize)
-		c.Assert(err, check.IsNil)
+		require.Equal(t, "source-name", source)
+		require.Equal(t, defaultBatchSize, batchSize)
+		require.NoError(t, err)
 	}
 	{
 		cmd := prepareTestCmd()
 		_ = cmd.ParseFlags([]string{"-s", "source-name", "--batch-size", "2"})
 		source, batchSize, err := parseOperateSourceTaskParams(cmd)
-		c.Assert(source, check.Equals, "source-name")
-		c.Assert(batchSize, check.Equals, 2)
-		c.Assert(err, check.IsNil)
+		require.Equal(t, "source-name", source)
+		require.Equal(t, 2, batchSize)
+		require.NoError(t, err)
 	}
 }
 

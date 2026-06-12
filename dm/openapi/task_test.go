@@ -16,26 +16,18 @@ package openapi
 import (
 	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&taskSuite{})
-
-type taskSuite struct{}
-
-func TestTask(t *testing.T) {
-	check.TestingT(t)
-}
-
-func (t *taskSuite) TestTaskAdjust(c *check.C) {
+func TestTaskAdjust(t *testing.T) {
 	meta := "test"
 	// test no error
 	task1 := &Task{MetaSchema: &meta, OnDuplicate: TaskOnDuplicateError}
-	c.Assert(task1.Adjust(), check.IsNil)
-	c.Assert(*task1.MetaSchema, check.Equals, meta)
+	require.NoError(t, task1.Adjust())
+	require.Equal(t, meta, *task1.MetaSchema)
 
 	// test default meta
 	task3 := &Task{OnDuplicate: TaskOnDuplicateError}
-	c.Assert(task3.Adjust(), check.IsNil)
-	c.Assert(*task3.MetaSchema, check.Equals, defaultMetaSchema)
+	require.NoError(t, task3.Adjust())
+	require.Equal(t, defaultMetaSchema, *task3.MetaSchema)
 }

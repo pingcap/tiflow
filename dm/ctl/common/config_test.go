@@ -16,18 +16,10 @@ package common
 import (
 	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-func TestConfig(t *testing.T) {
-	check.TestingT(t)
-}
-
-var _ = check.Suite(&testConfigSuite{})
-
-type testConfigSuite struct{}
-
-func (t *testConfigSuite) TestInteractiveQuotes(c *check.C) {
+func TestInteractiveQuotes(t *testing.T) {
 	cases := []struct {
 		input    string
 		expected []string
@@ -48,6 +40,6 @@ func (t *testConfigSuite) TestInteractiveQuotes(c *check.C) {
 
 	for _, ca := range cases {
 		got := SplitArgsRespectQuote(ca.input)
-		c.Assert(got, check.DeepEquals, ca.expected)
+		require.Equal(t, ca.expected, got)
 	}
 }

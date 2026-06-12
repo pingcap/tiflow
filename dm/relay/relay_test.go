@@ -27,7 +27,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/parser"
@@ -38,22 +37,15 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&testRelaySuite{})
-
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
-
-type testRelaySuite struct{}
-
-func newRelayCfg(c *check.C, flavor string) *Config {
+func newRelayCfg(t *testing.T, flavor string) *Config {
 	dbCfg := getDBConfigForTest()
 	return &Config{
 		EnableGTID: false, // position mode, so auto-positioning can work
 		Flavor:     flavor,
-		RelayDir:   c.MkDir(),
+		RelayDir:   t.TempDir(),
 		ServerID:   12321,
 		From: dbconfig.DBConfig{
 			Host:     dbCfg.Host,
@@ -143,7 +135,7 @@ func (w *mockWriter) Flush() error {
 	return nil
 }
 
-func (t *testRelaySuite) TestTryRecoverLatestFile(c *check.C) {
+func TestTryRecoverLatestFile(t *testing.T) {
 	var (
 		uuid               = "24ecd093-8cec-11e9-aa0d-0242ac170002"
 		uuidWithSuffix     = fmt.Sprintf("%s.000001", uuid)
@@ -156,90 +148,90 @@ func (t *testRelaySuite) TestTryRecoverLatestFile(c *check.C) {
 		startPos           = gmysql.Position{Name: filename, Pos: 123}
 
 		parser2  = parser.New()
-		relayCfg = newRelayCfg(c, gmysql.MySQLFlavor)
+		relayCfg = newRelayCfg(t, gmysql.MySQLFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 	)
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`), check.IsNil)
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("406a3f61-690d-11e7-87c5-6c92bf46f384:1-122")`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged")
 	cfg := getDBConfigForTest()
-	conn.InitMockDB(c)
+	conn.InitMockDB(t)
 	db, err := conn.GetUpstreamDB(cfg)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	r.db = db
-	c.Assert(r.Init(context.Background()), check.IsNil)
+	require.NoError(t, r.Init(context.Background()))
 	// purge old relay dir
 	f, err := os.Create(filepath.Join(r.cfg.RelayDir, "old_relay_log"))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	f.Close()
-	c.Assert(r.PurgeRelayDir(), check.IsNil)
+	require.NoError(t, r.PurgeRelayDir())
 	files, err := os.ReadDir(r.cfg.RelayDir)
-	c.Assert(err, check.IsNil)
-	c.Assert(files, check.HasLen, 0)
+	require.NoError(t, err)
+	require.Len(t, files, 0)
 
-	c.Assert(r.meta.Load(), check.IsNil)
+	require.NoError(t, r.meta.Load())
 
 	// no file specified, no need to recover
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 
 	// save position into meta
-	c.Assert(r.meta.AddDir(uuid, &startPos, nil, 0), check.IsNil)
+	require.Nil(t, r.meta.AddDir(uuid, &startPos, nil, 0))
 
 	// relay log file does not exists, no need to recover
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 
 	// use a generator to generate some binlog events
 	previousGTIDSet, err := gtid.ParserGTID(relayCfg.Flavor, previousGTIDSetStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	latestGTID1, err := gtid.ParserGTID(relayCfg.Flavor, latestGTIDStr1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	latestGTID2, err := gtid.ParserGTID(relayCfg.Flavor, latestGTIDStr2)
-	c.Assert(err, check.IsNil)
-	g, events, data := genBinlogEventsWithGTIDs(c, relayCfg.Flavor, previousGTIDSet, latestGTID1, latestGTID2)
+	require.NoError(t, err)
+	g, events, data := genBinlogEventsWithGTIDs(t, relayCfg.Flavor, previousGTIDSet, latestGTID1, latestGTID2)
 
 	// write events into relay log file
 	err = os.WriteFile(filepath.Join(r.meta.Dir(), filename), data, 0o600)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// all events/transactions are complete, no need to recover
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 	// now, we will update position/GTID set in meta to latest location in relay logs
 	lastEvent := events[len(events)-1]
 	pos := startPos
 	pos.Pos = lastEvent.Header.LogPos
-	t.verifyMetadata(c, r, uuidWithSuffix, pos, recoverGTIDSetStr, []string{uuidWithSuffix})
+	verifyMetadata(t, r, uuidWithSuffix, pos, recoverGTIDSetStr, []string{uuidWithSuffix})
 
 	// write some invalid data into the relay log file
 	f, err = os.OpenFile(filepath.Join(r.meta.Dir(), filename), os.O_WRONLY|os.O_APPEND, 0o600)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	_, err = f.Write([]byte("invalid event data"))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	f.Close()
 
 	// write a greater GTID sets in meta
 	greaterGITDSet, err := gtid.ParserGTID(relayCfg.Flavor, greaterGITDSetStr)
-	c.Assert(err, check.IsNil)
-	c.Assert(r.SaveMeta(startPos, greaterGITDSet), check.IsNil)
+	require.NoError(t, err)
+	require.Nil(t, r.SaveMeta(startPos, greaterGITDSet))
 
 	// invalid data truncated, meta updated
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 	_, latestPos := r.meta.Pos()
-	c.Assert(latestPos, check.DeepEquals, gmysql.Position{Name: filename, Pos: g.LatestPos})
+	require.Equal(t, gmysql.Position{Name: filename, Pos: g.LatestPos}, latestPos)
 	_, latestGTIDs := r.meta.GTID()
 	recoverGTIDSet, err := gtid.ParserGTID(relayCfg.Flavor, recoverGTIDSetStr)
-	c.Assert(err, check.IsNil)
-	c.Assert(latestGTIDs.Equal(recoverGTIDSet), check.IsTrue) // verifyMetadata is not enough
+	require.NoError(t, err)
+	require.True(t, latestGTIDs.Equal(recoverGTIDSet)) // verifyMetadata is not enough
 
 	// no relay log file need to recover
-	c.Assert(r.SaveMeta(minCheckpoint, latestGTIDs), check.IsNil)
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.SaveMeta(minCheckpoint, latestGTIDs))
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 	_, latestPos = r.meta.Pos()
-	c.Assert(latestPos, check.DeepEquals, minCheckpoint)
+	require.Equal(t, minCheckpoint, latestPos)
 	_, latestGTIDs = r.meta.GTID()
-	c.Assert(latestGTIDs.Contain(g.LatestGTID), check.IsTrue)
+	require.True(t, latestGTIDs.Contain(g.LatestGTID))
 }
 
-func (t *testRelaySuite) TestTryRecoverMeta(c *check.C) {
+func TestTryRecoverMeta(t *testing.T) {
 	var (
 		uuid               = "24ecd093-8cec-11e9-aa0d-0242ac170002"
 		previousGTIDSetStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-14,53bfca22-690d-11e7-8a62-18ded7a37b78:1-495,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456"
@@ -251,64 +243,64 @@ func (t *testRelaySuite) TestTryRecoverMeta(c *check.C) {
 		startPos          = gmysql.Position{Name: filename, Pos: 123}
 
 		parser2  = parser.New()
-		relayCfg = newRelayCfg(c, gmysql.MySQLFlavor)
+		relayCfg = newRelayCfg(t, gmysql.MySQLFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 	)
 	cfg := getDBConfigForTest()
-	conn.InitMockDB(c)
+	conn.InitMockDB(t)
 	db, err := conn.GetUpstreamDB(cfg)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	r.db = db
-	c.Assert(r.Init(context.Background()), check.IsNil)
+	require.NoError(t, r.Init(context.Background()))
 	recoverGTIDSet, err := gtid.ParserGTID(relayCfg.Flavor, recoverGTIDSetStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
-	c.Assert(r.meta.AddDir(uuid, &startPos, nil, 0), check.IsNil)
-	c.Assert(r.meta.Load(), check.IsNil)
+	require.Nil(t, r.meta.AddDir(uuid, &startPos, nil, 0))
+	require.NoError(t, r.meta.Load())
 
 	// use a generator to generate some binlog events
 	previousGTIDSet, err := gtid.ParserGTID(relayCfg.Flavor, previousGTIDSetStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	latestGTID1, err := gtid.ParserGTID(relayCfg.Flavor, latestGTIDStr1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	latestGTID2, err := gtid.ParserGTID(relayCfg.Flavor, latestGTIDStr2)
-	c.Assert(err, check.IsNil)
-	g, _, data := genBinlogEventsWithGTIDs(c, relayCfg.Flavor, previousGTIDSet, latestGTID1, latestGTID2)
+	require.NoError(t, err)
+	g, _, data := genBinlogEventsWithGTIDs(t, relayCfg.Flavor, previousGTIDSet, latestGTID1, latestGTID2)
 
 	// write events into relay log file
 	err = os.WriteFile(filepath.Join(r.meta.Dir(), filename), data, 0o600)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	// write some invalid data into the relay log file to trigger a recover.
 	f, err := os.OpenFile(filepath.Join(r.meta.Dir(), filename), os.O_WRONLY|os.O_APPEND, 0o600)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	_, err = f.Write([]byte("invalid event data"))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	f.Close()
 
 	// recover with empty GTIDs.
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("")`), check.IsNil)
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged", `return("")`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/conn/GetGTIDPurged")
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 	_, latestPos := r.meta.Pos()
-	c.Assert(latestPos, check.DeepEquals, gmysql.Position{Name: filename, Pos: g.LatestPos})
+	require.Equal(t, gmysql.Position{Name: filename, Pos: g.LatestPos}, latestPos)
 	_, latestGTIDs := r.meta.GTID()
-	c.Assert(latestGTIDs.Equal(recoverGTIDSet), check.IsTrue)
+	require.True(t, latestGTIDs.Equal(recoverGTIDSet))
 
 	// write some invalid data into the relay log file again.
 	f, err = os.OpenFile(filepath.Join(r.meta.Dir(), filename), os.O_WRONLY|os.O_APPEND, 0o600)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	_, err = f.Write([]byte("invalid event data"))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	f.Close()
 
 	// recover with the subset of GTIDs (previous GTID set).
-	c.Assert(r.SaveMeta(startPos, previousGTIDSet), check.IsNil)
-	c.Assert(r.tryRecoverLatestFile(context.Background(), parser2), check.IsNil)
+	require.Nil(t, r.SaveMeta(startPos, previousGTIDSet))
+	require.Nil(t, r.tryRecoverLatestFile(context.Background(), parser2))
 	_, latestPos = r.meta.Pos()
-	c.Assert(latestPos, check.DeepEquals, gmysql.Position{Name: filename, Pos: g.LatestPos})
+	require.Equal(t, gmysql.Position{Name: filename, Pos: g.LatestPos}, latestPos)
 	_, latestGTIDs = r.meta.GTID()
-	c.Assert(latestGTIDs.Equal(recoverGTIDSet), check.IsTrue)
+	require.True(t, latestGTIDs.Equal(recoverGTIDSet))
 }
 
 type dummyListener bool
@@ -317,27 +309,27 @@ func (d *dummyListener) OnEvent(e *replication.BinlogEvent) {
 	*d = true
 }
 
-func (t *testRelaySuite) TestListener(c *check.C) {
+func TestListener(t *testing.T) {
 	relay := NewRelay(&Config{}).(*Relay)
-	c.Assert(len(relay.listeners), check.Equals, 0)
+	require.Equal(t, 0, len(relay.listeners))
 
 	lis := dummyListener(false)
 	relay.RegisterListener(&lis)
-	c.Assert(len(relay.listeners), check.Equals, 1)
+	require.Equal(t, 1, len(relay.listeners))
 
 	relay.notify(nil)
-	c.Assert(bool(lis), check.Equals, true)
+	require.Equal(t, true, bool(lis))
 
 	relay.UnRegisterListener(&lis)
-	c.Assert(len(relay.listeners), check.Equals, 0)
+	require.Equal(t, 0, len(relay.listeners))
 	lis = false
 	relay.notify(nil)
-	c.Assert(bool(lis), check.Equals, false)
+	require.Equal(t, false, bool(lis))
 }
 
 // genBinlogEventsWithGTIDs generates some binlog events used by testFileUtilSuite and testFileWriterSuite.
 // now, its generated events including 3 DDL and 10 DML.
-func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latestGTID1, latestGTID2 gmysql.GTIDSet) (*event.Generator, []*replication.BinlogEvent, []byte) {
+func genBinlogEventsWithGTIDs(t *testing.T, flavor string, previousGTIDSet, latestGTID1, latestGTID2 gmysql.GTIDSet) (*event.Generator, []*replication.BinlogEvent, []byte) {
 	var (
 		serverID  uint32 = 11
 		latestPos uint32
@@ -349,11 +341,11 @@ func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latest
 
 	// use a binlog event generator to generate some binlog events.
 	g, err := event.NewGenerator(flavor, serverID, latestPos, latestGTID1, previousGTIDSet, latestXID)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// file header with FormatDescriptionEvent and PreviousGTIDsEvent
 	events, data, err := g.GenFileHeader(0)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	allEvents = append(allEvents, events...)
 	allData.Write(data)
 
@@ -366,7 +358,7 @@ func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latest
 	}
 	for _, query := range queries {
 		events, data, err = g.GenDDLEvents("db", query, 0)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		allEvents = append(allEvents, events...)
 		allData.Write(data)
 	}
@@ -393,7 +385,7 @@ func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latest
 			},
 		}
 		events, data, err = g.GenDMLEvents(eventType, dmlData, 0)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		allEvents = append(allEvents, events...)
 		allData.Write(data)
 	}
@@ -401,13 +393,13 @@ func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latest
 	return g, allEvents, allData.Bytes()
 }
 
-func (t *testRelaySuite) TestHandleEvent(c *check.C) {
+func TestHandleEvent(t *testing.T) {
 	// NOTE: we can test metrics later.
 	var (
 		reader2  = &mockReader{}
 		parser2  = parser.New()
 		writer2  = &mockWriter{}
-		relayCfg = newRelayCfg(c, gmysql.MariaDBFlavor)
+		relayCfg = newRelayCfg(t, gmysql.MariaDBFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 
 		eventHeader = &replication.EventHeader{
@@ -423,14 +415,14 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	r.writer = writer2
 
 	cfg := getDBConfigForTest()
-	conn.InitMockDB(c)
+	conn.InitMockDB(t)
 	db, err := conn.GetUpstreamDB(cfg)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	r.db = db
-	c.Assert(r.Init(context.Background()), check.IsNil)
+	require.NoError(t, r.Init(context.Background()))
 	// NOTE: we can mock meta later.
-	c.Assert(r.meta.Load(), check.IsNil)
-	c.Assert(r.meta.AddDir("24ecd093-8cec-11e9-aa0d-0242ac170002", nil, nil, 0), check.IsNil)
+	require.NoError(t, r.meta.Load())
+	require.Nil(t, r.meta.AddDir("24ecd093-8cec-11e9-aa0d-0242ac170002", nil, nil, 0))
 
 	// attach GTID sets to QueryEv
 	queryEv2 := queryEv.Event.(*replication.QueryEvent)
@@ -444,7 +436,7 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 		replication.ErrNeedSyncAgain,
 	} {
 		handleErr := r.handleEvents(context.Background(), reader2, parser2)
-		c.Assert(errors.Cause(handleErr), check.Equals, reader2.err)
+		require.Equal(t, reader2.err, errors.Cause(handleErr))
 	}
 
 	// reader return fake rotate event
@@ -454,26 +446,26 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
 	err = r.handleEvents(context.Background(), reader2, parser2)
-	c.Assert(errors.Cause(err), check.Equals, writer2.err)
+	require.Equal(t, writer2.err, errors.Cause(err))
 	// after handle rotate event, we save and flush the meta immediately
-	c.Assert(r.meta.Dirty(), check.Equals, false)
+	require.Equal(t, false, r.meta.Dirty())
 	{
 		lm := r.meta.(*LocalMeta)
-		c.Assert(lm.BinLogName, check.Equals, "mysql-bin.666888")
-		c.Assert(lm.BinLogPos, check.Equals, uint32(1234))
+		require.Equal(t, "mysql-bin.666888", lm.BinLogName)
+		require.Equal(t, uint32(1234), lm.BinLogPos)
 		filename := filepath.Join(lm.baseDir, lm.currentSubDir, utils.MetaFilename)
 		lm2 := &LocalMeta{}
 		_, err2 := toml.DecodeFile(filename, lm2)
-		c.Assert(err2, check.IsNil)
-		c.Assert(lm2.BinLogName, check.Equals, "mysql-bin.666888")
-		c.Assert(lm2.BinLogPos, check.Equals, uint32(1234))
+		require.Nil(t, err2)
+		require.Equal(t, "mysql-bin.666888", lm2.BinLogName)
+		require.Equal(t, uint32(1234), lm2.BinLogPos)
 	}
 	{
 		lm := r.meta.(*LocalMeta)
 		backupUUID := lm.currentSubDir
 		lm.currentSubDir = "not exist"
 		err = r.handleEvents(context.Background(), reader2, parser2)
-		c.Assert(os.IsNotExist(errors.Cause(err)), check.Equals, true)
+		require.Equal(t, true, os.IsNotExist(errors.Cause(err)))
 		lm.currentSubDir = backupUUID
 	}
 
@@ -485,22 +477,22 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	writer2.err = errors.New("writer error for testing")
 	// return with the annotated writer error
 	err = r.handleEvents(context.Background(), reader2, parser2)
-	c.Assert(errors.Cause(err), check.Equals, writer2.err)
-	c.Assert(r.meta.Dirty(), check.Equals, false)
+	require.Equal(t, writer2.err, errors.Cause(err))
+	require.Equal(t, false, r.meta.Dirty())
 
 	// writer without error
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	writer2.err = nil
 	err = r.handleEvents(ctx, reader2, parser2) // returned when ctx timeout
-	c.Assert(errors.Cause(err), check.Equals, ctx.Err())
+	require.Equal(t, ctx.Err(), errors.Cause(err))
 	// check written event
-	c.Assert(writer2.latestEvent, check.Equals, reader2.result.Event)
+	require.Equal(t, reader2.result.Event, writer2.latestEvent)
 	// check meta
 	_, pos := r.meta.Pos()
 	_, gs := r.meta.GTID()
-	c.Assert(pos, check.DeepEquals, binlogPos)
-	c.Assert(gs.String(), check.Equals, "") // no GTID sets in event yet
+	require.Equal(t, binlogPos, pos)
+	require.Equal(t, "", gs.String()) // no GTID sets in event yet
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel2()
@@ -508,15 +500,15 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	// write a QueryEvent with GTID sets
 	reader2.result.Event = queryEv
 	err = r.handleEvents(ctx2, reader2, parser2)
-	c.Assert(errors.Cause(err), check.Equals, ctx.Err())
+	require.Equal(t, ctx.Err(), errors.Cause(err))
 	// check written event
-	c.Assert(writer2.latestEvent, check.Equals, reader2.result.Event)
+	require.Equal(t, reader2.result.Event, writer2.latestEvent)
 	// check meta
 	_, pos = r.meta.Pos()
 	_, gs = r.meta.GTID()
-	c.Assert(pos.Name, check.Equals, binlogPos.Name)
-	c.Assert(pos.Pos, check.Equals, queryEv.Header.LogPos)
-	c.Assert(gs, check.DeepEquals, queryEv2.GSet) // got GTID sets
+	require.Equal(t, binlogPos.Name, pos.Name)
+	require.Equal(t, queryEv.Header.LogPos, pos.Pos)
+	require.Equal(t, queryEv2.GSet, gs) // got GTID sets
 
 	// transformer return ignorable for the event
 	reader2.err = nil
@@ -527,11 +519,11 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel4()
 	err = r.handleEvents(ctx4, reader2, parser2)
-	c.Assert(errors.Cause(err), check.Equals, ctx.Err())
+	require.Equal(t, ctx.Err(), errors.Cause(err))
 	select {
 	case <-ctx4.Done():
 	default:
-		c.Fatalf("ignorable event for transformer not ignored")
+		t.Fatalf("ignorable event for transformer not ignored")
 	}
 
 	// writer return ignorable for the event
@@ -540,32 +532,32 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	ctx5, cancel5 := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel5()
 	err = r.handleEvents(ctx5, reader2, parser2)
-	c.Assert(errors.Cause(err), check.Equals, ctx.Err())
+	require.Equal(t, ctx.Err(), errors.Cause(err))
 	select {
 	case <-ctx5.Done():
 	default:
-		c.Fatalf("ignorable event for writer not ignored")
+		t.Fatalf("ignorable event for writer not ignored")
 	}
 }
 
-func (t *testRelaySuite) TestReSetupMeta(c *check.C) {
+func TestReSetupMeta(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), conn.DefaultDBTimeout)
 	defer cancel()
 
 	var (
-		relayCfg = newRelayCfg(c, gmysql.MySQLFlavor)
+		relayCfg = newRelayCfg(t, gmysql.MySQLFlavor)
 		r        = NewRelay(relayCfg).(*Relay)
 	)
 	cfg := getDBConfigForTest()
-	mockDB := conn.InitMockDB(c)
+	mockDB := conn.InitMockDB(t)
 	db, err := conn.GetUpstreamDB(cfg)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	r.db = db
-	c.Assert(r.Init(context.Background()), check.IsNil)
+	require.NoError(t, r.Init(context.Background()))
 
 	// empty metadata
-	c.Assert(r.meta.Load(), check.IsNil)
-	t.verifyMetadata(c, r, "", minCheckpoint, "", nil)
+	require.NoError(t, r.meta.Load())
+	verifyMetadata(t, r, "", minCheckpoint, "", nil)
 
 	// open connected DB and get its UUID
 	defer func() {
@@ -574,36 +566,36 @@ func (t *testRelaySuite) TestReSetupMeta(c *check.C) {
 	}()
 	mockGetServerUUID(mockDB)
 	uuid, err := conn.GetServerUUID(tcontext.NewContext(ctx, log.L()), r.db, r.cfg.Flavor)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// re-setup meta with start pos adjusted
 	r.cfg.EnableGTID = true
 	r.cfg.BinlogGTID = "24ecd093-8cec-11e9-aa0d-0242ac170002:1-23"
 	r.cfg.BinLogName = "mysql-bin.000005"
 
-	c.Assert(r.setSyncConfig(), check.IsNil)
+	require.NoError(t, r.setSyncConfig())
 	// all adjusted gset should be empty since we didn't flush logs
 	emptyGTID, err := gtid.ParserGTID(r.cfg.Flavor, "")
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	mockGetServerUUID(mockDB)
 	mockGetRandomServerID(mockDB)
 	//  mock AddGSetWithPurged
 	mockDB.ExpectQuery("select @@GLOBAL.gtid_purged").WillReturnRows(sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(""))
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet", "return()"), check.IsNil)
+	require.NoError(t, failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet", "return()"))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/binlog/reader/MockGetEmptyPreviousGTIDFromGTIDSet")
-	c.Assert(r.reSetupMeta(ctx), check.IsNil)
+	require.NoError(t, r.reSetupMeta(ctx))
 	uuid001 := fmt.Sprintf("%s.000001", uuid)
-	t.verifyMetadata(c, r, uuid001, gmysql.Position{Name: r.cfg.BinLogName, Pos: 4}, emptyGTID.String(), []string{uuid001})
+	verifyMetadata(t, r, uuid001, gmysql.Position{Name: r.cfg.BinLogName, Pos: 4}, emptyGTID.String(), []string{uuid001})
 
 	// re-setup meta again, often happen when connecting a server behind a VIP.
 	mockGetServerUUID(mockDB)
 	mockGetRandomServerID(mockDB)
 	mockDB.ExpectQuery("select @@GLOBAL.gtid_purged").WillReturnRows(sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(""))
-	c.Assert(r.reSetupMeta(ctx), check.IsNil)
+	require.NoError(t, r.reSetupMeta(ctx))
 	uuid002 := fmt.Sprintf("%s.000002", uuid)
-	t.verifyMetadata(c, r, uuid002, minCheckpoint, emptyGTID.String(), []string{uuid001, uuid002})
+	verifyMetadata(t, r, uuid002, minCheckpoint, emptyGTID.String(), []string{uuid001, uuid002})
 
 	r.cfg.BinLogName = "mysql-bin.000002"
 	r.cfg.BinlogGTID = "24ecd093-8cec-11e9-aa0d-0242ac170002:1-50,24ecd093-8cec-11e9-aa0d-0242ac170003:1-50"
@@ -611,37 +603,37 @@ func (t *testRelaySuite) TestReSetupMeta(c *check.C) {
 	mockGetServerUUID(mockDB)
 	mockGetRandomServerID(mockDB)
 	mockDB.ExpectQuery("select @@GLOBAL.gtid_purged").WillReturnRows(sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(""))
-	c.Assert(r.reSetupMeta(ctx), check.IsNil)
-	t.verifyMetadata(c, r, uuid002, gmysql.Position{Name: r.cfg.BinLogName, Pos: 4}, emptyGTID.String(), []string{uuid002})
+	require.NoError(t, r.reSetupMeta(ctx))
+	verifyMetadata(t, r, uuid002, gmysql.Position{Name: r.cfg.BinLogName, Pos: 4}, emptyGTID.String(), []string{uuid002})
 
 	// re-setup meta again, often happen when connecting a server behind a VIP.
 	mockGetServerUUID(mockDB)
 	mockGetRandomServerID(mockDB)
 	mockDB.ExpectQuery("select @@GLOBAL.gtid_purged").WillReturnRows(sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(""))
-	c.Assert(r.reSetupMeta(ctx), check.IsNil)
+	require.NoError(t, r.reSetupMeta(ctx))
 	uuid003 := fmt.Sprintf("%s.000003", uuid)
-	t.verifyMetadata(c, r, uuid003, minCheckpoint, emptyGTID.String(), []string{uuid002, uuid003})
-	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
+	verifyMetadata(t, r, uuid003, minCheckpoint, emptyGTID.String(), []string{uuid002, uuid003})
+	require.NoError(t, mockDB.ExpectationsWereMet())
 }
 
-func (t *testRelaySuite) verifyMetadata(c *check.C, r *Relay, uuidExpected string,
+func verifyMetadata(t *testing.T, r *Relay, uuidExpected string,
 	posExpected gmysql.Position, gsStrExpected string, uuidsExpected []string,
 ) {
 	uuid, pos := r.meta.Pos()
 	_, gs := r.meta.GTID()
 	gsExpected, err := gtid.ParserGTID(gmysql.MySQLFlavor, gsStrExpected)
-	c.Assert(err, check.IsNil)
-	c.Assert(uuid, check.Equals, uuidExpected)
-	c.Assert(pos, check.DeepEquals, posExpected)
-	c.Assert(gs.Equal(gsExpected), check.IsTrue)
+	require.NoError(t, err)
+	require.Equal(t, uuidExpected, uuid)
+	require.Equal(t, posExpected, pos)
+	require.True(t, gs.Equal(gsExpected))
 
 	indexFile := filepath.Join(r.cfg.RelayDir, utils.UUIDIndexFilename)
 	UUIDs, err := utils.ParseUUIDIndex(indexFile)
-	c.Assert(err, check.IsNil)
-	c.Assert(UUIDs, check.DeepEquals, uuidsExpected)
+	require.NoError(t, err)
+	require.Equal(t, uuidsExpected, UUIDs)
 }
 
-func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
+func TestPreprocessEvent(t *testing.T) {
 	type Case struct {
 		event  *replication.BinlogEvent
 		result preprocessResult
@@ -665,7 +657,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	nextLogName := "mysql-bin.000123"
 	position := uint64(4)
 	ev, err := event.GenRotateEvent(header, latestPos, []byte(nextLogName), position)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	cases = append(cases, Case{
 		event: ev,
 		result: preprocessResult{
@@ -677,7 +669,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	// fake RotateEvent with zero timestamp
 	header.Timestamp = 0
 	ev, err = event.GenRotateEvent(header, latestPos, []byte(nextLogName), position)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	cases = append(cases, Case{
 		event: ev,
 		result: preprocessResult{
@@ -690,7 +682,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	// fake RotateEvent with zero logPos
 	fakeRotateHeader := *header
 	ev, err = event.GenRotateEvent(&fakeRotateHeader, latestPos, []byte(nextLogName), position)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	ev.Header.LogPos = 0 // set to zero
 	cases = append(cases, Case{
 		event: ev,
@@ -703,7 +695,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	// QueryEvent for DDL
 	query := []byte("CREATE TABLE test_tbl (c1 INT)")
 	ev, err = event.GenQueryEvent(header, latestPos, 0, 0, 0, nil, schema, query)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	ev.Event.(*replication.QueryEvent).GSet = gtidSet // set GTIDs manually
 	cases = append(cases, Case{
 		event: ev,
@@ -717,7 +709,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	// QueryEvent for non-DDL
 	query = []byte("BEGIN")
 	ev, err = event.GenQueryEvent(header, latestPos, 0, 0, 0, nil, schema, query)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	cases = append(cases, Case{
 		event: ev,
 		result: preprocessResult{
@@ -728,7 +720,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	// XIDEvent
 	xid := uint64(135)
 	ev, err = event.GenXIDEvent(header, latestPos, xid)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	ev.Event.(*replication.XIDEvent).GSet = gtidSet // set GTIDs manually
 	cases = append(cases, Case{
 		event: ev,
@@ -763,7 +755,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 
 	// other event type without LOG_EVENT_ARTIFICIAL_F
 	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet, false, 0)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	cases = append(cases, Case{
 		event: ev,
 		result: preprocessResult{
@@ -773,7 +765,7 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 
 	// other event type with LOG_EVENT_ARTIFICIAL_F
 	ev, err = event.GenTableMapEvent(header, latestPos, 0, []byte("testdb"), []byte("testtbl"), []byte("INT"))
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	ev.Header.Flags |= replication.LOG_EVENT_ARTIFICIAL_F
 	cases = append(cases, Case{
 		event: ev,
@@ -785,13 +777,13 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 	})
 
 	for _, cs := range cases {
-		c.Assert(relay.preprocessEvent(cs.event, parser2), check.DeepEquals, cs.result)
+		require.Equal(t, cs.result, relay.preprocessEvent(cs.event, parser2))
 	}
 }
 
-func (t *testRelaySuite) TestRecoverMySQL(c *check.C) {
+func TestRecoverMySQL(t *testing.T) {
 	var (
-		relayDir           = c.MkDir()
+		relayDir           = t.TempDir()
 		filename           = "test-mysql-bin.000001"
 		parser2            = parser.New()
 		flavor             = gmysql.MySQLFlavor
@@ -804,147 +796,147 @@ func (t *testRelaySuite) TestRecoverMySQL(c *check.C) {
 
 	// different SIDs in GTID set
 	previousGTIDSet, err := gtid.ParserGTID(flavor, previousGTIDSetStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	latestGTID1, err := gtid.ParserGTID(flavor, latestGTIDStr1)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	latestGTID2, err := gtid.ParserGTID(flavor, latestGTIDStr2)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// generate binlog events
-	g, _, baseData := genBinlogEventsWithGTIDs(c, flavor, previousGTIDSet, latestGTID1, latestGTID2)
+	g, _, baseData := genBinlogEventsWithGTIDs(t, flavor, previousGTIDSet, latestGTID1, latestGTID2)
 
 	// expected latest pos/GTID set
 	expectedPos := gmysql.Position{Name: filename, Pos: uint32(len(baseData))}
 	// 3 DDL + 10 DML
 	expectedGTIDsStr := "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-18,53bfca22-690d-11e7-8a62-18ded7a37b78:1-505,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
 	expectedGTIDs, err := gtid.ParserGTID(flavor, expectedGTIDsStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// write the events to a file
 	fullName := filepath.Join(relayDir, filename)
 	err = os.WriteFile(fullName, baseData, 0o644)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// try recover, but in fact do nothing
 	result, err := r.doRecovering(context.Background(), relayDir, filename, parser2)
-	c.Assert(err, check.IsNil)
-	c.Assert(result.Truncated, check.IsFalse)
-	c.Assert(result.LatestPos, check.DeepEquals, expectedPos)
-	c.Assert(result.LatestGTIDs, check.DeepEquals, expectedGTIDs)
+	require.NoError(t, err)
+	require.False(t, result.Truncated)
+	require.Equal(t, expectedPos, result.LatestPos)
+	require.Equal(t, expectedGTIDs, result.LatestGTIDs)
 
 	// check file size, whether no recovering operation applied
 	fs, err := os.Stat(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fs.Size(), check.Equals, int64(len(baseData)))
+	require.NoError(t, err)
+	require.Equal(t, int64(len(baseData)), fs.Size())
 
 	// generate another transaction, DDL
 	extraEvents, extraData, err := g.GenDDLEvents("db2", "CREATE DATABASE db2", 0)
-	c.Assert(err, check.IsNil)
-	c.Assert(extraEvents, check.HasLen, 2) // [GTID, Query]
+	require.NoError(t, err)
+	require.Len(t, extraEvents, 2) // [GTID, Query]
 
 	// write an incomplete event to the file
 	corruptData := extraEvents[0].RawData[:len(extraEvents[0].RawData)-2]
 	f, err := os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	_, err = f.Write(corruptData)
-	c.Assert(err, check.IsNil)
-	c.Assert(f.Close(), check.IsNil)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
 
 	// check file size, increased
 	fs, err = os.Stat(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fs.Size(), check.Equals, int64(len(baseData)+len(corruptData)))
+	require.NoError(t, err)
+	require.Equal(t, int64(len(baseData)+len(corruptData)), fs.Size())
 
 	// try recover, truncate the incomplete event
 	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
-	c.Assert(err, check.IsNil)
-	c.Assert(result.Truncated, check.IsTrue)
-	c.Assert(result.LatestPos, check.DeepEquals, expectedPos)
-	c.Assert(result.LatestGTIDs, check.DeepEquals, expectedGTIDs)
+	require.NoError(t, err)
+	require.True(t, result.Truncated)
+	require.Equal(t, expectedPos, result.LatestPos)
+	require.Equal(t, expectedGTIDs, result.LatestGTIDs)
 
 	// check file size, truncated
 	fs, err = os.Stat(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fs.Size(), check.Equals, int64(len(baseData)))
+	require.NoError(t, err)
+	require.Equal(t, int64(len(baseData)), fs.Size())
 
 	// write an incomplete transaction
 	f, err = os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	var extraLen int64
 	for i := 0; i < len(extraEvents)-1; i++ {
 		_, err = f.Write(extraEvents[i].RawData)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		extraLen += int64(len(extraEvents[i].RawData))
 	}
-	c.Assert(f.Close(), check.IsNil)
+	require.NoError(t, f.Close())
 
 	// check file size, increased
 	fs, err = os.Stat(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fs.Size(), check.Equals, int64(len(baseData))+extraLen)
+	require.NoError(t, err)
+	require.Equal(t, int64(len(baseData))+extraLen, fs.Size())
 
 	// try recover, truncate the incomplete transaction
 	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
-	c.Assert(err, check.IsNil)
-	c.Assert(result.Truncated, check.IsTrue)
-	c.Assert(result.LatestPos, check.DeepEquals, expectedPos)
-	c.Assert(result.LatestGTIDs, check.DeepEquals, expectedGTIDs)
+	require.NoError(t, err)
+	require.True(t, result.Truncated)
+	require.Equal(t, expectedPos, result.LatestPos)
+	require.Equal(t, expectedGTIDs, result.LatestGTIDs)
 
 	// check file size, truncated
 	fs, err = os.Stat(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fs.Size(), check.Equals, int64(len(baseData)))
+	require.NoError(t, err)
+	require.Equal(t, int64(len(baseData)), fs.Size())
 
 	// write an completed transaction
 	f, err = os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	for i := 0; i < len(extraEvents); i++ {
 		_, err = f.Write(extraEvents[i].RawData)
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 	}
-	c.Assert(f.Close(), check.IsNil)
+	require.NoError(t, f.Close())
 
 	// check file size, increased
 	fs, err = os.Stat(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fs.Size(), check.Equals, int64(len(baseData)+len(extraData)))
+	require.NoError(t, err)
+	require.Equal(t, int64(len(baseData)+len(extraData)), fs.Size())
 
 	// try recover, no operation applied
 	expectedPos.Pos += uint32(len(extraData))
 	// 4 DDL + 10 DML
 	expectedGTIDsStr = "3ccc475b-2343-11e7-be21-6c0b84d59f30:1-18,53bfca22-690d-11e7-8a62-18ded7a37b78:1-506,406a3f61-690d-11e7-87c5-6c92bf46f384:123-456,686e1ab6-c47e-11e7-a42c-6c92bf46f384:234-567"
 	expectedGTIDs, err = gtid.ParserGTID(flavor, expectedGTIDsStr)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
-	c.Assert(err, check.IsNil)
-	c.Assert(result.Truncated, check.IsFalse)
-	c.Assert(result.LatestPos, check.DeepEquals, expectedPos)
-	c.Assert(result.LatestGTIDs, check.DeepEquals, expectedGTIDs)
+	require.NoError(t, err)
+	require.False(t, result.Truncated)
+	require.Equal(t, expectedPos, result.LatestPos)
+	require.Equal(t, expectedGTIDs, result.LatestGTIDs)
 
 	// compare file data
 	var allData bytes.Buffer
 	allData.Write(baseData)
 	allData.Write(extraData)
 	fileData, err := os.ReadFile(fullName)
-	c.Assert(err, check.IsNil)
-	c.Assert(fileData, check.DeepEquals, allData.Bytes())
+	require.NoError(t, err)
+	require.Equal(t, allData.Bytes(), fileData)
 }
 
-func (t *testRelaySuite) TestRecoverMySQLNone(c *check.C) {
-	relayDir := c.MkDir()
+func TestRecoverMySQLNone(t *testing.T) {
+	relayDir := t.TempDir()
 	parser2 := parser.New()
 
 	r := NewRelay(&Config{Flavor: gmysql.MySQLFlavor}).(*Relay)
 
 	// no file specified to recover
 	result, err := r.doRecovering(context.Background(), relayDir, "", parser2)
-	c.Assert(err, check.IsNil)
-	c.Assert(result.Truncated, check.IsFalse)
+	require.NoError(t, err)
+	require.False(t, result.Truncated)
 
 	filename := "mysql-bin.000001"
 
 	// file not exist, no need to recover
 	result, err = r.doRecovering(context.Background(), relayDir, filename, parser2)
-	c.Assert(err, check.IsNil)
-	c.Assert(result.Truncated, check.IsFalse)
+	require.NoError(t, err)
+	require.False(t, result.Truncated)
 }

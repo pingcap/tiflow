@@ -16,16 +16,14 @@ package master
 import (
 	"context"
 	"time"
-
-	"github.com/pingcap/check"
 )
 
-func (t *testMaster) TestAgentPool(c *check.C) {
-	t.testPool(c)
-	t.testEmit(c)
+func (t *testMaster) TestAgentPool() {
+	t.testPool()
+	t.testEmit()
 }
 
-func (t *testMaster) testPool(c *check.C) {
+func (t *testMaster) testPool() {
 	var (
 		rate  = 10
 		burst = 100
@@ -43,26 +41,26 @@ func (t *testMaster) testPool(c *check.C) {
 
 	for i := 0; i < burst; i++ {
 		agent := <-pc
-		c.Assert(agent.ID, check.Equals, i)
+		t.Require().Equal(i, agent.ID)
 	}
 	select {
 	case <-pc:
-		c.Error("should not get agent now")
+		t.T().Error("should not get agent now")
 	default:
 	}
 
 	for i := 0; i < rate; i++ {
 		select {
 		case agent := <-pc:
-			c.Assert(agent.ID, check.Equals, i+burst)
+			t.Require().Equal(i+burst, agent.ID)
 		case <-time.After(time.Millisecond * 200):
 			// add 100ms time drift here
-			c.Error("get agent timeout")
+			t.T().Error("get agent timeout")
 		}
 	}
 }
 
-func (t *testMaster) testEmit(c *check.C) {
+func (t *testMaster) testEmit() {
 	type testWorkerType int
 
 	var (
@@ -75,23 +73,23 @@ func (t *testMaster) testEmit(c *check.C) {
 
 	ap.Emit(context.Background(), 1, func(args ...interface{}) {
 		if len(args) != 2 {
-			c.Fatalf("args count is not 2, args %v", args)
+			t.T().Fatalf("args count is not 2, args %v", args)
 		}
 
 		id1, ok := args[0].(string)
 		if !ok {
-			c.Fatalf("args[0] is not id, args %+v", args)
+			t.T().Fatalf("args[0] is not id, args %+v", args)
 		}
 		if id != id1 {
-			c.Fatalf("args[0] is expected id, args[0] %s vs %s", id1, id)
+			t.T().Fatalf("args[0] is expected id, args[0] %s vs %s", id1, id)
 		}
 
 		worker1, ok := args[1].(testWorkerType)
 		if !ok {
-			c.Fatalf("args[1] is not worker client, args %+v", args)
+			t.T().Fatalf("args[1] is not worker client, args %+v", args)
 		}
 		if worker1 != worker {
-			c.Fatalf("args[1] is not expected worker, args[1] %v vs %v", worker1, worker)
+			t.T().Fatalf("args[1] is not expected worker, args[1] %v vs %v", worker1, worker)
 		}
 	}, func(args ...interface{}) {}, []interface{}{id, worker}...)
 
@@ -99,16 +97,16 @@ func (t *testMaster) testEmit(c *check.C) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	ap.Emit(ctx, 1, func(args ...interface{}) {
-		c.FailNow()
+		t.T().FailNow()
 	}, func(args ...interface{}) {
 		if len(args) != 1 {
-			c.Fatalf("args count is not 1, args %v", args)
+			t.T().Fatalf("args count is not 1, args %v", args)
 		}
 		pCounter, ok := args[0].(*int)
 		if !ok {
-			c.Fatalf("args[0] is not *int, args %+v", args)
+			t.T().Fatalf("args[0] is not *int, args %+v", args)
 		}
 		*pCounter++
 	}, []interface{}{&counter}...)
-	c.Assert(counter, check.Equals, 1)
+	t.Require().Equal(1, counter)
 }

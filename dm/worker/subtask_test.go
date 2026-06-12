@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/dumpling"
@@ -42,41 +41,37 @@ const (
 	relayHolderBinlog = "(mysql-bin.00001,150)"
 )
 
-type testSubTask struct{}
-
-var _ = check.Suite(&testSubTask{})
-
-func (t *testSubTask) TestCreateUnits(c *check.C) {
+func TestCreateUnits(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		Mode:   "xxx",
 		Flavor: mysql.MySQLFlavor,
 	}
 	worker := "worker"
-	c.Assert(createUnits(cfg, nil, worker, nil), check.HasLen, 0)
+	require.Len(t, createUnits(cfg, nil, worker, nil), 0)
 
 	cfg.Mode = config.ModeFull
 	unitsFull := createUnits(cfg, nil, worker, nil)
-	c.Assert(unitsFull, check.HasLen, 2)
+	require.Len(t, unitsFull, 2)
 	_, ok := unitsFull[0].(*dumpling.Dumpling)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	_, ok = unitsFull[1].(*loader.LightningLoader)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 
 	cfg.Mode = config.ModeIncrement
 	unitsIncr := createUnits(cfg, nil, worker, nil)
-	c.Assert(unitsIncr, check.HasLen, 1)
+	require.Len(t, unitsIncr, 1)
 	_, ok = unitsIncr[0].(*syncer.Syncer)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 
 	cfg.Mode = config.ModeAll
 	unitsAll := createUnits(cfg, nil, worker, nil)
-	c.Assert(unitsAll, check.HasLen, 3)
+	require.Len(t, unitsAll, 3)
 	_, ok = unitsAll[0].(*dumpling.Dumpling)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	_, ok = unitsAll[1].(*loader.LightningLoader)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 	_, ok = unitsAll[2].(*syncer.Syncer)
-	c.Assert(ok, check.IsTrue)
+	require.True(t, ok)
 }
 
 type MockUnit struct {
@@ -217,14 +212,14 @@ func (u *KillOrderUnit) Type() pb.UnitType { return u.typ }
 
 func (u *KillOrderUnit) IsFreshTask(context.Context) (bool, error) { return true, nil }
 
-func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
+func TestSubTaskNormalUsage(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		Name: "testSubtaskScene",
 		Mode: config.ModeFull,
 	}
 
 	st := NewSubTask(cfg, nil, "worker")
-	c.Assert(st.Stage(), check.DeepEquals, pb.Stage_New)
+	require.Equal(t, pb.Stage_New, st.Stage())
 
 	// test empty and fail
 	defer func() {
@@ -234,8 +229,8 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 		return nil
 	}
 	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(strings.Contains(st.Result().Errors[0].String(), "has no dm units for mode"), check.IsTrue)
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.True(t, strings.Contains(st.Result().Errors[0].String(), "has no dm units for mode"))
 
 	mockDumper := NewMockUnit(pb.UnitType_Dump)
 	mockLoader := NewMockUnit(pb.UnitType_Load)
@@ -244,24 +239,24 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 	}
 
 	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
 
 	// finish dump
-	c.Assert(mockDumper.InjectProcessError(context.Background(), nil), check.IsNil)
+	require.NoError(t, mockDumper.InjectProcessError(context.Background(), nil))
 	for i := 0; i < 10; i++ {
 		if st.CurrUnit().Type() == pb.UnitType_Load {
 			break
 		}
 		time.Sleep(time.Millisecond)
 	}
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.Equal(t, pb.Stage_Running, st.Stage())
 
 	// fail loader
-	c.Assert(mockLoader.InjectProcessError(context.Background(), errors.New("loader process error")), check.IsNil)
+	require.NoError(t, mockLoader.InjectProcessError(context.Background(), errors.New("loader process error")))
 	for i := 0; i < 10; i++ {
 		res := st.Result()
 		if res != nil && st.Stage() == pb.Stage_Paused {
@@ -269,74 +264,74 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.NotNil)
-	c.Assert(st.Result().Errors, check.HasLen, 1)
-	c.Assert(strings.Contains(st.Result().Errors[0].Message, "loader process error"), check.IsTrue)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.NotNil(t, st.Result())
+	require.Len(t, st.Result().Errors, 1)
+	require.True(t, strings.Contains(st.Result().Errors[0].Message, "loader process error"))
+	require.Equal(t, pb.Stage_Paused, st.Stage())
 
 	// restore from pausing
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.Equal(t, pb.Stage_Running, st.Stage())
 
 	// update in running
-	c.Assert(st.Update(context.Background(), nil), check.NotNil)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
+	require.NotNil(t, st.Update(context.Background(), nil))
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.Equal(t, pb.Stage_Running, st.Stage())
 
 	// Pause
-	c.Assert(st.Pause(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
+	require.NoError(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockLoader, st.CurrUnit())
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
+		t.Fatalf("result %+v is not right after closing", st.Result())
 	}
 
 	// update again
-	c.Assert(st.Update(context.Background(), &config.SubTaskConfig{Name: "updateSubtask"}), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
+	require.NoError(t, st.Update(context.Background(), &config.SubTaskConfig{Name: "updateSubtask"}))
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockLoader, st.CurrUnit())
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
+		t.Fatalf("result %+v is not right after closing", st.Result())
 	}
 
 	// run again
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.Equal(t, pb.Stage_Running, st.Stage())
 
 	// pause again
-	c.Assert(st.Pause(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
+	require.NoError(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockLoader, st.CurrUnit())
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
+		t.Fatalf("result %+v is not right after closing", st.Result())
 	}
 
 	// run again
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.Equal(t, pb.Stage_Running, st.Stage())
 
 	// finish loader
-	c.Assert(mockLoader.InjectProcessError(context.Background(), nil), check.IsNil)
+	require.NoError(t, mockLoader.InjectProcessError(context.Background(), nil))
 	for i := 0; i < 1000; i++ {
 		if st.Stage() == pb.Stage_Finished {
 			break
 		}
 		time.Sleep(time.Millisecond)
 	}
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Finished)
-	c.Assert(st.Result().Errors, check.HasLen, 0)
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Equal(t, pb.Stage_Finished, st.Stage())
+	require.Len(t, st.Result().Errors, 0)
 }
 
-func (t *testSubTask) TestKillWithCauseDoesNotCancelBeforeKill(c *check.C) {
+func TestKillWithCauseDoesNotCancelBeforeKill(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		Name: "testKillOrder",
 		Mode: config.ModeIncrement,
@@ -356,17 +351,17 @@ func (t *testSubTask) TestKillWithCauseDoesNotCancelBeforeKill(c *check.C) {
 	<-u.started
 
 	st.killWithCause(errors.New("test"))
-	c.Assert(u.canceledAtKill, check.IsFalse)
+	require.False(t, u.canceledAtKill)
 }
 
-func (t *testSubTask) TestPauseAndResumeSubtask(c *check.C) {
+func TestPauseAndResumeSubtask(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		Name: "testSubtaskScene",
 		Mode: config.ModeFull,
 	}
 
 	st := NewSubTask(cfg, nil, "worker")
-	c.Assert(st.Stage(), check.DeepEquals, pb.Stage_New)
+	require.Equal(t, pb.Stage_New, st.Stage())
 
 	mockDumper := NewMockUnit(pb.UnitType_Dump)
 	mockLoader := NewMockUnit(pb.UnitType_Load)
@@ -378,110 +373,110 @@ func (t *testSubTask) TestPauseAndResumeSubtask(c *check.C) {
 	}
 
 	st.Run(pb.Stage_Running, pb.Stage_Running, nil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.CheckUnit(), check.IsFalse)
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.False(t, st.CheckUnit())
 
 	// pause twice
-	c.Assert(st.Pause(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
+	require.NoError(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
+		t.Fatalf("result %+v is not right after closing", st.Result())
 	}
 
-	c.Assert(st.Pause(), check.NotNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
+	require.NotNil(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
-	}
-
-	// resume
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
-
-	c.Assert(st.Pause(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
+		t.Fatalf("result %+v is not right after closing", st.Result())
 	}
 
 	// resume
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
+
+	require.NoError(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
+		t.Fatalf("result %+v is not right after closing", st.Result())
+	}
+
+	// resume
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
 
 	// fail dumper
-	c.Assert(mockDumper.InjectProcessError(context.Background(), errors.New("dumper process error")), check.IsNil)
+	require.NoError(t, mockDumper.InjectProcessError(context.Background(), errors.New("dumper process error")))
 	// InjectProcessError need 1 second, here we wait 1.5 second
 	utils.WaitSomething(15, 100*time.Millisecond, func() bool {
 		return st.Result() != nil
 	})
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.NotNil)
-	c.Assert(st.Result().Errors, check.HasLen, 1)
-	c.Assert(strings.Contains(st.Result().Errors[0].Message, "dumper process error"), check.IsTrue)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.NotNil(t, st.Result())
+	require.Len(t, st.Result().Errors, 1)
+	require.True(t, strings.Contains(st.Result().Errors[0].Message, "dumper process error"))
+	require.Equal(t, pb.Stage_Paused, st.Stage())
 
 	// pause
-	c.Assert(st.Pause(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.NotNil)
-	c.Assert(st.Result().Errors, check.HasLen, 1)
-	c.Assert(st.Result().IsCanceled, check.IsTrue)
-	c.Assert(strings.Contains(st.Result().Errors[0].Message, "dumper process error"), check.IsTrue)
+	require.NoError(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.NotNil(t, st.Result())
+	require.Len(t, st.Result().Errors, 1)
+	require.True(t, st.Result().IsCanceled)
+	require.True(t, strings.Contains(st.Result().Errors[0].Message, "dumper process error"))
 
 	// resume twice
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
 
-	c.Assert(st.Resume(nil), check.NotNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
+	require.NotNil(t, st.Resume(nil))
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
 	// finish dump
-	c.Assert(mockDumper.InjectProcessError(context.Background(), nil), check.IsNil)
+	require.NoError(t, mockDumper.InjectProcessError(context.Background(), nil))
 	utils.WaitSomething(20, 50*time.Millisecond, func() bool {
 		return st.CurrUnit().Type() == pb.UnitType_Load
 	})
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Result(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Nil(t, st.Result())
+	require.Equal(t, pb.Stage_Running, st.Stage())
 
 	// finish loader
-	c.Assert(mockLoader.InjectProcessError(context.Background(), nil), check.IsNil)
+	require.NoError(t, mockLoader.InjectProcessError(context.Background(), nil))
 	utils.WaitSomething(20, 50*time.Millisecond, func() bool {
 		return st.Stage() == pb.Stage_Finished
 	})
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Finished)
-	c.Assert(st.Result().Errors, check.HasLen, 0)
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Equal(t, pb.Stage_Finished, st.Stage())
+	require.Len(t, st.Result().Errors, 0)
 
 	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
-	c.Assert(st.CurrUnit(), check.Equals, mockLoader)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Finished)
-	c.Assert(st.Result().Errors, check.HasLen, 0)
+	require.Equal(t, mockLoader, st.CurrUnit())
+	require.Equal(t, pb.Stage_Finished, st.Stage())
+	require.Len(t, st.Result().Errors, 0)
 }
 
-func (t *testSubTask) TestSubtaskWithStage(c *check.C) {
+func TestSubtaskWithStage(t *testing.T) {
 	cfg := &config.SubTaskConfig{
 		SourceID: "source",
 		Name:     "testSubtaskScene",
 		Mode:     config.ModeFull,
 	}
-	c.Assert(cfg.Adjust(false), check.IsNil)
+	require.NoError(t, cfg.Adjust(false))
 
 	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
-	c.Assert(st.Stage(), check.DeepEquals, pb.Stage_Paused)
+	require.Equal(t, pb.Stage_Paused, st.Stage())
 
 	mockDumper := NewMockUnit(pb.UnitType_Dump)
 	mockLoader := NewMockUnit(pb.UnitType_Load)
@@ -493,37 +488,37 @@ func (t *testSubTask) TestSubtaskWithStage(c *check.C) {
 	}
 
 	// pause
-	c.Assert(st.Pause(), check.NotNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, nil)
-	c.Assert(st.Result(), check.IsNil)
+	require.NotNil(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, nil, st.CurrUnit())
+	require.Nil(t, st.Result())
 
-	c.Assert(st.Resume(nil), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
-	c.Assert(st.Result(), check.IsNil)
+	require.NoError(t, st.Resume(nil))
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
+	require.Nil(t, st.Result())
 
 	// pause again
-	c.Assert(st.Pause(), check.IsNil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
-	c.Assert(st.CurrUnit(), check.Equals, mockDumper)
+	require.NoError(t, st.Pause())
+	require.Equal(t, pb.Stage_Paused, st.Stage())
+	require.Equal(t, mockDumper, st.CurrUnit())
 	if st.Result() != nil && (!st.Result().IsCanceled || len(st.Result().Errors) > 0) {
-		c.Fatalf("result %+v is not right after closing", st.Result())
+		t.Fatalf("result %+v is not right after closing", st.Result())
 	}
 
 	st = NewSubTaskWithStage(cfg, pb.Stage_Finished, nil, "worker")
-	c.Assert(st.Stage(), check.DeepEquals, pb.Stage_Finished)
+	require.Equal(t, pb.Stage_Finished, st.Stage())
 	createUnits = func(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, worker string, relay relay.Process) []unit.Unit {
 		return []unit.Unit{mockDumper, mockLoader}
 	}
 
 	st.Run(pb.Stage_Finished, pb.Stage_Stopped, nil)
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Finished)
-	c.Assert(st.CurrUnit(), check.Equals, nil)
-	c.Assert(st.Result(), check.IsNil)
+	require.Equal(t, pb.Stage_Finished, st.Stage())
+	require.Equal(t, nil, st.CurrUnit())
+	require.Nil(t, st.Result())
 }
 
-func (t *testSubTask) TestSubtaskFastQuit(c *check.C) {
+func TestSubtaskFastQuit(t *testing.T) {
 	// case: test subtask stuck into unitTransWaitCondition
 	cfg := &config.SubTaskConfig{
 		Name: "testSubtaskFastQuit",
@@ -555,14 +550,14 @@ func (t *testSubTask) TestSubtaskFastQuit(c *check.C) {
 
 	// test Pause
 	time.Sleep(time.Second) // wait for task to run for some time
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Running)
-	c.Assert(st.Pause(), check.IsNil)
+	require.Equal(t, pb.Stage_Running, st.Stage())
+	require.NoError(t, st.Pause())
 	select {
 	case <-time.After(500 * time.Millisecond):
-		c.Fatal("fail to pause subtask in 0.5s when stuck into unitTransWaitCondition")
+		t.Fatal("fail to pause subtask in 0.5s when stuck into unitTransWaitCondition")
 	case <-finished:
 	}
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Paused)
+	require.Equal(t, pb.Stage_Paused, st.Stage())
 
 	st = NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
 	st.units = []unit.Unit{mockLoader, mockSyncer}
@@ -575,17 +570,17 @@ func (t *testSubTask) TestSubtaskFastQuit(c *check.C) {
 		close(finished)
 	}()
 
-	c.Assert(utils.WaitSomething(10, 100*time.Millisecond, func() bool {
+	require.True(t, utils.WaitSomething(10, 100*time.Millisecond, func() bool {
 		return st.Stage() == pb.Stage_Running
-	}), check.IsTrue)
+	}))
 	// test Close
 	st.Close()
 	select {
 	case <-time.After(500 * time.Millisecond):
-		c.Fatal("fail to stop subtask in 0.5s when stuck into unitTransWaitCondition")
+		t.Fatal("fail to stop subtask in 0.5s when stuck into unitTransWaitCondition")
 	case <-finished:
 	}
-	c.Assert(st.Stage(), check.Equals, pb.Stage_Stopped)
+	require.Equal(t, pb.Stage_Stopped, st.Stage())
 }
 
 func TestGetValidatorError(t *testing.T) {

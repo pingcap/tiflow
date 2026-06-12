@@ -18,24 +18,23 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pingcap/check"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 )
 
-func (t *testForEtcd) TestOperationJSON(c *check.C) {
+func (t *testForEtcd) TestOperationJSON() {
 	o1 := NewOperation("test-ID", "test", "mysql-replica-1", []string{
 		"ALTER TABLE bar ADD COLUMN c1 INT",
 	}, true, false)
 
 	j, err := o1.toJSON()
-	c.Assert(err, check.IsNil)
-	c.Assert(j, check.Equals, `{"id":"test-ID","task":"test","source":"mysql-replica-1","ddls":["ALTER TABLE bar ADD COLUMN c1 INT"],"exec":true,"done":false}`)
-	c.Assert(j, check.Equals, o1.String())
+	t.Require().NoError(err)
+	t.Require().Equal(`{"id":"test-ID","task":"test","source":"mysql-replica-1","ddls":["ALTER TABLE bar ADD COLUMN c1 INT"],"exec":true,"done":false}`, j)
+	t.Require().Equal(o1.String(), j)
 
 	o2, err := operationFromJSON(j)
-	c.Assert(err, check.IsNil)
-	c.Assert(o2, check.DeepEquals, o1)
+	t.Require().NoError(err)
+	t.Require().Equal(o1, o2)
 }
 
 func watchExactOperations(
@@ -74,8 +73,8 @@ func watchExactOperations(
 	return ops, nil
 }
 
-func (t *testForEtcd) TestOperationEtcd(c *check.C) {
-	defer clearTestInfoOperation(c)
+func (t *testForEtcd) TestOperationEtcd() {
+	defer clearTestInfoOperation(t.T())
 
 	var (
 		task1   = "test1"
@@ -94,113 +93,113 @@ func (t *testForEtcd) TestOperationEtcd(c *check.C) {
 
 	// put the same keys twice.
 	rev1, succ, err := PutOperations(etcdTestCli, false, op11, op12)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().True(succ)
 	rev2, succ, err := PutOperations(etcdTestCli, false, op11, op12)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsTrue)
-	c.Assert(rev2, check.Greater, rev1)
+	t.Require().NoError(err)
+	t.Require().True(succ)
+	t.Require().Greater(rev2, rev1)
 
 	// start the watcher with the same revision as the last PUT for the specified task and source.
 	ops, err := watchExactOperations(context.Background(), etcdTestCli, mvccpb.PUT, task1, source1, rev2, 1)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	// watch should only get op11.
-	c.Assert(ops[0], check.DeepEquals, op11)
+	t.Require().Equal(op11, ops[0])
 
 	// put for another task.
 	rev3, succ, err := PutOperations(etcdTestCli, false, op21)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().True(succ)
 
 	// start the watch with an older revision for all tasks and sources.
 	ops, err = watchExactOperations(context.Background(), etcdTestCli, mvccpb.PUT, "", "", rev2, 3)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	// watch should get 3 operations.
-	c.Assert(ops[0], check.DeepEquals, op11)
-	c.Assert(ops[1], check.DeepEquals, op12)
-	c.Assert(ops[2], check.DeepEquals, op21)
+	t.Require().Equal(op11, ops[0])
+	t.Require().Equal(op12, ops[1])
+	t.Require().Equal(op21, ops[2])
 
 	// get all operations.
 	opm, rev4, err := GetAllOperations(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev4, check.Equals, rev3)
-	c.Assert(opm, check.HasLen, 2)
-	c.Assert(opm, check.HasKey, task1)
-	c.Assert(opm, check.HasKey, task2)
-	c.Assert(opm[task1], check.HasLen, 2)
-	c.Assert(opm[task1][source1], check.DeepEquals, op11)
-	c.Assert(opm[task1][source2], check.DeepEquals, op12)
-	c.Assert(opm[task2], check.HasLen, 1)
-	c.Assert(opm[task2][source1], check.DeepEquals, op21)
+	t.Require().NoError(err)
+	t.Require().Equal(rev3, rev4)
+	t.Require().Len(opm, 2)
+	t.Require().Contains(opm, task1)
+	t.Require().Contains(opm, task2)
+	t.Require().Len(opm[task1], 2)
+	t.Require().Equal(op11, opm[task1][source1])
+	t.Require().Equal(op12, opm[task1][source2])
+	t.Require().Len(opm[task2], 1)
+	t.Require().Equal(op21, opm[task2][source1])
 
 	// put for `skipDone` with `done` in etcd, the operations should not be skipped.
 	// case: all of kvs "the `done` field is not `true`".
 	rev5, succ, err := PutOperations(etcdTestCli, true, op11, op12)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsTrue)
-	c.Assert(rev5, check.Greater, rev4)
+	t.Require().NoError(err)
+	t.Require().True(succ)
+	t.Require().Greater(rev5, rev4)
 
 	// delete op11.
 	rev6, err := DeleteOperations(etcdTestCli, op11)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev6, check.Greater, rev5)
+	t.Require().NoError(err)
+	t.Require().Greater(rev6, rev5)
 
 	// start watch with an older revision for the deleted op11.
 	ops, err = watchExactOperations(context.Background(), etcdTestCli, mvccpb.DELETE, op11.Task, op11.Source, rev5, 1)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	// watch should got the previous deleted operation.
 	op11d := ops[0]
-	c.Assert(op11d.IsDeleted, check.IsTrue)
+	t.Require().True(op11d.IsDeleted)
 	op11d.IsDeleted = false // reset to false
-	c.Assert(op11d, check.DeepEquals, op11)
+	t.Require().Equal(op11, op11d)
 
 	// get again, op11 should be deleted.
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(opm[task1], check.HasLen, 1)
-	c.Assert(opm[task1][source2], check.DeepEquals, op12)
+	t.Require().NoError(err)
+	t.Require().Len(opm[task1], 1)
+	t.Require().Equal(op12, opm[task1][source2])
 
 	// put for `skipDone` with `done` in etcd, the operations should not be skipped.
 	// case: all of kvs "not exist".
 	rev7, succ, err := PutOperations(etcdTestCli, true, op11, op13)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsTrue)
-	c.Assert(rev7, check.Greater, rev6)
+	t.Require().NoError(err)
+	t.Require().True(succ)
+	t.Require().Greater(rev7, rev6)
 
 	// get again, op11 and op13 should be putted.
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(opm[task1], check.HasLen, 3)
-	c.Assert(opm[task1][source1], check.DeepEquals, op11)
-	c.Assert(opm[task1][source2], check.DeepEquals, op12)
-	c.Assert(opm[task1][source3], check.DeepEquals, op13)
+	t.Require().NoError(err)
+	t.Require().Len(opm[task1], 3)
+	t.Require().Equal(op11, opm[task1][source1])
+	t.Require().Equal(op12, opm[task1][source2])
+	t.Require().Equal(op13, opm[task1][source3])
 
 	// update op12 to `done`.
 	op12c := op12
 	op12c.Done = true
 	putOp, err := putOperationOp(op12c)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	txnResp, err := etcdTestCli.Txn(context.Background()).Then(putOp).Commit()
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	// delete op13.
 	rev8, err := DeleteOperations(etcdTestCli, op13)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev8, check.Greater, txnResp.Header.Revision)
+	t.Require().NoError(err)
+	t.Require().Greater(rev8, txnResp.Header.Revision)
 
 	// put for `skipDone` with `done` in etcd, the operations should be skipped.
 	// case: any of kvs ("exist" and "the `done` field is `true`").
 	rev9, succ, err := PutOperations(etcdTestCli, true, op12, op13)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsFalse)
-	c.Assert(rev9, check.Equals, rev8)
+	t.Require().NoError(err)
+	t.Require().False(succ)
+	t.Require().Equal(rev8, rev9)
 
 	// get again, op13 not putted.
 	opm, _, err = GetAllOperations(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(opm[task1], check.HasLen, 2)
-	c.Assert(opm[task1][source1], check.DeepEquals, op11)
-	c.Assert(opm[task1][source2], check.DeepEquals, op12c)
+	t.Require().NoError(err)
+	t.Require().Len(opm[task1], 2)
+	t.Require().Equal(op11, opm[task1][source1])
+	t.Require().Equal(op12c, opm[task1][source2])
 
 	// FIXME: the right result:
 	//   the operations should *NOT* be skipped.
@@ -209,7 +208,7 @@ func (t *testForEtcd) TestOperationEtcd(c *check.C) {
 	//   - some of kvs "not exist"
 	// after FIXED, this test case will fail and need to be updated.
 	rev10, succ, err := PutOperations(etcdTestCli, true, op11, op13)
-	c.Assert(err, check.IsNil)
-	c.Assert(succ, check.IsFalse)
-	c.Assert(rev10, check.Equals, rev9)
+	t.Require().NoError(err)
+	t.Require().False(succ)
+	t.Require().Equal(rev9, rev10)
 }

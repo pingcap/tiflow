@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/tikv/pd/pkg/utils/tempurl"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -34,41 +34,36 @@ import (
 	"go.etcd.io/etcd/tests/v3/integration"
 )
 
-var etcdTestSuite = check.Suite(&testEtcdUtilSuite{})
-
 type testEtcdUtilSuite struct {
-	testT *testing.T
+	suite.Suite
 }
 
-func (t *testEtcdUtilSuite) SetUpSuite(c *check.C) {
+func (t *testEtcdUtilSuite) SetupSuite() {
 	// initialized the logger to make genEmbedEtcdConfig working.
-	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
+	t.Require().NoError(log.InitLogger(&log.Config{}))
 	// this is to trigger  `etcd.io/etcd/embed.(*Config).setupLogging()`
 	// otherwise `newConfig` will datarace with `TestDoOpsInOneTxnWithRetry.NewClusterV3.Launch.m.grpcServer.Serve(m.grpcListener)`
-	t.newConfig(c, "not used", 1)
+	t.newConfig("not used", 1)
 }
 
 func TestSuite(t *testing.T) {
 	integration.BeforeTestExternal(t)
-	// inject *testing.T to suite
-	s := etcdTestSuite.(*testEtcdUtilSuite)
-	s.testT = t
-	check.TestingT(t)
+	suite.Run(t, new(testEtcdUtilSuite))
 }
 
-func (t *testEtcdUtilSuite) newConfig(c *check.C, name string, portCount int) *embed.Config {
+func (t *testEtcdUtilSuite) newConfig(name string, portCount int) *embed.Config {
 	cfg := embed.NewConfig()
 	cfg.Name = name
-	cfg.Dir = c.MkDir()
+	cfg.Dir = t.T().TempDir()
 	cfg.ZapLoggerBuilder = embed.NewZapCoreLoggerBuilder(log.L().Logger, log.L().Core(), log.Props().Syncer)
 	cfg.Logger = "zap"
-	c.Assert(cfg.Validate(), check.IsNil)
+	t.Require().NoError(cfg.Validate())
 
 	cfg.ListenClientUrls = []url.URL{}
 	for i := 0; i < portCount; i++ {
 		endPoint := tempurl.Alloc()
 		cu, err2 := url.Parse(endPoint)
-		c.Assert(err2, check.IsNil)
+		t.Require().NoError(err2)
 		cfg.ListenClientUrls = append(cfg.ListenClientUrls, *cu)
 	}
 
@@ -78,7 +73,7 @@ func (t *testEtcdUtilSuite) newConfig(c *check.C, name string, portCount int) *e
 	for i := 0; i < portCount; i++ {
 		endPoint := tempurl.Alloc()
 		pu, err2 := url.Parse(endPoint)
-		c.Assert(err2, check.IsNil)
+		t.Require().NoError(err2)
 		cfg.ListenPeerUrls = append(cfg.ListenPeerUrls, *pu)
 		ic = append(ic, fmt.Sprintf("%s=%s", cfg.Name, pu))
 	}
@@ -96,109 +91,109 @@ func (t *testEtcdUtilSuite) urlsToStrings(urls []url.URL) []string {
 	return ret
 }
 
-func (t *testEtcdUtilSuite) startEtcd(c *check.C, cfg *embed.Config) *embed.Etcd {
+func (t *testEtcdUtilSuite) startEtcd(cfg *embed.Config) *embed.Etcd {
 	e, err := embed.StartEtcd(cfg)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	timeout := 10 * time.Second
 	select {
 	case <-e.Server.ReadyNotify():
 	case <-time.After(timeout):
 		e.Server.Stop()
-		c.Fatalf("start embed etcd timeout %v", timeout)
+		t.T().Fatalf("start embed etcd timeout %v", timeout)
 	}
 	return e
 }
 
-func (t *testEtcdUtilSuite) createEtcdClient(c *check.C, endpoints []string) *clientv3.Client {
+func (t *testEtcdUtilSuite) createEtcdClient(endpoints []string) *clientv3.Client {
 	cli, err := CreateClient(endpoints, nil)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	return cli
 }
 
-func (t *testEtcdUtilSuite) checkMember(c *check.C, mid uint64, m *etcdserverpb.Member, cfg *embed.Config) {
+func (t *testEtcdUtilSuite) checkMember(mid uint64, m *etcdserverpb.Member, cfg *embed.Config) {
 	if m.Name != "" { // no name exists after `member add`
-		c.Assert(m.Name, check.Equals, cfg.Name)
+		t.Require().Equal(cfg.Name, m.Name)
 	}
-	c.Assert(m.ID, check.Equals, mid)
-	require.ElementsMatch(t.testT, m.ClientURLs, t.urlsToStrings(cfg.AdvertiseClientUrls))
-	require.ElementsMatch(t.testT, m.PeerURLs, t.urlsToStrings(cfg.AdvertisePeerUrls))
+	t.Require().Equal(mid, m.ID)
+	require.ElementsMatch(t.T(), m.ClientURLs, t.urlsToStrings(cfg.AdvertiseClientUrls))
+	require.ElementsMatch(t.T(), m.PeerURLs, t.urlsToStrings(cfg.AdvertisePeerUrls))
 }
 
-func (t *testEtcdUtilSuite) TestMemberUtil(c *check.C) {
+func (t *testEtcdUtilSuite) TestMemberUtil() {
 	for i := 1; i <= 3; i++ {
-		t.testMemberUtilInternal(c, i)
+		t.testMemberUtilInternal(i)
 	}
 }
 
-func (t *testEtcdUtilSuite) testMemberUtilInternal(c *check.C, portCount int) {
+func (t *testEtcdUtilSuite) testMemberUtilInternal(portCount int) {
 	// start a etcd
-	cfg1 := t.newConfig(c, "etcd1", portCount)
+	cfg1 := t.newConfig("etcd1", portCount)
 	endpoints1 := t.urlsToStrings(cfg1.ListenClientUrls)
-	etcd1 := t.startEtcd(c, cfg1)
+	etcd1 := t.startEtcd(cfg1)
 	defer etcd1.Close()
 
 	// list member
-	cli := t.createEtcdClient(c, endpoints1)
+	cli := t.createEtcdClient(endpoints1)
 	listResp1, err := ListMembers(cli)
-	c.Assert(err, check.IsNil)
-	c.Assert(listResp1.Members, check.HasLen, 1)
-	t.checkMember(c, uint64(etcd1.Server.ID()), listResp1.Members[0], cfg1)
+	t.Require().NoError(err)
+	t.Require().Len(listResp1.Members, 1)
+	t.checkMember(uint64(etcd1.Server.ID()), listResp1.Members[0], cfg1)
 
 	// add member
-	cfg2 := t.newConfig(c, "etcd2", portCount)
+	cfg2 := t.newConfig("etcd2", portCount)
 	cfg2.InitialCluster = cfg1.InitialCluster + "," + cfg2.InitialCluster
 	cfg2.ClusterState = embed.ClusterStateFlagExisting
 	addResp, err := AddMember(cli, t.urlsToStrings(cfg2.AdvertisePeerUrls))
-	c.Assert(err, check.IsNil)
-	c.Assert(addResp.Members, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Len(addResp.Members, 2)
 
 	// start the added member
-	etcd2 := t.startEtcd(c, cfg2)
+	etcd2 := t.startEtcd(cfg2)
 	defer etcd2.Close()
-	c.Assert(addResp.Member.ID, check.Equals, uint64(etcd2.Server.ID()))
+	t.Require().Equal(uint64(etcd2.Server.ID()), addResp.Member.ID)
 
 	// list member again
 	listResp2, err := ListMembers(cli)
-	c.Assert(err, check.IsNil)
-	c.Assert(listResp2.Members, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Len(listResp2.Members, 2)
 	for _, m := range listResp2.Members {
 		switch m.ID {
 		case uint64(etcd1.Server.ID()):
-			t.checkMember(c, uint64(etcd1.Server.ID()), m, cfg1)
+			t.checkMember(uint64(etcd1.Server.ID()), m, cfg1)
 		case uint64(etcd2.Server.ID()):
-			t.checkMember(c, uint64(etcd2.Server.ID()), m, cfg2)
+			t.checkMember(uint64(etcd2.Server.ID()), m, cfg2)
 		default:
-			c.Fatalf("unknown member %v", m)
+			t.T().Fatalf("unknown member %v", m)
 		}
 	}
 }
 
-func (t *testEtcdUtilSuite) TestRemoveMember(c *check.C) {
+func (t *testEtcdUtilSuite) TestRemoveMember() {
 	// test remove one member that is not the one we connected to.
 	// if we remove the one we connected to, the test might fail, see more in https://github.com/etcd-io/etcd/pull/7242
-	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 3})
-	defer cluster.Terminate(t.testT)
-	leaderIdx := cluster.WaitLeader(t.testT)
-	c.Assert(leaderIdx, check.Not(check.Equals), -1)
+	cluster := integration.NewClusterV3(t.T(), &integration.ClusterConfig{Size: 3})
+	defer cluster.Terminate(t.T())
+	leaderIdx := cluster.WaitLeader(t.T())
+	t.Require().NotEqual(-1, leaderIdx)
 	cli := cluster.Client(leaderIdx)
 	respList, err := ListMembers(cli)
-	c.Assert(err, check.IsNil)
-	c.Assert(respList.Members, check.HasLen, 3)
+	t.Require().NoError(err)
+	t.Require().Len(respList.Members, 3)
 	for _, m := range respList.Members {
 		if m.ID != respList.Header.MemberId {
 			respRemove, removeErr := RemoveMember(cli, m.ID)
-			c.Assert(removeErr, check.IsNil)
-			c.Assert(respRemove.Members, check.HasLen, 2)
+			t.Require().NoError(removeErr)
+			t.Require().Len(respRemove.Members, 2)
 			break
 		}
 	}
 	respList, err = ListMembers(cli)
-	c.Assert(err, check.IsNil)
-	c.Assert(respList.Members, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Len(respList.Members, 2)
 }
 
-func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *check.C) {
+func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry() {
 	var (
 		key1 = "/test/etcdutil/do-ops-in-one-txn-with-retry-1"
 		key2 = "/test/etcdutil/do-ops-in-one-txn-with-retry-2"
@@ -206,15 +201,15 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *check.C) {
 		val2 = "bar"
 		val  = "foo-bar"
 	)
-	cluster := integration.NewClusterV3(t.testT, &integration.ClusterConfig{Size: 1})
-	defer cluster.Terminate(t.testT)
+	cluster := integration.NewClusterV3(t.T(), &integration.ClusterConfig{Size: 1})
+	defer cluster.Terminate(t.T())
 
 	cli := cluster.RandClient()
 
 	resp, rev1, err := DoTxnWithRepeatable(cli, ThenOpFunc(clientv3.OpPut(key1, val1), clientv3.OpPut(key2, val2)))
-	c.Assert(err, check.IsNil)
-	c.Assert(rev1, check.Greater, int64(0))
-	c.Assert(resp.Responses, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Greater(rev1, int64(0))
+	t.Require().Len(resp.Responses, 2)
 
 	// both cmps are true
 	cmp1 := clientv3.Compare(clientv3.Value(key1), "=", val1)
@@ -222,9 +217,9 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *check.C) {
 	resp, rev2, err := DoTxnWithRepeatable(cli, FullOpFunc([]clientv3.Cmp{cmp1, cmp2}, []clientv3.Op{
 		clientv3.OpPut(key1, val), clientv3.OpPut(key2, val),
 	}, []clientv3.Op{}))
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
-	c.Assert(resp.Responses, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Greater(rev2, rev1)
+	t.Require().Len(resp.Responses, 2)
 
 	// one of cmps are false
 	cmp1 = clientv3.Compare(clientv3.Value(key1), "=", val)
@@ -232,12 +227,12 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *check.C) {
 	resp, rev3, err := DoTxnWithRepeatable(cli, FullOpFunc([]clientv3.Cmp{cmp1, cmp2}, []clientv3.Op{}, []clientv3.Op{
 		clientv3.OpDelete(key1), clientv3.OpDelete(key2),
 	}))
-	c.Assert(err, check.IsNil)
-	c.Assert(rev3, check.Greater, rev2)
-	c.Assert(resp.Responses, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Greater(rev3, rev2)
+	t.Require().Len(resp.Responses, 2)
 
 	// enable failpoint
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/etcdutil/ErrNoSpace", `3*return()`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/pkg/etcdutil/ErrNoSpace", `3*return()`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/pkg/etcdutil/ErrNoSpace")
 
@@ -245,17 +240,17 @@ func (t *testEtcdUtilSuite) TestDoOpsInOneTxnWithRetry(c *check.C) {
 	resp, rev2, err = DoTxnWithRepeatable(cli, FullOpFunc([]clientv3.Cmp{clientv3util.KeyMissing(key1), clientv3util.KeyMissing(key2)}, []clientv3.Op{
 		clientv3.OpPut(key1, val), clientv3.OpPut(key2, val),
 	}, []clientv3.Op{}))
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
-	c.Assert(resp.Responses, check.HasLen, 2)
+	t.Require().NoError(err)
+	t.Require().Greater(rev2, rev1)
+	t.Require().Len(resp.Responses, 2)
 }
 
-func (t *testEtcdUtilSuite) TestIsRetryableError(c *check.C) {
-	c.Assert(IsRetryableError(v3rpc.ErrCompacted), check.IsTrue)
-	c.Assert(IsRetryableError(v3rpc.ErrNoLeader), check.IsTrue)
-	c.Assert(IsRetryableError(v3rpc.ErrNoSpace), check.IsTrue)
+func (t *testEtcdUtilSuite) TestIsRetryableError() {
+	t.Require().True(IsRetryableError(v3rpc.ErrCompacted))
+	t.Require().True(IsRetryableError(v3rpc.ErrNoLeader))
+	t.Require().True(IsRetryableError(v3rpc.ErrNoSpace))
 
-	c.Assert(IsRetryableError(v3rpc.ErrCorrupt), check.IsFalse)
-	c.Assert(IsRetryableError(terror.ErrDecodeEtcdKeyFail), check.IsFalse)
-	c.Assert(IsRetryableError(nil), check.IsFalse)
+	t.Require().False(IsRetryableError(v3rpc.ErrCorrupt))
+	t.Require().False(IsRetryableError(terror.ErrDecodeEtcdKeyFail))
+	t.Require().False(IsRetryableError(nil))
 }

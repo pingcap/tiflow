@@ -16,21 +16,13 @@ package config
 import (
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
+	"github.com/stretchr/testify/require"
 )
 
-func TestConfig(t *testing.T) {
-	check.TestingT(t)
-}
-
-type testConfig struct{}
-
-var _ = check.Suite(&testConfig{})
-
-func (t *testConfig) TestConverterWithSourceAndOpenAPISource(c *check.C) {
+func TestConverterWithSourceAndOpenAPISource(t *testing.T) {
 	sourceCfg1, err := SourceCfgFromYaml(SampleSourceConfig)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// 1. test user create source from dmctl, after convert to openapi.Source then convert back to source config
 	sourceCfg2 := OpenAPISourceToSourceCfg(SourceCfgToOpenAPISource(sourceCfg1))
@@ -40,12 +32,12 @@ func (t *testConfig) TestConverterWithSourceAndOpenAPISource(c *check.C) {
 	sourceCfg2.From.MaxAllowedPacket = sourceCfg1.From.MaxAllowedPacket
 
 	// we only need to make sure the source config that user can see is the same as the source config that user create
-	c.Assert(sourceCfg1.String(), check.Equals, sourceCfg2.String())
+	require.Equal(t, sourceCfg2.String(), sourceCfg1.String())
 
 	// 2. test user create source from openapi, after convert to source config then convert back to openapi.Source
 	openapiSource1, err := fixtures.GenOpenAPISourceForTest()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	openapiSource2 := SourceCfgToOpenAPISource(OpenAPISourceToSourceCfg(openapiSource1))
 	openapiSource2.Password = openapiSource1.Password // we set passwd to "******" for privacy
-	c.Assert(openapiSource1, check.DeepEquals, openapiSource2)
+	require.Equal(t, openapiSource2, openapiSource1)
 }

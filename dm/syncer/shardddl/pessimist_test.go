@@ -18,19 +18,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
+	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/tests/v3/integration"
 )
 
 var etcdTestCli *clientv3.Client
-
-type testPessimist struct{}
-
-var _ = check.Suite(&testPessimist{})
 
 func TestShardDDL(t *testing.T) {
 	err := log.InitLogger(&log.Config{})
@@ -44,19 +40,20 @@ func TestShardDDL(t *testing.T) {
 
 	etcdTestCli = mockCluster.RandClient()
 
-	check.TestingT(t)
+	t.Run("Pessimist", testPessimist)
+	t.Run("Optimist", testOptimist)
 }
 
 // clear keys in etcd test cluster.
-func clearTestInfoOperation(c *check.C) {
+func clearTestInfoOperation(t *testing.T) {
 	clearInfo := clientv3.OpDelete(common.ShardDDLPessimismInfoKeyAdapter.Path(), clientv3.WithPrefix())
 	clearOp := clientv3.OpDelete(common.ShardDDLPessimismOperationKeyAdapter.Path(), clientv3.WithPrefix())
 	_, err := etcdTestCli.Txn(context.Background()).Then(clearInfo, clearOp).Commit()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 }
 
-func (t *testPessimist) TestPessimist(c *check.C) {
-	defer clearTestInfoOperation(c)
+func testPessimist(t *testing.T) {
+	defer clearTestInfoOperation(t)
 
 	var (
 		task          = "task"
@@ -75,84 +72,84 @@ func (t *testPessimist) TestPessimist(c *check.C) {
 	defer cancel()
 
 	// no info and operation in pending
-	c.Assert(p.PendingInfo(), check.IsNil)
-	c.Assert(p.PendingOperation(), check.IsNil)
+	require.Nil(t, p.PendingInfo())
+	require.Nil(t, p.PendingOperation())
 
 	// put shard DDL info.
 	rev1, err := p.PutInfo(ctx, info)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev1, check.Greater, int64(0))
+	require.NoError(t, err)
+	require.Greater(t, rev1, int64(0))
 
 	// have info in pending
 	info2 := p.PendingInfo()
-	c.Assert(info2, check.NotNil)
-	c.Assert(*info2, check.DeepEquals, info)
+	require.NotNil(t, info2)
+	require.Equal(t, info, *info2)
 
 	// put the lock operation.
 	rev2, putted, err := pessimism.PutOperations(etcdTestCli, false, op)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
-	c.Assert(putted, check.IsTrue)
+	require.NoError(t, err)
+	require.Greater(t, rev2, rev1)
+	require.True(t, putted)
 
 	// wait for the lock operation.
 	op2, err := p.GetOperation(ctx, info, rev1)
-	c.Assert(err, check.IsNil)
-	c.Assert(op2, check.DeepEquals, op)
+	require.NoError(t, err)
+	require.Equal(t, op, op2)
 
 	// have operation in pending.
 	op3 := p.PendingOperation()
-	c.Assert(op3, check.NotNil)
-	c.Assert(*op3, check.DeepEquals, op)
+	require.NotNil(t, op3)
+	require.Equal(t, op, *op3)
 
 	// mark the operation as done and delete the info.
-	c.Assert(p.DoneOperationDeleteInfo(op, info), check.IsNil)
+	require.NoError(t, p.DoneOperationDeleteInfo(op, info))
 	// make this op reentrant.
-	c.Assert(p.DoneOperationDeleteInfo(op, info), check.IsNil)
+	require.NoError(t, p.DoneOperationDeleteInfo(op, info))
 
 	// verify the operation and info.
 	opc := op2
 	opc.Done = true
 	opm, _, err := pessimism.GetAllOperations(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(opm, check.HasLen, 1)
-	c.Assert(opm[task], check.HasLen, 1)
-	c.Assert(opm[task][source], check.DeepEquals, opc)
+	require.NoError(t, err)
+	require.Len(t, opm, 1)
+	require.Len(t, opm[task], 1)
+	require.Equal(t, opc, opm[task][source])
 	ifm, _, err := pessimism.GetAllInfo(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(ifm, check.HasLen, 0)
+	require.NoError(t, err)
+	require.Len(t, ifm, 0)
 
 	// no info and operation in pending now.
-	c.Assert(p.PendingInfo(), check.IsNil)
-	c.Assert(p.PendingOperation(), check.IsNil)
+	require.Nil(t, p.PendingInfo())
+	require.Nil(t, p.PendingOperation())
 
 	// try to put info again, but timeout because a `done` operation exist in etcd.
 	ctx2, cancel2 := context.WithTimeout(ctx, time.Second)
 	defer cancel2()
 	_, err = p.PutInfo(ctx2, info)
-	c.Assert(err, check.Equals, context.DeadlineExceeded)
+	require.Equal(t, context.DeadlineExceeded, err)
 
 	// start a goroutine to delete the `done` operation in background, then we can put info again.
 	go func() {
 		time.Sleep(500 * time.Millisecond) // wait `PutInfo` to start watch the deletion of the operation.
 		_, err2 := pessimism.DeleteOperations(etcdTestCli, op)
-		c.Assert(err2, check.IsNil)
+		require.NoError(t, err2)
 	}()
 
 	// put info again, but do not complete the flow.
 	_, err = p.PutInfo(ctx, info)
-	c.Assert(err, check.IsNil)
-	c.Assert(p.PendingInfo(), check.NotNil)
+	require.NoError(t, err)
+	require.NotNil(t, p.PendingInfo())
 
 	// put the lock operation again.
 	rev3, _, err := pessimism.PutOperations(etcdTestCli, false, op)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	// wait for the lock operation.
 	_, err = p.GetOperation(ctx, info, rev3)
-	c.Assert(err, check.IsNil)
-	c.Assert(p.PendingOperation(), check.NotNil)
+	require.NoError(t, err)
+	require.NotNil(t, p.PendingOperation())
 
 	// reset the pessimist.
 	p.Reset()
-	c.Assert(p.PendingInfo(), check.IsNil)
-	c.Assert(p.PendingOperation(), check.IsNil)
+	require.Nil(t, p.PendingInfo())
+	require.Nil(t, p.PendingOperation())
 }

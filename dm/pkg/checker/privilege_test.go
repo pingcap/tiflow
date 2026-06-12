@@ -16,19 +16,10 @@ package checker
 import (
 	"testing"
 
-	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/stretchr/testify/require"
 )
-
-func TestClient(t *testing.T) {
-	tc.TestingT(t)
-}
-
-var _ = tc.Suite(&testCheckSuite{})
-
-type testCheckSuite struct{}
 
 func TestVerifyDumpPrivileges(t *testing.T) {
 	cases := []struct {

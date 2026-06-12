@@ -18,19 +18,11 @@ import (
 	"testing"
 
 	"github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&testShardMetaSuite{})
-
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
-
-type testShardMetaSuite struct{}
-
-func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
+func TestShardingMeta(t *testing.T) {
 	var (
 		active     bool
 		err        error
@@ -62,45 +54,45 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 	// 1st round sharding DDL sync
 	for i := 0; i < 7; i++ {
 		active, err = meta.AddItem(items[i])
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		if i%3 == 0 {
-			c.Assert(active, check.IsTrue)
+			require.True(t, active)
 		} else {
-			c.Assert(active, check.IsFalse)
+			require.False(t, active)
 		}
 	}
 
-	c.Assert(meta.GetGlobalItems(), check.DeepEquals, []*DDLItem{items[0], items[1], items[2]})
-	c.Assert(meta.GetGlobalActiveDDL(), check.DeepEquals, items[0])
-	c.Assert(meta.GetActiveDDLItem(table1), check.DeepEquals, items[0])
-	c.Assert(meta.GetActiveDDLItem(table2), check.DeepEquals, items[3])
-	c.Assert(meta.GetActiveDDLItem(table3), check.DeepEquals, items[6])
-	c.Assert(meta.InSequenceSharding(), check.IsTrue)
+	require.Equal(t, []*DDLItem{items[0], items[1], items[2]}, meta.GetGlobalItems())
+	require.Equal(t, items[0], meta.GetGlobalActiveDDL())
+	require.Equal(t, items[0], meta.GetActiveDDLItem(table1))
+	require.Equal(t, items[3], meta.GetActiveDDLItem(table2))
+	require.Equal(t, items[6], meta.GetActiveDDLItem(table3))
+	require.True(t, meta.InSequenceSharding())
 	location, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.IsNil)
-	c.Assert(location.Position, check.DeepEquals, items[0].FirstLocation.Position)
+	require.NoError(t, err)
+	require.Equal(t, items[0].FirstLocation.Position, location.Position)
 
 	// find synced in shrading group, and call ShardingMeta.ResolveShardingDDL
-	c.Assert(meta.ResolveShardingDDL(), check.IsFalse)
+	require.False(t, meta.ResolveShardingDDL())
 
-	c.Assert(meta.GetGlobalActiveDDL(), check.DeepEquals, items[1])
-	c.Assert(meta.GetActiveDDLItem(table1), check.DeepEquals, items[1])
-	c.Assert(meta.GetActiveDDLItem(table2), check.DeepEquals, items[4])
-	c.Assert(meta.GetActiveDDLItem(table3), check.IsNil)
-	c.Assert(meta.InSequenceSharding(), check.IsTrue)
+	require.Equal(t, items[1], meta.GetGlobalActiveDDL())
+	require.Equal(t, items[1], meta.GetActiveDDLItem(table1))
+	require.Equal(t, items[4], meta.GetActiveDDLItem(table2))
+	require.Nil(t, meta.GetActiveDDLItem(table3))
+	require.True(t, meta.InSequenceSharding())
 	location, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.IsNil)
-	c.Assert(location.Position, check.DeepEquals, items[1].FirstLocation.Position)
+	require.NoError(t, err)
+	require.Equal(t, items[1].FirstLocation.Position, location.Position)
 
 	sqls, args = meta.FlushData(sourceID, tableID)
-	c.Assert(sqls, check.HasLen, 4)
-	c.Assert(args, check.HasLen, 4)
+	require.Len(t, sqls, 4)
+	require.Len(t, args, 4)
 	for _, stmt := range sqls {
-		c.Assert(stmt, check.Matches, "INSERT INTO .*")
+		require.Regexp(t, "INSERT INTO .*", stmt)
 	}
 	for _, arg := range args {
-		c.Assert(arg, check.HasLen, 8)
-		c.Assert(arg[3], check.Equals, 1)
+		require.Len(t, arg, 8)
+		require.Equal(t, 1, arg[3])
 	}
 
 	// 2nd round sharding DDL sync
@@ -109,44 +101,44 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 			continue
 		}
 		active, err = meta.AddItem(items[i])
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		if i%3 == 1 {
-			c.Assert(active, check.IsTrue)
+			require.True(t, active)
 		} else {
-			c.Assert(active, check.IsFalse)
+			require.False(t, active)
 		}
 	}
 
-	c.Assert(meta.GetGlobalActiveDDL(), check.DeepEquals, items[1])
-	c.Assert(meta.GetActiveDDLItem(table1), check.DeepEquals, items[1])
-	c.Assert(meta.GetActiveDDLItem(table2), check.DeepEquals, items[4])
-	c.Assert(meta.GetActiveDDLItem(table3), check.DeepEquals, items[7])
-	c.Assert(meta.InSequenceSharding(), check.IsTrue)
+	require.Equal(t, items[1], meta.GetGlobalActiveDDL())
+	require.Equal(t, items[1], meta.GetActiveDDLItem(table1))
+	require.Equal(t, items[4], meta.GetActiveDDLItem(table2))
+	require.Equal(t, items[7], meta.GetActiveDDLItem(table3))
+	require.True(t, meta.InSequenceSharding())
 	location, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.IsNil)
-	c.Assert(location.Position, check.DeepEquals, items[1].FirstLocation.Position)
+	require.NoError(t, err)
+	require.Equal(t, items[1].FirstLocation.Position, location.Position)
 
 	// find synced in shrading group, and call ShardingMeta.ResolveShardingDDL
-	c.Assert(meta.ResolveShardingDDL(), check.IsFalse)
+	require.False(t, meta.ResolveShardingDDL())
 
-	c.Assert(meta.GetGlobalActiveDDL(), check.DeepEquals, items[2])
-	c.Assert(meta.GetActiveDDLItem(table1), check.DeepEquals, items[2])
-	c.Assert(meta.GetActiveDDLItem(table2), check.DeepEquals, items[5])
-	c.Assert(meta.GetActiveDDLItem(table3), check.IsNil)
-	c.Assert(meta.InSequenceSharding(), check.IsTrue)
+	require.Equal(t, items[2], meta.GetGlobalActiveDDL())
+	require.Equal(t, items[2], meta.GetActiveDDLItem(table1))
+	require.Equal(t, items[5], meta.GetActiveDDLItem(table2))
+	require.Nil(t, meta.GetActiveDDLItem(table3))
+	require.True(t, meta.InSequenceSharding())
 	location, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.IsNil)
-	c.Assert(location.Position, check.DeepEquals, items[2].FirstLocation.Position)
+	require.NoError(t, err)
+	require.Equal(t, items[2].FirstLocation.Position, location.Position)
 
 	sqls, args = meta.FlushData(sourceID, tableID)
-	c.Assert(sqls, check.HasLen, 4)
-	c.Assert(args, check.HasLen, 4)
+	require.Len(t, sqls, 4)
+	require.Len(t, args, 4)
 	for _, stmt := range sqls {
-		c.Assert(stmt, check.Matches, "INSERT INTO .*")
+		require.Regexp(t, "INSERT INTO .*", stmt)
 	}
 	for _, arg := range args {
-		c.Assert(arg, check.HasLen, 8)
-		c.Assert(arg[3], check.Equals, 2)
+		require.Len(t, arg, 8)
+		require.Equal(t, 2, arg[3])
 	}
 
 	// 3rd round sharding DDL sync
@@ -155,41 +147,42 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 			continue
 		}
 		active, err = meta.AddItem(items[i])
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		if i%3 == 2 {
-			c.Assert(active, check.IsTrue)
+			require.True(t, active)
 		} else {
-			c.Assert(active, check.IsFalse)
+			require.False(t, active)
 		}
 	}
-	c.Assert(meta.GetGlobalActiveDDL(), check.DeepEquals, items[2])
-	c.Assert(meta.GetActiveDDLItem(table1), check.DeepEquals, items[2])
-	c.Assert(meta.GetActiveDDLItem(table2), check.DeepEquals, items[5])
-	c.Assert(meta.GetActiveDDLItem(table3), check.DeepEquals, items[8])
-	c.Assert(meta.InSequenceSharding(), check.IsTrue)
+	require.Equal(t, items[2], meta.GetGlobalActiveDDL())
+	require.Equal(t, items[2], meta.GetActiveDDLItem(table1))
+	require.Equal(t, items[5], meta.GetActiveDDLItem(table2))
+	require.Equal(t, items[8], meta.GetActiveDDLItem(table3))
+	require.True(t, meta.InSequenceSharding())
 	location, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.IsNil)
-	c.Assert(location.Position, check.DeepEquals, items[2].FirstLocation.Position)
+	require.NoError(t, err)
+	require.Equal(t, items[2].FirstLocation.Position, location.Position)
 
 	// find synced in shrading group, and call ShardingMeta.ResolveShardingDDL
-	c.Assert(meta.ResolveShardingDDL(), check.IsTrue)
+	require.True(t, meta.ResolveShardingDDL())
 
-	c.Assert(meta.GetGlobalActiveDDL(), check.IsNil)
-	c.Assert(meta.GetActiveDDLItem(table1), check.IsNil)
-	c.Assert(meta.GetActiveDDLItem(table2), check.IsNil)
-	c.Assert(meta.GetActiveDDLItem(table3), check.IsNil)
-	c.Assert(meta.InSequenceSharding(), check.IsFalse)
+	require.Nil(t, meta.GetGlobalActiveDDL())
+	require.Nil(t, meta.GetActiveDDLItem(table1))
+	require.Nil(t, meta.GetActiveDDLItem(table2))
+	require.Nil(t, meta.GetActiveDDLItem(table3))
+	require.False(t, meta.InSequenceSharding())
 	_, err = meta.ActiveDDLFirstLocation()
-	c.Assert(err, check.ErrorMatches, fmt.Sprintf("\\[.*\\], Message: activeIdx %d larger than length of global DDLItems: .*", meta.ActiveIdx()))
+	require.Error(t, err)
+	require.Regexp(t, fmt.Sprintf("\\[.*\\], Message: activeIdx %d larger than length of global DDLItems: .*", meta.ActiveIdx()), err.Error())
 
 	sqls, args = meta.FlushData(sourceID, tableID)
-	c.Assert(sqls, check.HasLen, 1)
-	c.Assert(args, check.HasLen, 1)
-	c.Assert(sqls[0], check.Matches, "DELETE FROM .*")
-	c.Assert(args[0], check.DeepEquals, []interface{}{sourceID, tableID})
+	require.Len(t, sqls, 1)
+	require.Len(t, args, 1)
+	require.Regexp(t, "DELETE FROM .*", sqls[0])
+	require.Equal(t, []interface{}{sourceID, tableID}, args[0])
 }
 
-func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
+func TestShardingMetaWrongSequence(t *testing.T) {
 	var (
 		active   bool
 		err      error
@@ -210,15 +203,15 @@ func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
 	// 1st round sharding DDL sync
 	for i := 0; i < 4; i++ {
 		active, err = meta.AddItem(items[i])
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		if i%3 == 0 {
-			c.Assert(active, check.IsTrue)
+			require.True(t, active)
 		} else {
-			c.Assert(active, check.IsFalse)
+			require.False(t, active)
 		}
 	}
 	// find synced in shrading group, and call ShardingMeta.ResolveShardingDDL
-	c.Assert(meta.ResolveShardingDDL(), check.IsFalse)
+	require.False(t, meta.ResolveShardingDDL())
 
 	// 2nd round sharding DDL sync
 	for i := 0; i < 4; i++ {
@@ -226,19 +219,20 @@ func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
 			continue
 		}
 		active, err = meta.AddItem(items[i])
-		c.Assert(err, check.IsNil)
+		require.NoError(t, err)
 		if i%3 == 1 {
-			c.Assert(active, check.IsTrue)
+			require.True(t, active)
 		} else {
-			c.Assert(active, check.IsFalse)
+			require.False(t, active)
 		}
 	}
 	active, err = meta.AddItem(items[4])
-	c.Assert(active, check.IsFalse)
-	c.Assert(err, check.ErrorMatches, "\\[.*\\], Message: detect inconsistent DDL sequence from source .*, right DDL sequence should be .*")
+	require.False(t, active)
+	require.Error(t, err)
+	require.Regexp(t, "\\[.*\\], Message: detect inconsistent DDL sequence from source .*, right DDL sequence should be .*", err.Error())
 }
 
-func (t *testShardMetaSuite) TestFlushLoadMeta(c *check.C) {
+func TestFlushLoadMeta(t *testing.T) {
 	var (
 		active     bool
 		err        error
@@ -258,21 +252,21 @@ func (t *testShardMetaSuite) TestFlushLoadMeta(c *check.C) {
 	)
 	for _, item := range items {
 		active, err = meta.AddItem(item)
-		c.Assert(err, check.IsNil)
-		c.Assert(active, check.IsTrue)
+		require.NoError(t, err)
+		require.True(t, active)
 	}
 	sqls, args := meta.FlushData(sourceID, tableID)
-	c.Assert(sqls, check.HasLen, 3)
-	c.Assert(args, check.HasLen, 3)
+	require.Len(t, sqls, 3)
+	require.Len(t, args, 3)
 	for _, arg := range args {
-		c.Assert(arg, check.HasLen, 8)
-		c.Assert(loadedMeta.RestoreFromData(arg[2].(string), arg[3].(int), arg[4].(bool), []byte(arg[5].(string)), mysql.MySQLFlavor), check.IsNil)
+		require.Len(t, arg, 8)
+		require.NoError(t, loadedMeta.RestoreFromData(arg[2].(string), arg[3].(int), arg[4].(bool), []byte(arg[5].(string)), mysql.MySQLFlavor))
 	}
-	c.Assert(loadedMeta.activeIdx, check.Equals, meta.activeIdx)
-	c.Assert(loadedMeta.global.String(), check.Equals, meta.global.String())
-	c.Assert(loadedMeta.tableName, check.Equals, meta.tableName)
-	c.Assert(len(loadedMeta.sources), check.Equals, len(meta.sources))
+	require.Equal(t, meta.activeIdx, loadedMeta.activeIdx)
+	require.Equal(t, meta.global.String(), loadedMeta.global.String())
+	require.Equal(t, meta.tableName, loadedMeta.tableName)
+	require.Equal(t, len(meta.sources), len(loadedMeta.sources))
 	for table, source := range loadedMeta.sources {
-		c.Assert(source.String(), check.Equals, meta.sources[table].String())
+		require.Equal(t, meta.sources[table].String(), source.String())
 	}
 }

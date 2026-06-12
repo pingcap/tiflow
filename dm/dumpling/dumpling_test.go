@@ -20,7 +20,6 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/docker/go-units"
-	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -34,9 +33,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 )
-
-var _ = check.Suite(&testDumplingSuite{})
 
 const (
 	testDumplingSchemaName = "INFORMATION_SCHEMA"
@@ -44,15 +42,16 @@ const (
 )
 
 func TestSuite(t *testing.T) {
-	check.TestingT(t)
+	suite.Run(t, new(testDumplingSuite))
 }
 
 type testDumplingSuite struct {
+	suite.Suite
 	cfg *config.SubTaskConfig
 }
 
-func (t *testDumplingSuite) SetUpSuite(c *check.C) {
-	dir := c.MkDir()
+func (t *testDumplingSuite) SetupSuite() {
+	dir := t.T().TempDir()
 	t.cfg = &config.SubTaskConfig{
 		Name:     "dumpling_ut",
 		Timezone: "UTC",
@@ -68,68 +67,68 @@ func (t *testDumplingSuite) SetUpSuite(c *check.C) {
 			}},
 		},
 	}
-	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
+	t.Require().NoError(log.InitLogger(&log.Config{}))
 }
 
-func (t *testDumplingSuite) TestDumpling(c *check.C) {
+func (t *testDumplingSuite) TestDumpling() {
 	dumpling := NewDumpling(t.cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	err := dumpling.Init(ctx)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	resultCh := make(chan pb.ProcessResult, 1)
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError", `return(true)`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError", `return(true)`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError")
 
 	dumpling.Process(ctx, resultCh)
-	c.Assert(len(resultCh), check.Equals, 1)
+	t.Require().Equal(1, len(resultCh))
 	result := <-resultCh
-	c.Assert(result.IsCanceled, check.IsFalse)
-	c.Assert(len(result.Errors), check.Equals, 0)
+	t.Require().False(result.IsCanceled)
+	t.Require().Equal(0, len(result.Errors))
 	//nolint:errcheck
 	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessNoError")
 
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError", `return("unknown error")`))
 	// nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
 	// return error
 	dumpling.Process(ctx, resultCh)
-	c.Assert(len(resultCh), check.Equals, 1)
+	t.Require().Equal(1, len(resultCh))
 	result = <-resultCh
-	c.Assert(result.IsCanceled, check.IsFalse)
-	c.Assert(len(result.Errors), check.Equals, 1)
-	c.Assert(result.Errors[0].Message, check.Equals, "unknown error")
+	t.Require().False(result.IsCanceled)
+	t.Require().Equal(1, len(result.Errors))
+	t.Require().Equal("unknown error", result.Errors[0].Message)
 	// nolint:errcheck
 	failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessWithError")
 
 	// cancel
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel", `return("unknown error")`))
 	// nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessCancel")
-	c.Assert(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever", `return(true)`), check.IsNil)
+	t.Require().NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever", `return(true)`))
 	//nolint:errcheck
 	defer failpoint.Disable("github.com/pingcap/tiflow/dm/dumpling/dumpUnitProcessForever")
 
 	ctx2, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel2()
 	dumpling.Process(ctx2, resultCh)
-	c.Assert(len(resultCh), check.Equals, 1)
+	t.Require().Equal(1, len(resultCh))
 	result = <-resultCh
-	c.Assert(result.IsCanceled, check.IsTrue)
-	c.Assert(len(result.Errors), check.Equals, 1)
-	c.Assert(result.Errors[0].String(), check.Matches, ".*context deadline exceeded.*")
+	t.Require().True(result.IsCanceled)
+	t.Require().Equal(1, len(result.Errors))
+	t.Require().Regexp(".*context deadline exceeded.*", result.Errors[0].String())
 }
 
-func (t *testDumplingSuite) TestDefaultConfig(c *check.C) {
+func (t *testDumplingSuite) TestDefaultConfig() {
 	dumpling := NewDumpling(t.cfg)
 	ctx := context.Background()
-	c.Assert(dumpling.Init(ctx), check.IsNil)
-	c.Assert(dumpling.dumpConfig.StatementSize, check.Not(check.Equals), export.UnspecifiedSize)
-	c.Assert(dumpling.dumpConfig.Rows, check.Not(check.Equals), export.UnspecifiedSize)
+	t.Require().NoError(dumpling.Init(ctx))
+	t.Require().NotEqual(export.UnspecifiedSize, dumpling.dumpConfig.StatementSize)
+	t.Require().NotEqual(export.UnspecifiedSize, dumpling.dumpConfig.Rows)
 }
 
 func TestCallStatus(t *testing.T) {
@@ -170,7 +169,7 @@ func TestCallStatus(t *testing.T) {
 	require.Equal(t, s.Bps, int64(0))
 }
 
-func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *check.C) {
+func (t *testDumplingSuite) TestParseArgsWontOverwrite() {
 	cfg := &config.SubTaskConfig{
 		Timezone: "UTC",
 	}
@@ -184,22 +183,22 @@ func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *check.C) {
 
 	d := NewDumpling(cfg)
 	exportCfg, err := d.constructArgs(context.Background())
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
-	c.Assert(exportCfg.StatementSize, check.Equals, uint64(4000))
-	c.Assert(exportCfg.FileSize, check.Equals, uint64(1*units.MiB))
+	t.Require().Equal(uint64(4000), exportCfg.StatementSize)
+	t.Require().Equal(uint64(1*units.MiB), exportCfg.FileSize)
 
 	f, err2 := tfilter.ParseMySQLReplicationRules(rules)
-	c.Assert(err2, check.IsNil)
-	c.Assert(exportCfg.TableFilter, check.DeepEquals, tfilter.CaseInsensitive(f))
+	t.Require().NoError(err2)
+	t.Require().Equal(tfilter.CaseInsensitive(f), exportCfg.TableFilter)
 
-	c.Assert(exportCfg.Consistency, check.Equals, "lock")
+	t.Require().Equal("lock", exportCfg.Consistency)
 }
 
-func (t *testDumplingSuite) TestConstructArgs(c *check.C) {
+func (t *testDumplingSuite) TestConstructArgs() {
 	ctx := context.Background()
 
-	mock := conn.InitMockDB(c)
+	mock := conn.InitMockDB(t.T())
 	mock.ExpectQuery("SELECT cast\\(TIMEDIFF\\(NOW\\(6\\), UTC_TIMESTAMP\\(6\\)\\) as time\\);").
 		WillReturnRows(sqlmock.NewRows([]string{""}).AddRow("01:00:00"))
 
@@ -207,13 +206,13 @@ func (t *testDumplingSuite) TestConstructArgs(c *check.C) {
 	cfg.ExtraArgs = `--statement-size=100 --where "t>10" --threads 8 -F 50B`
 	d := NewDumpling(cfg)
 	exportCfg, err := d.constructArgs(ctx)
-	c.Assert(err, check.IsNil)
-	c.Assert(exportCfg.StatementSize, check.Equals, uint64(100))
-	c.Assert(exportCfg.Where, check.Equals, "t>10")
-	c.Assert(exportCfg.Threads, check.Equals, 8)
-	c.Assert(exportCfg.FileSize, check.Equals, uint64(50))
-	c.Assert(exportCfg.SessionParams, check.NotNil)
-	c.Assert(exportCfg.SessionParams["time_zone"], check.Equals, "+01:00")
+	t.Require().NoError(err)
+	t.Require().Equal(uint64(100), exportCfg.StatementSize)
+	t.Require().Equal("t>10", exportCfg.Where)
+	t.Require().Equal(8, exportCfg.Threads)
+	t.Require().Equal(uint64(50), exportCfg.FileSize)
+	t.Require().NotNil(exportCfg.SessionParams)
+	t.Require().Equal("+01:00", exportCfg.SessionParams["time_zone"])
 }
 
 func genDumpCfg(t *testing.T) *config.SubTaskConfig {

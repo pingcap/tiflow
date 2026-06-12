@@ -17,26 +17,30 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"testing"
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/google/uuid"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/stretchr/testify/suite"
 )
 
-var _ = check.Suite(&testDBSuite{})
+func TestDBSuite(t *testing.T) {
+	suite.Run(t, new(testDBSuite))
+}
 
 type testDBSuite struct {
+	suite.Suite
 	db       *sql.DB
 	syncer   *replication.BinlogSyncer
 	streamer *replication.BinlogStreamer
 	cfg      *config.SubTaskConfig
 }
 
-func (s *testDBSuite) SetUpSuite(c *check.C) {
+func (s *testDBSuite) SetupSuite() {
 	s.cfg = &config.SubTaskConfig{
 		From:       config.GetDBConfigForTest(),
 		To:         config.GetDBConfigForTest(),
@@ -49,20 +53,23 @@ func (s *testDBSuite) SetUpSuite(c *check.C) {
 	s.cfg.From.Adjust()
 	s.cfg.To.Adjust()
 
-	dir := c.MkDir()
+	dir := s.T().TempDir()
 	s.cfg.RelayDir = dir
 
 	var err error
 	dbAddr := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8", s.cfg.From.User, s.cfg.From.Password, s.cfg.From.Host, s.cfg.From.Port)
 	s.db, err = sql.Open("mysql", dbAddr)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
+	if err = s.db.Ping(); err != nil {
+		s.T().Skipf("skipping suite, upstream MySQL is not available: %v", err)
+	}
 
-	s.resetBinlogSyncer(c)
+	s.resetBinlogSyncer()
 	_, err = s.db.Exec("SET GLOBAL binlog_format = 'ROW';")
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 }
 
-func (s *testDBSuite) resetBinlogSyncer(c *check.C) {
+func (s *testDBSuite) resetBinlogSyncer() {
 	cfg := replication.BinlogSyncerConfig{
 		ServerID:       s.cfg.ServerID,
 		Flavor:         "mysql",
@@ -80,28 +87,28 @@ func (s *testDBSuite) resetBinlogSyncer(c *check.C) {
 	}
 
 	pos, _, err := conn.GetPosAndGs(tcontext.Background(), conn.NewBaseDBForTest(s.db), "mysql")
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	s.syncer = replication.NewBinlogSyncer(cfg)
 	s.streamer, err = s.syncer.StartSync(pos)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 }
 
-func (s *testDBSuite) TestGetServerUUID(c *check.C) {
+func (s *testDBSuite) TestGetServerUUID() {
 	u, err := conn.GetServerUUID(tcontext.Background(), conn.NewBaseDBForTest(s.db), "mysql")
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	_, err = uuid.Parse(u)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 }
 
-func (s *testDBSuite) TestGetServerID(c *check.C) {
+func (s *testDBSuite) TestGetServerID() {
 	id, err := conn.GetServerID(tcontext.Background(), conn.NewBaseDBForTest(s.db))
-	c.Assert(err, check.IsNil)
-	c.Assert(id, check.Greater, uint32(0))
+	s.Require().NoError(err)
+	s.Require().Greater(id, uint32(0))
 }
 
-func (s *testDBSuite) TestGetServerUnixTS(c *check.C) {
+func (s *testDBSuite) TestGetServerUnixTS() {
 	id, err := conn.GetServerUnixTS(context.Background(), conn.NewBaseDBForTest(s.db))
-	c.Assert(err, check.IsNil)
-	c.Assert(id, check.Greater, int64(0))
+	s.Require().NoError(err)
+	s.Require().Greater(id, int64(0))
 }

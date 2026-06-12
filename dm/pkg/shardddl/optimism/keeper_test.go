@@ -16,31 +16,16 @@ package optimism
 import (
 	"testing"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"go.etcd.io/etcd/tests/v3/integration"
+	"github.com/stretchr/testify/require"
 )
 
-type testKeeper struct{}
-
-var _ = check.Suite(&testKeeper{})
-
-func TestKeeper(t *testing.T) {
-	integration.BeforeTestExternal(t)
-	mockCluster := integration.NewClusterV3(t, &integration.ClusterConfig{Size: 1})
-	defer mockCluster.Terminate(t)
-
-	etcdTestCli = mockCluster.RandClient()
-
-	check.TestingT(t)
-}
-
-func (t *testKeeper) TestLockKeeper(c *check.C) {
+func TestLockKeeper(t *testing.T) {
 	var (
 		lk         = NewLockKeeper(getDownstreamMeta)
 		upSchema   = "foo_1"
@@ -56,8 +41,8 @@ func (t *testKeeper) TestLockKeeper(c *check.C) {
 		p              = parser.New()
 		se             = mock.NewContext()
 		tblID    int64 = 111
-		tiBefore       = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		tiAfter        = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
+		tiBefore       = createTableInfo(t, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		tiAfter        = createTableInfo(t, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
 
 		i11 = NewInfo(task1, source1, upSchema, upTable, downSchema, downTable, DDLs, tiBefore, []*model.TableInfo{tiAfter})
 		i12 = NewInfo(task1, source2, upSchema, upTable, downSchema, downTable, DDLs, tiBefore, []*model.TableInfo{tiAfter})
@@ -74,80 +59,80 @@ func (t *testKeeper) TestLockKeeper(c *check.C) {
 
 	// lock with 2 sources.
 	lockID1, newDDLs, cols, err := lk.TrySync(etcdTestCli, i11, tts1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID1, check.Equals, "task1-`foo`.`bar`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "task1-`foo`.`bar`", lockID1)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 	lock1 := lk.FindLock(lockID1)
-	c.Assert(lock1, check.NotNil)
-	c.Assert(lock1.ID, check.Equals, lockID1)
-	c.Assert(lk.FindLockByInfo(i11).ID, check.Equals, lockID1)
+	require.NotNil(t, lock1)
+	require.Equal(t, lockID1, lock1.ID)
+	require.Equal(t, lockID1, lk.FindLockByInfo(i11).ID)
 
 	lks := lk.FindLocksByTask("hahaha")
-	c.Assert(len(lks), check.Equals, 0)
+	require.Equal(t, 0, len(lks))
 	lks = lk.FindLocksByTask(task1)
-	c.Assert(len(lks), check.Equals, 1)
-	c.Assert(lks[0].ID, check.Equals, lockID1)
+	require.Equal(t, 1, len(lks))
+	require.Equal(t, lockID1, lks[0].ID)
 
 	synced, remain := lock1.IsSynced()
-	c.Assert(synced, check.IsFalse)
-	c.Assert(remain, check.Equals, 1)
+	require.False(t, synced)
+	require.Equal(t, 1, remain)
 
 	lockID1, newDDLs, cols, err = lk.TrySync(etcdTestCli, i12, tts1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID1, check.Equals, "task1-`foo`.`bar`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "task1-`foo`.`bar`", lockID1)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 	lock1 = lk.FindLock(lockID1)
-	c.Assert(lock1, check.NotNil)
-	c.Assert(lock1.ID, check.Equals, lockID1)
+	require.NotNil(t, lock1)
+	require.Equal(t, lockID1, lock1.ID)
 	synced, remain = lock1.IsSynced()
-	c.Assert(synced, check.IsTrue)
-	c.Assert(remain, check.Equals, 0)
+	require.True(t, synced)
+	require.Equal(t, 0, remain)
 
 	// lock with only 1 source.
 	lockID2, newDDLs, cols, err := lk.TrySync(etcdTestCli, i21, tts2)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID2, check.Equals, "task2-`foo`.`bar`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "task2-`foo`.`bar`", lockID2)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 	lock2 := lk.FindLock(lockID2)
-	c.Assert(lock2, check.NotNil)
-	c.Assert(lock2.ID, check.Equals, lockID2)
+	require.NotNil(t, lock2)
+	require.Equal(t, lockID2, lock2.ID)
 	synced, remain = lock2.IsSynced()
-	c.Assert(synced, check.IsTrue)
-	c.Assert(remain, check.Equals, 0)
+	require.True(t, synced)
+	require.Equal(t, 0, remain)
 
 	lks = lk.FindLocksByTask(task1)
-	c.Assert(len(lks), check.Equals, 1)
-	c.Assert(lks[0].ID, check.Equals, lockID1)
+	require.Equal(t, 1, len(lks))
+	require.Equal(t, lockID1, lks[0].ID)
 	lks = lk.FindLocksByTask(task2)
-	c.Assert(len(lks), check.Equals, 1)
-	c.Assert(lks[0].ID, check.Equals, lockID2)
+	require.Equal(t, 1, len(lks))
+	require.Equal(t, lockID2, lks[0].ID)
 
 	// try to find not-exists lock.
 	lockIDNotExists := "lock-not-exists"
-	c.Assert(lk.FindLock(lockIDNotExists), check.IsNil)
+	require.Nil(t, lk.FindLock(lockIDNotExists))
 
 	// all locks.
 	locks := lk.Locks()
-	c.Assert(locks, check.HasLen, 2)
-	c.Assert(locks[lockID1], check.Equals, lock1) // compare pointer
-	c.Assert(locks[lockID2], check.Equals, lock2)
+	require.Len(t, locks, 2)
+	require.Equal(t, lock1, locks[lockID1]) // compare pointer
+	require.Equal(t, lock2, locks[lockID2])
 
 	// remove lock.
-	c.Assert(lk.RemoveLock(lockID1), check.IsTrue)
-	c.Assert(lk.RemoveLock(lockIDNotExists), check.IsFalse)
-	c.Assert(lk.Locks(), check.HasLen, 1)
+	require.True(t, lk.RemoveLock(lockID1))
+	require.False(t, lk.RemoveLock(lockIDNotExists))
+	require.Len(t, lk.Locks(), 1)
 
 	// clear locks.
 	lk.Clear()
 
 	// no locks exist.
-	c.Assert(lk.Locks(), check.HasLen, 0)
+	require.Len(t, lk.Locks(), 0)
 }
 
-func (t *testKeeper) TestLockKeeperMultipleTarget(c *check.C) {
+func TestLockKeeperMultipleTarget(t *testing.T) {
 	var (
 		lk         = NewLockKeeper(getDownstreamMeta)
 		task       = "test-lock-keeper-multiple-target"
@@ -162,8 +147,8 @@ func (t *testKeeper) TestLockKeeperMultipleTarget(c *check.C) {
 		p              = parser.New()
 		se             = mock.NewContext()
 		tblID    int64 = 111
-		tiBefore       = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
-		tiAfter        = createTableInfo(c, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
+		tiBefore       = createTableInfo(t, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY)`)
+		tiAfter        = createTableInfo(t, p, se, tblID, `CREATE TABLE bar (id INT PRIMARY KEY, c1 INT)`)
 
 		i11 = NewInfo(task, source, upSchema, upTables[0], downSchema, downTable1, DDLs, tiBefore, []*model.TableInfo{tiAfter})
 		i12 = NewInfo(task, source, upSchema, upTables[1], downSchema, downTable1, DDLs, tiBefore, []*model.TableInfo{tiAfter})
@@ -184,61 +169,61 @@ func (t *testKeeper) TestLockKeeperMultipleTarget(c *check.C) {
 
 	// lock for target1.
 	lockID1, newDDLs, cols, err := lk.TrySync(etcdTestCli, i11, tts1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID1, check.DeepEquals, "test-lock-keeper-multiple-target-`foo`.`bar`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-lock-keeper-multiple-target-`foo`.`bar`", lockID1)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 
 	// lock for target2.
 	lockID2, newDDLs, cols, err := lk.TrySync(etcdTestCli, i21, tts2)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID2, check.DeepEquals, "test-lock-keeper-multiple-target-`foo`.`rab`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-lock-keeper-multiple-target-`foo`.`rab`", lockID2)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 
 	// check two locks exist.
 	lock1 := lk.FindLock(lockID1)
-	c.Assert(lock1, check.NotNil)
-	c.Assert(lock1.ID, check.Equals, lockID1)
-	c.Assert(lk.FindLockByInfo(i11).ID, check.Equals, lockID1)
+	require.NotNil(t, lock1)
+	require.Equal(t, lockID1, lock1.ID)
+	require.Equal(t, lockID1, lk.FindLockByInfo(i11).ID)
 	synced, remain := lock1.IsSynced()
-	c.Assert(synced, check.IsFalse)
-	c.Assert(remain, check.Equals, 1)
+	require.False(t, synced)
+	require.Equal(t, 1, remain)
 	lock2 := lk.FindLock(lockID2)
-	c.Assert(lock2, check.NotNil)
-	c.Assert(lock2.ID, check.Equals, lockID2)
-	c.Assert(lk.FindLockByInfo(i21).ID, check.Equals, lockID2)
+	require.NotNil(t, lock2)
+	require.Equal(t, lockID2, lock2.ID)
+	require.Equal(t, lockID2, lk.FindLockByInfo(i21).ID)
 	synced, remain = lock2.IsSynced()
-	c.Assert(synced, check.IsFalse)
-	c.Assert(remain, check.Equals, 1)
+	require.False(t, synced)
+	require.Equal(t, 1, remain)
 
 	// sync for two locks.
 	lockID1, newDDLs, cols, err = lk.TrySync(etcdTestCli, i12, tts1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID1, check.DeepEquals, "test-lock-keeper-multiple-target-`foo`.`bar`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-lock-keeper-multiple-target-`foo`.`bar`", lockID1)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 	lockID2, newDDLs, cols, err = lk.TrySync(etcdTestCli, i22, tts2)
-	c.Assert(err, check.IsNil)
-	c.Assert(lockID2, check.DeepEquals, "test-lock-keeper-multiple-target-`foo`.`rab`")
-	c.Assert(newDDLs, check.DeepEquals, DDLs)
-	c.Assert(cols, check.DeepEquals, []string{})
+	require.NoError(t, err)
+	require.Equal(t, "test-lock-keeper-multiple-target-`foo`.`rab`", lockID2)
+	require.Equal(t, DDLs, newDDLs)
+	require.Equal(t, []string{}, cols)
 
 	lock1 = lk.FindLock(lockID1)
-	c.Assert(lock1, check.NotNil)
-	c.Assert(lock1.ID, check.Equals, lockID1)
+	require.NotNil(t, lock1)
+	require.Equal(t, lockID1, lock1.ID)
 	synced, remain = lock1.IsSynced()
-	c.Assert(synced, check.IsTrue)
-	c.Assert(remain, check.Equals, 0)
+	require.True(t, synced)
+	require.Equal(t, 0, remain)
 	lock2 = lk.FindLock(lockID2)
-	c.Assert(lock2, check.NotNil)
-	c.Assert(lock2.ID, check.Equals, lockID2)
+	require.NotNil(t, lock2)
+	require.Equal(t, lockID2, lock2.ID)
 	synced, remain = lock2.IsSynced()
-	c.Assert(synced, check.IsTrue)
-	c.Assert(remain, check.Equals, 0)
+	require.True(t, synced)
+	require.Equal(t, 0, remain)
 }
 
-func (t *testKeeper) TestTableKeeper(c *check.C) {
+func TestTableKeeper(t *testing.T) {
 	var (
 		tk         = NewTableKeeper()
 		task1      = "task-1"
@@ -291,128 +276,128 @@ func (t *testKeeper) TestTableKeeper(c *check.C) {
 	}
 
 	// no tables exist before Init/Update.
-	c.Assert(tk.FindTables(task1, downSchema, downTable), check.IsNil)
+	require.Nil(t, tk.FindTables(task1, downSchema, downTable))
 	for schema, tables := range tt11.UpTables {
 		for table := range tables {
-			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), check.IsFalse)
+			require.False(t, tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable))
 		}
 	}
 
 	// Init with `nil` is fine.
 	tk.Init(nil)
-	c.Assert(tk.FindTables(task1, downSchema, downTable), check.IsNil)
+	require.Nil(t, tk.FindTables(task1, downSchema, downTable))
 
 	// tables for task1 exit after Init.
 	tk.Init(stm)
 	tts := tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 2)
-	c.Assert(tts[0], check.DeepEquals, tt11)
-	c.Assert(tts[1], check.DeepEquals, tt12)
+	require.Len(t, tts, 2)
+	require.Equal(t, tt11, tts[0])
+	require.Equal(t, tt12, tts[1])
 	for schema, tables := range tt11.UpTables {
 		for table := range tables {
-			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), check.IsTrue)
+			require.True(t, tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable))
 		}
 	}
 
 	// adds new tables.
 	addTables, dropTables := tk.Update(st21)
-	c.Assert(addTables, check.HasLen, 1)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 1)
+	require.Len(t, dropTables, 0)
 	tts = tk.FindTables(task2, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 1)
-	c.Assert(tts[0], check.DeepEquals, tt21)
+	require.Len(t, tts, 1)
+	require.Equal(t, tt21, tts[0])
 
 	// updates/appends new tables.
 	addTables, dropTables = tk.Update(st22)
-	c.Assert(addTables, check.HasLen, 1)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 1)
+	require.Len(t, dropTables, 0)
 	tts = tk.FindTables(task2, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 1)
-	c.Assert(tts[0], check.DeepEquals, tt22)
+	require.Len(t, tts, 1)
+	require.Equal(t, tt22, tts[0])
 	for schema, tables := range tt22.UpTables {
 		for table := range tables {
-			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), check.IsTrue)
+			require.True(t, tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable))
 		}
 	}
 
 	// deletes tables.
 	st22.IsDeleted = true
 	addTables, dropTables = tk.Update(st22)
-	c.Assert(addTables, check.HasLen, 0)
-	c.Assert(dropTables, check.HasLen, 2)
-	c.Assert(tk.FindTables(task2, downSchema, downTable), check.IsNil)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 2)
+	require.Nil(t, tk.FindTables(task2, downSchema, downTable))
 	for schema, tables := range tt22.UpTables {
 		for table := range tables {
-			c.Assert(tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable), check.IsFalse)
+			require.False(t, tk.SourceTableExist(tt22.Task, tt22.Source, schema, table, downSchema, downTable))
 		}
 	}
 
 	// try to delete, but not exist.
 	addTables, dropTables = tk.Update(st22)
-	c.Assert(addTables, check.HasLen, 0)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 0)
 
 	st22.Task = "not-exist"
 	addTables, dropTables = tk.Update(st22)
-	c.Assert(addTables, check.HasLen, 0)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 0)
 
 	// tables for task1 not affected.
 	tts = tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 2)
-	c.Assert(tts[0], check.DeepEquals, tt11)
-	c.Assert(tts[1], check.DeepEquals, tt12)
+	require.Len(t, tts, 2)
+	require.Equal(t, tt11, tts[0])
+	require.Equal(t, tt12, tts[1])
 	for schema, tables := range tt11.UpTables {
 		for table := range tables {
-			c.Assert(tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable), check.IsTrue)
+			require.True(t, tk.SourceTableExist(tt11.Task, tt11.Source, schema, table, downSchema, downTable))
 		}
 	}
 
 	// add a table for st11.
-	c.Assert(tk.AddTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable), check.IsTrue)
-	c.Assert(tk.AddTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable), check.IsFalse)
+	require.True(t, tk.AddTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable))
+	require.False(t, tk.AddTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable))
 	tts = tk.FindTables(task1, downSchema, downTable)
 	st11n := tts[0]
-	c.Assert(st11n.UpTables, check.HasKey, "db-2")
-	c.Assert(st11n.UpTables["db-2"], check.HasKey, "tbl-3")
+	require.Contains(t, st11n.UpTables, "db-2")
+	require.Contains(t, st11n.UpTables["db-2"], "tbl-3")
 
 	// removed the added table in st11.
-	c.Assert(tk.RemoveTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable), check.IsTrue)
-	c.Assert(tk.RemoveTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable), check.IsFalse)
+	require.True(t, tk.RemoveTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable))
+	require.False(t, tk.RemoveTable(task1, st11.Source, "db-2", "tbl-3", downSchema, downTable))
 	tts = tk.FindTables(task1, downSchema, downTable)
 	st11n = tts[0]
-	c.Assert(st11n.UpTables["db-2"], check.IsNil)
+	require.Nil(t, st11n.UpTables["db-2"])
 
 	// adds for not existing task takes no effect.
-	c.Assert(tk.AddTable("not-exist", st11.Source, "db-2", "tbl-3", downSchema, downTable), check.IsFalse)
+	require.False(t, tk.AddTable("not-exist", st11.Source, "db-2", "tbl-3", downSchema, downTable))
 	// adds for not existing source takes effect.
-	c.Assert(tk.AddTable(task1, "new-source", "db-2", "tbl-3", downSchema, downTable), check.IsTrue)
+	require.True(t, tk.AddTable(task1, "new-source", "db-2", "tbl-3", downSchema, downTable))
 	tts = tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 3)
-	c.Assert(tts[2].Source, check.Equals, "new-source")
-	c.Assert(tts[2].UpTables["db-2"], check.HasKey, "tbl-3")
+	require.Len(t, tts, 3)
+	require.Equal(t, "new-source", tts[2].Source)
+	require.Contains(t, tts[2].UpTables["db-2"], "tbl-3")
 
 	// removes for not existing task/source takes no effect.
-	c.Assert(tk.RemoveTable("not-exit", st12.Source, "db", "tbl-1", downSchema, downTable), check.IsFalse)
-	c.Assert(tk.RemoveTable(task1, "not-exit", "db", "tbl-1", downSchema, downTable), check.IsFalse)
+	require.False(t, tk.RemoveTable("not-exit", st12.Source, "db", "tbl-1", downSchema, downTable))
+	require.False(t, tk.RemoveTable(task1, "not-exit", "db", "tbl-1", downSchema, downTable))
 	tts = tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts[1], check.DeepEquals, tt12)
+	require.Equal(t, tt12, tts[1])
 
-	c.Assert(tk.RemoveTableByTask("hahaha"), check.IsFalse)
+	require.False(t, tk.RemoveTableByTask("hahaha"))
 	tk.RemoveTableByTaskAndSources("hahaha", nil)
 	tts = tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 3)
+	require.Len(t, tts, 3)
 	tk.RemoveTableByTaskAndSources(task1, []string{"hahaha"})
 	tts = tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 3)
+	require.Len(t, tts, 3)
 	tk.RemoveTableByTaskAndSources(task1, []string{source1, source2})
 	tts = tk.FindTables(task1, downSchema, downTable)
-	c.Assert(tts, check.HasLen, 1)
-	c.Assert(tts[0].Source, check.Equals, "new-source")
-	c.Assert(tts[0].UpTables["db-2"], check.HasKey, "tbl-3")
+	require.Len(t, tts, 1)
+	require.Equal(t, "new-source", tts[0].Source)
+	require.Contains(t, tts[0].UpTables["db-2"], "tbl-3")
 }
 
-func (t *testKeeper) TestTargetTablesForTask(c *check.C) {
+func TestTargetTablesForTask(t *testing.T) {
 	var (
 		tk         = NewTableKeeper()
 		task1      = "task1"
@@ -429,11 +414,11 @@ func (t *testKeeper) TestTargetTablesForTask(c *check.C) {
 	)
 
 	// not exist task.
-	c.Assert(TargetTablesForTask("not-exist", downSchema, downTable1, stm), check.IsNil)
+	require.Nil(t, TargetTablesForTask("not-exist", downSchema, downTable1, stm))
 
 	// no tables exist.
 	tts := TargetTablesForTask(task1, downSchema, downTable1, stm)
-	c.Assert(tts, check.DeepEquals, []TargetTable{})
+	require.Equal(t, []TargetTable{}, tts)
 
 	// add some tables.
 	tt11 := stm[task1][source1]
@@ -449,40 +434,40 @@ func (t *testKeeper) TestTargetTablesForTask(c *check.C) {
 
 	// get tables back.
 	tts = TargetTablesForTask(task1, downSchema, downTable1, stm)
-	c.Assert(tts, check.DeepEquals, []TargetTable{
+	require.Equal(t, []TargetTable{
 		tt11.TargetTable(downSchema, downTable1),
 		tt12.TargetTable(downSchema, downTable1),
-	})
+	}, tts)
 	tts = TargetTablesForTask(task2, downSchema, downTable1, stm)
-	c.Assert(tts, check.DeepEquals, []TargetTable{
+	require.Equal(t, []TargetTable{
 		tt21.TargetTable(downSchema, downTable1),
 		tt22.TargetTable(downSchema, downTable1),
-	})
+	}, tts)
 
 	tk.Init(stm)
 	tts = tk.FindTables(task1, downSchema, downTable1)
-	c.Assert(tts, check.DeepEquals, []TargetTable{
+	require.Equal(t, []TargetTable{
 		tt11.TargetTable(downSchema, downTable1),
 		tt12.TargetTable(downSchema, downTable1),
-	})
+	}, tts)
 
 	// add some tables for another target table.
-	c.Assert(tk.AddTable(task1, source1, "foo-1", "bar-3", downSchema, downTable2), check.IsTrue)
-	c.Assert(tk.AddTable(task1, source1, "foo-1", "bar-4", downSchema, downTable2), check.IsTrue)
+	require.True(t, tk.AddTable(task1, source1, "foo-1", "bar-3", downSchema, downTable2))
+	require.True(t, tk.AddTable(task1, source1, "foo-1", "bar-4", downSchema, downTable2))
 	tts = tk.FindTables(task1, downSchema, downTable2)
-	c.Assert(tts, check.DeepEquals, []TargetTable{
+	require.Equal(t, []TargetTable{
 		newTargetTable(task1, source1, downSchema, downTable2,
 			map[string]map[string]struct{}{
 				"foo-1": {"bar-3": struct{}{}, "bar-4": struct{}{}},
 			}),
-	})
+	}, tts)
 }
 
 func getDownstreamMeta(string) (*dbconfig.DBConfig, string) {
 	return nil, ""
 }
 
-func (t *testKeeper) TestGetDownstreamMeta(c *check.C) {
+func TestGetDownstreamMeta(t *testing.T) {
 	var (
 		task1 = "hahaha"
 		task2 = "hihihi"
@@ -497,51 +482,51 @@ func (t *testKeeper) TestGetDownstreamMeta(c *check.C) {
 		}
 	}
 
-	conn.InitMockDB(c)
+	conn.InitMockDB(t)
 	lk := NewLockKeeper(getDownstreamMetaFunc)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 0)
+	require.Len(t, lk.downstreamMetaMap, 0)
 
 	downstreamMeta, err := lk.getDownstreamMeta(task3)
-	c.Assert(downstreamMeta, check.IsNil)
-	c.Assert(terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err), check.IsTrue)
+	require.Nil(t, downstreamMeta)
+	require.True(t, terror.ErrMasterOptimisticDownstreamMetaNotFound.Equal(err))
 
 	downstreamMeta, err = lk.getDownstreamMeta(task1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 1)
-	c.Assert(downstreamMeta, check.Equals, lk.downstreamMetaMap[task1])
+	require.NoError(t, err)
+	require.Len(t, lk.downstreamMetaMap, 1)
+	require.Equal(t, lk.downstreamMetaMap[task1], downstreamMeta)
 	downstreamMeta2, err := lk.getDownstreamMeta(task1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 1)
-	c.Assert(downstreamMeta, check.Equals, downstreamMeta2)
+	require.NoError(t, err)
+	require.Len(t, lk.downstreamMetaMap, 1)
+	require.Equal(t, downstreamMeta2, downstreamMeta)
 
 	downstreamMeta3, err := lk.getDownstreamMeta(task2)
-	c.Assert(err, check.IsNil)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 2)
-	c.Assert(lk.downstreamMetaMap, check.HasKey, task1)
-	c.Assert(lk.downstreamMetaMap, check.HasKey, task2)
-	c.Assert(downstreamMeta3, check.Equals, lk.downstreamMetaMap[task2])
+	require.NoError(t, err)
+	require.Len(t, lk.downstreamMetaMap, 2)
+	require.Contains(t, lk.downstreamMetaMap, task1)
+	require.Contains(t, lk.downstreamMetaMap, task2)
+	require.Equal(t, lk.downstreamMetaMap[task2], downstreamMeta3)
 
 	lk.RemoveDownstreamMeta(task3)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 2)
-	c.Assert(lk.downstreamMetaMap, check.HasKey, task1)
-	c.Assert(lk.downstreamMetaMap, check.HasKey, task2)
+	require.Len(t, lk.downstreamMetaMap, 2)
+	require.Contains(t, lk.downstreamMetaMap, task1)
+	require.Contains(t, lk.downstreamMetaMap, task2)
 
 	lk.RemoveDownstreamMeta(task1)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 1)
-	c.Assert(lk.downstreamMetaMap, check.HasKey, task2)
-	c.Assert(downstreamMeta3, check.Equals, lk.downstreamMetaMap[task2])
+	require.Len(t, lk.downstreamMetaMap, 1)
+	require.Contains(t, lk.downstreamMetaMap, task2)
+	require.Equal(t, lk.downstreamMetaMap[task2], downstreamMeta3)
 
 	downstreamMeta, err = lk.getDownstreamMeta(task1)
-	c.Assert(err, check.IsNil)
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 2)
-	c.Assert(downstreamMeta, check.Equals, lk.downstreamMetaMap[task1])
-	c.Assert(downstreamMeta3, check.Equals, lk.downstreamMetaMap[task2])
+	require.NoError(t, err)
+	require.Len(t, lk.downstreamMetaMap, 2)
+	require.Equal(t, lk.downstreamMetaMap[task1], downstreamMeta)
+	require.Equal(t, lk.downstreamMetaMap[task2], downstreamMeta3)
 
 	lk.Clear()
-	c.Assert(lk.downstreamMetaMap, check.HasLen, 0)
+	require.Len(t, lk.downstreamMetaMap, 0)
 }
 
-func (t *testKeeper) TestUpdateSourceTables(c *check.C) {
+func TestUpdateSourceTables(t *testing.T) {
 	var (
 		tk         = NewTableKeeper()
 		task1      = "task-1"
@@ -573,18 +558,18 @@ func (t *testKeeper) TestUpdateSourceTables(c *check.C) {
 
 	// put st11
 	addTables, dropTables := tk.Update(st11)
-	c.Assert(addTables, check.HasLen, 2)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 2)
+	require.Len(t, dropTables, 0)
 
 	// put st11 again
 	addTables, dropTables = tk.Update(st11)
-	c.Assert(addTables, check.HasLen, 0)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 0)
 
 	// put st12
 	addTables, dropTables = tk.Update(st12)
-	c.Assert(addTables, check.HasLen, 2)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 2)
+	require.Len(t, dropTables, 0)
 
 	// update and put st12
 	newST := NewSourceTables(task1, source2)
@@ -596,16 +581,16 @@ func (t *testKeeper) TestUpdateSourceTables(c *check.C) {
 	newST.RemoveTable("db", "tbl-1", downSchema, downTable)
 	newST.AddTable("db", "tbl-3", downSchema, downTable)
 	addTables, dropTables = tk.Update(newST)
-	c.Assert(addTables, check.HasLen, 1)
-	c.Assert(dropTables, check.HasLen, 1)
+	require.Len(t, addTables, 1)
+	require.Len(t, dropTables, 1)
 	// put st12 again
 	addTables, dropTables = tk.Update(newST)
-	c.Assert(addTables, check.HasLen, 0)
-	c.Assert(dropTables, check.HasLen, 0)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 0)
 
 	// delete source table
 	newST.IsDeleted = true
 	addTables, dropTables = tk.Update(newST)
-	c.Assert(addTables, check.HasLen, 0)
-	c.Assert(dropTables, check.HasLen, 2)
+	require.Len(t, addTables, 0)
+	require.Len(t, dropTables, 2)
 }

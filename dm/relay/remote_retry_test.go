@@ -16,25 +16,22 @@ package relay
 import (
 	"context"
 	"errors"
+	"testing"
 	"time"
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&testReaderRetrySuite{})
-
-type testReaderRetrySuite struct{}
-
-func (t *testReaderRetrySuite) TestRetry(c *check.C) {
+func TestRetry(t *testing.T) {
 	rr, err := NewReaderRetry(ReaderRetryConfig{
 		BackoffRollback: 200 * time.Millisecond,
 		BackoffMax:      1 * time.Second,
 		BackoffMin:      1 * time.Millisecond,
 		BackoffFactor:   2,
 	})
-	c.Assert(err, check.IsNil)
-	c.Assert(rr, check.NotNil)
+	require.NoError(t, err)
+	require.NotNil(t, rr)
 
 	retryableErr := gmysql.ErrBadConn
 	unRetryableErr := errors.New("custom error")
@@ -42,28 +39,28 @@ func (t *testReaderRetrySuite) TestRetry(c *check.C) {
 
 	// check some times
 	for i := 0; i < 3; i++ {
-		c.Assert(rr.Check(ctx, retryableErr), check.IsTrue)
+		require.True(t, rr.Check(ctx, retryableErr))
 	}
-	c.Assert(rr.bf.Current(), check.Equals, 8*time.Millisecond)
+	require.Equal(t, 8*time.Millisecond, rr.bf.Current())
 
 	// check more times, until reach Max
 	for i := 0; i < 10; i++ {
-		c.Assert(rr.Check(ctx, retryableErr), check.IsTrue)
+		require.True(t, rr.Check(ctx, retryableErr))
 	}
-	c.Assert(rr.bf.Current(), check.Equals, rr.cfg.BackoffMax)
+	require.Equal(t, rr.cfg.BackoffMax, rr.bf.Current())
 
 	// sleep 1s
 	time.Sleep(1 * time.Second)
 
 	// check with rollback, rollback 5 times, forward 1 time
-	c.Assert(rr.Check(ctx, retryableErr), check.IsTrue)
-	c.Assert(rr.bf.Current(), check.Equals, 64*time.Millisecond)
+	require.True(t, rr.Check(ctx, retryableErr))
+	require.Equal(t, 64*time.Millisecond, rr.bf.Current())
 
 	// check un-retryable error
-	c.Assert(rr.Check(ctx, unRetryableErr), check.IsFalse)
+	require.False(t, rr.Check(ctx, unRetryableErr))
 
 	// check with context timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
 	defer cancel()
-	c.Assert(rr.Check(ctx, retryableErr), check.IsFalse)
+	require.False(t, rr.Check(ctx, retryableErr))
 }

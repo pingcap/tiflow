@@ -22,66 +22,66 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/stretchr/testify/suite"
 	"github.com/tikv/pd/pkg/utils/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
-var _ = check.Suite(&testEtcdSuite{})
-
-type testEtcdSuite struct{}
-
-func (t *testEtcdSuite) SetUpSuite(c *check.C) {
-	// initialized the logger to make genEmbedEtcdConfig working.
-	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
+type testEtcdSuite struct {
+	suite.Suite
 }
 
-func (t *testEtcdSuite) TestStartEtcdFail(c *check.C) {
+func (t *testEtcdSuite) SetupSuite() {
+	// initialized the logger to make genEmbedEtcdConfig working.
+	t.Require().NoError(log.InitLogger(&log.Config{}))
+}
+
+func (t *testEtcdSuite) TestStartEtcdFail() {
 	cfgCluster := NewConfig()
 	cfgCluster.Name = "dm-master-1"
-	cfgCluster.DataDir = c.MkDir()
+	cfgCluster.DataDir = t.T().TempDir()
 	cfgCluster.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfgCluster.PeerUrls = tempurl.Alloc()
-	c.Assert(cfgCluster.adjust(), check.IsNil)
+	t.Require().NoError(cfgCluster.adjust())
 
 	// add another non-existing member for bootstrapping.
 	cfgCluster.InitialCluster = fmt.Sprintf("%s=%s,%s=%s",
 		cfgCluster.Name, cfgCluster.AdvertisePeerUrls,
 		"dm-master-2", tempurl.Alloc())
-	c.Assert(cfgCluster.adjust(), check.IsNil)
+	t.Require().NoError(cfgCluster.adjust())
 
 	// start an etcd cluster
 	cfgClusterEtcd := genEmbedEtcdConfigWithLogger("info")
 	cfgClusterEtcd, err := cfgCluster.genEmbedEtcdConfig(cfgClusterEtcd)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	e, err := startEtcd(cfgClusterEtcd, nil, nil, 3*time.Second)
-	c.Assert(terror.ErrMasterStartEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(e, check.IsNil)
+	t.Require().True(terror.ErrMasterStartEmbedEtcdFail.Equal(err))
+	t.Require().Nil(e)
 }
 
-func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
+func (t *testEtcdSuite) TestPrepareJoinEtcd() {
 	cfgCluster := NewConfig() // used to start an etcd cluster
 	cfgCluster.Name = "dm-master-1"
-	cfgCluster.DataDir = c.MkDir()
+	cfgCluster.DataDir = t.T().TempDir()
 	cfgCluster.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfgCluster.AdvertiseAddr = cfgCluster.MasterAddr
 	cfgCluster.PeerUrls = tempurl.Alloc()
-	c.Assert(cfgCluster.adjust(), check.IsNil)
+	t.Require().NoError(cfgCluster.adjust())
 	cfgClusterEtcd := genEmbedEtcdConfigWithLogger("info")
 	cfgClusterEtcd, err := cfgCluster.genEmbedEtcdConfig(cfgClusterEtcd)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	cfgBefore := t.cloneConfig(cfgCluster) // before `prepareJoinEtcd` applied
-	cfgBefore.DataDir = c.MkDir()          // overwrite some config items
+	cfgBefore.DataDir = t.T().TempDir()    // overwrite some config items
 	cfgBefore.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfgBefore.AdvertiseAddr = cfgBefore.MasterAddr
 	cfgBefore.PeerUrls = tempurl.Alloc()
 	cfgBefore.AdvertisePeerUrls = cfgBefore.PeerUrls
-	c.Assert(cfgBefore.adjust(), check.IsNil)
+	t.Require().NoError(cfgBefore.adjust())
 
 	cfgAfter := t.cloneConfig(cfgBefore) // after `prepareJoinEtcd applied
 
@@ -90,54 +90,57 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	memberDP := filepath.Join(cfgBefore.DataDir, "member")
 
 	// not set `join`, do nothing
-	c.Assert(prepareJoinEtcd(cfgAfter), check.IsNil)
-	c.Assert(cfgAfter, check.DeepEquals, cfgBefore)
+	t.Require().NoError(prepareJoinEtcd(cfgAfter))
+	t.Require().Equal(cfgBefore, cfgAfter)
 
 	// try to join self
 	cfgAfter.Join = cfgAfter.MasterAddr
 	err = prepareJoinEtcd(cfgAfter)
-	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: join self.*is forbidden.*")
+	t.Require().True(terror.ErrMasterJoinEmbedEtcdFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp(".*fail to join embed etcd: join self.*is forbidden.*", err.Error())
 
 	// update `join` to a valid item
 	cfgBefore.Join = joinCluster
 
 	// join with persistent data
-	c.Assert(os.WriteFile(joinFP, []byte(joinCluster), privateDirMode), check.IsNil)
+	t.Require().NoError(os.WriteFile(joinFP, []byte(joinCluster), privateDirMode))
 	cfgAfter = t.cloneConfig(cfgBefore)
-	c.Assert(prepareJoinEtcd(cfgAfter), check.IsNil)
-	c.Assert(cfgAfter.InitialCluster, check.Equals, joinCluster)
-	c.Assert(cfgAfter.InitialClusterState, check.Equals, embed.ClusterStateFlagExisting)
-	c.Assert(os.Remove(joinFP), check.IsNil) // remove the persistent data
+	t.Require().NoError(prepareJoinEtcd(cfgAfter))
+	t.Require().Equal(joinCluster, cfgAfter.InitialCluster)
+	t.Require().Equal(embed.ClusterStateFlagExisting, cfgAfter.InitialClusterState)
+	t.Require().NoError(os.Remove(joinFP)) // remove the persistent data
 
 	// join with invalid persistent data
-	c.Assert(os.Mkdir(joinFP, privateDirMode), check.IsNil) // use directory as invalid persistent data (file)
+	t.Require().NoError(os.Mkdir(joinFP, privateDirMode)) // use directory as invalid persistent data (file)
 	cfgAfter = t.cloneConfig(cfgBefore)
 	err = prepareJoinEtcd(cfgAfter)
-	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: read persistent join data.*")
-	c.Assert(os.Remove(joinFP), check.IsNil)        // remove the persistent data
-	c.Assert(cfgAfter, check.DeepEquals, cfgBefore) // not changed
+	t.Require().True(terror.ErrMasterJoinEmbedEtcdFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp(".*fail to join embed etcd: read persistent join data.*", err.Error())
+	t.Require().NoError(os.Remove(joinFP)) // remove the persistent data
+	t.Require().Equal(cfgBefore, cfgAfter) // not changed
 
 	// restart with previous data
-	c.Assert(os.Mkdir(memberDP, privateDirMode), check.IsNil)
-	c.Assert(os.Mkdir(filepath.Join(memberDP, "wal"), privateDirMode), check.IsNil)
-	c.Assert(prepareJoinEtcd(cfgAfter), check.IsNil)
-	c.Assert(cfgAfter.InitialCluster, check.Equals, "")
-	c.Assert(cfgAfter.InitialClusterState, check.Equals, embed.ClusterStateFlagExisting)
-	c.Assert(os.RemoveAll(memberDP), check.IsNil) // remove previous data
+	t.Require().NoError(os.Mkdir(memberDP, privateDirMode))
+	t.Require().NoError(os.Mkdir(filepath.Join(memberDP, "wal"), privateDirMode))
+	t.Require().NoError(prepareJoinEtcd(cfgAfter))
+	t.Require().Equal("", cfgAfter.InitialCluster)
+	t.Require().Equal(embed.ClusterStateFlagExisting, cfgAfter.InitialClusterState)
+	t.Require().NoError(os.RemoveAll(memberDP)) // remove previous data
 
 	// start an etcd cluster
 	e1, err := startEtcd(cfgClusterEtcd, nil, nil, etcdStartTimeout)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	defer e1.Close()
 
 	// same `name`, duplicate
 	cfgAfter = t.cloneConfig(cfgBefore)
 	err = prepareJoinEtcd(cfgAfter)
-	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: missing data or joining a duplicate member.*")
-	c.Assert(cfgAfter, check.DeepEquals, cfgBefore) // not changed
+	t.Require().True(terror.ErrMasterJoinEmbedEtcdFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp(".*fail to join embed etcd: missing data or joining a duplicate member.*", err.Error())
+	t.Require().Equal(cfgBefore, cfgAfter) // not changed
 
 	// set a different name
 	cfgBefore.Name = "dm-master-2"
@@ -146,13 +149,14 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	cfgAfter = t.cloneConfig(cfgBefore)
 	cfgAfter.AdvertisePeerUrls = "invalid-advertise-peer-urls"
 	err = prepareJoinEtcd(cfgAfter)
-	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: add member.*")
+	t.Require().True(terror.ErrMasterJoinEmbedEtcdFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp(".*fail to join embed etcd: add member.*", err.Error())
 
 	// join with existing cluster
 	cfgAfter = t.cloneConfig(cfgBefore)
-	c.Assert(prepareJoinEtcd(cfgAfter), check.IsNil)
-	c.Assert(cfgAfter.InitialClusterState, check.Equals, embed.ClusterStateFlagExisting)
+	t.Require().NoError(prepareJoinEtcd(cfgAfter))
+	t.Require().Equal(embed.ClusterStateFlagExisting, cfgAfter.InitialClusterState)
 	obtainClusters := strings.Split(cfgAfter.InitialCluster, ",")
 	sort.Strings(obtainClusters)
 	expectedClusters := []string{
@@ -160,31 +164,32 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 		fmt.Sprintf("%s=%s", cfgAfter.Name, cfgAfter.PeerUrls),
 	}
 	sort.Strings(expectedClusters)
-	c.Assert(obtainClusters, check.DeepEquals, expectedClusters)
+	t.Require().Equal(expectedClusters, obtainClusters)
 
 	// join data should exist now
 	joinData, err := os.ReadFile(joinFP)
-	c.Assert(err, check.IsNil)
-	c.Assert(string(joinData), check.Equals, cfgAfter.InitialCluster)
+	t.Require().NoError(err)
+	t.Require().Equal(cfgAfter.InitialCluster, string(joinData))
 
 	// prepare join done, but has not start the etcd to complete the join, can not join anymore.
 	cfgAfter2 := t.cloneConfig(cfgBefore)
 	cfgAfter2.Name = "dm-master-3" // overwrite some items
-	cfgAfter2.DataDir = c.MkDir()
+	cfgAfter2.DataDir = t.T().TempDir()
 	cfgAfter2.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfgAfter2.AdvertiseAddr = cfgAfter2.MasterAddr
 	cfgAfter2.PeerUrls = tempurl.Alloc()
 	cfgAfter2.AdvertisePeerUrls = cfgAfter2.PeerUrls
 	err = prepareJoinEtcd(cfgAfter2)
-	c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-	c.Assert(err, check.ErrorMatches, ".*context deadline exceeded.*")
+	t.Require().True(terror.ErrMasterJoinEmbedEtcdFail.Equal(err))
+	t.Require().Error(err)
+	t.Require().Regexp(".*context deadline exceeded.*", err.Error())
 
 	// start the joining etcd
 	cfgAfterEtcd := genEmbedEtcdConfigWithLogger("info")
 	cfgAfterEtcd, err = cfgAfter.genEmbedEtcdConfig(cfgAfterEtcd)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	e2, err := startEtcd(cfgAfterEtcd, nil, nil, etcdStartTimeout)
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 	defer e2.Close()
 
 	// try join again
@@ -194,11 +199,12 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 			break
 		}
 		// for `etcdserver: unhealthy cluster`, try again later
-		c.Assert(terror.ErrMasterJoinEmbedEtcdFail.Equal(err), check.IsTrue)
-		c.Assert(err, check.ErrorMatches, ".*fail to join embed etcd: add member.*: etcdserver: unhealthy cluster.*")
+		t.Require().True(terror.ErrMasterJoinEmbedEtcdFail.Equal(err))
+		t.Require().Error(err)
+		t.Require().Regexp(".*fail to join embed etcd: add member.*: etcdserver: unhealthy cluster.*", err.Error())
 		time.Sleep(500 * time.Millisecond)
 	}
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 }
 
 func (t *testEtcdSuite) cloneConfig(cfg *Config) *Config {
@@ -207,54 +213,55 @@ func (t *testEtcdSuite) cloneConfig(cfg *Config) *Config {
 	return clone
 }
 
-func (t *testEtcdSuite) TestIsDirExist(c *check.C) {
+func (t *testEtcdSuite) TestIsDirExist() {
 	d := "./directory-not-exists"
-	c.Assert(isDirExist(d), check.IsFalse)
+	t.Require().False(isDirExist(d))
 
 	// empty directory
-	d = c.MkDir()
-	c.Assert(isDirExist(d), check.IsTrue)
+	d = t.T().TempDir()
+	t.Require().True(isDirExist(d))
 
 	// data exists in the directory
 	for i := 1; i <= 3; i++ {
 		fp := filepath.Join(d, fmt.Sprintf("file.%d", i))
-		c.Assert(os.WriteFile(fp, nil, privateDirMode), check.IsNil)
-		c.Assert(isDirExist(d), check.IsTrue)
-		c.Assert(isDirExist(fp), check.IsFalse) // not a directory
+		t.Require().NoError(os.WriteFile(fp, nil, privateDirMode))
+		t.Require().True(isDirExist(d))
+		t.Require().False(isDirExist(fp)) // not a directory
 	}
 }
 
-func (t *testEtcdSuite) TestEtcdAutoCompaction(c *check.C) {
+func (t *testEtcdSuite) TestEtcdAutoCompaction() {
 	cfg := NewConfig()
-	c.Assert(cfg.FromContent(SampleConfig), check.IsNil)
+	t.Require().NoError(cfg.FromContent(SampleConfig))
 
-	cfg.DataDir = c.MkDir()
+	cfg.DataDir = t.T().TempDir()
 	cfg.MasterAddr = tempurl.Alloc()[len("http://"):]
 	cfg.AdvertiseAddr = cfg.MasterAddr
 	cfg.AutoCompactionRetention = "1s"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s := NewServer(cfg)
-	c.Assert(s.Start(ctx), check.IsNil)
+	t.Require().NoError(s.Start(ctx))
 
 	etcdCli, err := clientv3.New(clientv3.Config{
 		Endpoints: []string{cfg.MasterAddr},
 	})
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	for i := 0; i < 100; i++ {
 		_, err = etcdCli.Put(ctx, "key", fmt.Sprintf("%03d", i))
-		c.Assert(err, check.IsNil)
+		t.Require().NoError(err)
 	}
 	time.Sleep(3 * time.Second)
 	resp, err := etcdCli.Get(ctx, "key")
-	c.Assert(err, check.IsNil)
+	t.Require().NoError(err)
 
 	utils.WaitSomething(10, time.Second, func() bool {
 		_, err = etcdCli.Get(ctx, "key", clientv3.WithRev(resp.Header.Revision-1))
 		return err != nil
 	})
-	c.Assert(err, check.ErrorMatches, ".*required revision has been compacted.*")
+	t.Require().Error(err)
+	t.Require().Regexp(".*required revision has been compacted.*", err.Error())
 
 	cancel()
 	s.Close()

@@ -13,60 +13,56 @@
 
 package upgrade
 
-import (
-	"github.com/pingcap/check"
-)
-
-func (t *testForEtcd) TestVersionJSON(c *check.C) {
+func (t *testForEtcd) TestVersionJSON() {
 	v1 := NewVersion(1, "v2.0.0")
 	j, err := v1.toJSON()
-	c.Assert(err, check.IsNil)
-	c.Assert(j, check.Equals, `{"internal-no":1,"release-ver":"v2.0.0"}`)
-	c.Assert(j, check.Equals, v1.String())
+	t.Require().NoError(err)
+	t.Require().Equal(`{"internal-no":1,"release-ver":"v2.0.0"}`, j)
+	t.Require().Equal(v1.String(), j)
 
 	v2, err := versionFromJSON(j)
-	c.Assert(err, check.IsNil)
-	c.Assert(v2, check.DeepEquals, v1)
+	t.Require().NoError(err)
+	t.Require().Equal(v1, v2)
 }
 
-func (t *testForEtcd) TestVersionFunc(c *check.C) {
+func (t *testForEtcd) TestVersionFunc() {
 	var ve Version
-	c.Assert(ve.NotSet(), check.IsTrue)
-	c.Assert(CurrentVersion.NotSet(), check.IsFalse)
+	t.Require().True(ve.NotSet())
+	t.Require().False(CurrentVersion.NotSet())
 
 	v1 := NewVersion(1, "v2.0.0")
 	v2 := NewVersion(2, "v2.1.0")
-	c.Assert(v1.Compare(v2), check.Equals, -1)
-	c.Assert(v2.Compare(v1), check.Equals, 1)
+	t.Require().Equal(-1, v1.Compare(v2))
+	t.Require().Equal(1, v2.Compare(v1))
 
 	v11 := v1
-	c.Assert(v11.Compare(v1), check.Equals, 0)
+	t.Require().Equal(0, v11.Compare(v1))
 
 	// we only compare InternalNo now, if we should compare release version later, this should be fail.
 	v12 := NewVersion(v1.InternalNo, "another-release-ver")
-	c.Assert(v12.Compare(v1), check.Equals, 0)
+	t.Require().Equal(0, v12.Compare(v1))
 
 	// MinVersion should < any current version.
-	c.Assert(MinVersion.Compare(CurrentVersion), check.Equals, -1)
+	t.Require().Equal(-1, MinVersion.Compare(CurrentVersion))
 }
 
-func (t *testForEtcd) TestVersionEtcd(c *check.C) {
-	defer clearTestData(c)
+func (t *testForEtcd) TestVersionEtcd() {
+	defer clearTestData(t.T())
 
 	// try to get the version, but not exist.
 	ver, rev1, err := GetVersion(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev1, check.Greater, int64(0))
-	c.Assert(ver.NotSet(), check.IsTrue)
+	t.Require().NoError(err)
+	t.Require().Greater(rev1, int64(0))
+	t.Require().True(ver.NotSet())
 
 	// put current version into etcd.
 	rev2, err := PutVersion(etcdTestCli, CurrentVersion)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev2, check.Greater, rev1)
+	t.Require().NoError(err)
+	t.Require().Greater(rev2, rev1)
 
 	// get the version back.
 	ver, rev3, err := GetVersion(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(rev3, check.Equals, rev2)
-	c.Assert(ver, check.DeepEquals, CurrentVersion)
+	t.Require().NoError(err)
+	t.Require().Equal(rev2, rev3)
+	t.Require().Equal(CurrentVersion, ver)
 }

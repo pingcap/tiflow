@@ -17,19 +17,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 )
 
-var _ = check.Suite(&swaggerUISuite{})
-
-type swaggerUISuite struct{}
-
-func TestNewSwaggerDocUI(t *testing.T) {
-	check.TestingT(t)
-}
-
-func (t *swaggerUISuite) TestGetSwaggerHTML(c *check.C) {
+func TestGetSwaggerHTML(t *testing.T) {
 	html, err := GetSwaggerHTML(NewSwaggerConfig("/api/v1/docs/dm.json", ""))
-	c.Assert(err, check.IsNil)
-	c.Assert(strings.Contains(html, "<title>API documentation</title>"), check.Equals, true)
+	require.NoError(t, err)
+	require.Equal(t, true, strings.Contains(html, "<title>API documentation</title>"))
 }

@@ -17,49 +17,46 @@ import (
 	"flag"
 	"os"
 	"strings"
+	"testing"
 
 	"github.com/kami-zh/go-capturer"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
-var (
-	defaultConfigFile = "./dm-worker.toml"
-	_                 = check.Suite(&testConfigSuite{})
-)
+var defaultConfigFile = "./dm-worker.toml"
 
-type testConfigSuite struct{}
-
-func (t *testConfigSuite) TestAdjustAddr(c *check.C) {
+func TestAdjustAddr(t *testing.T) {
 	cfg := NewConfig()
-	c.Assert(cfg.configFromFile(defaultConfigFile), check.IsNil)
-	c.Assert(cfg.adjust(), check.IsNil)
+	require.NoError(t, cfg.configFromFile(defaultConfigFile))
+	require.NoError(t, cfg.adjust())
 
 	// invalid `advertise-addr`
 	cfg.AdvertiseAddr = "127.0.0.1"
-	c.Assert(terror.ErrWorkerHostPortNotValid.Equal(cfg.adjust()), check.IsTrue)
+	require.True(t, terror.ErrWorkerHostPortNotValid.Equal(cfg.adjust()))
 	cfg.AdvertiseAddr = "0.0.0.0:8262"
-	c.Assert(terror.ErrWorkerHostPortNotValid.Equal(cfg.adjust()), check.IsTrue)
+	require.True(t, terror.ErrWorkerHostPortNotValid.Equal(cfg.adjust()))
 
 	// clear `advertise-addr`, still invalid because no `host` in `worker-addr`.
 	cfg.AdvertiseAddr = ""
-	c.Assert(terror.ErrWorkerHostPortNotValid.Equal(cfg.adjust()), check.IsTrue)
+	require.True(t, terror.ErrWorkerHostPortNotValid.Equal(cfg.adjust()))
 
 	// TICASE-956
 	cfg.WorkerAddr = "127.0.0.1:8262"
-	c.Assert(cfg.adjust(), check.IsNil)
-	c.Assert(cfg.AdvertiseAddr, check.Equals, cfg.WorkerAddr)
+	require.NoError(t, cfg.adjust())
+	require.Equal(t, cfg.WorkerAddr, cfg.AdvertiseAddr)
 }
 
-func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
+func TestPrintSampleConfig(t *testing.T) {
 	buf, err := os.ReadFile(defaultConfigFile)
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 
 	// test print sample config
 	out := capturer.CaptureStdout(func() {
 		cfg := NewConfig()
 		err = cfg.Parse([]string{"-print-sample-config"})
-		c.Assert(err, check.ErrorMatches, flag.ErrHelp.Error())
+		require.Error(t, err)
+		require.Regexp(t, flag.ErrHelp.Error(), err.Error())
 	})
-	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(string(buf)))
+	require.Equal(t, strings.TrimSpace(string(buf)), strings.TrimSpace(out))
 }

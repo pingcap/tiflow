@@ -19,7 +19,6 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/check"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
@@ -28,38 +27,31 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSuite(t *testing.T) {
-	check.TestingT(t)
-}
-
-var _ = check.Suite(&testUnitSuite{})
-
-type testUnitSuite struct{}
-
-func (t *testUnitSuite) TestIsCtxCanceledProcessErr(c *check.C) {
+func TestIsCtxCanceledProcessErr(t *testing.T) {
 	err := NewProcessError(context.Canceled)
-	c.Assert(IsCtxCanceledProcessErr(err), check.IsTrue)
+	require.True(t, IsCtxCanceledProcessErr(err))
 
 	err = NewProcessError(errors.New("123"))
-	c.Assert(IsCtxCanceledProcessErr(err), check.IsFalse)
+	require.False(t, IsCtxCanceledProcessErr(err))
 
 	terr := terror.ErrDBBadConn
 	err = NewProcessError(terror.ErrDBBadConn)
-	c.Assert(err.GetErrCode(), check.Equals, int32(terr.Code()))
-	c.Assert(err.GetErrClass(), check.Equals, terr.Class().String())
-	c.Assert(err.GetErrLevel(), check.Equals, terr.Level().String())
-	c.Assert(err.GetMessage(), check.Equals, terr.Message())
-	c.Assert(err.GetRawCause(), check.Equals, "")
+	require.Equal(t, int32(terr.Code()), err.GetErrCode())
+	require.Equal(t, terr.Class().String(), err.GetErrClass())
+	require.Equal(t, terr.Level().String(), err.GetErrLevel())
+	require.Equal(t, terr.Message(), err.GetMessage())
+	require.Equal(t, "", err.GetRawCause())
 }
 
-func (t *testUnitSuite) TestJoinProcessErrors(c *check.C) {
+func TestJoinProcessErrors(t *testing.T) {
 	errs := []*pb.ProcessError{
 		NewProcessError(terror.ErrDBDriverError.Generate()),
 		NewProcessError(terror.ErrSyncUnitDMLStatementFound.Generate()),
 	}
 
-	c.Assert(JoinProcessErrors(errs), check.Equals,
-		`ErrCode:10001 ErrClass:"database" ErrScope:"not-set" ErrLevel:"high" Message:"database driver error" Workaround:"Please check the database connection and the database config in configuration file." , ErrCode:36014 ErrClass:"sync-unit" ErrScope:"internal" ErrLevel:"high" Message:"only support ROW format binlog, unexpected DML statement found in query event" `)
+	require.Equal(t,
+		`ErrCode:10001 ErrClass:"database" ErrScope:"not-set" ErrLevel:"high" Message:"database driver error" Workaround:"Please check the database connection and the database config in configuration file." , ErrCode:36014 ErrClass:"sync-unit" ErrScope:"internal" ErrLevel:"high" Message:"only support ROW format binlog, unexpected DML statement found in query event" `,
+		JoinProcessErrors(errs))
 }
 
 func TestIsResumableError(t *testing.T) {

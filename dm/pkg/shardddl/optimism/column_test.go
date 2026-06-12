@@ -14,15 +14,13 @@
 package optimism
 
 import (
-	"github.com/pingcap/check"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-type testColumn struct{}
-
-var _ = check.Suite(&testColumn{})
-
-func (t *testColumn) TestColumnETCD(c *check.C) {
-	defer clearTestInfoOperation(c)
+func TestColumnETCD(t *testing.T) {
+	defer clearTestInfoOperation(t)
 
 	var (
 		task       = "test"
@@ -38,24 +36,24 @@ func (t *testColumn) TestColumnETCD(c *check.C) {
 		lockID     = genDDLLockID(info1)
 	)
 	rev1, putted, err := PutDroppedColumns(etcdTestCli, lockID, source1, upSchema1, upTable1, []string{"a"}, DropNotDone)
-	c.Assert(err, check.IsNil)
-	c.Assert(putted, check.IsTrue)
+	require.NoError(t, err)
+	require.True(t, putted)
 	rev2, putted, err := PutDroppedColumns(etcdTestCli, lockID, source1, upSchema1, upTable1, []string{"b"}, DropNotDone)
-	c.Assert(err, check.IsNil)
-	c.Assert(putted, check.IsTrue)
-	c.Assert(rev2, check.Greater, rev1)
+	require.NoError(t, err)
+	require.True(t, putted)
+	require.Greater(t, rev2, rev1)
 	rev3, putted, err := PutDroppedColumns(etcdTestCli, lockID, source1, upSchema2, upTable2, []string{"b"}, DropNotDone)
-	c.Assert(err, check.IsNil)
-	c.Assert(putted, check.IsTrue)
-	c.Assert(rev3, check.Greater, rev2)
+	require.NoError(t, err)
+	require.True(t, putted)
+	require.Greater(t, rev3, rev2)
 	rev4, putted, err := PutDroppedColumns(etcdTestCli, lockID, source2, upSchema1, upTable1, []string{"b"}, DropNotDone)
-	c.Assert(err, check.IsNil)
-	c.Assert(putted, check.IsTrue)
-	c.Assert(rev4, check.Greater, rev3)
+	require.NoError(t, err)
+	require.True(t, putted)
+	require.Greater(t, rev4, rev3)
 	rev5, putted, err := PutDroppedColumns(etcdTestCli, lockID, source2, upSchema1, upTable1, []string{"b", "c"}, DropNotDone)
-	c.Assert(err, check.IsNil)
-	c.Assert(putted, check.IsTrue)
-	c.Assert(rev5, check.Greater, rev4)
+	require.NoError(t, err)
+	require.True(t, putted)
+	require.Greater(t, rev5, rev4)
 
 	expectedColm := map[string]map[string]map[string]map[string]map[string]DropColumnStage{
 		lockID: {
@@ -73,19 +71,19 @@ func (t *testColumn) TestColumnETCD(c *check.C) {
 		},
 	}
 	colm, rev6, err := GetAllDroppedColumns(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(colm, check.DeepEquals, expectedColm)
-	c.Assert(rev6, check.Equals, rev5)
+	require.NoError(t, err)
+	require.Equal(t, expectedColm, colm)
+	require.Equal(t, rev5, rev6)
 
 	rev7, deleted, err := DeleteDroppedColumns(etcdTestCli, lockID, "b", "c")
-	c.Assert(err, check.IsNil)
-	c.Assert(deleted, check.IsTrue)
-	c.Assert(rev7, check.Greater, rev6)
+	require.NoError(t, err)
+	require.True(t, deleted)
+	require.Greater(t, rev7, rev6)
 
 	delete(expectedColm[lockID], "b")
 	delete(expectedColm[lockID], "c")
 	colm, rev8, err := GetAllDroppedColumns(etcdTestCli)
-	c.Assert(err, check.IsNil)
-	c.Assert(colm, check.DeepEquals, expectedColm)
-	c.Assert(rev8, check.Equals, rev7)
+	require.NoError(t, err)
+	require.Equal(t, expectedColm, colm)
+	require.Equal(t, rev7, rev8)
 }

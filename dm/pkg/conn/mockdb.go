@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	check "github.com/pingcap/check"
 	tidbConfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/domain"
 	"github.com/pingcap/tidb/pkg/kv"
@@ -30,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
+	"github.com/stretchr/testify/require"
 	"github.com/tikv/client-go/v2/testutils"
 )
 
@@ -59,9 +59,9 @@ func (d *mockDBProvider) Apply(config ScopedDBConfig) (*BaseDB, error) {
 }
 
 // InitMockDB return a mocked db for unit test.
-func InitMockDB(c *check.C) sqlmock.Sqlmock {
+func InitMockDB(t require.TestingT) sqlmock.Sqlmock {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	require.NoError(t, err)
 	if mdbp, ok := DefaultDBProvider.(*mockDBProvider); ok {
 		mdbp.db = db
 	} else {

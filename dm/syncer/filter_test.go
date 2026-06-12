@@ -20,7 +20,6 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -32,31 +31,31 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
+	"github.com/stretchr/testify/suite"
 )
 
 type testFilterSuite struct {
+	suite.Suite
 	baseConn *conn.BaseConn
 	db       *sql.DB
 }
 
-var _ = check.Suite(&testFilterSuite{})
-
-func (s *testFilterSuite) SetUpSuite(c *check.C) {
+func (s *testFilterSuite) SetupSuite() {
 	db, mock, err := sqlmock.New()
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	s.db = db
 	mock.ExpectClose()
 	con, err := db.Conn(context.Background())
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	s.baseConn = conn.NewBaseConnForTest(con, nil)
 }
 
-func (s *testFilterSuite) TearDownSuite(c *check.C) {
-	c.Assert(s.baseConn.DBConn.Close(), check.IsNil)
-	c.Assert(s.db.Close(), check.IsNil)
+func (s *testFilterSuite) TearDownSuite() {
+	s.Require().Nil(s.baseConn.DBConn.Close())
+	s.Require().Nil(s.db.Close())
 }
 
-func (s *testFilterSuite) TestSkipQueryEvent(c *check.C) {
+func (s *testFilterSuite) TestSkipQueryEvent() {
 	cfg := &config.SubTaskConfig{
 		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
@@ -64,14 +63,14 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *check.C) {
 		},
 	}
 	syncer := NewSyncer(cfg, nil, nil)
-	c.Assert(syncer.genRouter(), check.IsNil)
+	s.Require().Nil(syncer.genRouter())
 	var err error
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	syncer.ddlDBConn = dbconn.NewDBConn(syncer.cfg, s.baseConn)
 	syncer.schemaTracker, err = schema.NewTestTracker(context.Background(), syncer.cfg.Name, syncer.ddlDBConn, log.L())
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	defer syncer.schemaTracker.Close()
 	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
 
@@ -86,7 +85,7 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *check.C) {
 		},
 	}
 	syncer.binlogFilter, err = bf.NewBinlogEvent(false, filterRules)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	cases := []struct {
 		sql           string
@@ -143,17 +142,17 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *check.C) {
 			ddlSchema: ca.schema,
 		}
 		ddlInfo, err := ddlWorker.genDDLInfo(qec, ca.sql)
-		c.Assert(err, check.IsNil)
+		s.Require().NoError(err)
 		qec.ddlSchema = ca.schema
 		qec.originSQL = ca.sql
 		skipped, err2 := syncer.skipQueryEvent(qec, ddlInfo)
-		c.Assert(err2, check.IsNil)
-		c.Assert(skipped, check.Equals, ca.expectSkipped)
-		c.Assert(len(ddlInfo.originDDL) == 0, check.Equals, ca.isEmptySQL)
+		s.Require().Nil(err2)
+		s.Require().Equal(ca.expectSkipped, skipped)
+		s.Require().Equal(ca.isEmptySQL, len(ddlInfo.originDDL) == 0)
 	}
 }
 
-func (s *testFilterSuite) TestSkipRowsEvent(c *check.C) {
+func (s *testFilterSuite) TestSkipRowsEvent() {
 	syncer := &Syncer{}
 	filterRules := []*bf.BinlogEventRule{
 		{
@@ -166,7 +165,7 @@ func (s *testFilterSuite) TestSkipRowsEvent(c *check.C) {
 	}
 	var err error
 	syncer.binlogFilter, err = bf.NewBinlogEvent(false, filterRules)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	syncer.onlineDDL = mockOnlinePlugin{}
 
 	cases := []struct {
@@ -196,12 +195,12 @@ func (s *testFilterSuite) TestSkipRowsEvent(c *check.C) {
 	}
 	for _, ca := range cases {
 		needSkip, err2 := syncer.skipRowsEvent(ca.table, ca.eventType)
-		c.Assert(err2, check.IsNil)
-		c.Assert(needSkip, check.Equals, ca.expected)
+		s.Require().Nil(err2)
+		s.Require().Equal(ca.expected, needSkip)
 	}
 }
 
-func (s *testFilterSuite) TestSkipByFilter(c *check.C) {
+func (s *testFilterSuite) TestSkipByFilter() {
 	cfg := &config.SubTaskConfig{
 		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
@@ -211,7 +210,7 @@ func (s *testFilterSuite) TestSkipByFilter(c *check.C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	var err error
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 	// test binlog filter
 	filterRules := []*bf.BinlogEventRule{
 		{
@@ -239,7 +238,7 @@ func (s *testFilterSuite) TestSkipByFilter(c *check.C) {
 		},
 	}
 	syncer.binlogFilter, err = bf.NewBinlogEvent(false, filterRules)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	cases := []struct {
 		sql           string
@@ -267,12 +266,12 @@ func (s *testFilterSuite) TestSkipByFilter(c *check.C) {
 	}
 	for _, ca := range cases {
 		skipped, err2 := syncer.skipByFilter(ca.table, ca.eventType, ca.sql)
-		c.Assert(err2, check.IsNil)
-		c.Assert(skipped, check.Equals, ca.expectSkipped)
+		s.Require().Nil(err2)
+		s.Require().Equal(ca.expectSkipped, skipped)
 	}
 }
 
-func (s *testFilterSuite) TestSkipByTable(c *check.C) {
+func (s *testFilterSuite) TestSkipByTable() {
 	cfg := &config.SubTaskConfig{
 		Flavor: mysql.MySQLFlavor,
 		BAList: &filter.Rules{
@@ -282,7 +281,7 @@ func (s *testFilterSuite) TestSkipByTable(c *check.C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	var err error
 	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
-	c.Assert(err, check.IsNil)
+	s.Require().NoError(err)
 
 	cases := []struct {
 		table    *filter.Table
@@ -304,6 +303,6 @@ func (s *testFilterSuite) TestSkipByTable(c *check.C) {
 	}
 	for _, ca := range cases {
 		needSkip := syncer.skipByTable(ca.table)
-		c.Assert(needSkip, check.Equals, ca.expected)
+		s.Require().Equal(ca.expected, needSkip)
 	}
 }
