@@ -24,6 +24,18 @@ update t1 set name = 'gentestxxxxxx', dt = '2021-05-11 12:03:05', ts = '2021-05-
 -- delete with unique key
 delete from t1 where gen_id > 124;
 
+-- test unique index on a stored generated column
+create table t_stored_gen_unique (
+    id int primary key,
+    name varchar(64),
+    lower_name varchar(64) generated always as (lower(name)) stored,
+    unique key uk_lower_name (lower_name)
+);
+replace into t_stored_gen_unique (id, name) values (10, 'Carol');
+replace into t_stored_gen_unique (id, name) values (20, 'Carol');
+replace into t_stored_gen_unique (id, name) values (30, 'Dave');
+replace into t_stored_gen_unique (id, name) values (40, 'DAVE');
+
 -- test unique functional index backed by a hidden generated column
 create table t_expr_unique (
     id int primary key,

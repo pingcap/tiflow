@@ -282,6 +282,21 @@ func TestCausalityKeysExpressionIndex(t *testing.T) {
 	require.Equal(t, []string{"2.id.db.tb1"}, keys)
 }
 
+func TestCausalityKeysStoredGeneratedUniqueIndex(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"lower_name VARCHAR(255) GENERATED ALWAYS AS (lower(name)) STORED, "+
+		"UNIQUE KEY uk_lower_name (lower_name))")
+
+	// MySQL row binlog includes visible stored generated columns, so they are
+	// handled as ordinary visible unique-key columns.
+	change := NewRowChange(source, nil, nil, []any{1, "Alice", "alice"}, ti, nil, nil)
+	require.Equal(t, []string{"alice.lower_name.db.tb1", "1.id.db.tb1"}, change.CausalityKeys())
+}
+
 func TestCausalityKeysExpressionIndexMaterializeFailure(t *testing.T) {
 	t.Parallel()
 

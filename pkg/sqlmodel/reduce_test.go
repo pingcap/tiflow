@@ -186,6 +186,30 @@ func TestPrimaryOrUniqueKeyUpdatedExpressionIndexMaterializeFailure(t *testing.T
 	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
 }
 
+func TestPrimaryOrUniqueKeyUpdatedWithStoredGeneratedUniqueIndex(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"lower_name VARCHAR(255) GENERATED ALWAYS AS (lower(name)) STORED, "+
+		"UNIQUE KEY uk_lower_name (lower_name))")
+
+	change := NewRowChange(source, nil,
+		[]any{1, "Alice", "alice"},
+		[]any{1, "ALICE", "alice"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]any{1, "Alice", "alice"},
+		[]any{1, "Bob", "bob"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
 func TestSplit(t *testing.T) {
 	t.Parallel()
 
