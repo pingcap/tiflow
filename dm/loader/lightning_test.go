@@ -44,11 +44,10 @@ func TestSetLightningConfig(t *testing.T) {
 	require.Equal(t, stCfg.LoaderConfig.PoolSize, cfg.App.RegionConcurrency)
 }
 
-func TestMakeGlobalConfigStripsS3ExternalIDOnlyForImportInto(t *testing.T) {
+func TestMakeGlobalConfigKeepsSourceDirForAllImportModes(t *testing.T) {
 	t.Parallel()
 
 	dataDir := "s3://bucket/prefix/path?region=us-west-2&external-id=dump&role-arn=arn:aws:iam::123:role/dm&external_id=import&endpoint=https%3A%2F%2F127.0.0.1%3A9000&provider=aws"
-	importIntoDir := "s3://bucket/prefix/path?endpoint=https%3A%2F%2F127.0.0.1%3A9000&provider=aws&region=us-west-2&role-arn=arn%3Aaws%3Aiam%3A%3A123%3Arole%2Fdm"
 
 	stCfg := &config.SubTaskConfig{
 		LoaderConfig: config.LoaderConfig{
@@ -58,7 +57,7 @@ func TestMakeGlobalConfigStripsS3ExternalIDOnlyForImportInto(t *testing.T) {
 	}
 	cfg := MakeGlobalConfig(stCfg)
 	require.Equal(t, lcfg.BackendImportInto, cfg.TikvImporter.Backend)
-	require.Equal(t, importIntoDir, cfg.Mydumper.SourceDir)
+	require.Equal(t, dataDir, cfg.Mydumper.SourceDir)
 	require.Equal(t, dataDir, stCfg.LoaderConfig.Dir)
 
 	stCfg.LoaderConfig.ImportMode = config.LoadModeLogical
@@ -70,6 +69,25 @@ func TestMakeGlobalConfigStripsS3ExternalIDOnlyForImportInto(t *testing.T) {
 	cfg = MakeGlobalConfig(stCfg)
 	require.Equal(t, lcfg.BackendLocal, cfg.TikvImporter.Backend)
 	require.Equal(t, dataDir, cfg.Mydumper.SourceDir)
+}
+
+func TestEnableImportIntoCompatibilityConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := lcfg.NewConfig()
+	cfg.TikvImporter.Backend = lcfg.BackendImportInto
+	enableImportIntoCompatibilityConfig(cfg)
+	require.True(t, cfg.TikvImporter.StripS3ExternalIDForImportSQL)
+
+	cfg = lcfg.NewConfig()
+	cfg.TikvImporter.Backend = lcfg.BackendTiDB
+	enableImportIntoCompatibilityConfig(cfg)
+	require.False(t, cfg.TikvImporter.StripS3ExternalIDForImportSQL)
+
+	cfg = lcfg.NewConfig()
+	cfg.TikvImporter.Backend = lcfg.BackendLocal
+	enableImportIntoCompatibilityConfig(cfg)
+	require.False(t, cfg.TikvImporter.StripS3ExternalIDForImportSQL)
 }
 
 func TestConvertLightningError(t *testing.T) {

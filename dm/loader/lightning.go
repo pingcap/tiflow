@@ -25,12 +25,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/lightning/pkg/checkpoints"
+	"github.com/pingcap/tidb/lightning/pkg/errormanager"
 	"github.com/pingcap/tidb/lightning/pkg/importinto"
 	lserver "github.com/pingcap/tidb/lightning/pkg/server"
-	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
-	"github.com/pingcap/tidb/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -130,9 +130,6 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
-	if cfg.LoaderConfig.ImportMode == config.LoadModeImportInto {
-		lightningCfg.Mydumper.SourceDir = storage.StripS3ExternalID(cfg.Dir)
-	}
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
 	return lightningCfg
 }
@@ -243,11 +240,23 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
 }
 
+func enableImportIntoCompatibilityConfig(cfg *lcfg.Config) {
+	if cfg.TikvImporter.Backend == lcfg.BackendImportInto {
+		// DM import-into mode shares the same S3 URI with Dumpling and Lightning.
+		// Keep the URI unchanged for storage access, and only ask TiDB Lightning
+		// to strip external-id from IMPORT INTO SQL for compatibility with old
+		// IMPORT INTO planners. This compatibility flag should be deprecated once
+		// those old planners no longer need to be supported.
+		cfg.TikvImporter.StripS3ExternalIDForImportSQL = true
+	}
+}
+
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
 	taskCtx, cancel := context.WithCancelCause(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
+	enableImportIntoCompatibilityConfig(cfg)
 
 	// always try to skill all checkpoint errors so we can resume this phase.
 	err = l.ignoreCheckpointError(ctx, cfg)
@@ -257,6 +266,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if err = l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
+	defer func() {
+		l.lastErr = err
+	}()
 
 	var opts []lserver.Option
 	if l.cfg.MetricsFactory != nil {
@@ -315,9 +327,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 			}
 		}
 	})
-	defer func() {
-		l.lastErr = err
-	}()
 	if err != nil {
 		return convertLightningError(err)
 	}
