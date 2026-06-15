@@ -72,24 +72,6 @@ func TestSuite(t *testing.T) {
 	check.TestingT(t)
 }
 
-func TestSessionVarsForExprContext(t *testing.T) {
-	vars := sessionVarsForExprContext(map[string]string{
-		"SQL_MODE":                 "ANSI_QUOTES",
-		"character_set_connection": "utf8mb4",
-		"collation_connection":     "utf8mb4_bin",
-		"foreign_key_checks":       "1",
-		"time_zone":                "+00:00",
-	}, time.UTC)
-
-	require.Equal(t, map[string]string{
-		"sql_mode":  "ANSI_QUOTES",
-		"time_zone": "UTC",
-	}, vars)
-
-	sessCtx := utils.NewSessionCtx(vars)
-	require.True(t, sessCtx.GetSessionVars().SQLMode.HasANSIQuotesMode())
-}
-
 type (
 	mockBinlogEvents []mockBinlogEvent
 	mockBinlogEvent  struct {

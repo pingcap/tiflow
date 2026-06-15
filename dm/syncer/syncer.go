@@ -444,7 +444,16 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
 	}
 
-	s.sessCtx = utils.NewSessionCtx(sessionVarsForExprContext(s.cfg.To.Session, s.timezone))
+	vars := map[string]string{
+		"time_zone": s.timezone.String(),
+	}
+	for k, v := range s.cfg.To.Session {
+		if strings.EqualFold(k, "sql_mode") {
+			vars["sql_mode"] = v
+			break
+		}
+	}
+	s.sessCtx = utils.NewSessionCtx(vars)
 	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
 	// create an empty Tracker and will be initialized in `Run`
 	s.schemaTracker = schema.NewTracker()
@@ -532,20 +541,6 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
-}
-
-func sessionVarsForExprContext(downstreamSession map[string]string, timezone *time.Location) map[string]string {
-	vars := make(map[string]string, 2)
-	for k, v := range downstreamSession {
-		if strings.EqualFold(k, "sql_mode") {
-			vars["sql_mode"] = v
-			break
-		}
-	}
-	if timezone != nil {
-		vars["time_zone"] = timezone.String()
-	}
-	return vars
 }
 
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
