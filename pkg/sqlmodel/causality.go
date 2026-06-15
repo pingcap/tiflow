@@ -319,9 +319,9 @@ func datumValue(d types.Datum) any {
 func (r *RowChange) generatedColumnExprContext() *exprstatic.ExprContext {
 	vars := r.tiSessionCtx.GetSessionVars()
 	charset, collation := vars.GetCharsetInfo()
-	// TODO(joechenrh): Carry the upstream user session's SQL mode and
-	// charset/collation into the DML path, preferably from event-level binlog
-	// context, so generated-column evaluation matches upstream semantics.
+	// TODO(joechenrh): Fetch downstream apply session charset/collation from
+	// the downstream DB when they are not explicitly configured, so
+	// generated-column evaluation fully matches downstream semantics.
 	return exprstatic.NewExprContext(
 		exprstatic.WithCharset(charset, collation),
 		exprstatic.WithEvalCtx(exprstatic.NewEvalContext(
