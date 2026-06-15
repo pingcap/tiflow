@@ -30,10 +30,10 @@ create table t_expr_unique (
     name varchar(64)
 );
 /*!80013 alter table t_expr_unique add unique key uk_lower_name ((lower(name))) */;
-insert into t_expr_unique values (1, 'Alice'), (3, 'Bob');
-replace into t_expr_unique values (2, 'ALICE');
-update t_expr_unique set name = 'BOB' where id = 3;
-replace into t_expr_unique values (4, 'bob');
+replace into t_expr_unique values (10, 'Alice');
+replace into t_expr_unique values (20, 'Alice');
+replace into t_expr_unique values (30, 'Bob');
+replace into t_expr_unique values (40, 'BOB');
 
 -- test alter database
 -- tidb doesn't support alter character set from latin1 to utf8m64 so we comment this now
