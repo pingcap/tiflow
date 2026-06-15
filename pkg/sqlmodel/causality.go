@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pingcap/tidb/pkg/expression/exprstatic"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -264,10 +263,9 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		return values, false
 	}
 
-	exprCtx := r.generatedColumnExprContext()
-	// The expressions only depend on the schema, so they are built once and
-	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
-	exprs, ok := r.whereHandle.hiddenGeneratedColumnExprCache.getOrBuildExprs(exprCtx)
+	// The expressions and their static expression context are cached on the
+	// per-table WhereHandle; here we just evaluate them per row.
+	exprs, exprCtx, ok := r.whereHandle.hiddenGeneratedColumnExprCache.getOrBuildExprs(r.tiSessionCtx)
 	if !ok {
 		return values, false
 	}
@@ -314,19 +312,4 @@ func datumValue(d types.Datum) any {
 		return string(bs)
 	}
 	return value
-}
-
-func (r *RowChange) generatedColumnExprContext() *exprstatic.ExprContext {
-	vars := r.tiSessionCtx.GetSessionVars()
-	charset, collation := vars.GetCharsetInfo()
-	// TODO(joechenrh): Carry downstream apply session charset/collation when
-	// needed, so generated-column evaluation fully matches downstream
-	// semantics.
-	return exprstatic.NewExprContext(
-		exprstatic.WithCharset(charset, collation),
-		exprstatic.WithEvalCtx(exprstatic.NewEvalContext(
-			exprstatic.WithLocation(vars.Location()),
-			exprstatic.WithSQLMode(vars.SQLMode),
-		)),
-	)
 }

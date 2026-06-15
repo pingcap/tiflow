@@ -18,10 +18,13 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/expression"
+	"github.com/pingcap/tidb/pkg/expression/exprstatic"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/types"
+	contextutil "github.com/pingcap/tidb/pkg/util/context"
 	"go.uber.org/zap"
 )
 
@@ -44,6 +47,7 @@ type generatedColumnExprCache struct {
 	sourceTableInfo *model.TableInfo
 	columns         []*model.ColumnInfo
 	once            sync.Once
+	exprCtx         *exprstatic.ExprContext
 	exprs           map[int]expression.Expression
 	ok              bool
 }
@@ -65,12 +69,13 @@ func newGeneratedColumnExprCache(source *model.TableInfo) *generatedColumnExprCa
 }
 
 func (c *generatedColumnExprCache) getOrBuildExprs(
-	ctx expression.BuildContext,
-) (map[int]expression.Expression, bool) {
+	tiSessionCtx sessionctx.Context,
+) (map[int]expression.Expression, *exprstatic.ExprContext, bool) {
 	c.once.Do(func() {
+		c.exprCtx = generatedColumnExprContext(tiSessionCtx)
 		exprs := make(map[int]expression.Expression)
 		for _, col := range c.columns {
-			e, err := expression.ParseSimpleExprWithTableInfo(ctx, col.GeneratedExprString, c.sourceTableInfo)
+			e, err := expression.ParseSimpleExprWithTableInfo(c.exprCtx, col.GeneratedExprString, c.sourceTableInfo)
 			if err != nil {
 				log.Warn("cannot build generated column expression, "+
 					"its index will be skipped for causality",
@@ -82,7 +87,26 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 		c.exprs = exprs
 		c.ok = true
 	})
-	return c.exprs, c.ok
+	return c.exprs, c.exprCtx, c.ok
+}
+
+func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.ExprContext {
+	vars := tiSessionCtx.GetSessionVars()
+	charset, collation := vars.GetCharsetInfo()
+	// TODO(joechenrh): Carry downstream apply session charset/collation when
+	// needed, so generated-column evaluation fully matches downstream
+	// semantics.
+	evalCtx := exprstatic.NewEvalContext(
+		exprstatic.WithLocation(vars.Location()),
+		exprstatic.WithSQLMode(vars.SQLMode),
+		exprstatic.WithWarnHandler(contextutil.IgnoreWarn),
+	)
+	planCacheTracker := contextutil.NewPlanCacheTracker(contextutil.IgnoreWarn)
+	return exprstatic.NewExprContext(
+		exprstatic.WithCharset(charset, collation),
+		exprstatic.WithEvalCtx(evalCtx),
+		exprstatic.WithPlanCacheTracker(&planCacheTracker),
+	)
 }
 
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,

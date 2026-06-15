@@ -18,7 +18,9 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -319,6 +321,34 @@ func TestCausalityKeysExpressionIndexNoRace(t *testing.T) {
 		})
 	}
 	require.NoError(t, g.Wait())
+}
+
+func TestGeneratedColumnExprContextCached(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY uk_lower_name ((lower(name))))")
+	handle := GetWhereHandle(ti, ti)
+	require.NotNil(t, handle.hiddenGeneratedColumnExprCache)
+
+	tiCtx := utils.NewSessionCtx(map[string]string{
+		"sql_mode": "ANSI_QUOTES",
+	})
+	change := NewRowChange(source, nil, nil, []any{1, "Alice"}, ti, nil, tiCtx)
+	change.SetWhereHandle(handle)
+	change.CausalityKeys()
+
+	cache := handle.hiddenGeneratedColumnExprCache
+	require.NotNil(t, cache.exprCtx)
+	require.True(t, cache.exprCtx.GetStaticEvalCtx().SQLMode().HasANSIQuotesMode())
+	require.NotEqual(t, mysql.ModeNone, cache.exprCtx.GetStaticEvalCtx().SQLMode())
+	cachedCtx := cache.exprCtx
+
+	other := NewRowChange(source, nil, nil, []any{2, "Bob"}, ti, nil, tiCtx)
+	other.SetWhereHandle(handle)
+	other.CausalityKeys()
+	require.Same(t, cachedCtx, cache.exprCtx)
 }
 
 func corruptHiddenGeneratedExpr(t *testing.T, ti *timodel.TableInfo) {
