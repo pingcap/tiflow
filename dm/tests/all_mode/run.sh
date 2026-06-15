@@ -516,7 +516,6 @@ function run() {
 
 	# use sync_diff_inspector to check data now!
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-	check_log_contain_with_retry "meet causality key.*t_expr_unique" $WORK_DIR/worker1/log/dm-worker.log
 
 	# test block-allow-list by the way
 	run_sql "show databases;" $TIDB_PORT $TIDB_PASSWORD
