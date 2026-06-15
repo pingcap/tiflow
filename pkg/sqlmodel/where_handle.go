@@ -38,6 +38,7 @@ type WhereHandle struct {
 	// backed by hidden generated columns are tracked in causalityIdxs instead.
 	UniqueIdxs []*model.IndexInfo
 
+	// causalityIdxs is a superset of UniqueIdxs and also includes expression indexes.
 	causalityIdxs                  []*model.IndexInfo
 	hiddenGeneratedColumnExprCache *generatedColumnExprCache
 }

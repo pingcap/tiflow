@@ -242,8 +242,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	}
 
 	if len(ret) == 0 {
-		// the table has no PK/UK, or all UK are NULL. all values of the row
-		// consists the causality key
+		// No index key was generated; fall back to the whole row.
 		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
 	}
 
@@ -251,7 +250,8 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 }
 
 // fillVirtualGeneratedValues returns a copy of values extended to the full
-// source column list, with hidden/virtual generated columns evaluated.
+// source column list, with hidden/virtual generated columns evaluated. The bool
+// reports whether full values are available.
 func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	if r.whereHandle.hiddenGeneratedColumnExprCache == nil {
 		return values, false
