@@ -464,7 +464,6 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 10 {
 		wg.Go(func() {
-
 			data, err := json.Marshal(cfg)
 			require.NoError(t, err)
 			jsonMap := make(map[string]any)
@@ -488,7 +487,6 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 		})
 
 		wg.Go(func() {
-
 			newCfg, err := cfg.Clone()
 			require.NoError(t, err)
 

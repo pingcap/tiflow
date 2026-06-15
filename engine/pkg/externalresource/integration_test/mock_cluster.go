@@ -83,14 +83,12 @@ func (c *mockCluster) Start(t *testing.T) {
 	c.cancel = cancel
 
 	c.wg.Go(func() {
-
 		err := c.gcCoordinator.Run(ctx)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, context.Canceled))
 	})
 
 	c.wg.Go(func() {
-
 		err := c.gcRunner.Run(ctx)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, context.Canceled))

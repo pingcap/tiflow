@@ -36,7 +36,6 @@ func TestNotifierBasics(t *testing.T) {
 
 	for range numReceivers {
 		wg.Go(func() {
-
 			r := n.NewReceiver()
 			defer r.Close()
 
@@ -78,7 +77,6 @@ func TestNotifierClose(t *testing.T) {
 
 	for range numReceivers {
 		wg.Go(func() {
-
 			r := n.NewReceiver()
 			defer r.Close()
 

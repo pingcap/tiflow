@@ -68,7 +68,6 @@ func newGCTestHelper() *gcTestHelper {
 
 func (h *gcTestHelper) Start() {
 	h.wg.Go(func() {
-
 		h.errCh <- h.Coord.Run(h.ctx)
 	})
 }

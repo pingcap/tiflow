@@ -78,7 +78,6 @@ func newGCRunnerTestHelperWithMeta(meta pkgOrm.ResourceClient) *gcRunnerTestHelp
 
 func (h *gcRunnerTestHelper) Start() {
 	h.wg.Go(func() {
-
 		h.errCh <- h.Runner.Run(h.ctx)
 	})
 }

@@ -119,7 +119,6 @@ func TestRunnerNormalPath(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		err := runner.Run(context.Background())
 		require.Error(t, err)
 		require.Regexp(t, "injected error", err)
@@ -152,7 +151,6 @@ func TestRunnerForcefulExit(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		err := runner.Run(context.Background())
 		require.Error(t, err)
 		require.Regexp(t, "ErrWorkerSuicide", err)

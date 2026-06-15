@@ -104,7 +104,6 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 	for _, task := range tasks {
 		taskID := task
 		wg.Go(func() {
-
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
 				workerID        string
