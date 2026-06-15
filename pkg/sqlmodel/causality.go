@@ -208,23 +208,25 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		// Only causality keys use this table name; r.sourceTable keeps the original source table.
 		sourceTable = r.causalityKeySourceTable
 	}
-	pkAndUks := r.whereHandle.causalityIdxs
-	if len(pkAndUks) == 0 {
-		// the table has no PK/UK, all values of the row consists the causality key
+	causalityIndexes := r.whereHandle.causalityIdxs
+	if len(causalityIndexes) == 0 {
+		// The table has no causality indexes, so all values of the row compose the causality key.
 		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
 	}
 
-	ret := make([]string, 0, len(pkAndUks))
+	ret := make([]string, 0, len(causalityIndexes))
 
 	values, fullValuesOK := r.fillVirtualGeneratedValues(values)
 
-	for _, indexCols := range pkAndUks {
+	for _, indexCols := range causalityIndexes {
 		// TODO: should not support multi value index and generate the value
 		// TODO: also fix https://github.com/pingcap/tiflow/issues/3286#issuecomment-971264282
 		if indexCols.MVIndex {
 			continue
 		}
 
+		// Hidden-column indexes need the materialized full row. Other indexes
+		// can still produce causality keys if materialization fails.
 		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
 			continue
 		}
@@ -268,7 +270,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 
 	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, cols[:len(values)])
 	if err != nil {
-		log.L().Warn("cannot adjust row for generated column evaluation",
+		log.L().Debug("cannot adjust row for generated column evaluation",
 			zap.String("table", r.sourceTable.String()), zap.Error(err))
 		return values, false
 	}
@@ -286,7 +288,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		}
 		d, err := expr.Eval(exprCtx.GetEvalCtx(), mutRow.ToRow())
 		if err != nil {
-			log.L().Warn("cannot evaluate generated column expression",
+			log.L().Debug("cannot evaluate generated column expression",
 				zap.String("table", r.sourceTable.String()),
 				zap.String("column", col.Name.O), zap.Error(err))
 			return values, false
@@ -299,7 +301,27 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 }
 
 func datumValue(d types.Datum) any {
+	if d.IsNull() {
+		return nil
+	}
+	switch d.Kind() {
+	case types.KindMysqlDecimal,
+		types.KindMysqlTime,
+		types.KindMysqlDuration,
+		types.KindMysqlEnum,
+		types.KindMysqlSet,
+		types.KindMysqlJSON,
+		types.KindBinaryLiteral,
+		types.KindMysqlBit,
+		types.KindVectorFloat32:
+		s, err := d.ToString()
+		if err == nil {
+			return s
+		}
+	}
 	value := d.GetValue()
+	// Convert byte slices to string so equal generated values compare equal
+	// under identityUpdated's Go != comparison.
 	if bs, ok := value.([]byte); ok {
 		return string(bs)
 	}

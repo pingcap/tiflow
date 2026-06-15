@@ -138,6 +138,11 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	)
 
 	if r.whereHandle.hiddenGeneratedColumnExprCache != nil {
+		// Try all causality indexes only when both row images can be
+		// materialized. Otherwise keep the visible-column unique index set:
+		// update detection needs both pre and post values for an index, unlike
+		// causality key generation which can skip one failed hidden-column
+		// index independently.
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
 		if preOK && postOK {

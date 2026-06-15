@@ -128,6 +128,27 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 			postValues: []any{1, "bob"},
 			updated:    true,
 		},
+		{
+			name: "binary expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, payload VARBINARY(16), note VARCHAR(16), " +
+				"UNIQUE KEY uk_payload_expr ((CAST(payload AS BINARY(16)))))",
+			preValues:  []any{1, "alice", "old"},
+			postValues: []any{1, "alice", "new"},
+		},
+		{
+			name: "decimal expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, price DECIMAL(10, 2), note VARCHAR(16), " +
+				"UNIQUE KEY uk_price_expr ((price + 0)))",
+			preValues:  []any{1, "12.30", "old"},
+			postValues: []any{1, "12.30", "new"},
+		},
+		{
+			name: "bit expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, flag BIT(8), note VARCHAR(16), " +
+				"UNIQUE KEY uk_flag_expr ((flag | b'00000000')))",
+			preValues:  []any{1, uint64(1), "old"},
+			postValues: []any{1, uint64(1), "new"},
+		},
 	}
 
 	for _, tc := range cases {

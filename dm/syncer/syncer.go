@@ -447,6 +447,8 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	vars := map[string]string{
 		"time_zone": s.timezone.String(),
 	}
+	// Hidden generated-column expressions for expression-index causality are
+	// evaluated with the downstream apply session's SQL mode.
 	for k, v := range s.cfg.To.Session {
 		if strings.EqualFold(k, "sql_mode") {
 			vars["sql_mode"] = v

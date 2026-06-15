@@ -34,10 +34,9 @@ import (
 // hidden columns backing unique expression indexes.
 type WhereHandle struct {
 	UniqueNotNullIdx *model.IndexInfo
-	// If the index and columns have no NOT NULL constraint, but all data is NOT
-	// NULL, we can still use it.
-	// every index that is UNIQUE should be added to UniqueIdxs, even for
-	// PK and NOT NULL. Indexes backed by a hidden column are excluded here.
+	// UniqueIdxs contains unique indexes whose columns are all addressable by
+	// row-change values. Expression indexes backed by hidden generated columns
+	// are tracked in causalityIdxs instead.
 	UniqueIdxs []*model.IndexInfo
 
 	causalityIdxs                  []*model.IndexInfo
@@ -66,6 +65,9 @@ func newGeneratedColumnExprCache(source *model.TableInfo) *generatedColumnExprCa
 	}
 }
 
+// getOrBuildExprs uses tiSessionCtx only when the cache is built for the first
+// time. DM creates RowChange objects with the syncer's stable apply session
+// context, so the cached expressions and ExprContext are reused per table.
 func (c *generatedColumnExprCache) getOrBuildExprs(
 	tiSessionCtx sessionctx.Context,
 ) (map[int]expression.Expression, *exprstatic.ExprContext, bool) {
@@ -90,7 +92,8 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.ExprContext {
 	vars := tiSessionCtx.GetSessionVars()
 	charset, collation := vars.GetCharsetInfo()
-	// TODO(joechenrh): Carry downstream charset/collation when needed.
+	// TODO(joechenrh): Carry downstream charset/collation once expression-index
+	// causality needs to support charset/collation-sensitive generated expressions.
 	evalCtx := exprstatic.NewEvalContext(
 		exprstatic.WithLocation(vars.Location()),
 		exprstatic.WithSQLMode(vars.SQLMode),
