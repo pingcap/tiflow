@@ -14,6 +14,7 @@
 package sqlmodel
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/pingcap/log"
@@ -77,8 +78,7 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 		for _, col := range c.columns {
 			e, err := expression.ParseSimpleExprWithTableInfo(c.exprCtx, col.GeneratedExprString, c.sourceTableInfo)
 			if err != nil {
-				log.Warn("cannot build generated column expression, "+
-					"its index will be skipped for causality",
+				log.Warn("cannot build generated column expression, its index will be skipped for causality",
 					zap.String("column", col.Name.O), zap.Error(err))
 				return
 			}
@@ -93,9 +93,7 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.ExprContext {
 	vars := tiSessionCtx.GetSessionVars()
 	charset, collation := vars.GetCharsetInfo()
-	// TODO(joechenrh): Carry downstream apply session charset/collation when
-	// needed, so generated-column evaluation fully matches downstream
-	// semantics.
+	// TODO(joechenrh): Carry downstream charset/collation when needed.
 	evalCtx := exprstatic.NewEvalContext(
 		exprstatic.WithLocation(vars.Location()),
 		exprstatic.WithSQLMode(vars.SQLMode),
@@ -157,15 +155,13 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 	return &ret
 }
 
-// indexHasHiddenColumn reports whether the index references a hidden column in
-// source, e.g. the virtual generated column that backs an expression index.
 func indexHasHiddenColumn(index *model.IndexInfo, source *model.TableInfo) bool {
-	for _, key := range index.Columns {
-		if key.Offset < len(source.Columns) && source.Columns[key.Offset].Hidden {
-			return true
-		}
-	}
-	return false
+	return slices.ContainsFunc(
+		[]*model.IndexColumn(index.Columns),
+		func(key *model.IndexColumn) bool {
+			return key.Offset < len(source.Columns) && source.Columns[key.Offset].Hidden
+		},
+	)
 }
 
 // rewriteColsOffset rewrites index columns offset to those from source table.

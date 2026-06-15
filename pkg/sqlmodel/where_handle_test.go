@@ -14,10 +14,12 @@
 package sqlmodel
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/stretchr/testify/require"
@@ -223,22 +225,18 @@ func TestGetWhereHandleExpressionIndex(t *testing.T) {
 	// generated column that is never present in the binlog row image. It must be
 	// kept for causality (so the constraint is still enforced for conflict
 	// detection) but excluded from the WHERE candidate set, because a hidden
-	// column has no addressable name. See issue #12696.
+	// column has no addressable name.
 	ti := mockTableInfo(t, "CREATE TABLE t (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
 		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
 
-	// sanity: TiDB materialized the expression as a hidden generated column.
-	hasHidden := false
-	for _, c := range ti.Columns {
-		if c.Hidden {
-			hasHidden = true
-		}
-	}
+	hasHidden := slices.ContainsFunc(ti.Columns, func(c *timodel.ColumnInfo) bool {
+		return c.Hidden
+	})
 	require.True(t, hasHidden, "expression index should create a hidden generated column")
 
 	handle := GetWhereHandle(ti, ti)
 
-	// the expression index is a causality candidate ...
+	// the expression index is a causality candidate.
 	inCausality := false
 	for _, idx := range handle.causalityIdxs {
 		if idx.Name.L == "only_one_alice" {
