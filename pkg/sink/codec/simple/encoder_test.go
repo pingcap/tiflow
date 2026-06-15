@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql/driver"
 	"fmt"
+	"maps"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -1485,7 +1486,7 @@ func TestEncodeLargeEventsNormal(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, obtainedDDL)
 
-			obtainedDefaultValues := make(map[string]interface{}, len(obtainedDDL.TableInfo.Columns))
+			obtainedDefaultValues := make(map[string]any, len(obtainedDDL.TableInfo.Columns))
 			for _, col := range obtainedDDL.TableInfo.Columns {
 				obtainedDefaultValues[col.Name.O] = col.GetDefaultValue()
 				switch col.GetType() {
@@ -1790,10 +1791,8 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				require.Equal(t, model.MessageTypeRow, messageType)
 				require.True(t, dec.msg.HandleKeyOnly)
 
-				obtainedValues := make(map[string]interface{}, len(dec.msg.Data))
-				for name, value := range dec.msg.Data {
-					obtainedValues[name] = value
-				}
+				obtainedValues := make(map[string]any, len(dec.msg.Data))
+				maps.Copy(obtainedValues, dec.msg.Data)
 				for _, col := range event.Columns {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					colFlag := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)
@@ -1813,9 +1812,7 @@ func TestLargeMessageHandleKeyOnly(t *testing.T) {
 				}
 
 				clear(obtainedValues)
-				for name, value := range dec.msg.Old {
-					obtainedValues[name] = value
-				}
+				maps.Copy(obtainedValues, dec.msg.Old)
 				for _, col := range event.PreColumns {
 					colName := event.TableInfo.ForceGetColumnName(col.ColumnID)
 					colFlag := event.TableInfo.ForceGetColumnFlagType(col.ColumnID)

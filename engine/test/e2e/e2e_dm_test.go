@@ -211,7 +211,7 @@ func testSimpleAllModeTask(
 	db string,
 ) {
 	ctx := context.Background()
-	noError := func(_ interface{}, err error) {
+	noError := func(_ any, err error) {
 		require.NoError(t, err)
 	}
 
@@ -427,7 +427,7 @@ func testSimpleAllModeTask(
 
 	// update with new balist
 	newDB := "new_" + db
-	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte(fmt.Sprintf(`["%s"]`, db)), []byte(fmt.Sprintf(`["%s", "%s"]`, db, newDB)))
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, fmt.Appendf(nil, `["%s"]`, db), fmt.Appendf(nil, `["%s", "%s"]`, db, newDB))
 	err = updateJobCfg(ctx, httpClient, jobID, string(dmJobCfg))
 	require.NoError(t, err)
 	// get new config
@@ -465,7 +465,7 @@ func testSimpleDumpSyncModeTask(
 	db string,
 ) {
 	ctx := context.Background()
-	noError := func(_ interface{}, err error) {
+	noError := func(_ any, err error) {
 		require.NoError(t, err)
 	}
 
@@ -495,7 +495,7 @@ func testSimpleDumpSyncModeTask(
 	secretAccessKey := os.Getenv(envS3SecretAccessKey)
 	require.Greater(t, len(secretAccessKey), 0, "empty secret access key in env %s", envS3SecretAccessKey)
 
-	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("#    dir: ./dumped_data"), []byte(fmt.Sprintf("    dir: s3://engine-it/dumped_data_%s?force-path-style=1&access-key=%s&secret-access-key=%s&endpoint=%s", db, accessKeyID, secretAccessKey, endpoint)))
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("#    dir: ./dumped_data"), fmt.Appendf(nil, "    dir: s3://engine-it/dumped_data_%s?force-path-style=1&access-key=%s&secret-access-key=%s&endpoint=%s", db, accessKeyID, secretAccessKey, endpoint))
 	var jobID string
 	require.Eventually(t, func() bool {
 		var err error
@@ -695,7 +695,7 @@ func testSimpleDumpSyncModeTask(
 
 	// update with new balist
 	newDB := "new_" + db
-	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte(fmt.Sprintf(`["%s"]`, db)), []byte(fmt.Sprintf(`["%s", "%s"]`, db, newDB)))
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, fmt.Appendf(nil, `["%s"]`, db), fmt.Appendf(nil, `["%s", "%s"]`, db, newDB))
 	err = updateJobCfg(ctx, httpClient, jobID, string(dmJobCfg))
 	require.NoError(t, err)
 	// get new config

@@ -108,11 +108,9 @@ func (h *realRelayHolder) Init(ctx context.Context, interceptors []relay.PurgeIn
 
 // Start starts run the relay.
 func (h *realRelayHolder) Start() {
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 		h.run()
-	}()
+	})
 }
 
 // Close closes the holder.
@@ -213,11 +211,9 @@ func (h *realRelayHolder) resumeRelay(_ context.Context, op pb.RelayOp) error {
 		return terror.ErrWorkerRelayStageNotValid.Generate(h.stage, pb.Stage_Paused, op)
 	}
 
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 		h.run()
-	}()
+	})
 	return nil
 }
 

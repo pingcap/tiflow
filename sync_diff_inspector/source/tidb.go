@@ -371,7 +371,7 @@ func NewTiDBSource(
 	sourceTablesAfterRoute := make(map[string]struct{})
 
 	// instance -> db -> table
-	allTablesMap := make(map[string]map[string]interface{})
+	allTablesMap := make(map[string]map[string]any)
 	sourceSchemas, err := dbutil.GetSchemas(ctx, ds.Conn)
 	if err != nil {
 		return nil, errors.Annotatef(err, "get schemas from database")

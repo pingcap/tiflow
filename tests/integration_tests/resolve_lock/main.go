@@ -333,9 +333,9 @@ func (c *Locker) lockBatch(ctx context.Context, keys [][]byte, primary []byte) (
 
 func randStr() string {
 	length := rand.Intn(128)
-	res := ""
-	for i := 0; i < length; i++ {
-		res += fmt.Sprintf("a%d", rand.Intn(26))
+	var res strings.Builder
+	for range length {
+		res.WriteString(fmt.Sprintf("a%d", rand.Intn(26)))
 	}
-	return res
+	return res.String()
 }

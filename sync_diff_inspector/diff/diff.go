@@ -618,11 +618,9 @@ func (df *Diff) binSearch(ctx context.Context, targetSource source.Source, table
 func (df *Diff) compareChecksumAndGetCount(ctx context.Context, tableRange *splitter.RangeInfo) (bool, int64, int64, error) {
 	var wg sync.WaitGroup
 	var upstreamInfo, downstreamInfo *source.ChecksumInfo
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		upstreamInfo = df.upstream.GetCountAndMD5(ctx, tableRange)
-	}()
+	})
 	downstreamInfo = df.downstream.GetCountAndMD5(ctx, tableRange)
 	wg.Wait()
 

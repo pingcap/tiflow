@@ -447,7 +447,7 @@ func checkTableMatched(tableDiffs []*common.TableDiff, targetMap map[string]stru
 
 func getIndexMapForTable(tableDiffs []*common.TableDiff) map[string]int {
 	tableIndexMap := make(map[string]int)
-	for i := 0; i < len(tableDiffs); i++ {
+	for i := range tableDiffs {
 		tableUniqueID := utils.UniqueID(tableDiffs[i].Schema, tableDiffs[i].Table)
 		tableIndexMap[tableUniqueID] = i
 	}

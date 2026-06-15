@@ -92,7 +92,7 @@ func (b *bankReactorState) patchAccount(index int, fn func(int) int) DataPatch {
 }
 
 func (b *bankReactorState) TransferRandomly(transferNumber int) {
-	for i := 0; i < transferNumber; i++ {
+	for range transferNumber {
 		accountA := rand.Intn(len(b.account))
 		accountB := rand.Intn(len(b.account))
 		transferMoney := rand.Intn(100)
@@ -148,16 +148,14 @@ func TestEtcdBank(t *testing.T) {
 	}()
 
 	defer cancel()
-	for i := 0; i < totalAccountNumber; i++ {
+	for i := range totalAccountNumber {
 		_, err := cli.Put(ctx, fmt.Sprintf("%s%d", bankTestPrefix, i), "0")
 		require.Nil(t, err)
 	}
 
-	for i := 0; i < workerNumber; i++ {
+	for i := range workerNumber {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for {
 				worker, err := NewEtcdWorker(cdcCli, bankTestPrefix, &bankReactor{
 					accountNumber: totalAccountNumber,
@@ -171,7 +169,7 @@ func TestEtcdBank(t *testing.T) {
 				require.Contains(t, err.Error(), "context deadline exceeded")
 				return
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

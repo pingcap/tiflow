@@ -448,11 +448,9 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *check.C) {
 	c.Assert(w.subTaskHolder.findSubTask(subtaskCfg.Name), check.NotNil)
 	var wg sync.WaitGroup
 	ctx1, cancel1 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		c.Assert(w.observeSubtaskStage(ctx1, etcdCli, startRev), check.IsNil)
-	}()
+	})
 	time.Sleep(time.Second)
 	// step 4.1: after observe, invalid subtask should be removed
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
@@ -476,11 +474,9 @@ func (t *testWorkerEtcdCompact) TestWatchSubtaskStageEtcdCompact(c *check.C) {
 	w.subTaskHolder.closeAllSubTasks()
 	// step 5: restart observe and start from startRev, this subtask should be added
 	ctx2, cancel2 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		c.Assert(w.observeSubtaskStage(ctx2, etcdCli, startRev), check.IsNil)
-	}()
+	})
 	time.Sleep(time.Second)
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return w.subTaskHolder.findSubTask(subtaskCfg.Name) != nil
@@ -584,11 +580,9 @@ func (t *testWorkerEtcdCompact) TestWatchValidatorStageEtcdCompact(c *check.C) {
 	c.Assert(getValidator(), check.IsNil)
 	var wg sync.WaitGroup
 	ctx1, cancel1 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		c.Assert(w.observeValidatorStage(ctx1, startRev), check.IsNil)
-	}()
+	})
 	time.Sleep(time.Second)
 
 	subtaskCfg.ValidatorCfg = config.ValidatorConfig{Mode: config.ValidationFast}

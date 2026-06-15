@@ -142,7 +142,7 @@ func (t *testMaster) TestCollectSourceConfigFilesV1Import(c *check.C) {
 	c.Assert(err, check.IsNil)
 	// fix empty map after marshal/unmarshal becomes nil
 	cfg1.From.Adjust()
-	cfg1.Tracer = map[string]interface{}{}
+	cfg1.Tracer = map[string]any{}
 	cfg1.Filters = []*filter.BinlogEventRule{}
 	cfg1.From.Host = host
 	cfg1.From.Port = port

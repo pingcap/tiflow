@@ -70,8 +70,8 @@ func BenchmarkSkipDML(b *testing.B) {
 		// set columns to non nil to indicate this case is for insert
 		// set columns to nil to indicate this case is for delete
 		columns []*model.Column
-		preRow  []interface{}
-		row     []interface{}
+		preRow  []any
+		row     []any
 		ignore  bool
 	}
 
@@ -83,7 +83,7 @@ func BenchmarkSkipDML(b *testing.B) {
 			columns: []*model.Column{
 				{Name: "none"},
 			},
-			row:    []interface{}{999, "Will", 39, "male"},
+			row:    []any{999, "Will", 39, "male"},
 			ignore: true,
 		},
 		{ // insert
@@ -95,7 +95,7 @@ func BenchmarkSkipDML(b *testing.B) {
 			columns: []*model.Column{
 				{Name: "none"},
 			},
-			row:    []interface{}{999, "Will", 39, "male"},
+			row:    []any{999, "Will", 39, "male"},
 			ignore: true,
 		},
 		{ // update
@@ -105,11 +105,11 @@ func BenchmarkSkipDML(b *testing.B) {
 			preColumns: []*model.Column{
 				{Name: "none"},
 			},
-			preRow: []interface{}{876, "Li", 45, "female"},
+			preRow: []any{876, "Li", 45, "female"},
 			columns: []*model.Column{
 				{Name: "none"},
 			},
-			row:    []interface{}{1, "Dongmen", 20, "male"},
+			row:    []any{1, "Dongmen", 20, "male"},
 			ignore: true,
 		},
 		{ // delete
@@ -119,7 +119,7 @@ func BenchmarkSkipDML(b *testing.B) {
 			preColumns: []*model.Column{
 				{Name: "none"},
 			},
-			preRow: []interface{}{876, "Li", 45, "female"},
+			preRow: []any{876, "Li", 45, "female"},
 			ignore: true,
 		},
 	}

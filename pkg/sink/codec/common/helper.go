@@ -31,8 +31,8 @@ import (
 
 // ColumnsHolder read columns from sql.Rows
 type ColumnsHolder struct {
-	Values        []interface{}
-	ValuePointers []interface{}
+	Values        []any
+	ValuePointers []any
 	Types         []*sql.ColumnType
 }
 
@@ -42,8 +42,8 @@ func newColumnHolder(rows *sql.Rows) (*ColumnsHolder, error) {
 		return nil, errors.Trace(err)
 	}
 
-	values := make([]interface{}, len(columnTypes))
-	valuePointers := make([]interface{}, len(columnTypes))
+	values := make([]any, len(columnTypes))
+	valuePointers := make([]any, len(columnTypes))
 	for i := range values {
 		valuePointers[i] = &values[i]
 	}
@@ -105,7 +105,7 @@ func queryRowChecksum(
 	defer conn.Close()
 
 	if event.Checksum.Current != 0 {
-		conditions := make(map[string]interface{})
+		conditions := make(map[string]any)
 		for _, name := range pkNames {
 			for _, col := range event.Columns {
 				if event.TableInfo.ForceGetColumnName(col.ColumnID) == name {
@@ -123,7 +123,7 @@ func queryRowChecksum(
 	}
 
 	if event.Checksum.Previous != 0 {
-		conditions := make(map[string]interface{})
+		conditions := make(map[string]any)
 		for _, name := range pkNames {
 			for _, col := range event.PreColumns {
 				if event.TableInfo.ForceGetColumnName(col.ColumnID) == name {
@@ -144,7 +144,7 @@ func queryRowChecksum(
 }
 
 func queryRowChecksumAux(
-	ctx context.Context, conn *sql.Conn, commitTs uint64, schema string, table string, conditions map[string]interface{},
+	ctx context.Context, conn *sql.Conn, commitTs uint64, schema string, table string, conditions map[string]any,
 ) uint32 {
 	var result uint32
 	// 1. set snapshot read
@@ -193,7 +193,7 @@ func queryRowChecksumAux(
 
 // MustSnapshotQuery query the db by the snapshot read with the given commitTs
 func MustSnapshotQuery(
-	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
+	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]any,
 ) *ColumnsHolder {
 	conn, err := db.Conn(ctx)
 	if err != nil {

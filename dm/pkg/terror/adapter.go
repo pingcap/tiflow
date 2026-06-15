@@ -22,7 +22,7 @@ import (
 
 // DBErrorAdaptArgs is an adapter to change raw database error to *Error object.
 // If err is already an *Error object, return it directly.
-func DBErrorAdaptArgs(err error, defaultErr *Error, args ...interface{}) error {
+func DBErrorAdaptArgs(err error, defaultErr *Error, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -42,6 +42,6 @@ func DBErrorAdaptArgs(err error, defaultErr *Error, args ...interface{}) error {
 
 // DBErrorAdapt is an adapter to change raw database error to *Error object.
 // If err is already an *Error object, return it directly.
-func DBErrorAdapt(err error, scope ErrScope, defaultErr *Error, args ...interface{}) error {
+func DBErrorAdapt(err error, scope ErrScope, defaultErr *Error, args ...any) error {
 	return WithScope(DBErrorAdaptArgs(err, defaultErr, args...), scope)
 }

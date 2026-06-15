@@ -71,7 +71,7 @@ func TestMaxMessageBytes(t *testing.T) {
 	builder, err = NewBatchEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
 	encoder = builder.Build()
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		err := encoder.AppendRowChangedEvent(ctx, topic, event, nil)
 		require.NoError(t, err)
 	}
@@ -96,7 +96,7 @@ func TestMaxBatchSize(t *testing.T) {
 	require.NoError(t, err)
 	encoder := builder.Build()
 
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		err := encoder.AppendRowChangedEvent(ctx, "", event, nil)
 		require.NoError(t, err)
 	}

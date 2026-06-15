@@ -61,7 +61,7 @@ func TestDeframenter(t *testing.T) {
 	require.Nil(t, err)
 
 	var seqNumbers []uint64
-	for i := 0; i < txnCnt; i++ {
+	for i := range txnCnt {
 		seqNumbers = append(seqNumbers, uint64(i+1))
 	}
 	rand.Seed(time.Now().UnixNano())
@@ -78,7 +78,7 @@ func TestDeframenter(t *testing.T) {
 		},
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 99, tidbTableInfo)
-	for i := 0; i < txnCnt; i++ {
+	for i := range txnCnt {
 		go func(seq uint64) {
 			encoder := encoderBuilder.Build()
 			frag := eventFragment{
@@ -97,7 +97,7 @@ func TestDeframenter(t *testing.T) {
 
 			rand.Seed(time.Now().UnixNano())
 			n := 1 + rand.Intn(1000)
-			for j := 0; j < n; j++ {
+			for j := range n {
 				row := &model.RowChangedEvent{
 					PhysicalTableID: 100,
 					TableInfo:       tableInfo,

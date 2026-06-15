@@ -71,8 +71,8 @@ func (col *column) parseRule(kvs []string) {
 			log.S().Fatal(err)
 		}
 	} else if key == "set" {
-		fields := strings.Split(value, ",")
-		for _, field := range fields {
+		fields := strings.SplitSeq(value, ",")
+		for field := range fields {
 			col.set = append(col.set, strings.TrimSpace(field))
 		}
 	}
@@ -90,8 +90,8 @@ func (col *column) parseColumnComment() {
 		content = comment[start+2 : end]
 	}
 
-	fields := strings.Split(content, ";")
-	for _, field := range fields {
+	fields := strings.SplitSeq(content, ";")
+	for field := range fields {
 		field = strings.TrimSpace(field)
 		kvs := strings.Split(field, "=")
 		col.parseRule(kvs)
@@ -127,12 +127,12 @@ type table struct {
 }
 
 func (t *table) printColumns() string {
-	ret := ""
+	var ret strings.Builder
 	for _, col := range t.columns {
-		ret += fmt.Sprintf("%v", col)
+		ret.WriteString(fmt.Sprintf("%v", col))
 	}
 
-	return ret
+	return ret.String()
 }
 
 func (t *table) String() string {
@@ -140,23 +140,24 @@ func (t *table) String() string {
 		return "<nil>"
 	}
 
-	ret := fmt.Sprintf("[table]name: %s\n", t.name)
-	ret += "[table]columns:\n"
-	ret += t.printColumns()
+	var ret strings.Builder
+	ret.WriteString(fmt.Sprintf("[table]name: %s\n", t.name))
+	ret.WriteString("[table]columns:\n")
+	ret.WriteString(t.printColumns())
 
-	ret += fmt.Sprintf("[table]column list: %s\n", t.columnList)
+	ret.WriteString(fmt.Sprintf("[table]column list: %s\n", t.columnList))
 
-	ret += "[table]indices:\n"
+	ret.WriteString("[table]indices:\n")
 	for k, v := range t.indices {
-		ret += fmt.Sprintf("key->%s, value->%v", k, v)
+		ret.WriteString(fmt.Sprintf("key->%s, value->%v", k, v))
 	}
 
-	ret += "[table]unique indices:\n"
+	ret.WriteString("[table]unique indices:\n")
 	for k, v := range t.uniqIndices {
-		ret += fmt.Sprintf("key->%s, value->%v", k, v)
+		ret.WriteString(fmt.Sprintf("key->%s, value->%v", k, v))
 	}
 
-	return ret
+	return ret.String()
 }
 
 func newTable() *table {

@@ -141,7 +141,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 }
 
 // MustExec executes sqls
-func MustExec(db *sql.DB, sql string, args ...interface{}) {
+func MustExec(db *sql.DB, sql string, args ...any) {
 	_, err := db.Exec(sql, args...)
 	if err != nil {
 		log.S().Fatalf("exec failed, sql: %s args: %v, err: %+v", sql, args, err)
@@ -149,7 +149,7 @@ func MustExec(db *sql.DB, sql string, args ...interface{}) {
 }
 
 // MustExecWithConn executes sqls with context
-func MustExecWithConn(ctx context.Context, conn *sql.Conn, sql string, args ...interface{}) {
+func MustExecWithConn(ctx context.Context, conn *sql.Conn, sql string, args ...any) {
 	var err error
 	_, err = conn.ExecContext(ctx, sql, args...)
 	if err != nil && errors.Cause(err) == context.DeadlineExceeded && errors.Cause(err) == context.Canceled {

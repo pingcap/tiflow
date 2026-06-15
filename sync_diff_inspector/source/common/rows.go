@@ -104,12 +104,12 @@ func (r RowDatas) Swap(i, j int) {
 }
 
 // Push implements heap.Interface's Push function
-func (r *RowDatas) Push(x interface{}) {
+func (r *RowDatas) Push(x any) {
 	r.Rows = append(r.Rows, x.(RowData))
 }
 
 // Pop implements heap.Interface's Pop function
-func (r *RowDatas) Pop() (x interface{}) {
+func (r *RowDatas) Pop() (x any) {
 	if len(r.Rows) == 0 {
 		return nil
 	}

@@ -81,14 +81,14 @@ func queryCount(table *table, db *sql.DB) (int, error) {
 	return nums, nil
 }
 
-func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]interface{}, error) {
+func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]any, error) {
 	nums, err := queryCount(table, db)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
 	var sqls []string
-	var args [][]interface{}
+	var args [][]any
 
 	if nums == 0 || nums-count < 1 {
 		return sqls, args, nil
@@ -104,10 +104,10 @@ func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]interface
 	}
 
 	for rows.Next() {
-		data := make([]interface{}, length)
-		dbArgs := make([]interface{}, length)
+		data := make([]any, length)
+		dbArgs := make([]any, length)
 
-		for i := 0; i < length; i++ {
+		for i := range length {
 			dbArgs[i] = &data[i]
 		}
 
@@ -123,14 +123,14 @@ func genDeleteSqls(table *table, db *sql.DB, count int) ([]string, [][]interface
 	return sqls, args, nil
 }
 
-func genUpdateSqls(table *table, db *sql.DB, count int) ([]string, [][]interface{}, error) {
+func genUpdateSqls(table *table, db *sql.DB, count int) ([]string, [][]any, error) {
 	nums, err := queryCount(table, db)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
 	var sqls []string
-	var args [][]interface{}
+	var args [][]any
 
 	if nums == 0 || nums-count < 1 {
 		return sqls, args, nil
@@ -146,10 +146,10 @@ func genUpdateSqls(table *table, db *sql.DB, count int) ([]string, [][]interface
 	}
 
 	for rows.Next() {
-		data := make([]interface{}, length)
-		dbArgs := make([]interface{}, length)
+		data := make([]any, length)
+		dbArgs := make([]any, length)
 
-		for i := 0; i < length; i++ {
+		for i := range length {
 			dbArgs[i] = &data[i]
 		}
 
@@ -172,10 +172,10 @@ func genUpdateSqls(table *table, db *sql.DB, count int) ([]string, [][]interface
 	return sqls, args, nil
 }
 
-func genInsertSqls(table *table, count int) ([]string, [][]interface{}, error) {
+func genInsertSqls(table *table, count int) ([]string, [][]any, error) {
 	datas := make([]string, 0, count)
-	args := make([][]interface{}, 0, count)
-	for i := 0; i < count; i++ {
+	args := make([][]any, 0, count)
+	for range count {
 		data, err := genRowData(table)
 		if err != nil {
 			return nil, nil, errors.Trace(err)

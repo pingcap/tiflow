@@ -55,11 +55,9 @@ func newWorkerForTest(txnCh <-chan causality.TxnWithNotifier[*txnForTest]) *work
 		closeCh:  make(chan struct{}),
 	}
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		ret.run(txnCh)
-	}()
+	})
 
 	return ret
 }

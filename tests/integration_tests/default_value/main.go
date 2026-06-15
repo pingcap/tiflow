@@ -111,12 +111,10 @@ func testGetDefaultValue(srcs []*sql.DB, wg *sync.WaitGroup) {
 
 			time.Sleep(5 * time.Millisecond)
 
-			wg1.Add(1)
-			go func() {
+			wg1.Go(func() {
 				ddlFunc(ctx, srcs[0])
 				cancel()
-				wg1.Done()
-			}()
+			})
 
 			wg1.Wait()
 
@@ -126,7 +124,7 @@ func testGetDefaultValue(srcs []*sql.DB, wg *sync.WaitGroup) {
 	wg2.Wait()
 }
 
-func getFunctionName(i interface{}) string {
+func getFunctionName(i any) string {
 	strs := strings.Split(runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name(), ".")
 	return strs[len(strs)-1]
 }
@@ -146,7 +144,7 @@ func ignoreableError(err error) bool {
 }
 
 // TODO: need cover the scenarios: update existing old value
-func dml(ctx context.Context, db *sql.DB, table string, id int, defaultValue interface{}) {
+func dml(ctx context.Context, db *sql.DB, table string, id int, defaultValue any) {
 	var err error
 	var i int
 	var insertSuccess int
@@ -237,7 +235,7 @@ func modifyColumnDefaultValueDDL1(ctx context.Context, db *sql.DB) {
 			default:
 			}
 
-			var defaultValue interface{}
+			var defaultValue any
 
 			if value%2 != 0 {
 				defaultValue = value
@@ -277,7 +275,7 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 			default:
 			}
 
-			var defaultValue interface{}
+			var defaultValue any
 
 			if value%2 != 0 {
 				defaultValue = value
@@ -294,7 +292,7 @@ func modifyColumnDefaultValueDDL2(ctx context.Context, db *sql.DB) {
 }
 
 func ddlZeroValueFunc(ctx context.Context, db *sql.DB, format string, table string,
-	defaultValue interface{},
+	defaultValue any,
 ) {
 	// drop column at first
 	fm := fmt.Sprintf("alter table test.`%s` drop column v1", table)
@@ -318,7 +316,7 @@ func ddlZeroValueFunc(ctx context.Context, db *sql.DB, format string, table stri
 }
 
 func ddlDefaultValueFunc(ctx context.Context, db *sql.DB, format string, table string,
-	defaultValue interface{},
+	defaultValue any,
 ) {
 	for value := 1; value < 3; value++ {
 		select {
@@ -347,8 +345,8 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 
 	type Unit struct {
 		Fmt          string
-		DefaultValue interface{}
-		DDLFunc      func(context.Context, *sql.DB, string, string, interface{})
+		DefaultValue any
+		DDLFunc      func(context.Context, *sql.DB, string, string, any)
 		NoDMLParas   bool
 	}
 
@@ -853,12 +851,10 @@ func testMultiDDLs(srcs []*sql.DB, wg *sync.WaitGroup) {
 			time.Sleep(5 * time.Millisecond)
 
 			// start ddl
-			wg2.Add(1)
-			go func() {
+			wg2.Go(func() {
 				unit.DDLFunc(ctx, srcs[0], unit.Fmt, newTbName, unit.DefaultValue)
 				cancel2()
-				wg2.Done()
-			}()
+			})
 
 			wg2.Wait()
 		})

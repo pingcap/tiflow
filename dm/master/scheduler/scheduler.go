@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"sync"
 	"time"
@@ -456,7 +457,7 @@ func (s *Scheduler) RemoveSourceCfg(source string) error {
 
 	// 2. check whether any subtask or relay config exists for the source.
 	existingSubtasksM := make(map[string]struct{})
-	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+	s.subTaskCfgs.Range(func(k, v any) bool {
 		task := k.(string)
 		cfg := v.(map[string]config.SubTaskConfig)
 		for source2 := range cfg {
@@ -785,7 +786,7 @@ func (s *Scheduler) BatchOperateTaskOnWorker(
 	}
 	// wait all tasks are in expected stage before actually starting scheduling
 WaitLoop:
-	for retry := 0; retry < maxQueryWorkerRetryNum; retry++ {
+	for retry := range maxQueryWorkerRetryNum {
 		resp, err := worker.queryStatus(ctx)
 		if err != nil {
 			return terror.Annotatef(err, "failed to query worker: %s status", worker.baseInfo.Name)
@@ -1173,7 +1174,7 @@ func (s *Scheduler) GetSubTaskCfgsByTaskAndSource(taskName string, sources []str
 	}
 	// filter the source that we don't want
 	if len(sources) > 0 {
-		filterSource := map[string]interface{}{}
+		filterSource := map[string]any{}
 		for _, source := range sources {
 			filterSource[source] = true // the source we want
 		}
@@ -1195,7 +1196,7 @@ func (s *Scheduler) GetSubTaskCfgsByTaskAndSource(taskName string, sources []str
 func (s *Scheduler) GetSubTaskCfgs() map[string]map[string]config.SubTaskConfig {
 	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]config.SubTaskConfig)
-	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+	s.subTaskCfgs.Range(func(k, v any) bool {
 		task := k.(string)
 		m := v.(map[string]config.SubTaskConfig)
 		clone2 := make(map[string]config.SubTaskConfig, len(m))
@@ -1218,7 +1219,7 @@ func (s *Scheduler) GetALlSubTaskCfgs() map[string]map[string]*config.SubTaskCon
 	defer s.mu.RUnlock()
 	// taskName -> sourceName -> SubTaskConfig
 	clone := make(map[string]map[string]*config.SubTaskConfig)
-	s.subTaskCfgs.Range(func(k, v interface{}) bool {
+	s.subTaskCfgs.Range(func(k, v any) bool {
 		task := k.(string)
 		m := v.(map[string]config.SubTaskConfig)
 		clone2 := make(map[string]*config.SubTaskConfig, len(m))
@@ -1238,7 +1239,7 @@ func (s *Scheduler) GetALlSubTaskCfgs() map[string]map[string]*config.SubTaskCon
 // GetTaskNameListBySourceName gets task name list by source name.
 func (s *Scheduler) GetTaskNameListBySourceName(sourceName string, expectStage *pb.Stage) []string {
 	var taskNameList []string
-	s.expectSubTaskStages.Range(func(k, v interface{}) bool {
+	s.expectSubTaskStages.Range(func(k, v any) bool {
 		subtaskM := v.(map[string]ha.Stage)
 		subtaskStage, ok2 := subtaskM[sourceName]
 		if !ok2 {
@@ -1805,12 +1806,8 @@ func (s *Scheduler) recoverSources() error {
 	}
 
 	// recover in-memory data.
-	for source, cfg := range cfgM {
-		s.sourceCfgs[source] = cfg
-	}
-	for source, stage := range stageM {
-		s.expectRelayStages[source] = stage
-	}
+	maps.Copy(s.sourceCfgs, cfgM)
+	maps.Copy(s.expectRelayStages, stageM)
 
 	return nil
 }

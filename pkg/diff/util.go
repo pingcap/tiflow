@@ -24,8 +24,8 @@ import (
 	"go.uber.org/zap"
 )
 
-func sliceToMap(slice []string) map[string]interface{} {
-	sMap := make(map[string]interface{})
+func sliceToMap(slice []string) map[string]any {
+	sMap := make(map[string]any)
 	for _, str := range slice {
 		sMap[str] = struct{}{}
 	}
@@ -121,8 +121,8 @@ func rowToString(row map[string]*dbutil.ColumnData) string {
 	return s.String()
 }
 
-func stringsToInterfaces(strs []string) []interface{} {
-	is := make([]interface{}, 0, len(strs))
+func stringsToInterfaces(strs []string) []any {
+	is := make([]any, 0, len(strs))
 	for _, str := range strs {
 		is = append(is, str)
 	}

@@ -57,7 +57,7 @@ func TestRowData(t *testing.T) {
 		})
 	}
 
-	for i := 0; i < len(ids); i++ {
+	for i := range ids {
 		rowData := heap.Pop(rowDatas).(RowData)
 		id := string(rowData.Data["id"].Data)
 		name := string(rowData.Data["name"].Data)

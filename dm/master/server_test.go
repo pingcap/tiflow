@@ -213,7 +213,7 @@ func stageDeepEqualExcludeRev(t *testing.T, stage, expectStage ha.Stage) {
 	require.Equal(t, expectStage, stage)
 }
 
-func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceID string, masterReq interface{}) {
+func mockRevelantWorkerClient(mockWorkerClient *pbmock.MockWorkerClient, taskName, sourceID string, masterReq any) {
 	var expect pb.Stage
 	switch req := masterReq.(type) {
 	case *pb.OperateSourceRequest:
@@ -313,7 +313,7 @@ func makeNilWorkerClients(workers []string) map[string]workerrpc.Client {
 	return nilWorkerClients
 }
 
-func makeWorkerClientsForHandle(ctrl *gomock.Controller, taskName string, sources []string, workers []string, reqs ...interface{}) map[string]workerrpc.Client {
+func makeWorkerClientsForHandle(ctrl *gomock.Controller, taskName string, sources []string, workers []string, reqs ...any) map[string]workerrpc.Client {
 	workerClients := make(map[string]workerrpc.Client, len(workers))
 	for i := range workers {
 		mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
@@ -517,7 +517,7 @@ func (t *testMasterSuite) TestQueryStatus() {
 
 func (t *testMasterSuite) TestWaitOperationOkRightResult() {
 	cases := []struct {
-		req              interface{}
+		req              any
 		resp             *pb.QueryStatusResponse
 		expectedOK       bool
 		expectedEmptyMsg bool
@@ -1004,9 +1004,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 	require.Greater(t.T(), len(server.pessimist.Locks()), 0)
 
 	resp, err := server.StartTask(context.Background(), req)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(10 * time.Microsecond)
 		// start another same task at the same time, should get err
 		verMock2 := conn.InitVersionDB()
@@ -1017,7 +1015,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 		require.False(t.T(), resp1.Result)
 		require.Equal(t.T(), terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
 			"while remove-meta is true").Error(), resp1.Msg)
-	}()
+	})
 	require.NoError(t.T(), err)
 	require.True(t.T(), resp.Result, "start task failed: %s", resp.Msg)
 	for _, source := range sources {
@@ -1099,9 +1097,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 	require.Greater(t.T(), len(server.optimist.Locks()), 0)
 
 	resp, err = server.StartTask(context.Background(), req)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(10 * time.Microsecond)
 		// start another same task at the same time, should get err
 		vermock2 := conn.InitVersionDB()
@@ -1112,7 +1108,7 @@ func (t *testMasterSuite) TestStartTaskWithRemoveMeta() {
 		require.False(t.T(), resp1.Result)
 		require.Equal(t.T(), terror.Annotate(terror.ErrSchedulerSubTaskExist.Generate(cfg.Name, sources),
 			"while remove-meta is true").Error(), resp1.Msg)
-	}()
+	})
 	require.NoError(t.T(), err)
 	require.True(t.T(), resp.Result)
 	for _, source := range sources {
@@ -1248,12 +1244,12 @@ func (t *testMasterSuite) TestPurgeWorkerRelay() {
 	// mock PurgeRelay request
 	mockPurgeRelay := func(rpcSuccess bool) {
 		for i, worker := range workers {
-			rets := []interface{}{
+			rets := []any{
 				nil,
 				errors.New(errGRPCFailed),
 			}
 			if rpcSuccess {
-				rets = []interface{}{
+				rets = []any{
 					&pb.CommonWorkerResponse{
 						Result: true,
 						Source: sources[i],
@@ -1926,22 +1922,18 @@ func (t *testMasterSuite) TestOfflineMember() {
 		cancel()
 		s1.Close()
 	}()
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		require.NoError(t.T(), s1.Start(ctx))
-		wg.Done()
-	}()
+	})
 
 	s2 := NewServer(cfg2)
 	defer func() {
 		cancel()
 		s2.Close()
 	}()
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		require.NoError(t.T(), s2.Start(ctx))
-		wg.Done()
-	}()
+	})
 
 	ctx3, cancel3 := context.WithCancel(ctx)
 	s3 := NewServer(cfg3)

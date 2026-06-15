@@ -28,7 +28,7 @@ const (
 func TestChunkQueueIteratorPrevNext(t *testing.T) {
 	t.Parallel()
 	q := NewChunkQueue[int]()
-	for i := 0; i < iterTestSize; i++ {
+	for i := range iterTestSize {
 		q.Push(i)
 	}
 
@@ -57,7 +57,7 @@ func BenchmarkIterate(b *testing.B) {
 	b.Run("Iterate-ChunkQueue-by-iterator", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
-		for i := 0; i < n; i++ {
+		for i := range n {
 			q.Push(i)
 		}
 		b.ResetTimer()
@@ -75,7 +75,7 @@ func BenchmarkIterate(b *testing.B) {
 	b.Run("Iterate-ChunkQueue-by-Peek", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
-		for i := 0; i < n; i++ {
+		for i := range n {
 			q.Push(i)
 		}
 		b.ResetTimer()
@@ -91,7 +91,7 @@ func BenchmarkIterate(b *testing.B) {
 	b.Run("Iterate-ChunkQueue-by-Range", func(b *testing.B) {
 		q := NewChunkQueue[int]()
 		n := b.N
-		for i := 0; i < n; i++ {
+		for i := range n {
 			q.Push(i)
 		}
 		b.ResetTimer()
@@ -107,12 +107,12 @@ func BenchmarkIterate(b *testing.B) {
 	b.Run("Iterate-Slice-byLoop", func(b *testing.B) {
 		n := b.N
 		q := make([]int, n)
-		for i := 0; i < n; i++ {
+		for i := range n {
 			q[i] = i
 		}
 		b.ResetTimer()
 
-		for i := 0; i < len(q); i++ {
+		for i := range q {
 			if q[i] != i {
 				panic("error")
 			}
@@ -123,7 +123,7 @@ func BenchmarkIterate(b *testing.B) {
 		q := deque.NewDeque()
 		n := b.N
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			q.Enqueue(i)
 		}
 		b.ResetTimer()
@@ -140,12 +140,12 @@ func BenchmarkIterate(b *testing.B) {
 		q := deque.NewDeque()
 		n := b.N
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			q.Enqueue(i)
 		}
 		b.ResetTimer()
 
-		for i := 0; i < n; i++ {
+		for i := range n {
 			val := q.Peek(i)
 			if val != i {
 				panic("not equal")
@@ -169,7 +169,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 	require.False(t, oldIt.Valid(), oldIt.Prev())
 	require.True(t, q.Empty())
 
-	for i := 0; i < iterTestSize; i++ {
+	for i := range iterTestSize {
 		q.Push(i)
 	}
 	require.True(t, q.End().Index() < 0)
@@ -179,7 +179,7 @@ func TestChunkQueueGetIterator(t *testing.T) {
 	})
 
 	require.NotPanics(t, func() {
-		for i := 0; i < iterTestSize; i++ {
+		for i := range iterTestSize {
 			it = q.GetIterator(i)
 			require.Equal(t, i, it.Index(), it.Value(), q.Peek(i))
 		}

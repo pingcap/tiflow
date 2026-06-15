@@ -424,7 +424,7 @@ func assertResponseIsOK(resp *Result) {
 
 func ensureChangefeed(ctx context.Context, client *CDCRESTClient, id, state string) {
 	var info *ChangeFeedInfo
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		resp := client.Get().
 			WithURI("/changefeeds/" + id + "?namespace=test").Do(ctx)
 		if resp.statusCode == 200 {

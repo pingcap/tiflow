@@ -85,7 +85,7 @@ func (f *indexFields) MatchesIndex(index *model.IndexInfo) bool {
 	// Sort for comparison
 	sortColsInPlace(indexCols)
 
-	for i := 0; i < len(indexCols); i++ {
+	for i := range indexCols {
 		if f.cols[i].ID != indexCols[i].ID {
 			return false
 		}

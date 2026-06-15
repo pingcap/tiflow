@@ -252,7 +252,7 @@ func (s *OpenAPIViewSuite) TestClusterAPI() {
 
 	// offline master-2 with retry
 	// operate etcd cluster may met `etcdserver: unhealthy cluster`, add some retry
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		result = testutil.NewRequest().Delete(fmt.Sprintf("%s/%s", masterURL, s2.cfg.Name)).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 		if result.Code() == http.StatusBadRequest {
 			s.Equal(http.StatusBadRequest, result.Code())

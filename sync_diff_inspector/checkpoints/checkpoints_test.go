@@ -38,7 +38,7 @@ func TestSaveChunk(t *testing.T) {
 	require.Nil(t, id)
 	wg := &sync.WaitGroup{}
 	rounds := 100
-	for i := 0; i < rounds; i++ {
+	for i := range rounds {
 		wg.Add(1)
 		go func(i int) {
 			node := &Node{
@@ -87,7 +87,7 @@ func TestLoadChunk(t *testing.T) {
 	rounds := 100
 	testColNames := []ast.CIStr{ast.NewCIStr("col1"), ast.NewCIStr("col2")}
 	wg := &sync.WaitGroup{}
-	for i := 0; i < rounds; i++ {
+	for i := range rounds {
 		wg.Add(1)
 		go func(i int) {
 			node := &Node{

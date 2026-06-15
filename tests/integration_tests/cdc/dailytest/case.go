@@ -160,7 +160,7 @@ func RunCase(src *sql.DB, dst *sql.DB, schema string) {
 		// insert 5 * 1M
 		// note limitation of TiDB: https://github.com/pingcap/docs/blob/733a5b0284e70c5b4d22b93a818210a3f6fbb5a0/FAQ.md#the-error-message-transaction-too-large-is-displayed
 		data := make([]byte, 1<<20)
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			_, err = tx.Query("INSERT INTO binlog_big(id, data) VALUES(?, ?);", i, data)
 			if err != nil {
 				log.S().Fatal(err)
@@ -240,27 +240,23 @@ CREATE TABLE growing_cols (
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		insertSQL := `INSERT INTO growing_cols(id, val) VALUES (?, ?);`
 		mustExec(db, insertSQL, 1, 0)
 
 		// Keep updating to generate DMLs while the other goroutine's adding columns
 		updateSQL := `UPDATE growing_cols SET val = ? WHERE id = ?;`
-		for i := 0; i < 256; i++ {
+		for i := range 256 {
 			mustExec(db, updateSQL, i, 1)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 32; i++ {
+	wg.Go(func() {
+		for i := range 32 {
 			updateSQL := fmt.Sprintf(`ALTER TABLE growing_cols ADD COLUMN col%d VARCHAR(50);`, i)
 			mustExec(db, updateSQL)
 		}
-	}()
+	})
 
 	wg.Wait()
 }
@@ -268,7 +264,7 @@ CREATE TABLE growing_cols (
 func caseUpdateWhileDroppingCol(db *sql.DB) {
 	const nCols = 10
 	var builder strings.Builder
-	for i := 0; i < nCols; i++ {
+	for i := range nCols {
 		if i != 0 {
 			builder.WriteRune(',')
 		}
@@ -283,7 +279,7 @@ CREATE TABLE many_cols (
 	mustExec(db, createSQL)
 
 	builder.Reset()
-	for i := 0; i < nCols; i++ {
+	for i := range nCols {
 		if i != 0 {
 			builder.WriteRune(',')
 		}
@@ -292,7 +288,7 @@ CREATE TABLE many_cols (
 	cols := builder.String()
 
 	builder.Reset()
-	for i := 0; i < nCols; i++ {
+	for i := range nCols {
 		if i != 0 {
 			builder.WriteRune(',')
 		}
@@ -318,7 +314,7 @@ CREATE TABLE many_cols (
 		}
 	}()
 
-	for i := 0; i < nCols; i++ {
+	for i := range nCols {
 		mustExec(db, fmt.Sprintf("ALTER TABLE many_cols DROP COLUMN col%d;", i))
 	}
 	close(closeCh)
@@ -339,14 +335,14 @@ CREATE TABLE gen_contacts (
 
 	insertSQL := "INSERT INTO gen_contacts(first_name, last_name) VALUES(?, ?);"
 	updateSQL := "UPDATE gen_contacts SET other = fullname WHERE first_name = ?"
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		mustExec(db, insertSQL, fmt.Sprintf("John%d", i), fmt.Sprintf("Dow%d", i))
 
 		idxToUpdate := rand.Intn(i + 1)
 		mustExec(db, updateSQL, fmt.Sprintf("John%d", idxToUpdate))
 	}
 	delSQL := "DELETE FROM gen_contacts WHERE fullname = ?"
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mustExec(db, delSQL, fmt.Sprintf("John%d Dow%d", i, i))
 	}
 }
@@ -366,15 +362,15 @@ AS SELECT user_id, SUM(amount) FROM base_for_view GROUP BY user_id;`)
 	insertSQL := "INSERT INTO base_for_view(user_id, amount) VALUES(?, ?);"
 	updateSQL := "UPDATE base_for_view SET amount = ? WHERE user_id = ?;"
 	deleteSQL := "DELETE FROM base_for_view WHERE user_id = ? AND amount = ?;"
-	for i := 0; i < 42; i++ {
-		for j := 0; j < 3; j++ {
+	for i := range 42 {
+		for j := range 3 {
 			mustExec(db, insertSQL, i, j*10+i)
 			if i%2 == 0 && j == 1 {
 				mustExec(db, updateSQL, 1111, i)
 			}
 		}
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		mustExec(db, deleteSQL, i, 1111)
 	}
 }
@@ -477,7 +473,7 @@ func updatePKUK(db *sql.DB, opNum int) error {
 	return nil
 }
 
-func mustExec(db *sql.DB, sql string, args ...interface{}) {
+func mustExec(db *sql.DB, sql string, args ...any) {
 	_, err := db.Exec(sql, args...)
 	if err != nil {
 		log.S().Fatalf("exec failed, sql: %s args: %v, err: %+v", sql, args, err)

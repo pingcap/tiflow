@@ -97,7 +97,7 @@ func TestReport(t *testing.T) {
 	}
 
 	configsBytes := make([][]byte, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		buf := new(bytes.Buffer)
 		err := toml.NewEncoder(buf).Encode(configs[i])
 		require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestCalculateTotal(t *testing.T) {
 	}
 
 	configsBytes := make([][]byte, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		buf := new(bytes.Buffer)
 		err := toml.NewEncoder(buf).Encode(configs[i])
 		require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestPrint(t *testing.T) {
 	}
 
 	configsBytes := make([][]byte, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		buf := new(bytes.Buffer)
 		err := toml.NewEncoder(buf).Encode(configs[i])
 		require.NoError(t, err)
@@ -328,7 +328,7 @@ func TestGetSnapshot(t *testing.T) {
 	}
 
 	configsBytes := make([][]byte, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		buf := new(bytes.Buffer)
 		err := toml.NewEncoder(buf).Encode(configs[i])
 		require.NoError(t, err)
@@ -462,7 +462,7 @@ func TestCommitSummary(t *testing.T) {
 	}
 
 	configsBytes := make([][]byte, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		buf := new(bytes.Buffer)
 		err := toml.NewEncoder(buf).Encode(configs[i])
 		require.NoError(t, err)

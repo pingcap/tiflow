@@ -36,7 +36,7 @@ func TestS3ResourceController(t *testing.T) {
 	defer cancel()
 
 	temproraryResNames := make([]resModel.ResourceName, numTemporaryResources)
-	for i := 0; i < numTemporaryResources; i++ {
+	for i := range numTemporaryResources {
 		resID := fmt.Sprintf("/s3/temporary-resource-%d", i)
 		_, resName, err := resModel.ParseResourceID(resID)
 		require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestS3ResourceController(t *testing.T) {
 
 	persistedResNames := make([]resModel.ResourceName, numPersistedResources)
 	persistedResMetas := []*resModel.ResourceMeta{}
-	for i := 0; i < numPersistedResources; i++ {
+	for i := range numPersistedResources {
 		resID := fmt.Sprintf("/s3/persisted-resource-%d", i)
 		_, resName, err := resModel.ParseResourceID(resID)
 		require.NoError(t, err)

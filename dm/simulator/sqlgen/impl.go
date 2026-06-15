@@ -75,7 +75,7 @@ func (g *sqlGeneratorImpl) GenTruncateTable() (string, error) {
 	return outputString(truncateTree)
 }
 
-func (g *sqlGeneratorImpl) generateWhereClause(theUK map[string]interface{}) (ast.ExprNode, error) {
+func (g *sqlGeneratorImpl) generateWhereClause(theUK map[string]any) (ast.ExprNode, error) {
 	compareExprs := make([]ast.ExprNode, 0)
 	// iterate the existing UKs, to make sure all the uk columns has values
 	for ukColName := range g.ukMap {
@@ -172,7 +172,7 @@ func (g *sqlGeneratorImpl) GenUpdateRow(theUK *mcp.UniqueKey) (string, error) {
 // The new row's unique key is also provided,
 // so that it can be further added into an MCP.
 func (g *sqlGeneratorImpl) GenInsertRow() (string, *mcp.UniqueKey, error) {
-	ukValues := make(map[string]interface{})
+	ukValues := make(map[string]any)
 	columnNames := []*ast.ColumnName{}
 	values := []ast.ExprNode{}
 	for _, col := range g.columnMap {

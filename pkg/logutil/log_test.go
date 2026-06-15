@@ -220,14 +220,12 @@ func TestMySQLLogger(t *testing.T) {
 	ms, err := net.Listen("tcp4", "127.0.0.1:0")
 	require.NoError(t, err)
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		conn, err := ms.Accept()
 		require.NoError(t, err)
 		err = conn.Close()
 		require.NoError(t, err)
-	}()
+	})
 
 	dsnStr := fmt.Sprintf("root:@tcp(%s)/", ms.Addr().String())
 	db, err := sql.Open("mysql", dsnStr)

@@ -277,7 +277,7 @@ type CheckPoint interface {
 	// by extraSQLs and extraArgs. Currently extraSQLs contain shard meta only.
 	// @exceptTables: [[schema, table]... ]
 	// corresponding to Meta.Flush
-	FlushPointsExcept(tctx *tcontext.Context, snapshotID int, exceptTables []*filter.Table, extraSQLs []string, extraArgs [][]interface{}) error
+	FlushPointsExcept(tctx *tcontext.Context, snapshotID int, exceptTables []*filter.Table, extraSQLs []string, extraArgs [][]any) error
 
 	// FlushPointsWithTableInfos flushed the table points with given table infos
 	FlushPointsWithTableInfos(tctx *tcontext.Context, tables []*filter.Table, tis []*model.TableInfo) error
@@ -518,7 +518,7 @@ func (cp *RemoteCheckPoint) Clear(tctx *tcontext.Context) error {
 		tctx2,
 		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ?`},
-		[]interface{}{cp.id},
+		[]any{cp.id},
 	)
 	if err != nil {
 		return err
@@ -599,7 +599,7 @@ func (cp *RemoteCheckPoint) DeleteTablePoint(tctx *tcontext.Context, table *filt
 		tctx2,
 		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND cp_schema = ? AND cp_table = ?`},
-		[]interface{}{cp.id, sourceSchema, sourceTable},
+		[]any{cp.id, sourceSchema, sourceTable},
 	)
 	if err != nil {
 		return err
@@ -620,7 +620,7 @@ func (cp *RemoteCheckPoint) DeleteAllTablePoint(tctx *tcontext.Context) error {
 		tctx2,
 		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND is_global = ?`},
-		[]interface{}{cp.id, false},
+		[]any{cp.id, false},
 	)
 	if err != nil {
 		return err
@@ -645,7 +645,7 @@ func (cp *RemoteCheckPoint) DeleteSchemaPoint(tctx *tcontext.Context, sourceSche
 		tctx2,
 		cp.metricProxies,
 		[]string{`DELETE FROM ` + cp.tableName + ` WHERE id = ? AND cp_schema = ?`},
-		[]interface{}{cp.id, sourceSchema},
+		[]any{cp.id, sourceSchema},
 	)
 	if err != nil {
 		return err
@@ -707,7 +707,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	snapshotID int,
 	exceptTables []*filter.Table,
 	extraSQLs []string,
-	extraArgs [][]interface{},
+	extraArgs [][]any,
 ) error {
 	cp.Lock()
 
@@ -730,7 +730,7 @@ func (cp *RemoteCheckPoint) FlushPointsExcept(
 	}
 
 	sqls := make([]string, 0, 100)
-	args := make([][]interface{}, 0, 100)
+	args := make([][]any, 0, 100)
 
 	type tableCpSnapshotTuple struct {
 		tableCp         *binlogPoint // current table checkpoint location
@@ -813,13 +813,10 @@ func (cp *RemoteCheckPoint) FlushPointsWithTableInfos(tctx *tcontext.Context, ta
 	}
 
 	for i := 0; i < len(tables); i += batchFlushPoints {
-		end := i + batchFlushPoints
-		if end > len(tables) {
-			end = len(tables)
-		}
+		end := min(i+batchFlushPoints, len(tables))
 
 		sqls := make([]string, 0, batchFlushPoints)
-		args := make([][]interface{}, 0, batchFlushPoints)
+		args := make([][]any, 0, batchFlushPoints)
 		points := make([]*binlogPoint, 0, batchFlushPoints)
 		for j := i; j < end; j++ {
 			table := tables[j]
@@ -872,7 +869,7 @@ func (cp *RemoteCheckPoint) FlushSafeModeExitPoint(tctx *tcontext.Context) error
 	defer cp.RUnlock()
 
 	sqls := make([]string, 1)
-	args := make([][]interface{}, 1)
+	args := make([][]any, 1)
 
 	// use FlushedGlobalPoint here to avoid update global checkpoint
 	locationG := cp.FlushedGlobalPoint()
@@ -995,8 +992,8 @@ func (cp *RemoteCheckPoint) prepare(tctx *tcontext.Context) error {
 func (cp *RemoteCheckPoint) createSchema(tctx *tcontext.Context) error {
 	// TODO(lance6716): change ColumnName to IdentName or something
 	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(cp.cfg.MetaSchema))
-	args := make([]interface{}, 0)
-	_, err := cp.dbConn.ExecuteSQL(tctx, cp.metricProxies, []string{sql2}, [][]interface{}{args}...)
+	args := make([]any, 0)
+	_, err := cp.dbConn.ExecuteSQL(tctx, cp.metricProxies, []string{sql2}, [][]any{args}...)
 	cp.logCtx.L().Info("create checkpoint schema", zap.String("statement", sql2))
 	return err
 }
@@ -1254,7 +1251,7 @@ func (cp *RemoteCheckPoint) LoadMeta(ctx context.Context) error {
 }
 
 // genUpdateSQL generates SQL and arguments for update checkpoint.
-func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binlog.Location, safeModeExitLoc *binlog.Location, tiBytes []byte, isGlobal bool) (string, []interface{}) {
+func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binlog.Location, safeModeExitLoc *binlog.Location, tiBytes []byte, isGlobal bool) (string, []any) {
 	// use `INSERT INTO ... ON DUPLICATE KEY UPDATE` rather than `REPLACE INTO`
 	// to keep `create_time`, `update_time` correctly
 	sql2 := `INSERT INTO ` + cp.tableName + `
@@ -1292,7 +1289,7 @@ func (cp *RemoteCheckPoint) genUpdateSQL(cpSchema, cpTable string, location binl
 	}
 
 	// convert tiBytes to string to get a readable log
-	args := []interface{}{
+	args := []any{
 		cp.id, cpSchema, cpTable, location.Position.Name, location.Position.Pos, location.GTIDSetStr(),
 		exitSafeName, exitSafePos, exitSafeGTIDStr, string(tiBytes), isGlobal,
 	}

@@ -466,13 +466,11 @@ func (w *SourceWorker) EnableRelay(startBySourceCfg bool) (err error) {
 	}
 
 	// 4. watch relay stage
-	w.relayWg.Add(1)
-	go func() {
-		defer w.relayWg.Done()
+	w.relayWg.Go(func() {
 		// TODO: handle fatal error from observeRelayStage
 		//nolint:errcheck
 		w.observeRelayStage(w.relayCtx, w.etcdClient, revRelay)
-	}()
+	})
 
 	w.relayEnabled.Store(true)
 	w.l.Info("relay enabled")
@@ -566,20 +564,16 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		}
 	}
 
-	w.subTaskWg.Add(1)
-	go func() {
-		defer w.subTaskWg.Done()
+	w.subTaskWg.Go(func() {
 		// TODO: handle fatal error from observeSubtaskStage
 		//nolint:errcheck
 		w.observeSubtaskStage(w.subTaskCtx, w.etcdClient, revSubTask)
-	}()
-	w.subTaskWg.Add(1)
-	go func() {
-		defer w.subTaskWg.Done()
+	})
+	w.subTaskWg.Go(func() {
 		// TODO: handle fatal error from observeValidatorStage
 		//nolint:errcheck
 		w.observeValidatorStage(w.subTaskCtx, revSubTask)
-	}()
+	})
 
 	w.subTaskEnabled.Store(true)
 	w.l.Info("handling subtask enabled")

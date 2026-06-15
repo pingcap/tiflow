@@ -41,7 +41,7 @@ func (t *testMaster) testPool(c *check.C) {
 		}
 	}()
 
-	for i := 0; i < burst; i++ {
+	for i := range burst {
 		agent := <-pc
 		c.Assert(agent.ID, check.Equals, i)
 	}
@@ -51,7 +51,7 @@ func (t *testMaster) testPool(c *check.C) {
 	default:
 	}
 
-	for i := 0; i < rate; i++ {
+	for i := range rate {
 		select {
 		case agent := <-pc:
 			c.Assert(agent.ID, check.Equals, i+burst)
@@ -73,7 +73,7 @@ func (t *testMaster) testEmit(c *check.C) {
 	ap := NewAgentPool(&RateLimitConfig{rate: DefaultRate, burst: DefaultBurst})
 	go ap.Start(context.Background())
 
-	ap.Emit(context.Background(), 1, func(args ...interface{}) {
+	ap.Emit(context.Background(), 1, func(args ...any) {
 		if len(args) != 2 {
 			c.Fatalf("args count is not 2, args %v", args)
 		}
@@ -93,14 +93,14 @@ func (t *testMaster) testEmit(c *check.C) {
 		if worker1 != worker {
 			c.Fatalf("args[1] is not expected worker, args[1] %v vs %v", worker1, worker)
 		}
-	}, func(args ...interface{}) {}, []interface{}{id, worker}...)
+	}, func(args ...any) {}, []any{id, worker}...)
 
 	counter := 0
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	ap.Emit(ctx, 1, func(args ...interface{}) {
+	ap.Emit(ctx, 1, func(args ...any) {
 		c.FailNow()
-	}, func(args ...interface{}) {
+	}, func(args ...any) {
 		if len(args) != 1 {
 			c.Fatalf("args count is not 1, args %v", args)
 		}
@@ -109,6 +109,6 @@ func (t *testMaster) testEmit(c *check.C) {
 			c.Fatalf("args[0] is not *int, args %+v", args)
 		}
 		*pCounter++
-	}, []interface{}{&counter}...)
+	}, []any{&counter}...)
 	c.Assert(counter, check.Equals, 1)
 }

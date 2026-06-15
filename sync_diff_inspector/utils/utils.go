@@ -89,7 +89,7 @@ type taskFunc func()
 // NewWorkerPool returns a WorkerPool with `limit` workers in the channel.
 func NewWorkerPool(limit uint, name string) *WorkerPool {
 	workers := make(chan *Worker, limit)
-	for i := uint(0); i < limit; i++ {
+	for i := range limit {
 		workers <- &Worker{ID: uint64(i + 1)}
 	}
 	return &WorkerPool{
@@ -103,12 +103,10 @@ func NewWorkerPool(limit uint, name string) *WorkerPool {
 // Notice: function `Apply` and `WaitFinished` cannot be called in parallel
 func (pool *WorkerPool) Apply(fn taskFunc) {
 	worker := pool.apply()
-	pool.wg.Add(1)
-	go func() {
-		defer pool.wg.Done()
+	pool.wg.Go(func() {
 		defer pool.recycle(worker)
 		fn()
-	}()
+	})
 }
 
 // apply waits for an idle worker from the channel and return it
@@ -786,8 +784,8 @@ func MinLenInSlices(slices [][]string) int {
 }
 
 // SliceToMap converts Slice to Set
-func SliceToMap(slice []string) map[string]interface{} {
-	sMap := make(map[string]interface{})
+func SliceToMap(slice []string) map[string]any {
+	sMap := make(map[string]any)
 	for _, str := range slice {
 		sMap[str] = struct{}{}
 	}
@@ -795,7 +793,7 @@ func SliceToMap(slice []string) map[string]interface{} {
 }
 
 // GetApproximateMidBySize return the `count`th row in rows that meet the `limitRange`.
-func GetApproximateMidBySize(ctx context.Context, db *sql.DB, schema, table string, indexColumns []*model.ColumnInfo, limitRange string, args []interface{}, count int64) (map[string]string, error) {
+func GetApproximateMidBySize(ctx context.Context, db *sql.DB, schema, table string, indexColumns []*model.ColumnInfo, limitRange string, args []any, count int64) (map[string]string, error) {
 	/*
 		example
 		mysql> select i_id, i_im_id, i_name from item where i_id > 0 order by i_id, i_im_id, i_name collate limit 5000,1;
@@ -824,7 +822,7 @@ func GetApproximateMidBySize(ctx context.Context, db *sql.DB, schema, table stri
 		return nil, errors.Trace(err)
 	}
 	defer rows.Close()
-	columns := make([]interface{}, len(indexColumns))
+	columns := make([]any, len(indexColumns))
 	for i := range columns {
 		columns[i] = new(string)
 	}
@@ -959,7 +957,7 @@ func GetRandomValues(
 NEXTROW:
 	for rows.Next() {
 		colVals := make([][]byte, len(columns))
-		colValsI := make([]interface{}, len(colVals))
+		colValsI := make([]any, len(colVals))
 		for i := range colValsI {
 			colValsI[i] = &colVals[i]
 		}
@@ -1079,7 +1077,7 @@ func GetBetterIndex(ctx context.Context, db *sql.DB, schema, table string, table
 func GetSelectivity(ctx context.Context, db *sql.DB, schemaName, tableName, columnName string, tbInfo *model.TableInfo) (float64, error) {
 	query := fmt.Sprintf("SELECT COUNT(DISTINCT %s)/COUNT(1) as SEL FROM %s;", dbutil.ColumnName(columnName), dbutil.TableName(schemaName, tableName))
 	var selectivity sql.NullFloat64
-	args := []interface{}{}
+	args := []any{}
 	err := db.QueryRowContext(ctx, query, args...).Scan(&selectivity)
 	if err != nil {
 		log.Warn("execute get selectivity query fail", zap.String("query", query))

@@ -15,6 +15,7 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -154,11 +155,8 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 
 	allowed := false
 	serverCfg := config.GetGlobalServerConfig()
-	for _, user := range serverCfg.Security.ClientAllowedUser {
-		if user == username {
-			allowed = true
-			break
-		}
+	if slices.Contains(serverCfg.Security.ClientAllowedUser, username) {
+		allowed = true
 	}
 	if !allowed {
 		errMsg := "The user is not allowed."

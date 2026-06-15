@@ -39,7 +39,7 @@ const (
 // EventNotifier notifies whether there is new binlog event written to the file.
 type EventNotifier interface {
 	// Notified returns a channel used to check whether there is new binlog event written to the file
-	Notified() chan interface{}
+	Notified() chan any
 }
 
 // CollectAllBinlogFiles collects all valid binlog files in dir, and returns filenames in binlog ascending order.

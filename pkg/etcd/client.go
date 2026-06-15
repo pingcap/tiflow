@@ -418,7 +418,7 @@ func CreateRawEtcdClient(securityConf *security.Credential, grpcDialOption grpc.
 			select {
 			case <-client.Ctx().Done():
 				log.Info("etcd client is closed, exit health check goroutine")
-				checker.Range(func(key, value interface{}) bool {
+				checker.Range(func(key, value any) bool {
 					client := value.(*healthyClient)
 					client.Close()
 					return true
@@ -486,15 +486,15 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 	// See https://github.com/etcd-io/etcd/blob/85b640cee793e25f3837c47200089d14a8392dc7/etcdctl/ctlv3/command/ep_command.go#L105-L145
 	var wg sync.WaitGroup
 	count := 0
-	checker.Range(func(key, value interface{}) bool {
+	checker.Range(func(key, value any) bool {
 		count++
 		return true
 	})
 	hch := make(chan string, count)
 	healthyList := make([]string, 0, count)
-	checker.Range(func(key, value interface{}) bool {
+	checker.Range(func(key, value any) bool {
 		wg.Add(1)
-		go func(key, value interface{}) {
+		go func(key, value any) {
 			defer wg.Done()
 			ep := key.(string)
 			client := value.(*healthyClient)
@@ -539,7 +539,7 @@ func (checker *healthyChecker) update(eps []string) {
 		}
 		checker.addClient(ep, time.Now())
 	}
-	checker.Range(func(key, value interface{}) bool {
+	checker.Range(func(key, value any) bool {
 		ep := key.(string)
 		if _, exist := updateEps[ep]; !exist {
 			if client, ok := value.(*healthyClient); ok {

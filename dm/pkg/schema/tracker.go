@@ -105,7 +105,7 @@ func (se executorContext) GetRestrictedSQLExecutor() sqlexec.RestrictedSQLExecut
 	return se
 }
 
-func (se executorContext) ParseWithParams(context.Context, string, ...interface{}) (ast.StmtNode, error) {
+func (se executorContext) ParseWithParams(context.Context, string, ...any) (ast.StmtNode, error) {
 	return nil, nil
 }
 
@@ -113,7 +113,7 @@ func (se executorContext) ExecRestrictedStmt(context.Context, ast.StmtNode, ...s
 	return nil, nil, nil
 }
 
-func (se executorContext) ExecRestrictedSQL(context.Context, []sqlexec.OptionFuncAlias, string, ...interface{}) ([]chunk.Row, []*resolve.ResultField, error) {
+func (se executorContext) ExecRestrictedSQL(context.Context, []sqlexec.OptionFuncAlias, string, ...any) ([]chunk.Row, []*resolve.ResultField, error) {
 	return nil, nil, nil
 }
 

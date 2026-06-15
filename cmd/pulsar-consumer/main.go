@@ -206,9 +206,7 @@ func run(_ *cobra.Command, _ []string) {
 	msgChan := pulsarConsumer.Chan()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -228,17 +226,15 @@ func run(_ *cobra.Command, _ []string) {
 				}
 			}
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		if err = consumer.Run(ctx); err != nil {
 			if err != context.Canceled {
 				log.Panic("Error running consumer", zap.Error(err))
 			}
 		}
-	}()
+	})
 
 	log.Info("TiCDC consumer up and running!...")
 	sigterm := make(chan os.Signal, 1)
@@ -692,7 +688,7 @@ func flushRowChangedEvents(ctx context.Context, sink *partitionSinks, resolvedTs
 		default:
 		}
 		flushedResolvedTs := true
-		sink.tablesCommitTsMap.Range(func(key, value interface{}) bool {
+		sink.tablesCommitTsMap.Range(func(key, value any) bool {
 			tableID := key.(int64)
 			resolvedTs := model.NewResolvedTs(resolvedTs)
 			tableSink, ok := sink.tableSinksMap.Load(tableID)

@@ -31,10 +31,10 @@ func prepareDataOneColoumnPK(t *testing.T, batch int) []*RowChange {
 	c4 VARCHAR(10), c5 VARCHAR(100), c6 VARCHAR(1000), PRIMARY KEY (c))`)
 
 	changes := make([]*RowChange, 0, batch)
-	for i := 0; i < batch; i++ {
+	for i := range batch {
 		change := NewRowChange(source, target,
-			[]interface{}{i + 1, i + 2, i + 3, "c4", "c5", "c6"},
-			[]interface{}{i + 10, i + 20, i + 30, "c4", "c5", "c6"},
+			[]any{i + 1, i + 2, i + 3, "c4", "c5", "c6"},
+			[]any{i + 10, i + 20, i + 30, "c4", "c5", "c6"},
 			sourceTI, targetTI, nil)
 		changes = append(changes, change)
 	}
@@ -53,10 +53,10 @@ func prepareDataMultiColumnsPK(t *testing.T, batch int) []*RowChange {
 	PRIMARY KEY (c1, c2, c3, c4))`)
 
 	changes := make([]*RowChange, 0, batch)
-	for i := 0; i < batch; i++ {
+	for i := range batch {
 		change := NewRowChange(source, target,
-			[]interface{}{i + 1, i + 2, i + 3, i + 4, "c4", "c5", "c6", "c7", time.Time{}, time.Time{}},
-			[]interface{}{i + 10, i + 20, i + 30, i + 40, "c4", "c5", "c6", "c7", time.Time{}, time.Time{}},
+			[]any{i + 1, i + 2, i + 3, i + 4, "c4", "c5", "c6", "c7", time.Time{}, time.Time{}},
+			[]any{i + 10, i + 20, i + 30, i + 40, "c4", "c5", "c6", "c7", time.Time{}, time.Time{}},
 			sourceTI, targetTI, nil)
 		changes = append(changes, change)
 	}

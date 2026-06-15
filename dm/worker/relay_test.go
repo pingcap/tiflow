@@ -113,12 +113,12 @@ func (d *DummyRelay) Resume(ctx context.Context, pr chan pb.ProcessResult) {}
 func (d *DummyRelay) Pause() {}
 
 // Error implements Process interface.
-func (d *DummyRelay) Error() interface{} {
+func (d *DummyRelay) Error() any {
 	return d.errorInfo
 }
 
 // Status implements Process interface.
-func (d *DummyRelay) Status(sourceStatus *binlog.SourceStatus) interface{} {
+func (d *DummyRelay) Status(sourceStatus *binlog.SourceStatus) any {
 	return &pb.RelayStatus{
 		Stage: pb.Stage_New,
 	}

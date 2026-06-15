@@ -87,7 +87,7 @@ func (h *SQLTestHelper) Close() {
 	h.helper.Close()
 }
 
-func (h *SQLTestHelper) MustExec(query string, args ...interface{}) {
+func (h *SQLTestHelper) MustExec(query string, args ...any) {
 	h.helper.Tk().MustExec(query, args...)
 }
 

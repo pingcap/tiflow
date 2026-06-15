@@ -55,11 +55,9 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		puller.run(ctx, false)
-	}()
+	})
 
 	events := []model.RegionFeedEvent{
 		{

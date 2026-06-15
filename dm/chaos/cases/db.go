@@ -86,7 +86,7 @@ func (c *dbConn) execSQLs(ctx context.Context, queries ...string) error {
 	}
 
 	_, _, err := c.baseConn.ApplyRetryStrategy(tcontext.NewContext(ctx, log.L()), params,
-		func(tctx *tcontext.Context) (interface{}, error) {
+		func(tctx *tcontext.Context) (any, error) {
 			ret, err2 := c.baseConn.ExecuteSQLWithIgnoreError(tctx, nil, "chaos-cases", ignoreExecSQLError, queries)
 			return ret, err2
 		})

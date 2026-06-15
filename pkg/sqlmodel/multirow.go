@@ -76,7 +76,7 @@ func SameTypeTargetAndColumns(lhs *RowChange, rhs *RowChange) bool {
 // GenDeleteSQL generates the DELETE SQL and its arguments.
 // Input `changes` should have same target table and same columns for WHERE
 // (typically same PK/NOT NULL UK), otherwise the behaviour is undefined.
-func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
+func GenDeleteSQL(changes ...*RowChange) (string, []any) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")
 		return "", nil
@@ -90,7 +90,7 @@ func GenDeleteSQL(changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(first.targetTable.QuoteString())
 	buf.WriteString(" WHERE (")
 
-	allArgs := make([]interface{}, 0, len(changes)*CommonIndexColumnsCount)
+	allArgs := make([]any, 0, len(changes)*CommonIndexColumnsCount)
 
 	for i, c := range changes {
 		if i > 0 {
@@ -123,7 +123,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 	// Pre-generate essential sub statements used after WHEN, WHERE.
 	var (
 		whenCaseStmts = make([]string, len(changes))
-		whenCaseArgs  = make([][]interface{}, len(changes))
+		whenCaseArgs  = make([][]any, len(changes))
 	)
 	whereColumns, _ := first.whereColumnsAndValues()
 
@@ -226,7 +226,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 // GenInsertSQL generates the INSERT SQL and its arguments.
 // Input `changes` should have same target table and same modifiable columns,
 // otherwise the behaviour is undefined.
-func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
+func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []any) {
 	if len(changes) == 0 {
 		log.L().DPanic("row changes is empty")
 		return "", nil
@@ -289,7 +289,7 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 		}
 	}
 
-	args := make([]interface{}, 0, len(changes)*(len(first.sourceTableInfo.Columns)-len(skipColIdx)))
+	args := make([]any, 0, len(changes)*(len(first.sourceTableInfo.Columns)-len(skipColIdx)))
 	for _, change := range changes {
 		i := 0 // used as index of skipColIdx
 		for j, val := range change.postValues {

@@ -265,7 +265,7 @@ func TestTiDBSource(t *testing.T) {
 
 	analyze := tidb.GetTableAnalyzer()
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
 	}
 	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
@@ -293,7 +293,7 @@ func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
 	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) cnt")).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(100))
 	statsRows := sqlmock.NewRows([]string{"hist_id", "is_index", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
 	}
 	f, err := filter.Parse([]string{"source_test.*"})
@@ -390,7 +390,7 @@ func TestMysqlShardSources(t *testing.T) {
 	shard, err := NewMySQLSources(ctx, tableDiffs, cs, 4, f, false)
 	require.NoError(t, err)
 
-	for i := 0; i < len(dbs); i++ {
+	for range dbs {
 		infoRows := sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("test_t", "CREATE TABLE `source_test`.`test1` (`a` int, `b` varchar(24), `c` float, primary key(`a`, `b`))")
 		variableRows := sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", "ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION")
 
@@ -404,7 +404,7 @@ func TestMysqlShardSources(t *testing.T) {
 	for n, tableCase := range tableCases {
 		require.Equal(t, n, tableCase.rangeInfo.GetTableIndex())
 		var resChecksum uint64 = 0
-		for i := 0; i < len(dbs); i++ {
+		for i := range dbs {
 			resChecksum = resChecksum + 1<<i
 			countRows := sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(1, 1<<i)
 			mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
@@ -420,9 +420,9 @@ func TestMysqlShardSources(t *testing.T) {
 	tableCase := tableCases[0]
 	rowNums := len(tableCase.rows) / len(dbs)
 	i := 0
-	for j := 0; j < len(dbs); j++ {
+	for range dbs {
 		dataRows := sqlmock.NewRows(tableCase.rowColumns)
-		for k := 0; k < rowNums; k++ {
+		for range rowNums {
 			dataRows.AddRow(tableCase.rows[i]...)
 			i++
 		}

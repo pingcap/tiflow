@@ -98,11 +98,9 @@ func runDDLTest(srcs []*sql.DB) {
 
 		time.Sleep(time.Millisecond)
 
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			ddlFunc(ctx, srcs[0])
-			wg.Done()
-		}()
+		})
 
 		wg.Wait()
 		time.Sleep(5 * time.Second)
@@ -131,7 +129,7 @@ func switchAsyncCommit(ctx context.Context, db *sql.DB) {
 	}
 }
 
-func getFunctionName(i interface{}) string {
+func getFunctionName(i any) string {
 	strs := strings.Split(runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name(), ".")
 	return strs[len(strs)-1]
 }
@@ -213,7 +211,7 @@ func dml(ctx context.Context, db *sql.DB, table string, id int) {
 	insertSQL := fmt.Sprintf("insert into test.`%s`(id, id1, id2) values(?,?,?)", table)
 	deleteSQL := fmt.Sprintf("delete from test.`%s` where id1 = ? or id2 = ?", table)
 	k := 100000000
-	for i = 0; i < k; i++ {
+	for i = range k {
 		_, err = db.Exec(insertSQL, i+id*k, i+id*k, i+id*k+1)
 		if err == nil {
 			insertSuccess++
@@ -264,7 +262,7 @@ func addDropColumnDDL(ctx context.Context, db *sql.DB) {
 		time.Sleep(100 * time.Millisecond)
 
 		var notNULL string
-		var defaultValue interface{}
+		var defaultValue any
 
 		if value%5 == 0 {
 			// use default <value> not null
@@ -306,7 +304,7 @@ func addDropColumnDDL2(ctx context.Context, db *sql.DB) {
 		time.Sleep(100 * time.Millisecond)
 
 		var notNULL string
-		var defaultValue interface{}
+		var defaultValue any
 
 		strValue := strconv.Itoa(value)
 		if value%5 == 0 {
@@ -337,7 +335,7 @@ func modifyColumnDDL(ctx context.Context, db *sql.DB) {
 		default:
 		}
 
-		var defaultValue interface{}
+		var defaultValue any
 		// use default null per five modify
 		if value%5 == 0 {
 			defaultValue = nil

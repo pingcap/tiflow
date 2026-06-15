@@ -20,7 +20,7 @@ import (
 )
 
 func TestSetUpLeakTest(t *testing.T) {
-	leakChan := make(chan interface{})
+	leakChan := make(chan any)
 
 	go func() {
 		<-leakChan

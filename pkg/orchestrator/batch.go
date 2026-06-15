@@ -14,6 +14,8 @@
 package orchestrator
 
 import (
+	"maps"
+
 	"github.com/pingcap/errors"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
@@ -60,9 +62,7 @@ func getBatchChangedState(state map[util.EtcdKey][]byte, patchGroups [][]DataPat
 			len(batchChangedState)+len(changedState) >= etcdTxnMaxOps {
 			break
 		}
-		for k, v := range changedState {
-			batchChangedState[k] = v
-		}
+		maps.Copy(batchChangedState, changedState)
 		num++
 		totalSize += changedSize
 	}

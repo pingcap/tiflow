@@ -146,7 +146,7 @@ func decodeStringChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte
 	newBits := bits
 	var bl int
 	var err error
-	for i := 0; i < size; i++ {
+	for i := range size {
 		newBits, bl, err = decodeUvarintLength(newBits)
 		if err != nil {
 			return bits, nil, errors.Trace(err)
@@ -155,7 +155,7 @@ func decodeStringChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte
 	}
 
 	data := allocator.stringSlice(size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = common.UnsafeBytesToString(newBits[:larray[i]])
 		newBits = newBits[larray[i]:]
 	}
@@ -167,7 +167,7 @@ func decodeNullableStringChunk(bits []byte, size int, allocator *SliceAllocator)
 	newBits := bits
 	var bl int
 	var err error
-	for i := 0; i < size; i++ {
+	for i := range size {
 		newBits, bl, err = decodeVarintLength(newBits)
 		if err != nil {
 			return bits, nil, errors.Trace(err)
@@ -176,7 +176,7 @@ func decodeNullableStringChunk(bits []byte, size int, allocator *SliceAllocator)
 	}
 
 	data := allocator.nullableStringSlice(size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if larray[i] == -1 {
 			continue
 		}
@@ -197,7 +197,7 @@ func doDecodeBytesChunk(bits []byte, size int, lengthDecoder func([]byte) ([]byt
 	newBits := bits
 	var bl int
 	var err error
-	for i := 0; i < size; i++ {
+	for i := range size {
 		newBits, bl, err = lengthDecoder(newBits)
 		if err != nil {
 			return bits, nil, errors.Trace(err)
@@ -206,7 +206,7 @@ func doDecodeBytesChunk(bits []byte, size int, lengthDecoder func([]byte) ([]byt
 	}
 
 	data := allocator.bytesSlice(size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		if larray[i] != -1 {
 			data[i] = newBits[:larray[i]]
 			newBits = newBits[larray[i]:]
@@ -224,7 +224,7 @@ func decodeVarintChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte
 	newBits := bits
 	var i64 int64
 	var err error
-	for i := 0; i < size; i++ {
+	for i := range size {
 		newBits, i64, err = decodeVarint(newBits)
 		if err != nil {
 			return bits, nil, errors.Trace(err)
@@ -239,7 +239,7 @@ func decodeUvarintChunk(bits []byte, size int, allocator *SliceAllocator) ([]byt
 	newBits := bits
 	var u64 uint64
 	var err error
-	for i := 0; i < size; i++ {
+	for i := range size {
 		newBits, u64, err = decodeUvarint(newBits)
 		if err != nil {
 			return bits, nil, errors.Trace(err)
@@ -312,7 +312,7 @@ func decodeSizeTables(bits []byte, allocator *SliceAllocator) (int, [][]int64, e
 }
 
 // DecodeTiDBType decodes TiDB types.
-func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (interface{}, error) {
+func DecodeTiDBType(ty byte, flag model.ColumnFlagType, bits []byte) (any, error) {
 	if bits == nil {
 		return nil, nil
 	}

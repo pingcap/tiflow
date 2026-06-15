@@ -102,10 +102,10 @@ func getDDLType(t timodel.ActionType) MessageType {
 
 // columnSchema is the schema of the column.
 type columnSchema struct {
-	Name     string      `json:"name"`
-	DataType dataType    `json:"dataType"`
-	Nullable bool        `json:"nullable"`
-	Default  interface{} `json:"default"`
+	Name     string   `json:"name"`
+	DataType dataType `json:"dataType"`
+	Nullable bool     `json:"nullable"`
+	Default  any      `json:"default"`
 }
 
 type dataType struct {
@@ -428,7 +428,7 @@ func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
 		switch v := column.Value.(type) {
 		case map[string]string:
 			ts = v["value"]
-		case map[string]interface{}:
+		case map[string]any:
 			ts = v["value"].(string)
 		}
 		column.Value = ts
@@ -436,7 +436,7 @@ func adjustTimestampValue(column *model.ColumnData, flag types.FieldType) {
 }
 
 func decodeColumns(
-	rawData map[string]interface{}, tableInfo *model.TableInfo,
+	rawData map[string]any, tableInfo *model.TableInfo,
 ) []*model.ColumnData {
 	if rawData == nil {
 		return nil
@@ -492,9 +492,9 @@ type message struct {
 	Checksum *checksum `json:"checksum,omitempty"`
 
 	// Data is available for the Insert and Update event.
-	Data map[string]interface{} `json:"data,omitempty"`
+	Data map[string]any `json:"data,omitempty"`
 	// Old is available for the Update and Delete event.
-	Old map[string]interface{} `json:"old,omitempty"`
+	Old map[string]any `json:"old,omitempty"`
 	// TableSchema is for the DDL and Bootstrap event.
 	TableSchema *TableSchema `json:"tableSchema,omitempty"`
 	// PreTableSchema holds schema information before the DDL executed.
@@ -586,8 +586,8 @@ func (a *jsonMarshaller) newDMLMessage(
 
 func (a *jsonMarshaller) formatColumns(
 	columns []*model.ColumnData, tableInfo *model.TableInfo, onlyHandleKey bool,
-) map[string]interface{} {
-	result := make(map[string]interface{}, len(columns))
+) map[string]any {
+	result := make(map[string]any, len(columns))
 	colInfos := tableInfo.GetColInfosForRowChangedEvent()
 	for i, col := range columns {
 		if col != nil {
@@ -603,21 +603,21 @@ func (a *jsonMarshaller) formatColumns(
 }
 
 func (a *avroMarshaller) encodeValue4Avro(
-	value interface{}, ft *types.FieldType,
-) (interface{}, string) {
+	value any, ft *types.FieldType,
+) (any, string) {
 	if value == nil {
 		return nil, "null"
 	}
 
 	switch ft.GetType() {
 	case mysql.TypeTimestamp:
-		return map[string]interface{}{
+		return map[string]any{
 			"location": a.config.TimeZone.String(),
 			"value":    value.(string),
 		}, "com.pingcap.simple.avro.Timestamp"
 	case mysql.TypeLonglong:
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
-			return map[string]interface{}{
+			return map[string]any{
 				"value": int64(value.(uint64)),
 			}, "com.pingcap.simple.avro.UnsignedBigint"
 		}
@@ -648,8 +648,8 @@ func (a *avroMarshaller) encodeValue4Avro(
 }
 
 func encodeValue(
-	value interface{}, ft *types.FieldType, location string,
-) interface{} {
+	value any, ft *types.FieldType, location string,
+) any {
 	if value == nil {
 		return nil
 	}
@@ -725,7 +725,7 @@ func encodeValue(
 	return result
 }
 
-func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *model.ColumnData {
+func decodeColumn(value any, id int64, fieldType *types.FieldType) *model.ColumnData {
 	result := &model.ColumnData{
 		ColumnID: id,
 		Value:    value,
@@ -784,7 +784,7 @@ func decodeColumn(value interface{}, id int64, fieldType *types.FieldType) *mode
 			} else {
 				value, err = strconv.ParseInt(v, 10, 64)
 			}
-		case map[string]interface{}:
+		case map[string]any:
 			value = uint64(v["value"].(int64))
 		default:
 			value = v

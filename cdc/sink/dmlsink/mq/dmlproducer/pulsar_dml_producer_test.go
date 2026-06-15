@@ -49,8 +49,7 @@ func newPulsarConfig(t *testing.T, schema string) (sinkURI *url.URL, replicaConf
 
 func TestNewPulsarDMLProducer(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	for _, schema := range pulsarSchemaList {
 		sinkURI, rc := newPulsarConfig(t, schema)
@@ -77,8 +76,7 @@ func TestNewPulsarDMLProducer(t *testing.T) {
 
 func Test_pulsarDMLProducer_AsyncSendMessage(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	for _, schema := range pulsarSchemaList {
 		_, rc := newPulsarConfig(t, schema)

@@ -57,8 +57,8 @@ func main() {
 func runPKorUKcases(db *sql.DB) {
 	cases := []struct {
 		Tp     string
-		Value  interface{}
-		Update interface{}
+		Value  any
+		Update any
 	}{
 		{
 			Tp:     "BIGINT UNSIGNED",

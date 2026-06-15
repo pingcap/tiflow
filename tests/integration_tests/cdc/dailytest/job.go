@@ -24,7 +24,7 @@ import (
 )
 
 func addJobs(jobCount int, jobChan chan struct{}) {
-	for i := 0; i < jobCount; i++ {
+	for range jobCount {
 		jobChan <- struct{}{}
 	}
 
@@ -33,7 +33,7 @@ func addJobs(jobCount int, jobChan chan struct{}) {
 
 func doSqls(table *table, db *sql.DB, count int) {
 	var sqls []string
-	var args [][]interface{}
+	var args [][]any
 	var err error
 
 	sql, arg, err := genDeleteSqls(table, db, count/10)
@@ -63,7 +63,7 @@ func doSqls(table *table, db *sql.DB, count int) {
 	execSqls(db, sqls, args)
 }
 
-func execSqls(db *sql.DB, sqls []string, args [][]interface{}) {
+func execSqls(db *sql.DB, sqls []string, args [][]any) {
 	txn, err := db.Begin()
 	if err != nil {
 		log.S().Fatalf(errors.ErrorStack(err))
@@ -100,7 +100,7 @@ func doJob(table *table, db *sql.DB, batch int, jobChan chan struct{}, doneChan 
 }
 
 func doWait(doneChan chan struct{}, workerCount int) {
-	for i := 0; i < workerCount; i++ {
+	for range workerCount {
 		<-doneChan
 	}
 
@@ -113,7 +113,7 @@ func doDMLProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch
 
 	go addJobs(jobCount, jobChan)
 
-	for i := 0; i < workerCount; i++ {
+	for range workerCount {
 		go doJob(table, db, batch, jobChan, doneChan)
 	}
 
@@ -133,7 +133,7 @@ func doDDLProcess(table *table, db *sql.DB) {
 		newCols = append(newCols, table.columns[index+1:]...)
 		table.columns = newCols
 		sql := fmt.Sprintf("alter table %s drop column %s", table.name, col.name)
-		execSqls(db, []string{sql}, [][]interface{}{{}})
+		execSqls(db, []string{sql}, [][]any{{}})
 	}
 
 	// do add  column ddl
@@ -150,7 +150,7 @@ func doDDLProcess(table *table, db *sql.DB) {
 
 	table.columns = newCols
 	sql := fmt.Sprintf("alter table %s add column `%s` varchar(45) after %s", table.name, col.name, table.columns[index-1].name)
-	execSqls(db, []string{sql}, [][]interface{}{{}})
+	execSqls(db, []string{sql}, [][]any{{}})
 }
 
 func doProcess(table *table, db *sql.DB, jobCount int, workerCount int, batch int) {

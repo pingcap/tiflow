@@ -114,11 +114,9 @@ func (p *relayPurger) Start() {
 	p.logger.Info("starting relay log purger", zap.Reflect("config", p.cfg))
 
 	// Close will wait process to return
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		p.run()
-	}()
+	})
 }
 
 // run starts running the process

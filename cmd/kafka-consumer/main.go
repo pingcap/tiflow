@@ -84,19 +84,15 @@ func main() {
 	var wg sync.WaitGroup
 	if consumerOption.enableProfiling {
 		log.Info("profiling is enabled")
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			if err = http.ListenAndServe(":6060", nil); err != nil {
 				log.Panic("cannot start the pprof", zap.Error(err))
 			}
-		}()
+		})
 	}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		consumer.Consume(ctx)
-	}()
+	})
 
 	sigterm := make(chan os.Signal, 1)
 	signal.Notify(sigterm, syscall.SIGINT, syscall.SIGTERM)

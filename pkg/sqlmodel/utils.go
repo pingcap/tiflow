@@ -23,10 +23,10 @@ import (
 func getColsAndValuesOfIdx(
 	columns []*timodel.ColumnInfo,
 	indexColumns *timodel.IndexInfo,
-	data []interface{},
-) ([]*timodel.ColumnInfo, []interface{}) {
+	data []any,
+) ([]*timodel.ColumnInfo, []any) {
 	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
-	values := make([]interface{}, 0, len(indexColumns.Columns))
+	values := make([]any, 0, len(indexColumns.Columns))
 	for _, col := range indexColumns.Columns {
 		cols = append(cols, columns[col.Offset])
 		values = append(values, data[col.Offset])
@@ -40,7 +40,7 @@ func valuesHolder(n int) string {
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 3)
 	builder.WriteByte('(')
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			builder.WriteString(",")
 		}
@@ -62,7 +62,7 @@ func generatedColumnsNameSet(columns []*timodel.ColumnInfo) map[string]struct{} 
 }
 
 // ColValAsStr convert column value as string
-func ColValAsStr(v interface{}) string {
+func ColValAsStr(v any) string {
 	switch dv := v.(type) {
 	case []byte:
 		return string(dv)

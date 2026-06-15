@@ -228,13 +228,13 @@ func TestEtcdSum(t *testing.T) {
 	jsonStr, err := json.Marshal(initArray)
 	require.Nil(t, err)
 
-	for i := 0; i < numGroups; i++ {
+	for i := range numGroups {
 		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/"+strconv.Itoa(i), string(jsonStr))
 		require.Nil(t, err)
 	}
 
 	errg, ctx := errgroup.WithContext(ctx)
-	for i := 0; i < numValuesPerGroup+1; i++ {
+	for i := range numValuesPerGroup + 1 {
 		finalI := i
 		errg.Go(func() error {
 			values := make([][]int, numGroups)
@@ -340,7 +340,7 @@ func TestLinearizability(t *testing.T) {
 	cdcCli, err := etcd.NewCDCEtcdClient(ctx, cli0.Unwrap(), "default")
 	require.Nil(t, err)
 	cli := newClient()
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		_, err := cli.Put(ctx, testEtcdKeyPrefix+"/lin", strconv.Itoa(i))
 		require.Nil(t, err)
 	}
@@ -743,12 +743,10 @@ func TestModifyAfterDelete(t *testing.T) {
 	require.Nil(t, err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := worker1.Run(ctx, nil, time.Millisecond*100, "owner")
 		require.Nil(t, err)
-	}()
+	})
 
 	modifyReactor.waitOnCh <- struct{}{}
 

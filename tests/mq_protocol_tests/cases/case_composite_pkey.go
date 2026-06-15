@@ -45,7 +45,7 @@ func (s *CompositePKeyCase) Run(ctx *framework.TaskContext) error {
 	// Get a handle of an existing table
 	table := ctx.SQLHelper().GetTable("test")
 	// Create an SQL request, send it to the upstream, wait for completion and check the correctness of replication
-	err = table.Insert(map[string]interface{}{
+	err = table.Insert(map[string]any{
 		"id1":   0,
 		"id2":   1,
 		"value": 0,
@@ -54,7 +54,7 @@ func (s *CompositePKeyCase) Run(ctx *framework.TaskContext) error {
 		return errors.AddStack(err)
 	}
 
-	err = table.Upsert(map[string]interface{}{
+	err = table.Upsert(map[string]any{
 		"id1":   0,
 		"id2":   1,
 		"value": 1,
@@ -63,7 +63,7 @@ func (s *CompositePKeyCase) Run(ctx *framework.TaskContext) error {
 		return err
 	}
 
-	err = table.Delete(map[string]interface{}{
+	err = table.Delete(map[string]any{
 		"id1": 0,
 		"id2": 1,
 	}).Send().Wait().Check()

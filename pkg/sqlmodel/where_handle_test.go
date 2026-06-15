@@ -202,16 +202,16 @@ CREATE TABLE t (
 	require.NoError(t, err)
 
 	handle := GetWhereHandle(ti, ti)
-	idx := handle.getWhereIdxByData([]interface{}{nil, 2, 3, 4})
+	idx := handle.getWhereIdxByData([]any{nil, 2, 3, 4})
 	require.Equal(t, "idx2", idx.Name.L)
 	require.Equal(t, idx, handle.UniqueIdxs[0])
 
 	// last used index is moved to front
-	idx = handle.getWhereIdxByData([]interface{}{1, 2, 3, nil})
+	idx = handle.getWhereIdxByData([]any{1, 2, 3, nil})
 	require.Equal(t, "idx1", idx.Name.L)
 	require.Equal(t, idx, handle.UniqueIdxs[0])
 
 	// no index available
-	idx = handle.getWhereIdxByData([]interface{}{1, nil, 3, nil})
+	idx = handle.getWhereIdxByData([]any{1, nil, 3, nil})
 	require.Nil(t, idx)
 }

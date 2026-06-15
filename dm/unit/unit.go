@@ -62,7 +62,7 @@ type Unit interface {
 
 	// Status returns the unit's current status. The result may need calculation with source status, like estimated time
 	// to catch up. If sourceStatus is nil, the calculation should be skipped.
-	Status(sourceStatus *binlog.SourceStatus) interface{}
+	Status(sourceStatus *binlog.SourceStatus) any
 	// Type returns the unit's type
 	Type() pb.UnitType
 	// IsFreshTask return whether is a fresh task (not processed before)

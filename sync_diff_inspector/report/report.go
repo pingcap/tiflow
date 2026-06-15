@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -101,9 +102,7 @@ func (r *Report) LoadReport(reportInfo *Report) {
 		if _, ok := r.TableResults[schema]; !ok {
 			r.TableResults[schema] = make(map[string]*TableResult)
 		}
-		for table, result := range tableMap {
-			r.TableResults[schema][table] = result
-		}
+		maps.Copy(r.TableResults[schema], tableMap)
 	}
 	r.refreshResult()
 }

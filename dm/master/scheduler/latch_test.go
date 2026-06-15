@@ -35,7 +35,7 @@ func TestOneAcquireSuccess(t *testing.T) {
 		wg      sync.WaitGroup
 	)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		var group string
 		if i < 5 {
 			group = group1
@@ -56,7 +56,7 @@ func TestOneAcquireSuccess(t *testing.T) {
 		}(group)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		fire <- struct{}{}
 	}
 	wg.Wait()
@@ -81,10 +81,8 @@ func TestAcquireAfterRelease(t *testing.T) {
 		wg      sync.WaitGroup
 	)
 
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 5 {
+		wg.Go(func() {
 			<-fire
 
 			for {
@@ -98,10 +96,10 @@ func TestAcquireAfterRelease(t *testing.T) {
 					return
 				}
 			}
-		}()
+		})
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		fire <- struct{}{}
 	}
 
@@ -119,7 +117,7 @@ func TestMultiRelease(t *testing.T) {
 		wg    sync.WaitGroup
 	)
 
-	for repeat := 0; repeat < 3; repeat++ {
+	for range 3 {
 		for i := range names {
 			wg.Add(1)
 			go func(name string) {

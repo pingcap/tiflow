@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/pingcap/log"
@@ -838,14 +839,15 @@ func TestGCDroppedColumns(t *testing.T) {
 }
 
 func genCreateStmt(cols ...string) string {
-	str := "CREATE TABLE tbl("
+	var str strings.Builder
+	str.WriteString("CREATE TABLE tbl(")
 	for idx, col := range cols {
 		if idx == 0 {
-			str += col
+			str.WriteString(col)
 		} else {
-			str += ", " + col
+			str.WriteString(", " + col)
 		}
 	}
-	str += ")"
-	return str
+	str.WriteString(")")
+	return str.String()
 }

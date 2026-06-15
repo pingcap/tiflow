@@ -230,7 +230,7 @@ func DefaultMydumperConfig() MydumperConfig {
 type rawMydumperConfig MydumperConfig
 
 // UnmarshalYAML implements Unmarshaler.UnmarshalYAML.
-func (m *MydumperConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (m *MydumperConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	raw := rawMydumperConfig(DefaultMydumperConfig())
 	if err := unmarshal(&raw); err != nil {
 		return terror.ErrConfigYamlTransform.Delegate(err, "unmarshal mydumper config")
@@ -324,7 +324,7 @@ func DefaultLoaderConfig() LoaderConfig {
 type rawLoaderConfig LoaderConfig
 
 // UnmarshalYAML implements Unmarshaler.UnmarshalYAML.
-func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (m *LoaderConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	raw := rawLoaderConfig(DefaultLoaderConfig())
 	if err := unmarshal(&raw); err != nil {
 		return terror.ErrConfigYamlTransform.Delegate(err, "unmarshal loader config")
@@ -461,7 +461,7 @@ func DefaultSyncerConfig() SyncerConfig {
 type rawSyncerConfig SyncerConfig
 
 // UnmarshalYAML implements Unmarshaler.UnmarshalYAML.
-func (m *SyncerConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (m *SyncerConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	raw := rawSyncerConfig(DefaultSyncerConfig())
 	if err := unmarshal(&raw); err != nil {
 		return terror.ErrConfigYamlTransform.Delegate(err, "unmarshal syncer config")
@@ -1050,7 +1050,7 @@ func (c *TaskConfig) adjust() error {
 // getGenerateName generates name by rule or gets name from nameMap
 // if it's a new name, increase nameIdx
 // otherwise return current nameIdx.
-func getGenerateName(rule interface{}, nameIdx int, namePrefix string, nameMap map[string]string) (string, int) {
+func getGenerateName(rule any, nameIdx int, namePrefix string, nameMap map[string]string) (string, int) {
 	// use json as key since no DeepEqual for rules now.
 	ruleByte, err := json.Marshal(rule)
 	if err != nil {

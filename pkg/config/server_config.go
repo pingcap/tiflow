@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -333,10 +334,5 @@ func isValidClusterID(clusterID string) bool {
 	if !valid {
 		return false
 	}
-	for _, reserved := range ReservedClusterIDs {
-		if reserved == clusterID {
-			return false
-		}
-	}
-	return true
+	return !slices.Contains(ReservedClusterIDs, clusterID)
 }

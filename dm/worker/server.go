@@ -164,11 +164,9 @@ func (s *Server) Start() error {
 
 		s.setWorker(nil, true)
 
-		s.runWg.Add(1)
-		go func() {
+		s.runWg.Go(func() {
 			s.runBackgroundJob(s.runCtx)
-			s.runWg.Done()
-		}()
+		})
 
 		s.startKeepAlive()
 

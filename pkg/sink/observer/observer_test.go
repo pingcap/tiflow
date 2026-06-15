@@ -14,6 +14,7 @@
 package observer
 
 import (
+	context0 "context"
 	"database/sql"
 	"testing"
 
@@ -23,7 +24,6 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/context"
 )
 
 func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
@@ -40,7 +40,7 @@ func TestNewObserver(t *testing.T) {
 	t.Parallel()
 
 	dbIndex := 0
-	mockGetDBConn := func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+	mockGetDBConn := func(ctx context0.Context, dsnStr string) (*sql.DB, error) {
 		defer func() { dbIndex++ }()
 
 		if dbIndex == 0 {
@@ -57,13 +57,13 @@ func TestNewObserver(t *testing.T) {
 		return db, nil
 	}
 
-	ctx := context.Background()
+	ctx := context0.Background()
 	sinkURI := "mysql://127.0.0.1:21347/"
 	obs, err := NewObserver(ctx, model.DefaultChangeFeedID("test"),
 		sinkURI, config.GetDefaultReplicaConfig(),
 		WithDBConnFactory(mockGetDBConn))
 	require.NoError(t, err)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err = obs.Tick(ctx)
 		require.NoError(t, err)
 	}

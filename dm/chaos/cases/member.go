@@ -30,7 +30,7 @@ const (
 // checkMembersReadyLoop checks whether all DM-master and DM-worker members have been ready.
 // NOTE: in this chaos case, we ensure 3 DM-master and 3 DM-worker started.
 func checkMembersReadyLoop(ctx context.Context, cli pb.MasterClient, masterCount, workerCount int) (err error) {
-	for i := 0; i < checkMemberTimes; i++ {
+	for range checkMemberTimes {
 		select {
 		case <-ctx.Done():
 			return nil

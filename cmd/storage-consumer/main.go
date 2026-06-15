@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -255,9 +256,7 @@ func (c *consumer) getNewFiles(
 	opt := &storeapi.WalkOption{SubDir: ""}
 
 	origDMLIdxMap := make(map[cloudstorage.DmlPathKey]uint64, len(c.tableDMLIdxMap))
-	for k, v := range c.tableDMLIdxMap {
-		origDMLIdxMap[k] = v
-	}
+	maps.Copy(origDMLIdxMap, c.tableDMLIdxMap)
 
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
 		if cloudstorage.IsSchemaFile(path) {

@@ -437,7 +437,7 @@ func TestCreateProducerFailed(t *testing.T) {
 func TestConfigurationCombinations(t *testing.T) {
 	combinations := []struct {
 		uriTemplate             string
-		uriParams               []interface{}
+		uriParams               []any
 		brokerMessageMaxBytes   string
 		topicMaxMessageBytes    string
 		expectedMaxMessageBytes string
@@ -447,7 +447,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `message.max.bytes`) = `message.max.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"not-exist-topic"},
+			[]any{"not-exist-topic"},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			BrokerMessageMaxBytes,
@@ -457,7 +457,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"not-exist-topic"},
+			[]any{"not-exist-topic"},
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
@@ -467,7 +467,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `message.max.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{"no-params"},
+			[]any{"no-params"},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
@@ -477,7 +477,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// user set `max-message-bytes` < `message.max.bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 - 1)},
+			[]any{"not-created-topic", strconv.Itoa(1024*1024 - 1)},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			strconv.Itoa(1024*1024 - 1),
@@ -486,7 +486,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// user set `max-message-bytes` < default `max-message-bytes` < `message.max.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
+			[]any{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes - 1)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes - 1),
@@ -495,7 +495,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// `message.max.bytes` < user set `max-message-bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(1024*1024 + 1)},
+			[]any{"not-created-topic", strconv.Itoa(1024*1024 + 1)},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			BrokerMessageMaxBytes,
@@ -504,7 +504,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// `message.max.bytes` < default `max-message-bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			[]any{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			BrokerMessageMaxBytes,
@@ -513,7 +513,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// default `max-message-bytes` < user set `max-message-bytes` < `message.max.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
+			[]any{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 1)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 2),
 			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
@@ -522,7 +522,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// default `max-message-bytes` < `message.max.bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
+			[]any{"not-created-topic", strconv.Itoa(config.DefaultMaxMessageBytes + 2)},
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			TopicMaxMessageBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
@@ -533,7 +533,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{DefaultMockTopicName},
+			[]any{DefaultMockTopicName},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			TopicMaxMessageBytes,
@@ -543,7 +543,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{DefaultMockTopicName},
+			[]any{DefaultMockTopicName},
 			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes),
 			strconv.Itoa(config.DefaultMaxMessageBytes),
@@ -553,7 +553,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// expected = min(`max-message-bytes`, `max.message.bytes`) = `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s",
-			[]interface{}{DefaultMockTopicName},
+			[]any{DefaultMockTopicName},
 			BrokerMessageMaxBytes,
 			strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			strconv.Itoa(config.DefaultMaxMessageBytes),
@@ -563,7 +563,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// user set `max-message-bytes` < `max.message.bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
+			[]any{DefaultMockTopicName, strconv.Itoa(1024*1024 - 1)},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			strconv.Itoa(1024*1024 - 1),
@@ -572,7 +572,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// user set `max-message-bytes` < default `max-message-bytes` < `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{
+			[]any{
 				DefaultMockTopicName,
 				strconv.Itoa(config.DefaultMaxMessageBytes - 1),
 			},
@@ -584,7 +584,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// `max.message.bytes` < user set `max-message-bytes` < default `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
+			[]any{DefaultMockTopicName, strconv.Itoa(1024*1024 + 1)},
 			BrokerMessageMaxBytes,
 			TopicMaxMessageBytes,
 			TopicMaxMessageBytes,
@@ -593,7 +593,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// `max.message.bytes` < default `max-message-bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{
+			[]any{
 				DefaultMockTopicName,
 				strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			},
@@ -605,7 +605,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// default `max-message-bytes` < user set `max-message-bytes` < `max.message.bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{
+			[]any{
 				DefaultMockTopicName,
 				strconv.Itoa(config.DefaultMaxMessageBytes + 1),
 			},
@@ -617,7 +617,7 @@ func TestConfigurationCombinations(t *testing.T) {
 		// default `max-message-bytes` < `max.message.bytes` < user set `max-message-bytes`
 		{
 			"kafka://127.0.0.1:9092/%s?max-message-bytes=%s",
-			[]interface{}{
+			[]any{
 				DefaultMockTopicName,
 				strconv.Itoa(config.DefaultMaxMessageBytes + 2),
 			},

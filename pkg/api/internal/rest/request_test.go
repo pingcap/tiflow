@@ -128,8 +128,7 @@ func TestRequestDoContextTimeout(t *testing.T) {
 	}))
 	defer testServer.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	c, err := CDCRESTClientFromConfig(&Config{
 		Host:    testServer.URL,

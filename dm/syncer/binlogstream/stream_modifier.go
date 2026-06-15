@@ -199,11 +199,7 @@ func (m *streamModifier) ListEqualAndAfter(posStr string) []*pb.HandleWorkerErro
 // the argument.
 // RemoveOutdated will not remove the operator equals or after the `front`.
 func (m *streamModifier) RemoveOutdated(pos mysql.Position) {
-	newStartIdx := m.minIdxLargerOrEqual(pos)
-
-	if newStartIdx > m.nextOp {
-		newStartIdx = m.nextOp
-	}
+	newStartIdx := min(m.minIdxLargerOrEqual(pos), m.nextOp)
 
 	m.ops = m.ops[newStartIdx:]
 	m.nextOp -= newStartIdx

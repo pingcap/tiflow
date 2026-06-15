@@ -188,7 +188,7 @@ func (t *testEtcdSuite) TestPrepareJoinEtcd(c *check.C) {
 	defer e2.Close()
 
 	// try join again
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		err = prepareJoinEtcd(cfgAfter2)
 		if err == nil {
 			break
@@ -242,7 +242,7 @@ func (t *testEtcdSuite) TestEtcdAutoCompaction(c *check.C) {
 	})
 	c.Assert(err, check.IsNil)
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		_, err = etcdCli.Put(ctx, "key", fmt.Sprintf("%03d", i))
 		c.Assert(err, check.IsNil)
 	}

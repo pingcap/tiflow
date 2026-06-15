@@ -17,6 +17,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"math"
 	"strconv"
 	"strings"
@@ -201,9 +202,7 @@ func (vw *validateWorker) validateTableChange() {
 			if err2 != nil {
 				return err2
 			}
-			for key, val := range failedRows {
-				allFailedRows[key] = val
-			}
+			maps.Copy(allFailedRows, failedRows)
 			return nil
 		}
 		if err = validateFunc(insertUpdateChanges, false); err != nil {
@@ -282,18 +281,13 @@ func (vw *validateWorker) updatePendingAndErrorRows(failedChanges map[string]map
 func (vw *validateWorker) validateRowChanges(rows []*rowValidationJob, deleteChange bool) (map[string]*validateFailedRow, error) {
 	res := make(map[string]*validateFailedRow)
 	for start := 0; start < len(rows); start += vw.batchSize {
-		end := start + vw.batchSize
-		if end > len(rows) {
-			end = len(rows)
-		}
+		end := min(start+vw.batchSize, len(rows))
 		batch := rows[start:end]
 		failedRows, err := vw.batchValidateRowChanges(batch, deleteChange)
 		if err != nil {
 			return nil, err
 		}
-		for k, v := range failedRows {
-			res[k] = v
-		}
+		maps.Copy(res, failedRows)
 	}
 	return res, nil
 }
@@ -528,7 +522,7 @@ func scanRow(rows *sql.Rows) ([]*sql.NullString, error) {
 	}
 
 	colVals := make([][]byte, len(cols))
-	colValsI := make([]interface{}, len(colVals))
+	colValsI := make([]any, len(colVals))
 	for i := range colValsI {
 		colValsI[i] = &colVals[i]
 	}

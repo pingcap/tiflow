@@ -14,6 +14,7 @@
 package config
 
 import (
+	"maps"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -45,9 +46,7 @@ func TestCheckingItems(t *testing.T) {
 
 	// ignore shard checking items
 	checkingItems := make(map[string]string)
-	for item, desc := range AllCheckingItems {
-		checkingItems[item] = desc
-	}
+	maps.Copy(checkingItems, AllCheckingItems)
 	delete(checkingItems, AllChecking)
 
 	require.Equal(t, checkingItems, FilterCheckingItems(ignoredCheckingItems[:0]))

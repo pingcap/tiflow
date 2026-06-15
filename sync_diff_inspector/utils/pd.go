@@ -143,7 +143,7 @@ func GetSpecifiedColumnValueAndClose(rows *sql.Rows, columnName string) ([]strin
 	columnName = strings.ToUpper(columnName)
 	var strs []string
 	columns, _ := rows.Columns()
-	addr := make([]interface{}, len(columns))
+	addr := make([]any, len(columns))
 	oneRow := make([]sql.NullString, len(columns))
 	fieldIndex := -1
 	for i, col := range columns {

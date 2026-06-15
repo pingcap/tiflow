@@ -16,6 +16,7 @@ package chunk
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -468,9 +469,7 @@ func (r *Range) Clone() *Range {
 	newChunk.Type = r.Type
 	newChunk.Where = r.Where
 	newChunk.Args = r.Args
-	for i, v := range r.columnOffset {
-		newChunk.columnOffset[i] = v
-	}
+	maps.Copy(newChunk.columnOffset, r.columnOffset)
 	newChunk.Index = r.Index.Copy()
 	newChunk.IsFirst = r.IsFirst
 	newChunk.IsLast = r.IsLast

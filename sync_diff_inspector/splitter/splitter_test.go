@@ -36,7 +36,7 @@ import (
 
 type chunkResult struct {
 	chunkStr string
-	args     []interface{}
+	args     []any
 }
 
 func TestSplitRangeByRandom(t *testing.T) {
@@ -61,13 +61,13 @@ func TestSplitRangeByRandom(t *testing.T) {
 			[]chunkResult{
 				{
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"0", "0", "a", "5", "5", "g"},
+					[]any{"0", "0", "a", "5", "5", "g"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"5", "5", "g", "7", "7", "n"},
+					[]any{"5", "5", "g", "7", "7", "n"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"7", "7", "n", "10", "10", "z"},
+					[]any{"7", "7", "n", "10", "10", "z"},
 				},
 			},
 		},
@@ -82,13 +82,13 @@ func TestSplitRangeByRandom(t *testing.T) {
 			[]chunkResult{
 				{
 					"((`b` > ?) OR (`b` = ? AND `a` > ?)) AND ((`b` < ?) OR (`b` = ? AND `a` <= ?))",
-					[]interface{}{"a", "a", "0", "g", "g", "5"},
+					[]any{"a", "a", "0", "g", "g", "5"},
 				}, {
 					"((`b` > ?) OR (`b` = ? AND `a` > ?)) AND ((`b` < ?) OR (`b` = ? AND `a` <= ?))",
-					[]interface{}{"g", "g", "5", "n", "n", "7"},
+					[]any{"g", "g", "5", "n", "n", "7"},
 				}, {
 					"((`b` > ?) OR (`b` = ? AND `a` > ?)) AND ((`b` < ?) OR (`b` = ? AND `a` <= ?))",
-					[]interface{}{"n", "n", "7", "z", "z", "10"},
+					[]any{"n", "n", "7", "z", "z", "10"},
 				},
 			},
 		},
@@ -102,13 +102,13 @@ func TestSplitRangeByRandom(t *testing.T) {
 			[]chunkResult{
 				{
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"a", "g"},
+					[]any{"a", "g"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"g", "n"},
+					[]any{"g", "n"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"n", "z"},
+					[]any{"n", "z"},
 				},
 			},
 		},
@@ -122,10 +122,10 @@ func TestSplitRangeByRandom(t *testing.T) {
 			[]chunkResult{
 				{
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"a", "g"},
+					[]any{"a", "g"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"g", "z"},
+					[]any{"g", "z"},
 				},
 			},
 		},
@@ -139,7 +139,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 			[]chunkResult{
 				{
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"a", "z"},
+					[]any{"a", "z"},
 				},
 			},
 		},
@@ -187,22 +187,22 @@ func TestRandomSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"1", "1", "a"},
+					[]any{"1", "1", "a"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"1", "1", "a", "2", "2", "b"},
+					[]any{"1", "1", "a", "2", "2", "b"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"2", "2", "b", "3", "3", "c"},
+					[]any{"2", "2", "b", "3", "3", "c"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"3", "3", "c", "4", "4", "d"},
+					[]any{"3", "3", "c", "4", "4", "d"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"4", "4", "d", "5", "5", "e"},
+					[]any{"4", "4", "d", "5", "5", "e"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"5", "5", "e"},
+					[]any{"5", "5", "e"},
 				},
 			},
 		}, {
@@ -216,22 +216,22 @@ func TestRandomSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`b` <= ?)",
-					[]interface{}{"a"},
+					[]any{"a"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"a", "b"},
+					[]any{"a", "b"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"b", "c"},
+					[]any{"b", "c"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"c", "d"},
+					[]any{"c", "d"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"d", "e"},
+					[]any{"d", "e"},
 				}, {
 					"(`b` > ?)",
-					[]interface{}{"e"},
+					[]any{"e"},
 				},
 			},
 		}, {
@@ -246,22 +246,22 @@ func TestRandomSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`b` < ?) OR (`b` = ? AND `c` <= ?)",
-					[]interface{}{"a", "a", "1.1"},
+					[]any{"a", "a", "1.1"},
 				}, {
 					"((`b` > ?) OR (`b` = ? AND `c` > ?)) AND ((`b` < ?) OR (`b` = ? AND `c` <= ?))",
-					[]interface{}{"a", "a", "1.1", "b", "b", "2.2"},
+					[]any{"a", "a", "1.1", "b", "b", "2.2"},
 				}, {
 					"((`b` > ?) OR (`b` = ? AND `c` > ?)) AND ((`b` < ?) OR (`b` = ? AND `c` <= ?))",
-					[]interface{}{"b", "b", "2.2", "c", "c", "3.3"},
+					[]any{"b", "b", "2.2", "c", "c", "3.3"},
 				}, {
 					"((`b` > ?) OR (`b` = ? AND `c` > ?)) AND ((`b` < ?) OR (`b` = ? AND `c` <= ?))",
-					[]interface{}{"c", "c", "3.3", "d", "d", "4.4"},
+					[]any{"c", "c", "3.3", "d", "d", "4.4"},
 				}, {
 					"((`b` > ?) OR (`b` = ? AND `c` > ?)) AND ((`b` < ?) OR (`b` = ? AND `c` <= ?))",
-					[]interface{}{"d", "d", "4.4", "e", "e", "5.5"},
+					[]any{"d", "d", "4.4", "e", "e", "5.5"},
 				}, {
 					"(`b` > ?) OR (`b` = ? AND `c` > ?)",
-					[]interface{}{"e", "e", "5.5"},
+					[]any{"e", "e", "5.5"},
 				},
 			},
 		}, {
@@ -275,22 +275,22 @@ func TestRandomSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`b` <= ?)",
-					[]interface{}{"a"},
+					[]any{"a"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"a", "b"},
+					[]any{"a", "b"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"b", "c"},
+					[]any{"b", "c"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"c", "d"},
+					[]any{"c", "d"},
 				}, {
 					"((`b` > ?)) AND ((`b` <= ?))",
-					[]interface{}{"d", "e"},
+					[]any{"d", "e"},
 				}, {
 					"(`b` > ?)",
-					[]interface{}{"e"},
+					[]any{"e"},
 				},
 			},
 		}, {
@@ -304,22 +304,22 @@ func TestRandomSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` <= ?)",
-					[]interface{}{"1"},
+					[]any{"1"},
 				}, {
 					"((`a` > ?)) AND ((`a` <= ?))",
-					[]interface{}{"1", "2"},
+					[]any{"1", "2"},
 				}, {
 					"((`a` > ?)) AND ((`a` <= ?))",
-					[]interface{}{"2", "3"},
+					[]any{"2", "3"},
 				}, {
 					"((`a` > ?)) AND ((`a` <= ?))",
-					[]interface{}{"3", "4"},
+					[]any{"3", "4"},
 				}, {
 					"((`a` > ?)) AND ((`a` <= ?))",
-					[]interface{}{"4", "5"},
+					[]any{"4", "5"},
 				}, {
 					"(`a` > ?)",
-					[]interface{}{"5"},
+					[]any{"5"},
 				},
 			},
 		},
@@ -379,7 +379,7 @@ func TestRandomSpliter(t *testing.T) {
 	require.NoError(t, err)
 
 	var chunk *chunk.Range
-	for j := 0; j < stopJ; j++ {
+	for range stopJ {
 		chunk, err = iter.Next()
 		require.NoError(t, err)
 	}
@@ -415,13 +415,13 @@ func createFakeResultForRandomSplit(t *testing.T, mock sqlmock.Sqlmock, count in
 	// generate fake result for get random value for column a
 	columns := []string{"a", "b", "c", "d", "e", "f"}
 	rowsNames := make([]string, 0, len(randomValues))
-	for i := 0; i < len(randomValues); i++ {
+	for i := range randomValues {
 		rowsNames = append(rowsNames, columns[i])
 	}
 	randomRows := sqlmock.NewRows(rowsNames)
 	for i := 0; i < len(randomValues[0]); i++ {
 		row := make([]driver.Value, 0, len(randomValues))
-		for j := 0; j < len(randomValues); j++ {
+		for j := range randomValues {
 			row = append(row, randomValues[j][i])
 		}
 		randomRows.AddRow(row...)
@@ -440,49 +440,49 @@ func TestBucketSpliter(t *testing.T) {
 
 	testCases := []struct {
 		chunkSize     int64
-		aRandomValues []interface{}
-		bRandomValues []interface{}
+		aRandomValues []any
+		bRandomValues []any
 		expectResult  []chunkResult
 	}{
 		{
 			// chunk size less than the count of bucket 64, and the bucket's count 64 >= 32, so will split by random in every bucket
 			32,
-			[]interface{}{32, 32 * 3, 32 * 5, 32 * 7, 32 * 9},
-			[]interface{}{6, 6 * 3, 6 * 5, 6 * 7, 6 * 9},
+			[]any{32, 32 * 3, 32 * 5, 32 * 7, 32 * 9},
+			[]any{6, 6 * 3, 6 * 5, 6 * 7, 6 * 9},
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"32", "32", "6"},
+					[]any{"32", "32", "6"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"32", "32", "6", "63", "63", "11"},
+					[]any{"32", "32", "6", "63", "63", "11"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"63", "63", "11", "96", "96", "18"},
+					[]any{"63", "63", "11", "96", "96", "18"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"96", "96", "18", "127", "127", "23"},
+					[]any{"96", "96", "18", "127", "127", "23"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"127", "127", "23", "160", "160", "30"},
+					[]any{"127", "127", "23", "160", "160", "30"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"160", "160", "30", "191", "191", "35"},
+					[]any{"160", "160", "30", "191", "191", "35"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"191", "191", "35", "224", "224", "42"},
+					[]any{"191", "191", "35", "224", "224", "42"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"224", "224", "42", "255", "255", "47"},
+					[]any{"224", "224", "42", "255", "255", "47"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"255", "255", "47", "288", "288", "54"},
+					[]any{"255", "255", "47", "288", "288", "54"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"288", "288", "54", "319", "319", "59"},
+					[]any{"288", "288", "54", "319", "319", "59"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"319", "319", "59"},
+					[]any{"319", "319", "59"},
 				},
 			},
 		}, {
@@ -493,22 +493,22 @@ func TestBucketSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"63", "63", "11"},
+					[]any{"63", "63", "11"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"63", "63", "11", "127", "127", "23"},
+					[]any{"63", "63", "11", "127", "127", "23"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"127", "127", "23", "191", "191", "35"},
+					[]any{"127", "127", "23", "191", "191", "35"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"191", "191", "35", "255", "255", "47"},
+					[]any{"191", "191", "35", "255", "255", "47"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"255", "255", "47", "319", "319", "59"},
+					[]any{"255", "255", "47", "319", "319", "59"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"319", "319", "59"},
+					[]any{"319", "319", "59"},
 				},
 			},
 		}, {
@@ -519,22 +519,22 @@ func TestBucketSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"63", "63", "11"},
+					[]any{"63", "63", "11"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"63", "63", "11", "127", "127", "23"},
+					[]any{"63", "63", "11", "127", "127", "23"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"127", "127", "23", "191", "191", "35"},
+					[]any{"127", "127", "23", "191", "191", "35"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"191", "191", "35", "255", "255", "47"},
+					[]any{"191", "191", "35", "255", "255", "47"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"255", "255", "47", "319", "319", "59"},
+					[]any{"255", "255", "47", "319", "319", "59"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"319", "319", "59"},
+					[]any{"319", "319", "59"},
 				},
 			},
 		}, {
@@ -545,13 +545,13 @@ func TestBucketSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"127", "127", "23"},
+					[]any{"127", "127", "23"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"127", "127", "23", "255", "255", "47"},
+					[]any{"127", "127", "23", "255", "255", "47"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"255", "255", "47"},
+					[]any{"255", "255", "47"},
 				},
 			},
 		}, {
@@ -562,13 +562,13 @@ func TestBucketSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"127", "127", "23"},
+					[]any{"127", "127", "23"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"127", "127", "23", "255", "255", "47"},
+					[]any{"127", "127", "23", "255", "255", "47"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"255", "255", "47"},
+					[]any{"255", "255", "47"},
 				},
 			},
 		}, {
@@ -579,10 +579,10 @@ func TestBucketSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"191", "191", "35"},
+					[]any{"191", "191", "35"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"191", "191", "35"},
+					[]any{"191", "191", "35"},
 				},
 			},
 		}, {
@@ -634,10 +634,7 @@ func TestBucketSpliter(t *testing.T) {
 
 		}
 		sort.Slice(obtainChunks, func(i, j int) bool {
-			totalIndex := len(obtainChunks[i].args)
-			if totalIndex > len(obtainChunks[j].args) {
-				totalIndex = len(obtainChunks[j].args)
-			}
+			totalIndex := min(len(obtainChunks[i].args), len(obtainChunks[j].args))
 			for index := 0; index < totalIndex; index++ {
 				a1, _ := strconv.Atoi(obtainChunks[i].args[index].(string))
 				a2, _ := strconv.Atoi(obtainChunks[j].args[index].(string))
@@ -718,7 +715,7 @@ func TestBucketSpliter(t *testing.T) {
 	require.Error(t, err)
 }
 
-func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []interface{}) {
+func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []any) {
 	/*
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 		| Db_name | Table_name | Column_name | Is_index | Bucket_id | Count | Repeats | Lower_Bound | Upper_Bound |
@@ -733,7 +730,7 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 
 	// Mock query with subquery to get all table_ids (main table + partitions) at once
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		// Encode index bounds as real encoded keys: PRIMARY(a, b) where both a and b are integers.
 		lowerA, lowerB := i*64, i*12
 		upperA, upperB := (i+1)*64-1, (i+1)*12-1
@@ -763,8 +760,8 @@ func createFakeResultForCount(t *testing.T, count int) {
 	}
 }
 
-func createFakeResultForRandom(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []interface{}) {
-	for i := 0; i < len(aRandomValues); i++ {
+func createFakeResultForRandom(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []any) {
+	for i := range aRandomValues {
 		aRandomRows := sqlmock.NewRows([]string{"a", "b"})
 		aRandomRows.AddRow(aRandomValues[i], bRandomValues[i])
 		mock.ExpectQuery("ORDER BY rand_value").WillReturnRows(aRandomRows)
@@ -789,19 +786,19 @@ func TestLimitSpliter(t *testing.T) {
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
-					[]interface{}{"1000", "1000", "a"},
+					[]any{"1000", "1000", "a"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"1000", "1000", "a", "2000", "2000", "b"},
+					[]any{"1000", "1000", "a", "2000", "2000", "b"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"2000", "2000", "b", "3000", "3000", "c"},
+					[]any{"2000", "2000", "b", "3000", "3000", "c"},
 				}, {
 					"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-					[]interface{}{"3000", "3000", "c", "4000", "4000", "d"},
+					[]any{"3000", "3000", "c", "4000", "4000", "d"},
 				}, {
 					"(`a` > ?) OR (`a` = ? AND `b` > ?)",
-					[]interface{}{"4000", "4000", "d"},
+					[]any{"4000", "4000", "d"},
 				},
 			},
 		},
@@ -899,7 +896,7 @@ func TestRangeInfo(t *testing.T) {
 	rangeInfo.ChunkRange.Index.TableIndex = 1
 	chunkRange := rangeInfo.GetChunk()
 	require.Equal(t, chunkRange.Where, "((((`a` COLLATE '[23]' > ?)) AND ((`a` COLLATE '[23]' <= ?))) AND ([sdg]))")
-	require.Equal(t, chunkRange.Args, []interface{}{"1", "2"})
+	require.Equal(t, chunkRange.Args, []any{"1", "2"})
 
 	require.Equal(t, rangeInfo.GetTableIndex(), 1)
 
@@ -907,7 +904,7 @@ func TestRangeInfo(t *testing.T) {
 
 	chunkRange = rangeInfo2.GetChunk()
 	require.Equal(t, chunkRange.Where, "((((`a` COLLATE '[23]' > ?)) AND ((`a` COLLATE '[23]' <= ?))) AND ([sdg]))")
-	require.Equal(t, chunkRange.Args, []interface{}{"1", "2"})
+	require.Equal(t, chunkRange.Args, []any{"1", "2"})
 
 	require.Equal(t, rangeInfo2.GetTableIndex(), 1)
 }
@@ -1101,7 +1098,7 @@ func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	for i := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
 		histID := int64(i + 1) // hist_id starts from 1
-		for j := 0; j < 5; j++ {
+		for j := range 5 {
 			statsRows.AddRow(1, histID, j, (j+1)*64, fmt.Sprintf("(%d, %d)", j*64, j*12), fmt.Sprintf("(%d, %d)", (j+1)*64-1, (j+1)*12-1))
 		}
 	}

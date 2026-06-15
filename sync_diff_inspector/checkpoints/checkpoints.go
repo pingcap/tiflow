@@ -225,12 +225,12 @@ func (hp *nodeHeap) Swap(i, j int) {
 }
 
 // Push implementation of push for the heap interface
-func (hp *nodeHeap) Push(x interface{}) {
+func (hp *nodeHeap) Push(x any) {
 	hp.Nodes = append(hp.Nodes, x.(*Node))
 }
 
 // Pop implementation of pop for heap interface
-func (hp *nodeHeap) Pop() (item interface{}) {
+func (hp *nodeHeap) Pop() (item any) {
 	if len(hp.Nodes) == 0 {
 		return
 	}

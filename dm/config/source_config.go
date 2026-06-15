@@ -98,7 +98,7 @@ type SourceConfig struct {
 	ServerID uint32 `yaml:"server-id" toml:"server-id" json:"server-id"`
 
 	// deprecated tracer, to keep compatibility with older version
-	Tracer map[string]interface{} `yaml:"tracer" toml:"tracer" json:"-"`
+	Tracer map[string]any `yaml:"tracer" toml:"tracer" json:"-"`
 
 	CaseSensitive bool                  `yaml:"case-sensitive" toml:"case-sensitive" json:"case-sensitive"`
 	Filters       []*bf.BinlogEventRule `yaml:"filters" toml:"filters" json:"filters"`
@@ -366,7 +366,7 @@ func (c *SourceConfig) AdjustServerID(ctx context.Context, db *conn.BaseDB) erro
 	}
 
 	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		randomValue := uint32(rand.Intn(100000))
 		randomServerID := defaultBaseServerID + randomValue
 		if _, ok := serverIDs[randomServerID]; ok {
@@ -403,21 +403,21 @@ func (c *SourceConfig) YamlForDowngrade() (string, error) {
 // This config is used for downgrade(config export) from a higher dmctl version.
 // When we add any new config item into SourceConfig, we should update it also.
 type SourceConfigForDowngrade struct {
-	Enable          bool                   `yaml:"enable,omitempty"`
-	EnableGTID      bool                   `yaml:"enable-gtid"`
-	RelayDir        string                 `yaml:"relay-dir"`
-	Flavor          string                 `yaml:"flavor"`
-	Charset         string                 `yaml:"charset"`
-	EnableRelay     bool                   `yaml:"enable-relay"`
-	RelayBinLogName string                 `yaml:"relay-binlog-name"`
-	RelayBinlogGTID string                 `yaml:"relay-binlog-gtid"`
-	UUIDSuffix      int                    `yaml:"-"`
-	SourceID        string                 `yaml:"source-id"`
-	From            dbconfig.DBConfig      `yaml:"from"`
-	Purge           PurgeConfig            `yaml:"purge"`
-	Checker         CheckerConfig          `yaml:"checker"`
-	ServerID        uint32                 `yaml:"server-id"`
-	Tracer          map[string]interface{} `yaml:"tracer"`
+	Enable          bool              `yaml:"enable,omitempty"`
+	EnableGTID      bool              `yaml:"enable-gtid"`
+	RelayDir        string            `yaml:"relay-dir"`
+	Flavor          string            `yaml:"flavor"`
+	Charset         string            `yaml:"charset"`
+	EnableRelay     bool              `yaml:"enable-relay"`
+	RelayBinLogName string            `yaml:"relay-binlog-name"`
+	RelayBinlogGTID string            `yaml:"relay-binlog-gtid"`
+	UUIDSuffix      int               `yaml:"-"`
+	SourceID        string            `yaml:"source-id"`
+	From            dbconfig.DBConfig `yaml:"from"`
+	Purge           PurgeConfig       `yaml:"purge"`
+	Checker         CheckerConfig     `yaml:"checker"`
+	ServerID        uint32            `yaml:"server-id"`
+	Tracer          map[string]any    `yaml:"tracer"`
 	// any new config item, we mark it omitempty
 	CaseSensitive bool                  `yaml:"case-sensitive,omitempty"`
 	Filters       []*bf.BinlogEventRule `yaml:"filters,omitempty"`

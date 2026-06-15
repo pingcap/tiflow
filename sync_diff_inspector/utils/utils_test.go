@@ -388,7 +388,7 @@ func TestGetTableSize(t *testing.T) {
 	defer conn.Close()
 	dataRows := sqlmock.NewRows([]string{"a", "b"})
 	rowNums := 1000
-	for k := 0; k < rowNums; k++ {
+	for k := range rowNums {
 		str := fmt.Sprintf("%d", k)
 		dataRows.AddRow(str, str)
 	}

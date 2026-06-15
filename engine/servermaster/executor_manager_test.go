@@ -79,11 +79,9 @@ func TestExecutorManager(t *testing.T) {
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executor.ID).Times(1).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		mgr.Run(ctx)
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		return mgr.ExecutorCount(model.Running) == 0
@@ -170,9 +168,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 		require.NoError(t, err)
 
 		ctxIn, cancelIn := context.WithCancel(ctx)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ticker := time.NewTicker(time.Millisecond)
 			defer ticker.Stop()
 			for {
@@ -184,7 +180,7 @@ func TestExecutorManagerWatch(t *testing.T) {
 					require.NoError(t, err)
 				}
 			}
-		}()
+		})
 		return cancelIn
 	}
 
@@ -197,11 +193,9 @@ func TestExecutorManagerWatch(t *testing.T) {
 	metaClient.EXPECT().DeleteExecutor(gomock.Any(), executorID2).Times(1).Return(nil)
 
 	var mgrWg sync.WaitGroup
-	mgrWg.Add(1)
-	go func() {
-		defer mgrWg.Done()
+	mgrWg.Go(func() {
 		mgr.Run(ctx)
-	}()
+	})
 
 	// mgr.Start will reset executors first, so there will be two online events.
 	event = <-stream.C

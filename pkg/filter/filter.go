@@ -14,6 +14,8 @@
 package filter
 
 import (
+	"slices"
+
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -244,12 +246,7 @@ func (f *filter) Verify(tableInfos []*model.TableInfo) error {
 }
 
 func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
-	for _, ignoreTs := range f.ignoreTxnStartTs {
-		if ignoreTs == ts {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(f.ignoreTxnStartTs, ts)
 }
 
 func isAllowedDDL(actionType timodel.ActionType) bool {

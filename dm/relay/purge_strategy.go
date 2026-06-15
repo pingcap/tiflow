@@ -59,10 +59,10 @@ func (s strategyType) String() string {
 // a strategy can support both or one of them.
 type PurgeStrategy interface {
 	// Check checks whether need to do the purge in the background automatically
-	Check(args interface{}) (bool, error)
+	Check(args any) (bool, error)
 
 	// Do does the purge process one time
-	Do(args interface{}) error
+	Do(args any) error
 
 	// Purging indicates whether is doing purge
 	Purging() bool
@@ -142,12 +142,12 @@ func newFilenameStrategy() PurgeStrategy {
 	}
 }
 
-func (s *filenameStrategy) Check(args interface{}) (bool, error) {
+func (s *filenameStrategy) Check(args any) (bool, error) {
 	// do not support purge in the background
 	return false, nil
 }
 
-func (s *filenameStrategy) Do(args interface{}) error {
+func (s *filenameStrategy) Do(args any) error {
 	if !s.purging.CAS(false, true) {
 		return terror.ErrRelayThisStrategyIsPurging.Generate()
 	}
@@ -202,12 +202,12 @@ func newInactiveStrategy() PurgeStrategy {
 	}
 }
 
-func (s *inactiveStrategy) Check(args interface{}) (bool, error) {
+func (s *inactiveStrategy) Check(args any) (bool, error) {
 	// do not support purge in the background
 	return false, nil
 }
 
-func (s *inactiveStrategy) Do(args interface{}) error {
+func (s *inactiveStrategy) Do(args any) error {
 	if !s.purging.CAS(false, true) {
 		return terror.ErrRelayThisStrategyIsPurging.Generate()
 	}
@@ -259,7 +259,7 @@ func newSpaceStrategy() PurgeStrategy {
 	}
 }
 
-func (s *spaceStrategy) Check(args interface{}) (bool, error) {
+func (s *spaceStrategy) Check(args any) (bool, error) {
 	sa, ok := args.(*spaceArgs)
 	if !ok {
 		return false, terror.ErrRelayPurgeArgsNotValid.Generate(args, args)
@@ -274,7 +274,7 @@ func (s *spaceStrategy) Check(args interface{}) (bool, error) {
 	return storageSize.Available < requiredBytes, nil
 }
 
-func (s *spaceStrategy) Do(args interface{}) error {
+func (s *spaceStrategy) Do(args any) error {
 	if !s.purging.CAS(false, true) {
 		return terror.ErrRelayThisStrategyIsPurging.Generate()
 	}
@@ -329,7 +329,7 @@ func newTimeStrategy() PurgeStrategy {
 	}
 }
 
-func (s *timeStrategy) Check(args interface{}) (bool, error) {
+func (s *timeStrategy) Check(args any) (bool, error) {
 	// for time strategy, we always try to do the purging
 	return true, nil
 }
@@ -337,7 +337,7 @@ func (s *timeStrategy) Check(args interface{}) (bool, error) {
 func (s *timeStrategy) Stop() {
 }
 
-func (s *timeStrategy) Do(args interface{}) error {
+func (s *timeStrategy) Do(args any) error {
 	if !s.purging.CAS(false, true) {
 		return terror.ErrRelayThisStrategyIsPurging.Generate()
 	}

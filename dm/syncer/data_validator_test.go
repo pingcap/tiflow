@@ -225,7 +225,7 @@ func TestValidatorDeadLock(t *testing.T) {
 			// nolint:errcheck
 			recover()
 		}()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			validator.sendError(context.Canceled) // prevent from stopping the validator
 		}
 	}()
@@ -383,7 +383,7 @@ func TestValidatorProcessRowsEventAdjustUnsignedData(t *testing.T) {
 				Table:  []byte(tableName),
 			},
 			ColumnCount: 2,
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(-2061521730), "v1"},
 			},
 		},
@@ -489,7 +489,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(1), "a"},
 				{int32(2), "b"},
 				{int32(3), "c"},
@@ -501,7 +501,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName2,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(1), "a"},
 				{int32(2), "b"},
 				{int32(3), "c"},
@@ -513,7 +513,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName3,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(1), "a"},
 				{int32(2), "b"},
 				{int32(3), "c"},
@@ -525,7 +525,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName3,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(4), "a"},
 			},
 		},
@@ -536,7 +536,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				// update non-primary column
 				{int32(3), "c"},
 				{int32(3), "d"},
@@ -552,7 +552,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(3), "c"},
 			},
 		},
@@ -562,7 +562,7 @@ func TestValidatorDoValidate(t *testing.T) {
 			Schema:     schemaName,
 			Table:      tableName4,
 			ColumnType: []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING},
-			Rows: [][]interface{}{
+			Rows: [][]any{
 				{int32(4), "c"},
 			},
 		},
@@ -648,7 +648,7 @@ func TestValidatorGenRowKey(t *testing.T) {
 	require.Equal(t, "a\tb", genRowKeyByString([]string{"a", "b"}))
 	require.Equal(t, "a\tb\tc", genRowKeyByString([]string{"a", "b", "c"}))
 	var bytes []byte
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		bytes = append(bytes, 'a')
 	}
 	{
@@ -886,13 +886,11 @@ func TestValidatorErrorProcessRoutineDeadlock(t *testing.T) {
 
 	finishedCh := make(chan struct{})
 	// simulate a worker
-	validator.wg.Add(1)
-	go func() {
-		defer validator.wg.Done()
+	validator.wg.Go(func() {
 		validator.sendError(errors.New("test error 1"))
 		validator.sendError(errors.New("test error 2"))
 		validator.sendError(errors.New("test error 3"))
-	}()
+	})
 
 	validator.errProcessWg.Add(1)
 	go func() {

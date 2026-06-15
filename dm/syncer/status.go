@@ -27,7 +27,7 @@ import (
 )
 
 // Status implements Unit.Status.
-func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) interface{} {
+func (s *Syncer) Status(sourceStatus *binlog.SourceStatus) any {
 	syncerLocation := s.checkpoint.FlushedGlobalPoint()
 	st := &pb.SyncStatus{
 		TotalEvents:         s.count.Load(),

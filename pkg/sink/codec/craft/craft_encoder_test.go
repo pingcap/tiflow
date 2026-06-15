@@ -35,7 +35,7 @@ func TestCraftMaxMessageBytes(t *testing.T) {
 	_ = helper.DDL2Event(`create table test.t(a varchar(10) primary key)`)
 	testEvent := helper.DML2Event(`insert into test.t values ("aa")`, "test", "t")
 
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}
@@ -57,7 +57,7 @@ func TestCraftMaxBatchSize(t *testing.T) {
 	_ = helper.DDL2Event(`create table test.t(a varchar(10) primary key)`)
 	testEvent := helper.DML2Event(`insert into test.t values ("aa")`, "test", "t")
 
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		err := encoder.AppendRowChangedEvent(context.Background(), "", testEvent, nil)
 		require.Nil(t, err)
 	}

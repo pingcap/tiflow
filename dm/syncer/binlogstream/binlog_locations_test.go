@@ -31,7 +31,7 @@ import (
 type (
 	mockBinlogEvent struct {
 		typ  int
-		args []interface{}
+		args []any
 	}
 )
 
@@ -118,7 +118,7 @@ func (s *testLocationSuite) generateEvents(binlogEvents []mockBinlogEvent) []*re
 					Schema:     e.args[1].(string),
 					Table:      e.args[2].(string),
 					ColumnType: e.args[3].([]byte),
-					Rows:       e.args[4].([][]interface{}),
+					Rows:       e.args[4].([][]any),
 				},
 			}
 			eventType := replication.WRITE_ROWS_EVENTv2
@@ -177,8 +177,8 @@ func (s *testLocationSuite) updateLastEventGSet(events []*replication.BinlogEven
 
 func (s *testLocationSuite) generateDMLEvents() []*replication.BinlogEvent {
 	events := s.generateEvents([]mockBinlogEvent{
-		{Headers, []interface{}{s.binlogFile}},
-		{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}},
+		{Headers, []any{s.binlogFile}},
+		{Write, []any{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(1)}}}},
 	})
 
 	s.updateLastEventGSet(events)
@@ -187,8 +187,8 @@ func (s *testLocationSuite) generateDMLEvents() []*replication.BinlogEvent {
 
 func (s *testLocationSuite) generateDDLEvents() []*replication.BinlogEvent {
 	events := s.generateEvents([]mockBinlogEvent{
-		{Headers, []interface{}{s.binlogFile}},
-		{DBCreate, []interface{}{"foo1"}},
+		{Headers, []any{s.binlogFile}},
+		{DBCreate, []any{"foo1"}},
 	})
 
 	s.updateLastEventGSet(events)
@@ -442,8 +442,8 @@ func (s *testLocationSuite) generateDMLQueryEvents() []*replication.BinlogEvent 
 	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
 	s.Require().NoError(err)
 	events := s.generateEvents([]mockBinlogEvent{
-		{Headers, []interface{}{s.binlogFile}},
-		{DMLQuery, []interface{}{"foo", "INSERT INTO v VALUES(1)"}},
+		{Headers, []any{s.binlogFile}},
+		{DMLQuery, []any{"foo", "INSERT INTO v VALUES(1)"}},
 	})
 
 	s.updateLastEventGSet(events)
@@ -502,10 +502,10 @@ func (s *testLocationSuite) generateRotateAndDMLEvents() []*replication.BinlogEv
 	s.eventsGenerator, err = event.NewGenerator(s.flavor, s.serverID, s.binlogPos, s.lastGTID, s.prevGSet, 0)
 	s.Require().NoError(err)
 	events := s.generateEvents([]mockBinlogEvent{
-		{Headers, []interface{}{s.binlogFile}},
-		{Rotate, []interface{}{s.nextBinlogFile}},
-		{Headers, []interface{}{s.nextBinlogFile}},
-		{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}},
+		{Headers, []any{s.binlogFile}},
+		{Rotate, []any{s.nextBinlogFile}},
+		{Headers, []any{s.nextBinlogFile}},
+		{Write, []any{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(1)}}}},
 	})
 
 	s.updateLastEventGSet(events)

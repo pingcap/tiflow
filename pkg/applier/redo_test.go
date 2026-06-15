@@ -89,8 +89,7 @@ func (br *MockReader) ReadMeta(ctx context.Context) (checkpointTs, resolvedTs ui
 }
 
 func TestApply(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	checkpointTs := uint64(1000)
 	resolvedTs := uint64(2000)
@@ -303,8 +302,7 @@ func TestApply(t *testing.T) {
 }
 
 func TestApplyBigTxn(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	checkpointTs := uint64(1000)
 	resolvedTs := uint64(2000)
@@ -479,8 +477,7 @@ func TestApplyBigTxn(t *testing.T) {
 }
 
 func TestApplyMeetSinkError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	port, err := freeport.GetFreePort()
 	require.Nil(t, err)
