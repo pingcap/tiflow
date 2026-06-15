@@ -210,7 +210,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	}
 	causalityIndexes := r.whereHandle.causalityIdxs
 	if len(causalityIndexes) == 0 {
-		// The table has no causality indexes, so all values of the row compose the causality key.
+		// No causality index: use the whole row.
 		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
 	}
 
@@ -225,8 +225,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 
-		// Hidden-column indexes need the materialized full row. Other indexes
-		// can still produce causality keys if materialization fails.
+		// Only hidden-column indexes require materialized values.
 		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
 			continue
 		}
@@ -320,8 +319,7 @@ func datumValue(d types.Datum) any {
 		}
 	}
 	value := d.GetValue()
-	// Convert byte slices to string so equal generated values compare equal
-	// under identityUpdated's Go != comparison.
+	// Keep byte values comparable for identityUpdated's != check.
 	if bs, ok := value.([]byte); ok {
 		return string(bs)
 	}
