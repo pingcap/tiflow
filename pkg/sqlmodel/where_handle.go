@@ -36,11 +36,11 @@ type WhereHandle struct {
 	// PK and NOT NULL. Indexes backed by a hidden column are excluded here.
 	UniqueIdxs []*model.IndexInfo
 
-	causalityIdxs              []*model.IndexInfo
-	hiddenGeneratedColumnExprs *generatedColumnCache
+	causalityIdxs                  []*model.IndexInfo
+	hiddenGeneratedColumnExprCache *generatedColumnExprCache
 }
 
-type generatedColumnCache struct {
+type generatedColumnExprCache struct {
 	sourceTableInfo *model.TableInfo
 	columns         []*model.ColumnInfo
 	once            sync.Once
@@ -48,7 +48,7 @@ type generatedColumnCache struct {
 	ok              bool
 }
 
-func newGeneratedColumnCache(source *model.TableInfo) *generatedColumnCache {
+func newGeneratedColumnExprCache(source *model.TableInfo) *generatedColumnExprCache {
 	cols := make([]*model.ColumnInfo, 0)
 	for _, col := range source.Columns {
 		if col.Hidden && col.IsGenerated() {
@@ -58,13 +58,13 @@ func newGeneratedColumnCache(source *model.TableInfo) *generatedColumnCache {
 	if len(cols) == 0 {
 		return nil
 	}
-	return &generatedColumnCache{
+	return &generatedColumnExprCache{
 		sourceTableInfo: source,
 		columns:         cols,
 	}
 }
 
-func (c *generatedColumnCache) getOrBuildExprs(
+func (c *generatedColumnExprCache) getOrBuildExprs(
 	ctx expression.BuildContext,
 ) (map[int]expression.Expression, bool) {
 	c.once.Do(func() {
@@ -112,8 +112,8 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 
 		ret.causalityIdxs = append(ret.causalityIdxs, rewritten)
 		if indexHasHiddenColumn(rewritten, source) {
-			if ret.hiddenGeneratedColumnExprs == nil {
-				ret.hiddenGeneratedColumnExprs = newGeneratedColumnCache(source)
+			if ret.hiddenGeneratedColumnExprCache == nil {
+				ret.hiddenGeneratedColumnExprCache = newGeneratedColumnExprCache(source)
 			}
 			continue
 		}

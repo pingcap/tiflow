@@ -137,7 +137,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		preOK, postOK bool
 	)
 
-	if r.whereHandle.hiddenGeneratedColumnExprs != nil {
+	if r.whereHandle.hiddenGeneratedColumnExprCache != nil {
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
 		if preOK && postOK {

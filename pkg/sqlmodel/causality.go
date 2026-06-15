@@ -260,14 +260,14 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	if len(values) >= len(cols) {
 		return values, true
 	}
-	if r.whereHandle.hiddenGeneratedColumnExprs == nil {
+	if r.whereHandle.hiddenGeneratedColumnExprCache == nil {
 		return values, false
 	}
 
 	exprCtx := r.generatedColumnExprContext()
 	// The expressions only depend on the schema, so they are built once and
 	// cached on the (per-table) WhereHandle; here we just evaluate them per row.
-	exprs, ok := r.whereHandle.hiddenGeneratedColumnExprs.getOrBuildExprs(exprCtx)
+	exprs, ok := r.whereHandle.hiddenGeneratedColumnExprCache.getOrBuildExprs(exprCtx)
 	if !ok {
 		return values, false
 	}
@@ -290,7 +290,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	// A generated column may depend on generated columns defined before it, so
 	// evaluate generated columns in column order after visible values are in
 	// their full TableInfo offsets.
-	for _, col := range r.whereHandle.hiddenGeneratedColumnExprs.columns {
+	for _, col := range r.whereHandle.hiddenGeneratedColumnExprCache.columns {
 		expr, ok := exprs[col.Offset]
 		if !ok {
 			return values, false
