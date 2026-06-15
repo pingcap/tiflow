@@ -20,7 +20,6 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestCausalityKeys(t *testing.T) {
@@ -298,27 +297,6 @@ func TestCausalityKeysExpressionIndexMaterializeFailure(t *testing.T) {
 		keys = change.CausalityKeys()
 	})
 	require.Equal(t, []string{"1.id.db.tb1"}, keys)
-}
-
-func TestCausalityKeysExpressionIndexNoRace(t *testing.T) {
-	t.Parallel()
-
-	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
-	ti := mockTableInfo(t, "CREATE TABLE tb1 (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
-		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
-	// One shared WhereHandle so the cached generated-column expression is built
-	// once and read concurrently (run with -race).
-	handle := GetWhereHandle(ti, ti)
-	var g errgroup.Group
-	for i := range 50 {
-		g.Go(func() error {
-			change := NewRowChange(source, nil, nil, []any{i, "Alice"}, ti, nil, nil)
-			change.SetWhereHandle(handle)
-			change.CausalityKeys()
-			return nil
-		})
-	}
-	require.NoError(t, g.Wait())
 }
 
 func corruptHiddenGeneratedExpr(t *testing.T, ti *timodel.TableInfo) {

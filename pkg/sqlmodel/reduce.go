@@ -157,6 +157,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	return false
 }
 
+// identityValuesByIndex extracts pre and post column values of given index
 func (r *RowChange) identityValuesByIndex(
 	indexInfo *timodel.IndexInfo,
 	preValues []any,

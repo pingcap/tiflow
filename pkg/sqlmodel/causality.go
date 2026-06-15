@@ -250,29 +250,22 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 }
 
 // fillVirtualGeneratedValues returns a copy of values extended to the full
-// source column list, with hidden/virtual generated columns (such as the column
-// backing an expression index) evaluated from their generated expression. The
-// bool is false if any generated value cannot be computed, so the caller can
-// skip the affected index instead of indexing the row-value slice out of range.
+// source column list, with hidden/virtual generated columns evaluated.
 func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
-	cols := r.sourceTableInfo.Columns
-	if len(values) >= len(cols) {
-		return values, true
-	}
 	if r.whereHandle.hiddenGeneratedColumnExprCache == nil {
 		return values, false
 	}
 
-	// The expressions and their static expression context are cached on the
-	// per-table WhereHandle; here we just evaluate them per row.
+	cols := r.sourceTableInfo.Columns
+	if len(values) >= len(cols) {
+		return values, true
+	}
+
 	exprs, exprCtx, ok := r.whereHandle.hiddenGeneratedColumnExprCache.getOrBuildExprs(r.tiSessionCtx)
 	if !ok {
 		return values, false
 	}
 
-	// DM row values are compacted by dropping hidden columns. TiDB keeps hidden
-	// expression-index columns at the end of TableInfo.Columns, so the row image
-	// corresponds to the visible prefix.
 	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, cols[:len(values)])
 	if err != nil {
 		log.L().Warn("cannot adjust row for generated column evaluation",
@@ -281,19 +274,17 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	}
 
 	full := make([]any, len(cols))
-	copy(full, values)
 	fullDatums := make([]types.Datum, len(cols))
+	copy(full, values)
 	copy(fullDatums, datums)
 
-	// A generated column may depend on generated columns defined before it, so
-	// evaluate generated columns in column order after visible values are in
-	// their full TableInfo offsets.
+	mutRow := chunk.MutRowFromDatums(fullDatums)
 	for _, col := range r.whereHandle.hiddenGeneratedColumnExprCache.columns {
 		expr, ok := exprs[col.Offset]
 		if !ok {
 			return values, false
 		}
-		d, err := expr.Eval(exprCtx.GetEvalCtx(), chunk.MutRowFromDatums(fullDatums).ToRow())
+		d, err := expr.Eval(exprCtx.GetEvalCtx(), mutRow.ToRow())
 		if err != nil {
 			log.L().Warn("cannot evaluate generated column expression",
 				zap.String("table", r.sourceTable.String()),
@@ -302,6 +293,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		}
 		full[col.Offset] = datumValue(d)
 		fullDatums[col.Offset] = d
+		mutRow.SetDatum(col.Offset, d)
 	}
 	return full, true
 }
