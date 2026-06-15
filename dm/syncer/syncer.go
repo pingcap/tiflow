@@ -535,12 +535,12 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 }
 
 func sessionVarsForExprContext(downstreamSession map[string]string, timezone *time.Location) map[string]string {
-	vars := make(map[string]string, len(downstreamSession)+1)
+	vars := make(map[string]string, 2)
 	for k, v := range downstreamSession {
-		if strings.EqualFold(k, "time_zone") {
-			continue
+		if strings.EqualFold(k, "sql_mode") {
+			vars["sql_mode"] = v
+			break
 		}
-		vars[k] = v
 	}
 	if timezone != nil {
 		vars["time_zone"] = timezone.String()

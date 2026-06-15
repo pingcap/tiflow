@@ -74,7 +74,7 @@ func TestSuite(t *testing.T) {
 
 func TestSessionVarsForExprContext(t *testing.T) {
 	vars := sessionVarsForExprContext(map[string]string{
-		"sql_mode":                 "ANSI_QUOTES",
+		"SQL_MODE":                 "ANSI_QUOTES",
 		"character_set_connection": "utf8mb4",
 		"collation_connection":     "utf8mb4_bin",
 		"foreign_key_checks":       "1",
@@ -82,17 +82,11 @@ func TestSessionVarsForExprContext(t *testing.T) {
 	}, time.UTC)
 
 	require.Equal(t, map[string]string{
-		"sql_mode":                 "ANSI_QUOTES",
-		"character_set_connection": "utf8mb4",
-		"collation_connection":     "utf8mb4_bin",
-		"foreign_key_checks":       "1",
-		"time_zone":                "UTC",
+		"sql_mode":  "ANSI_QUOTES",
+		"time_zone": "UTC",
 	}, vars)
 
 	sessCtx := utils.NewSessionCtx(vars)
-	charset, collation := sessCtx.GetSessionVars().GetCharsetInfo()
-	require.Equal(t, "utf8mb4", charset)
-	require.Equal(t, "utf8mb4_bin", collation)
 	require.True(t, sessCtx.GetSessionVars().SQLMode.HasANSIQuotesMode())
 }
 
