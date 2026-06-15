@@ -63,7 +63,6 @@ func (r *resolver) Resolve(ctx context.Context, regionID uint64, maxVersion uint
 			log.Info("resolve lock finishes",
 				zap.Uint64("regionID", regionID),
 				zap.Int("lockCount", len(totalLocks)),
-				zap.Any("locks", totalLocks),
 				zap.Uint64("maxVersion", maxVersion),
 				zap.String("namespace", r.changefeed.Namespace),
 				zap.String("changefeed", r.changefeed.ID),

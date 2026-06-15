@@ -159,13 +159,6 @@ func (t *p2pTransport) Send(
 			return errors.Trace(err)
 		}
 	}
-
-	if len(msgs) != 0 {
-		log.Debug("schedulerv3: all messages sent",
-			zap.String("namespace", t.changefeed.Namespace),
-			zap.String("changefeed", t.changefeed.ID),
-			zap.Int("len", len(msgs)))
-	}
 	return nil
 }
 
