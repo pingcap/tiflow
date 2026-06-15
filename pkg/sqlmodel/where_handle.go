@@ -60,9 +60,6 @@ func newGeneratedColumnExprCache(source *model.TableInfo) *generatedColumnExprCa
 			cols = append(cols, col)
 		}
 	}
-	if len(cols) == 0 {
-		return nil
-	}
 	return &generatedColumnExprCache{
 		sourceTableInfo: source,
 		columns:         cols,
