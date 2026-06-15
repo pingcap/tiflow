@@ -162,12 +162,16 @@ func (r *RowChange) identityValuesByIndex(
 	preValues []any,
 	postValues []any,
 ) ([]any, []any) {
-	var pre, post []any
-	if preValues != nil {
-		_, pre = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, preValues)
-	}
-	if postValues != nil {
-		_, post = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexInfo, postValues)
+	pre := make([]any, 0, len(indexInfo.Columns))
+	post := make([]any, 0, len(indexInfo.Columns))
+
+	for _, column := range indexInfo.Columns {
+		if preValues != nil {
+			pre = append(pre, preValues[column.Offset])
+		}
+		if postValues != nil {
+			post = append(post, postValues[column.Offset])
+		}
 	}
 	return pre, post
 }
