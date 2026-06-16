@@ -231,14 +231,11 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 
-		cols, vals, ok := r.whereHandle.rowMapper.columnsAndValuesByIndex(
+		cols, vals := r.whereHandle.rowMapper.columnsAndValuesByIndex(
 			r.sourceTableInfo.Columns,
 			indexCols,
 			values,
 		)
-		if !ok {
-			continue
-		}
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
 		key := genKeyString(sourceTable.String(), cols, truncVals)

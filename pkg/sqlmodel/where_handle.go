@@ -83,24 +83,15 @@ func (m rowValueMapper) columnsAndValuesByIndex(
 	columns []*model.ColumnInfo,
 	indexInfo *model.IndexInfo,
 	values []any,
-) ([]*model.ColumnInfo, []any, bool) {
+) ([]*model.ColumnInfo, []any) {
 	cols := make([]*model.ColumnInfo, 0, len(indexInfo.Columns))
 	vals := make([]any, 0, len(indexInfo.Columns))
-	if values == nil {
-		return cols, vals, true
-	}
 	for _, column := range indexInfo.Columns {
-		if column.Offset < 0 || column.Offset >= len(columns) {
-			return nil, nil, false
-		}
-		offset, ok := m.valueOffset(column.Offset, values)
-		if !ok {
-			return nil, nil, false
-		}
+		offset := m.valueOffset(column.Offset, values)
 		cols = append(cols, columns[column.Offset])
 		vals = append(vals, values[offset])
 	}
-	return cols, vals, true
+	return cols, vals
 }
 
 func (m rowValueMapper) valuesByIndex(indexInfo *model.IndexInfo, values []any) []any {
@@ -109,26 +100,17 @@ func (m rowValueMapper) valuesByIndex(indexInfo *model.IndexInfo, values []any) 
 		return ret
 	}
 	for _, column := range indexInfo.Columns {
-		offset, ok := m.valueOffset(column.Offset, values)
-		if !ok {
-			return nil
-		}
+		offset := m.valueOffset(column.Offset, values)
 		ret = append(ret, values[offset])
 	}
 	return ret
 }
 
-func (m rowValueMapper) valueOffset(columnOffset int, values []any) (int, bool) {
+func (m rowValueMapper) valueOffset(columnOffset int, values []any) int {
 	if m.isFullValues(values) {
-		return columnOffset, columnOffset < len(values)
+		return columnOffset
 	}
-	if len(values) != len(m.visibleColumns) ||
-		columnOffset < 0 ||
-		columnOffset >= len(m.visibleOffsetByColumnOffset) {
-		return 0, false
-	}
-	visibleOffset := m.visibleOffsetByColumnOffset[columnOffset]
-	return visibleOffset, visibleOffset >= 0 && visibleOffset < len(values)
+	return m.visibleOffsetByColumnOffset[columnOffset]
 }
 
 type generatedColumnExprCache struct {
@@ -330,9 +312,6 @@ func (h *WhereHandle) getWhereIdxByData(data []interface{}) *model.IndexInfo {
 	for i, idx := range h.UniqueIdxs {
 		ok := true
 		values := h.rowMapper.valuesByIndex(idx, data)
-		if len(values) != len(idx.Columns) {
-			ok = false
-		}
 		for _, value := range values {
 			if value == nil {
 				ok = false

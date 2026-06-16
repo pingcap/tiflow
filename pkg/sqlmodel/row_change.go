@@ -248,15 +248,11 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	values := r.preValues
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
-		idxColumns, idxValues, ok := r.whereHandle.rowMapper.columnsAndValuesByIndex(
+		columns, values = r.whereHandle.rowMapper.columnsAndValuesByIndex(
 			r.sourceTableInfo.Columns,
 			uniqueIndex,
 			values,
 		)
-		if ok {
-			columns = idxColumns
-			values = idxValues
-		}
 	}
 
 	columnNames := make([]string, 0, len(columns))
