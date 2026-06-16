@@ -19,34 +19,26 @@ import (
 
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // register parser driver
 	"github.com/stretchr/testify/require"
 )
 
-func TestRewriteSQLRemovesFunctionDefaultOnVarchar(t *testing.T) {
-	rewriter := newDefaultRewriterForTest()
-
-	out, changed, err := rewriter.RewriteSQL("CREATE TABLE t(t VARCHAR(100) DEFAULT current_timestamp());")
-	require.NoError(t, err)
+func TestRewriteStmtRemovesFunctionDefaultOnVarchar(t *testing.T) {
+	stmt, changed := rewriteCreateTable(t, "CREATE TABLE t(t VARCHAR(100) DEFAULT current_timestamp());")
 	require.True(t, changed)
-	require.NotContains(t, strings.ToLower(out), "default")
 
-	stmt := parseCreateTable(t, out)
 	col := findColumn(stmt, "t")
 	require.NotNil(t, col)
 	require.False(t, hasColumnOption(col, ast.ColumnOptionDefaultValue))
 }
 
-func TestRewriteSQLKeepsTimeFunctionDefaultOnTimeColumn(t *testing.T) {
-	rewriter := newDefaultRewriterForTest()
-
-	out, changed, err := rewriter.RewriteSQL("CREATE TABLE t(ts TIMESTAMP DEFAULT current_timestamp());")
-	require.NoError(t, err)
+func TestRewriteStmtKeepsTimeFunctionDefaultOnTimeColumn(t *testing.T) {
+	stmt, changed := rewriteCreateTable(t, "CREATE TABLE t(ts TIMESTAMP DEFAULT current_timestamp());")
 	require.False(t, changed)
-	require.Contains(t, strings.ToLower(out), "default current_timestamp")
+	require.True(t, hasColumnOption(findColumn(stmt, "ts"), ast.ColumnOptionDefaultValue))
 }
 
-func TestRewriteSQLDefaultRules(t *testing.T) {
-	rewriter := newDefaultRewriterForTest()
+func TestRewriteStmtDefaultRules(t *testing.T) {
 	input := `CREATE TABLE t (
   id INT(11),
   txt TEXT DEFAULT 'x',
@@ -59,11 +51,9 @@ func TestRewriteSQLDefaultRules(t *testing.T) {
   KEY idx_v (v)
 ) DEFAULT CHARSET=latin1 COLLATE=latin1_swedish_ci;`
 
-	out, changed, err := rewriter.RewriteSQL(input)
-	require.NoError(t, err)
+	stmt, changed := rewriteCreateTable(t, input)
 	require.True(t, changed)
 
-	stmt := parseCreateTable(t, out)
 	require.Equal(t, "utf8mb4", findTableOption(stmt, ast.TableOptionCharset))
 	require.Equal(t, "utf8mb4_0900_ai_ci", findTableOption(stmt, ast.TableOptionCollate))
 	require.Equal(t, -1, findColumn(stmt, "id").Tp.GetFlen())
@@ -81,32 +71,24 @@ func TestRewriteSQLDefaultRules(t *testing.T) {
 	require.Equal(t, 768, idxV.Keys[0].Length)
 }
 
-func TestRewriteSQLSkipsExpressionIndexPrefix(t *testing.T) {
-	rewriter := newDefaultRewriterForTest()
-
-	_, _, err := rewriter.RewriteSQL("CREATE TABLE t(name VARCHAR(32), KEY idx_expr ((LOWER(name))));")
-	require.NoError(t, err)
+func TestRewriteStmtSkipsExpressionIndexPrefix(t *testing.T) {
+	rewriteCreateTable(t, "CREATE TABLE t(name VARCHAR(32), KEY idx_expr ((LOWER(name))));")
 }
 
-func TestRewriteSQLRemovesParenthesizedJSONGeneratedColumn(t *testing.T) {
-	rewriter := newDefaultRewriterForTest()
-
-	out, changed, err := rewriter.RewriteSQL(
+func TestRewriteStmtRemovesParenthesizedJSONGeneratedColumn(t *testing.T) {
+	stmt, changed := rewriteCreateTable(t,
 		"CREATE TABLE t(j JSON, g JSON GENERATED ALWAYS AS ((JSON_EXTRACT(j, '$.a'))) VIRTUAL);",
 	)
-	require.NoError(t, err)
 	require.True(t, changed)
-	require.False(t, hasColumnOption(findColumn(parseCreateTable(t, out), "g"), ast.ColumnOptionGenerated))
+	require.False(t, hasColumnOption(findColumn(stmt, "g"), ast.ColumnOptionGenerated))
 }
 
-func TestNewRewriterForFlavor(t *testing.T) {
-	require.NotNil(t, NewRewriterForFlavor("mariadb"))
-	require.NotNil(t, NewRewriterForFlavor("MariaDB"))
-	require.Nil(t, NewRewriterForFlavor("mysql"))
-}
-
-func newDefaultRewriterForTest() *Rewriter {
-	return NewRewriter(defaultRules...)
+func rewriteCreateTable(t *testing.T, sql string) (*ast.CreateTableStmt, bool) {
+	t.Helper()
+	stmt := parseCreateTable(t, sql)
+	changed, err := NewRewriter().RewriteStmt(stmt)
+	require.NoError(t, err)
+	return stmt, changed
 }
 
 func parseCreateTable(t *testing.T, sql string) *ast.CreateTableStmt {

@@ -24,7 +24,7 @@ import (
 
 const maxVarcharLen = 768
 
-var defaultRules = []Rule{
+var defaultRules = []rule{
 	collationRule{},
 	zeroTimestampRule{},
 	keyLengthRule{},
@@ -37,8 +37,6 @@ var defaultRules = []Rule{
 }
 
 type collationRule struct{}
-
-func (r collationRule) Name() string { return "collation" }
 
 func (r collationRule) Apply(node ast.Node) (bool, error) {
 	switch n := node.(type) {
@@ -55,8 +53,6 @@ func (r collationRule) Apply(node ast.Node) (bool, error) {
 
 type zeroTimestampRule struct{}
 
-func (r zeroTimestampRule) Name() string { return "zero-timestamp" }
-
 func (r zeroTimestampRule) Apply(node ast.Node) (bool, error) {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok || !isTimeType(col.Tp.GetType()) {
@@ -68,8 +64,6 @@ func (r zeroTimestampRule) Apply(node ast.Node) (bool, error) {
 }
 
 type keyLengthRule struct{}
-
-func (r keyLengthRule) Name() string { return "key-length" }
 
 func (r keyLengthRule) Apply(node ast.Node) (bool, error) {
 	col, ok := node.(*ast.ColumnDef)
@@ -86,8 +80,6 @@ func (r keyLengthRule) Apply(node ast.Node) (bool, error) {
 }
 
 type indexPrefixRule struct{}
-
-func (r indexPrefixRule) Name() string { return "index-prefix" }
 
 func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 	stmt, ok := node.(*ast.CreateTableStmt)
@@ -132,8 +124,6 @@ func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 
 type integerWidthRule struct{}
 
-func (r integerWidthRule) Name() string { return "integer-width" }
-
 func (r integerWidthRule) Apply(node ast.Node) (bool, error) {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok || !mysql.IsIntegerType(col.Tp.GetType()) {
@@ -148,8 +138,6 @@ func (r integerWidthRule) Apply(node ast.Node) (bool, error) {
 
 type textBlobDefaultRule struct{}
 
-func (r textBlobDefaultRule) Name() string { return "text-blob-default" }
-
 func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok || !isTextBlobOrJSON(col.Tp) {
@@ -161,8 +149,6 @@ func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
 }
 
 type jsonCheckRule struct{}
-
-func (r jsonCheckRule) Name() string { return "json-check" }
 
 func (r jsonCheckRule) Apply(node ast.Node) (bool, error) {
 	switch n := node.(type) {
@@ -189,8 +175,6 @@ func (r jsonCheckRule) Apply(node ast.Node) (bool, error) {
 
 type functionDefaultRule struct{}
 
-func (r functionDefaultRule) Name() string { return "function-default" }
-
 func (r functionDefaultRule) Apply(node ast.Node) (bool, error) {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok {
@@ -202,8 +186,6 @@ func (r functionDefaultRule) Apply(node ast.Node) (bool, error) {
 }
 
 type jsonGeneratedRule struct{}
-
-func (r jsonGeneratedRule) Name() string { return "json-generated" }
 
 func (r jsonGeneratedRule) Apply(node ast.Node) (bool, error) {
 	col, ok := node.(*ast.ColumnDef)

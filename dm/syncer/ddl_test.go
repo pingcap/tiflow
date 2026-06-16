@@ -427,7 +427,7 @@ func TestParseOneStmtWithMariaDBASTRewriter(t *testing.T) {
 		ddlSchema:    "test",
 		originSQL:    "CREATE TABLE t(c VARCHAR(100) DEFAULT current_timestamp())",
 		p:            parser.New(),
-		ddlRewriter:  ddlrewriter.NewRewriterForFlavor("mariadb"),
+		ddlRewriter:  ddlrewriter.NewRewriter(),
 	}
 
 	stmt, err := parseOneStmt(qec)

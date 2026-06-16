@@ -535,7 +535,9 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
-	s.ddlRewriter = ddlrewriter.NewRewriterForFlavor(s.cfg.Flavor)
+	if strings.EqualFold(s.cfg.Flavor, mysql.MariaDBFlavor) {
+		s.ddlRewriter = ddlrewriter.NewRewriter()
+	}
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
