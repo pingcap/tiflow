@@ -255,8 +255,7 @@ func (c *consumer) getNewFiles(
 	tableDMLMap := make(map[cloudstorage.DmlPathKey]fileIndexRange)
 	opt := &storeapi.WalkOption{SubDir: ""}
 
-	origDMLIdxMap := make(map[cloudstorage.DmlPathKey]uint64, len(c.tableDMLIdxMap))
-	maps.Copy(origDMLIdxMap, c.tableDMLIdxMap)
+	origDMLIdxMap := maps.Clone(c.tableDMLIdxMap)
 
 	err := c.externalStorage.WalkDir(ctx, opt, func(path string, size int64) error {
 		if cloudstorage.IsSchemaFile(path) {
