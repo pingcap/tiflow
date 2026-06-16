@@ -263,7 +263,7 @@ func (m *FileManager) SetPersisted(
 	return nil
 }
 
-func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}) {
+func (m *FileManager) validateExecutor(creator model.ExecutorID, res any) {
 	if creator != m.executorID {
 		log.Panic("inconsistent executor ID of bucket file",
 			zap.Any("resource", res),

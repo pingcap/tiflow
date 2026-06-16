@@ -128,13 +128,11 @@ func TestWatchExecutors(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		err := WatchExecutors(ctx, watcher, user)
 		require.ErrorIs(t, err, context.Canceled)
-	}()
+	})
 
 	for _, event := range events {
 		evNotifier.Notify(event)
@@ -187,12 +185,10 @@ func TestCloseWatchExecutors(t *testing.T) {
 	user.On("UpdateExecutorList", snap).Return(nil).Times(1)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := WatchExecutors(ctx, watcher, user)
 		require.ErrorIs(t, err, errors.ErrExecutorWatcherClosed)
-	}()
+	})
 
 	evNotifier.Close()
 	wg.Wait()

@@ -39,16 +39,14 @@ func TestTaskRunnerBasics(t *testing.T) {
 
 	tr := NewTaskRunner(workerNum+1, 1)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := tr.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, "context canceled", err.Error())
-	}()
+	})
 
 	var workers []*dummyWorker
-	for i := 0; i < workerNum; i++ {
+	for i := range workerNum {
 		worker := &dummyWorker{
 			id: fmt.Sprintf("worker-%d", i),
 		}
@@ -95,13 +93,11 @@ func TestTaskRunnerSubmitTime(t *testing.T) {
 	mockClock.Add(time.Hour)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := tr.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, "context canceled", err.Error())
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		return worker.SubmitTime() == clock.ToMono(submitTime)
@@ -117,19 +113,17 @@ func TestTaskStopReceiver(t *testing.T) {
 
 	tr := NewTaskRunner(workerNum+1, 1)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := tr.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, "context canceled", err.Error())
-	}()
+	})
 
 	var (
 		workers []*dummyWorker
 		running sync.Map
 	)
-	for i := 0; i < workerNum; i++ {
+	for i := range workerNum {
 		worker := &dummyWorker{
 			id: fmt.Sprintf("worker-%d", i),
 		}

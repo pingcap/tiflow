@@ -91,15 +91,13 @@ func (h *masterClientTestHelper) PopHeartbeat(t *testing.T) *frameModel.Heartbea
 }
 
 func (h *masterClientTestHelper) SimulateWorkerClose(timeout time.Duration) {
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 
 		h.closeErrCh <- h.Client.WaitClosed(ctx)
-	}()
+	})
 }
 
 func (h *masterClientTestHelper) WaitWorkerClosed(t *testing.T) error {

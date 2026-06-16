@@ -296,7 +296,7 @@ func (jm *JobMaster) OnWorkerStatusUpdated(worker framework.WorkerHandle, newSta
 }
 
 // OnJobManagerMessage implements JobMasterImpl.OnJobManagerMessage
-func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnJobManagerMessage(topic p2p.Topic, message any) error {
 	// TODO: receive user request
 	return nil
 }
@@ -307,12 +307,12 @@ func (jm *JobMaster) OnOpenAPIInitialized(router *gin.RouterGroup) {
 }
 
 // OnWorkerMessage implements JobMasterImpl.OnWorkerMessage
-func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message any) error {
 	return nil
 }
 
 // OnMasterMessage implements JobMasterImpl.OnMasterMessage
-func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message interface{}) error {
+func (jm *JobMaster) OnMasterMessage(ctx context.Context, topic p2p.Topic, message any) error {
 	return nil
 }
 

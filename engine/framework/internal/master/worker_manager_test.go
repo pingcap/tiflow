@@ -559,9 +559,7 @@ func TestWorkerSendsStaleHeartbeat(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -570,7 +568,7 @@ func TestWorkerSendsStaleHeartbeat(t *testing.T) {
 				suite.SimulateHeartbeat("worker-1", 1, wEpoch-1, "executor-1", false)
 			}
 		}
-	}()
+	})
 
 	event = suite.WaitForEvent(t, "worker-1")
 	require.Equal(t, workerOfflineEvent, event.Tp)

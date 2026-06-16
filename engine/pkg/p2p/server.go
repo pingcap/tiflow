@@ -41,9 +41,9 @@ type (
 
 type (
 	// TypeInformation is used to hold type data
-	TypeInformation = interface{}
+	TypeInformation = any
 	// MessageValue is used to hold message object
-	MessageValue = interface{}
+	MessageValue = any
 	// HandlerFunc alias to message handler function
 	HandlerFunc = func(sender NodeID, value MessageValue) error
 )

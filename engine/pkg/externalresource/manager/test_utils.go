@@ -15,6 +15,7 @@ package manager
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -99,9 +100,7 @@ func (p *MockExecutorInfoProvider) WatchExecutors(
 	defer p.mu.Unlock()
 
 	executors := make(map[model.ExecutorID]string, len(p.executorSet))
-	for id, addr := range p.executorSet {
-		executors[id] = addr
-	}
+	maps.Copy(executors, p.executorSet)
 
 	return executors, p.notifier.NewReceiver(), nil
 }
@@ -157,9 +156,7 @@ func (jp *MockJobStatusProvider) WatchJobStatuses(
 	defer jp.mu.Unlock()
 
 	snapCopy := make(JobStatusesSnapshot, len(jp.jobInfos))
-	for k, v := range jp.jobInfos {
-		snapCopy[k] = v
-	}
+	maps.Copy(snapCopy, jp.jobInfos)
 
 	return snapCopy, jp.notifier.NewReceiver(), nil
 }

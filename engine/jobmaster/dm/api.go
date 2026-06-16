@@ -103,9 +103,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 	unitState, existUnitState = state.(*metadata.UnitState)
 	for _, task := range tasks {
 		taskID := task
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			var (
 				queryStatusResp *dmpkg.QueryStatusResponse
@@ -150,7 +148,7 @@ func (jm *JobMaster) QueryJobStatus(ctx context.Context, tasks []string) (*JobSt
 				Duration:       duration,
 			}
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -234,9 +232,7 @@ func (jm *JobMaster) Binlog(ctx context.Context, req *dmpkg.BinlogRequest) (*dmp
 	)
 	for _, task := range req.Sources {
 		taskID := task
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			req := &dmpkg.BinlogTaskRequest{
 				Op:        req.Op,
 				BinlogPos: req.BinlogPos,
@@ -246,7 +242,7 @@ func (jm *JobMaster) Binlog(ctx context.Context, req *dmpkg.BinlogRequest) (*dmp
 			mu.Lock()
 			binlogResp.Results[taskID] = resp
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 	return binlogResp, nil
@@ -277,9 +273,7 @@ func (jm *JobMaster) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaRe
 	)
 	for _, task := range req.Sources {
 		taskID := task
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			req := &dmpkg.BinlogSchemaTaskRequest{
 				Op:         req.Op,
 				Source:     taskID,
@@ -295,7 +289,7 @@ func (jm *JobMaster) BinlogSchema(ctx context.Context, req *dmpkg.BinlogSchemaRe
 			mu.Lock()
 			binlogSchemaResponse.Results[taskID] = resp
 			mu.Unlock()
-		}()
+		})
 	}
 	wg.Wait()
 	return binlogSchemaResponse

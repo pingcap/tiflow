@@ -67,12 +67,10 @@ func newGCTestHelper() *gcTestHelper {
 }
 
 func (h *gcTestHelper) Start() {
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
+	h.wg.Go(func() {
 
 		h.errCh <- h.Coord.Run(h.ctx)
-	}()
+	})
 }
 
 func (h *gcTestHelper) Close() {

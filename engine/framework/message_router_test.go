@@ -61,21 +61,17 @@ func testMessageRouter(t *testing.T, suite *messageSuite) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = pool.Run(ctx)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			if err := router.Tick(ctx); err != nil {
 				return
 			}
 		}
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		if int(msgCounter.Load()) != len(suite.expected) {
