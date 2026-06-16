@@ -47,7 +47,6 @@ func testChannelDelayer(t *testing.T, delayBy time.Duration, count int) {
 	})
 
 	wg.Go(func() {
-
 		counter := 0
 		for ts := range delayer.Out() {
 			require.Greater(t, time.Since(ts), delayBy)
