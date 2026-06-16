@@ -168,7 +168,7 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 		if strings.ToLower(key) == "foreign_key_checks" {
 			setFK = true
 		}
-		dsn.WriteString(fmt.Sprintf("&%s='%s'", key, url.QueryEscape(val)))
+		fmt.Fprintf(&dsn, "&%s='%s'", key, url.QueryEscape(val))
 	}
 
 	if !setFK {
