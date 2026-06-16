@@ -49,7 +49,7 @@ func NewDefaultWorkerPool(numWorkers int) WorkerPool {
 
 func newDefaultPoolImpl(hasher Hasher, numWorkers int) *defaultPoolImpl {
 	workers := make([]*worker, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workers[i] = newWorker()
 	}
 	return &defaultPoolImpl{
@@ -75,7 +75,7 @@ func (p *defaultPoolImpl) Run(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interface{}) error) EventHandle {
+func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event any) error) EventHandle {
 	handler := &defaultEventHandle{
 		f:     f,
 		errCh: make(chan error, 1),
@@ -99,7 +99,7 @@ const (
 
 type defaultEventHandle struct {
 	// the function to be run each time the event is triggered
-	f func(ctx context.Context, event interface{}) error
+	f func(ctx context.Context, event any) error
 	// must be accessed atomically
 	status handleStatus
 	// channel for the error returned by f
@@ -126,7 +126,7 @@ type defaultEventHandle struct {
 	errorHandler func(err error)
 }
 
-func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) error {
+func (h *defaultEventHandle) AddEvent(ctx context.Context, event any) error {
 	status := atomic.LoadInt32(&h.status)
 	if status != handleRunning {
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
@@ -149,7 +149,7 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	return nil
 }
 
-func (h *defaultEventHandle) AddEvents(ctx context.Context, events []interface{}) error {
+func (h *defaultEventHandle) AddEvents(ctx context.Context, events []any) error {
 	status := atomic.LoadInt32(&h.status)
 	if status != handleRunning {
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()

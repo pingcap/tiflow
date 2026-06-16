@@ -498,7 +498,7 @@ func (t *TableDiff) compareChecksum(ctx context.Context, chunk *ChunkRange) (boo
 	)
 	defer close(checksumInfoCh)
 
-	getChecksum := func(db *sql.DB, schema, table, limitRange string, tbInfo *model.TableInfo, args []interface{}, tp string) {
+	getChecksum := func(db *sql.DB, schema, table, limitRange string, tbInfo *model.TableInfo, args []any, tp string) {
 		beginTime := time.Now()
 		checksum, err := dbutil.GetCRC32Checksum(ctx1, db, schema, table, tbInfo, limitRange, args)
 		cost := time.Since(beginTime)
@@ -1017,7 +1017,7 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 }
 
 func getChunkRows(ctx context.Context, db *sql.DB, schema, table string, tableInfo *model.TableInfo, where string,
-	args []interface{}, collation string,
+	args []any, collation string,
 ) (*sql.Rows, []*model.ColumnInfo, error) {
 	_, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
 

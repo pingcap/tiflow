@@ -22,14 +22,14 @@ type Serializable interface {
 	Unmarshal(data []byte) error
 }
 
-func marshalMessage(value interface{}) ([]byte, error) {
+func marshalMessage(value any) ([]byte, error) {
 	if value, ok := value.(Serializable); ok {
 		return value.Marshal()
 	}
 	return json.Marshal(value)
 }
 
-func unmarshalMessage(data []byte, value interface{}) error {
+func unmarshalMessage(data []byte, value any) error {
 	if value, ok := value.(Serializable); ok {
 		return value.Unmarshal(data)
 	}

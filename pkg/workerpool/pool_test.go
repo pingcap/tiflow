@@ -39,7 +39,7 @@ func TestTaskError(t *testing.T) {
 		return pool.Run(ctx)
 	})
 
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		if event.(int) == 3 {
 			return errors.New("test error")
 		}
@@ -49,16 +49,14 @@ func TestTaskError(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10; i++ {
+	wg.Go(func() {
+		for i := range 10 {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
 				require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err)
 			}
 		}
-	}()
+	})
 
 	select {
 	case <-ctx.Done():
@@ -86,7 +84,7 @@ func TestTimerError(t *testing.T) {
 	})
 
 	counter := 0
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		return nil
 	}).SetTimer(ctx, time.Millisecond*200, func(ctx context.Context) error {
 		if counter == 3 {
@@ -117,7 +115,7 @@ func TestMultiError(t *testing.T) {
 		return pool.Run(ctx)
 	})
 
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		if event.(int) >= 3 {
 			return errors.New("test error")
 		}
@@ -125,16 +123,14 @@ func TestMultiError(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < 10; i++ {
+	wg.Go(func() {
+		for i := range 10 {
 			err := handle.AddEvent(ctx, i)
 			if err != nil {
 				require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err)
 			}
 		}
-	}()
+	})
 
 	select {
 	case <-ctx.Done():
@@ -162,7 +158,7 @@ func TestCancelHandle(t *testing.T) {
 	})
 
 	var num int32
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		atomic.StoreInt32(&num, int32(event.(int)))
 		return nil
 	})
@@ -234,7 +230,7 @@ func TestCancelTimer(t *testing.T) {
 		_ = failpoint.Disable("github.com/pingcap/tiflow/pkg/workerpool/unregisterDelayPoint")
 	}()
 
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		return nil
 	}).SetTimer(ctx, 200*time.Millisecond, func(ctx context.Context) error {
 		return nil
@@ -270,7 +266,7 @@ func TestErrorAndCancelRace(t *testing.T) {
 	})
 
 	var racedVar int
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		return errors.New("fake")
 	}).OnExit(func(err error) {
 		time.Sleep(100 * time.Millisecond)
@@ -301,7 +297,7 @@ func TestTimer(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		if event.(int) == 3 {
 			return errors.New("test error")
 		}
@@ -343,10 +339,10 @@ func TestBasics(t *testing.T) {
 	var wg sync.WaitGroup
 
 	wg.Add(16)
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		finalI := i
 		resultCh := make(chan int, 128)
-		handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+		handler := pool.RegisterEvent(func(ctx context.Context, event any) error {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -357,7 +353,7 @@ func TestBasics(t *testing.T) {
 		})
 
 		errg.Go(func() error {
-			for j := 0; j < 256; j++ {
+			for j := range 256 {
 				err := handler.AddEvent(ctx, j)
 				if err != nil {
 					return errors.Trace(err)
@@ -396,8 +392,7 @@ func TestBasics(t *testing.T) {
 // TestCancelByAddEventContext makes sure that the event handle can be cancelled by the context used
 // to call `AddEvent`.
 func TestCancelByAddEventContext(t *testing.T) {
-	poolCtx, poolCancel := context.WithCancel(context.Background())
-	defer poolCancel()
+	poolCtx := t.Context()
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	go func() {
 		err := pool.Run(poolCtx)
@@ -408,14 +403,14 @@ func TestCancelByAddEventContext(t *testing.T) {
 	defer cancel()
 	errg, ctx := errgroup.WithContext(ctx)
 
-	for i := 0; i < 8; i++ {
-		handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	for range 8 {
+		handler := pool.RegisterEvent(func(ctx context.Context, event any) error {
 			<-ctx.Done()
 			return ctx.Err()
 		})
 
 		errg.Go(func() error {
-			for j := 0; j < 64; j++ {
+			for j := range 64 {
 				err := handler.AddEvent(ctx, j)
 				if err != nil {
 					return nil
@@ -441,8 +436,7 @@ func TestCancelByAddEventContext(t *testing.T) {
 }
 
 func TestGracefulUnregister(t *testing.T) {
-	poolCtx, poolCancel := context.WithCancel(context.Background())
-	defer poolCancel()
+	poolCtx := t.Context()
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	go func() {
 		err := pool.Run(poolCtx)
@@ -455,7 +449,7 @@ func TestGracefulUnregister(t *testing.T) {
 	waitCh := make(chan struct{})
 
 	var lastEventIdx int64
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		select {
 		case <-ctx.Done():
 			return errors.Trace(ctx.Err())
@@ -469,9 +463,7 @@ func TestGracefulUnregister(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		var maxEventIdx int64
 		for i := int64(0); ; i++ {
 			err := handle.AddEvent(ctx, i+1)
@@ -486,7 +478,7 @@ func TestGracefulUnregister(t *testing.T) {
 		require.Eventually(t, func() (success bool) {
 			return atomic.LoadInt64(&lastEventIdx) == maxEventIdx
 		}, time.Millisecond*500, time.Millisecond*10)
-	}()
+	})
 
 	time.Sleep(time.Millisecond * 200)
 	go func() {
@@ -504,8 +496,7 @@ func TestGracefulUnregister(t *testing.T) {
 }
 
 func TestGracefulUnregisterTimeout(t *testing.T) {
-	poolCtx, poolCancel := context.WithCancel(context.Background())
-	defer poolCancel()
+	poolCtx := t.Context()
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	go func() {
 		err := pool.Run(poolCtx)
@@ -517,7 +508,7 @@ func TestGracefulUnregisterTimeout(t *testing.T) {
 
 	waitCh := make(chan struct{})
 
-	handle := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handle := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		select {
 		case <-waitCh:
 			return nil
@@ -573,14 +564,13 @@ func TestSynchronizeLog(t *testing.T) {
 // Benchmark workerpool with ping-pong workflow.
 // go test -benchmem -run='^$' -bench '^(BenchmarkWorkerpool)$' github.com/pingcap/tiflow/pkg/workerpool
 func BenchmarkWorkerpool(b *testing.B) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := b.Context()
 
 	pool := newDefaultPoolImpl(&defaultHasher{}, 4)
 	go func() { _ = pool.Run(ctx) }()
 
 	ch := make(chan int)
-	handler := pool.RegisterEvent(func(ctx context.Context, event interface{}) error {
+	handler := pool.RegisterEvent(func(ctx context.Context, event any) error {
 		ch <- event.(int)
 		return nil
 	})

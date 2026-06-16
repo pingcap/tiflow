@@ -104,7 +104,7 @@ func calculateChecksum(columns []*model.ColumnData, columnInfo []*timodel.Column
 
 // buildChecksumBytes append value to the buf, mysqlType is used to convert value interface to concrete type.
 // by follow: https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/util/rowcodec/common.go#L308
-func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, error) {
+func buildChecksumBytes(buf []byte, value any, mysqlType byte) ([]byte, error) {
 	if value == nil {
 		return buf, nil
 	}
@@ -133,7 +133,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 			if err != nil {
 				return nil, errors.Trace(err)
 			}
-		case map[string]interface{}:
+		case map[string]any:
 			// this may only happen for bigint larger than math.uint64
 			v = uint64(a["value"].(int64))
 		default:
@@ -191,7 +191,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 		location := "Local"
 		var ts string
 		switch data := value.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			ts = data["value"].(string)
 			location = data["location"].(string)
 		case string:

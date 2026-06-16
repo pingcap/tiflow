@@ -55,7 +55,7 @@ func TestHandleErr(t *testing.T) {
 		count       int32
 	)
 	errg := HandleErrWithErrGroup(ctx, errCh, func(e error) { atomic.AddInt32(&count, 1) })
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		errCh <- errors.New("test error")
 	}
 	require.True(t, WaitSomething(5, time.Millisecond*10, func() bool { return atomic.LoadInt32(&count) == int32(5) }))

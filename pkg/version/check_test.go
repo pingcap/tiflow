@@ -54,7 +54,7 @@ func (m *mockPDClient) ServeHTTP(resp http.ResponseWriter, _ *http.Request) {
 	}
 
 	if m.getPDVersion != nil {
-		_, _ = resp.Write([]byte(fmt.Sprintf(`{"version":"%s"}`, m.getPDVersion())))
+		_, _ = resp.Write(fmt.Appendf(nil, `{"version":"%s"}`, m.getPDVersion()))
 	}
 }
 
@@ -74,7 +74,7 @@ func TestCheckClusterVersion(t *testing.T) {
 	defer srv.Close()
 	cli, err := httputil.NewClient(nil)
 	require.Nil(t, err)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		time.Sleep(100 * time.Millisecond)
 		resp, err := cli.Get(context.Background(), pdAddr)
 		if err == nil {

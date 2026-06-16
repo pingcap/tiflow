@@ -14,7 +14,6 @@
 package p2p
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"testing"
@@ -25,8 +24,7 @@ import (
 )
 
 func TestClientBatchSenderMaxCount(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	grpcStream := newMockSendMessageClient(ctx)
 	sender := newClientBatchSender(grpcStream, 100, math.MaxInt64)
@@ -36,7 +34,7 @@ func TestClientBatchSenderMaxCount(t *testing.T) {
 	for i := 1; i < 100; i++ {
 		err := sender.Append(&proto.MessageEntry{
 			Topic:    "test-topic",
-			Content:  []byte(fmt.Sprintf("test-%d", i)),
+			Content:  fmt.Appendf(nil, "test-%d", i),
 			Sequence: int64(i),
 		})
 		require.NoError(t, err)
@@ -61,8 +59,7 @@ func TestClientBatchSenderMaxCount(t *testing.T) {
 }
 
 func TestClientBatchSenderMaxSize(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	grpcStream := newMockSendMessageClient(ctx)
 	sender := newClientBatchSender(grpcStream, math.MaxInt64, 1000)
@@ -72,7 +69,7 @@ func TestClientBatchSenderMaxSize(t *testing.T) {
 	for size := 0; size < 220; {
 		msg := &proto.MessageEntry{
 			Topic:    "test-topic",
-			Content:  []byte(fmt.Sprintf("test-%d", i)),
+			Content:  fmt.Appendf(nil, "test-%d", i),
 			Sequence: int64(i),
 		}
 		i++
@@ -93,15 +90,14 @@ func TestClientBatchSenderMaxSize(t *testing.T) {
 	// one more message
 	err := sender.Append(&proto.MessageEntry{
 		Topic:    "test-topic",
-		Content:  []byte(fmt.Sprintf("test-%d", i)),
+		Content:  fmt.Appendf(nil, "test-%d", i),
 		Sequence: int64(i),
 	})
 	require.NoError(t, err)
 }
 
 func TestClientBatchSenderFlush(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	grpcStream := newMockSendMessageClient(ctx)
 	sender := newClientBatchSender(grpcStream, math.MaxInt64, 1000)

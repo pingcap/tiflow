@@ -65,11 +65,9 @@ func newServerForIntegrationTesting(t *testing.T, serverID string, configOpts ..
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
 	cancel = func() {
 		grpcServer.Stop()
@@ -95,9 +93,7 @@ func runP2PIntegrationTest(
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			err := server.Run(ctx, nil)
 			if cerror.ErrPeerMessageInjectedServerRestart.Equal(err) {
@@ -107,12 +103,12 @@ func runP2PIntegrationTest(
 			require.Regexp(t, ".*context canceled.*", err.Error())
 			break
 		}
-	}()
+	})
 
-	for j := 0; j < numTopics; j++ {
+	for j := range numTopics {
 		topicName := fmt.Sprintf("test-topic-%d", j)
 		var lastIndex int64
-		errCh := mustAddHandler(ctx, t, server, topicName, &testTopicContent{}, func(senderID string, i interface{}) error {
+		errCh := mustAddHandler(ctx, t, server, topicName, &testTopicContent{}, func(senderID string, i any) error {
 			require.Equal(t, "test-client-1", senderID)
 			require.IsType(t, &testTopicContent{}, i)
 			content := i.(*testTopicContent)
@@ -123,27 +119,23 @@ func runP2PIntegrationTest(
 			return nil
 		})
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			select {
 			case <-ctx.Done():
 			case err := <-errCh:
 				require.NoError(t, err)
 			}
-		}()
+		})
 	}
 
 	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		if err != nil {
 			log.Warn("client returned error", zap.Error(err))
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
-	}()
+	})
 
 	var wg1 sync.WaitGroup
 	wg1.Add(numTopics * clientConcurrency)
@@ -152,7 +144,7 @@ func runP2PIntegrationTest(
 		go func() {
 			defer wg1.Done()
 			var oldSeq Seq
-			for i := 0; i < size; i++ {
+			for i := range size {
 				content := &testTopicContent{Index: int64(i + 1)}
 				seq, err := client.SendMessage(ctx, topicName, content)
 				require.NoError(t, err)
@@ -260,17 +252,15 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
-	}()
+	})
 
 	var lastIndex int64
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
 		content := i.(*testTopicContent)
@@ -279,27 +269,23 @@ func TestMessageClientBasicNonblocking(t *testing.T) {
 		return nil
 	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 		case err := <-errCh:
 			require.NoError(t, err)
 		}
-	}()
+	})
 
 	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	var oldSeq Seq
-	for i := 0; i < defaultMessageBatchSizeSmall; i++ {
+	for i := range defaultMessageBatchSizeSmall {
 		content := &testTopicContent{Index: int64(i + 1)}
 		var (
 			seq Seq
@@ -337,38 +323,32 @@ func TestMessageBackPressure(t *testing.T) {
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
-	}()
+	})
 
 	// No-op handler. We are only testing for back-pressure.
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i any) error {
 		return nil
 	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 		case err := <-errCh:
 			require.NoError(t, err)
 		}
-	}()
+	})
 
 	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	_ = failpoint.Enable("github.com/pingcap/tiflow/pkg/p2p/ServerInjectTaskDelay", "sleep(1)")
 	defer func() {
@@ -376,7 +356,7 @@ func TestMessageBackPressure(t *testing.T) {
 	}()
 
 	var lastSeq Seq
-	for i := 0; i < defaultMessageBatchSizeLarge; i++ {
+	for range defaultMessageBatchSizeLarge {
 		seq, err := client.SendMessage(ctx, "test-topic-1", &testTopicContent{})
 		require.NoError(t, err)
 		atomic.StoreInt64(&lastSeq, seq)
@@ -405,43 +385,37 @@ func TestTopicCongested(t *testing.T) {
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
-	}()
+	})
 
 	newClientConfig := *clientConfig4Testing
 	newClientConfig.MaxBatchCount = 1
 	newClientConfig.RetryRateLimitPerSecond = 100
 	client := NewGrpcMessageClient("test-client-1", clientConfig4Testing)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "tcp", addr, "test-server-1", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	var lastSeq Seq
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			seq, err := client.SendMessage(ctx, "test-topic-1", &testTopicContent{})
 			require.NoError(t, err)
 			atomic.StoreInt64(&lastSeq, seq)
 			time.Sleep(10 * time.Millisecond)
 		}
-	}()
+	})
 
 	// No-op handler.
 	_ = mustAddHandler(ctx, t, server, "test-topic-1",
-		&testTopicContent{}, func(senderID string, i interface{}) error {
+		&testTopicContent{}, func(senderID string, i any) error {
 			return nil
 		})
 
@@ -453,7 +427,7 @@ func TestTopicCongested(t *testing.T) {
 
 	// No-op handler.
 	_ = mustAddHandler(ctx, t, server, "test-topic-1",
-		&testTopicContent{}, func(senderID string, i interface{}) error {
+		&testTopicContent{}, func(senderID string, i any) error {
 			return nil
 		})
 

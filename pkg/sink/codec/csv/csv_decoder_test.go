@@ -46,7 +46,7 @@ func TestCSVBatchDecoder(t *testing.T) {
 	decoder, err := NewBatchDecoder(ctx, codecConfig, createTableDDL.TableInfo, []byte(csvData))
 	require.NoError(t, err)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		tp, hasNext, err := decoder.HasNext()
 		require.Nil(t, err)
 		require.True(t, hasNext)

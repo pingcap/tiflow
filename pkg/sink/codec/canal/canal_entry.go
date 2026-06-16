@@ -81,7 +81,7 @@ func (b *canalEntryBuilder) buildHeader(commitTs uint64, schema string, table st
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/dbsync/src/main/java/com/taobao/tddl/dbsync/binlog/event/RowsLogBuffer.java#L276-L1147
 // all value will be represented in string type
 // see https://github.com/alibaba/canal/blob/b54bea5e3337c9597c427a53071d214ff04628d1/parse/src/main/java/com/alibaba/otter/canal/parse/inbound/mysql/dbsync/LogEventConvert.java#L760-L855
-func (b *canalEntryBuilder) formatValue(value interface{}, isBinary bool) (result string, err error) {
+func (b *canalEntryBuilder) formatValue(value any, isBinary bool) (result string, err error) {
 	// value would be nil, if no value insert for the column.
 	if value == nil {
 		return "", nil
@@ -301,7 +301,7 @@ func isCanalDDL(t canal.EventType) bool {
 	return false
 }
 
-func getJavaSQLType(value interface{}, tp byte, flag model.ColumnFlagType) (result internal.JavaSQLType, err error) {
+func getJavaSQLType(value any, tp byte, flag model.ColumnFlagType) (result internal.JavaSQLType, err error) {
 	javaType := internal.MySQLType2JavaType(tp, flag.IsBinary())
 	// flag `isUnsigned` only for `numerical` and `bit`, `year` data type.
 	if !flag.IsUnsigned() {

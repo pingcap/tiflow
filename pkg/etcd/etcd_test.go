@@ -283,8 +283,7 @@ func TestGetAllCaptureLeases(t *testing.T) {
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	testCases := []*model.CaptureInfo{
 		{
 			ID:            "a3f41a6a-3c31-44f4-aa27-344c1b8cd658",
@@ -359,7 +358,7 @@ func TestGetOwnerRevision(t *testing.T) {
 	// checks that the global monotonicity is guaranteed.
 
 	wg.Add(3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		i := i
 		go func() {
 			defer wg.Done()

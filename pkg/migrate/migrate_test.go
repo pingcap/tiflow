@@ -191,23 +191,17 @@ func TestMigration(t *testing.T) {
 
 	// 3. tow non-owner node wait for meta migrating done
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := migrator.WaitMetaVersionMatched(ctx)
 		require.NoError(t, err)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		err := migrator.WaitMetaVersionMatched(ctx)
 		require.NoError(t, err)
-	}()
+	})
 
-	wg.Add(1)
 	// 4.owner note migrates meta data
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// 5. test ShouldMigrate works as expected
 		should, err := migrator.ShouldMigrate(ctx)
 		require.NoError(t, err)
@@ -216,7 +210,7 @@ func TestMigration(t *testing.T) {
 			err = migrator.Migrate(ctx)
 			require.NoError(t, err)
 		}
-	}()
+	})
 
 	// 6. wait for migration done
 	wg.Wait()
@@ -291,7 +285,7 @@ func TestMigration(t *testing.T) {
 	require.Equal(t, int64(1), v)
 
 	// migrate again
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err = m.Migrate(ctx)
 		require.Nil(t, err)
 	}
@@ -410,23 +404,17 @@ func TestMigrationNonDefaultCluster(t *testing.T) {
 	}
 	// 3. tow non-owner node wait for meta migrating done
 	wg := new(sync.WaitGroup)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := migrator.WaitMetaVersionMatched(ctx)
 		require.NoError(t, err)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		err := migrator.WaitMetaVersionMatched(ctx)
 		require.NoError(t, err)
-	}()
+	})
 
-	wg.Add(1)
 	// 4.owner note migrates meta data
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// 5. test ShouldMigrate works as expected
 		should, err := migrator.ShouldMigrate(ctx)
 		require.NoError(t, err)
@@ -435,7 +423,7 @@ func TestMigrationNonDefaultCluster(t *testing.T) {
 			err = migrator.Migrate(ctx)
 			require.NoError(t, err)
 		}
-	}()
+	})
 
 	// 6. wait for migration done
 	wg.Wait()
@@ -498,8 +486,7 @@ func newMockPDClient(normal bool) *mockPDClient {
 }
 
 func TestMigrateGcServiceSafePoint(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	m := &migrator{}
 	mockClient := newMockPDClient(true)
 
@@ -549,8 +536,7 @@ func TestMigrateGcServiceSafePoint(t *testing.T) {
 }
 
 func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	mockClient := newMockPDClient(true)
 
 	m := &migrator{}
@@ -589,8 +575,7 @@ func TestRemoveOldGcServiceSafePointFailed(t *testing.T) {
 }
 
 func TestListServiceSafePointFailed(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	mockClient := newMockPDClient(true)
 
 	m := &migrator{}
@@ -600,8 +585,7 @@ func TestListServiceSafePointFailed(t *testing.T) {
 }
 
 func TestNoServiceSafePoint(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	mockClient := newMockPDClient(true)
 
 	m := &migrator{}

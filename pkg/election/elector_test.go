@@ -68,7 +68,7 @@ func TestElectorBasic(t *testing.T) {
 	)
 	firstLeaderID := make(chan string, 1)
 	const electorCount = 5
-	for i := 0; i < electorCount; i++ {
+	for i := range electorCount {
 		id := fmt.Sprintf("elector-%d", i)
 		config := election.Config{
 			ID:      id,
@@ -91,13 +91,11 @@ func TestElectorBasic(t *testing.T) {
 		require.NoError(t, err)
 
 		ctx, cancel := context.WithCancel(context.Background())
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			err := elector.RunElection(ctx)
 			require.Error(t, err)
 			require.Equal(t, context.Canceled, errors.Cause(err))
-		}()
+		})
 
 		electors = append(electors, elector)
 		configs = append(configs, config)
@@ -247,14 +245,12 @@ func TestElectorRenewFailure(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := e1.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	// Wait for leader to be elected.
 	require.Eventually(t, func() bool {
@@ -277,13 +273,11 @@ func TestElectorRenewFailure(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := e2.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	// Make s1 fail and wait for s2 to be elected.
 	s1Err.Store(errors.New("connection error"))
@@ -369,13 +363,11 @@ func TestLeaderCallbackUnexpectedExit(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := e1.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	// Wait for leader to be elected.
 	require.Eventually(t, func() bool {
@@ -397,13 +389,11 @@ func TestLeaderCallbackUnexpectedExit(t *testing.T) {
 		RenewDeadline: renewDeadline,
 	})
 	require.NoError(t, err)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := e2.RunElection(ctx)
 		require.Error(t, err)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	// Make elector 1 leader callback return error.
 	e1CallbackErr.Store(errors.New("callback error"))

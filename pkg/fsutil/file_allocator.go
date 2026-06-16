@@ -52,11 +52,9 @@ func NewFileAllocator(dir string, prefix string, size int64) *FileAllocator {
 		doneCh: make(chan struct{}),
 	}
 
-	allocator.wg.Add(1)
-	go func() {
-		defer allocator.wg.Done()
+	allocator.wg.Go(func() {
 		allocator.run()
-	}()
+	})
 
 	return allocator
 }

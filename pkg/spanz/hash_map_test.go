@@ -74,7 +74,7 @@ func TestHashMapIter(t *testing.T) {
 	t.Parallel()
 
 	m := NewHashMap[int]()
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		m.ReplaceOrInsert(tablepb.Span{TableID: int64(i)}, i)
 	}
 

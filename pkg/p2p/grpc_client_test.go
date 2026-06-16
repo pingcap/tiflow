@@ -113,13 +113,11 @@ func TestMessageClientBasics(t *testing.T) {
 	grpcStream.On("Recv").Return(nil, nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "", "", "node-2", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, "context canceled", err.Error())
-	}()
+	})
 
 	// wait for the stream meta to be received
 	require.Eventuallyf(t, func() bool {
@@ -263,13 +261,11 @@ func TestClientPermanentFailure(t *testing.T) {
 	}, nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "", "", "node-2", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrPeerMessageClientPermanentFail.*", err.Error())
-	}()
+	})
 
 	wg.Wait()
 
@@ -324,13 +320,11 @@ func TestClientSendAnomalies(t *testing.T) {
 	sender.On("Append", mock.Anything).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(runCtx, "", "", "node-2", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	// Test point 1: ErrPeerMessageSendTryAgain
 	_, err := client.TrySendMessage(ctx, "test-topic", &testMessage{Value: 1})

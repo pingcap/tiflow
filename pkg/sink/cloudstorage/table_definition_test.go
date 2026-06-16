@@ -515,7 +515,7 @@ func TestTableDefinitionSum32(t *testing.T) {
 	newDef := def
 	newDef.Columns = newCol
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		target := rand.Intn(n)
 		newDef.Columns[i], newDef.Columns[target] = newDef.Columns[target], newDef.Columns[i]
 		newChecksum, err := newDef.Sum32(nil)

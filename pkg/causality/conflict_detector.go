@@ -61,11 +61,9 @@ func NewConflictDetector[Txn txnEvent](
 		ret.resolvedTxnCaches[i] = newTxnCache[Txn](opt)
 	}
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		ret.runBackgroundTasks()
-	}()
+	})
 
 	return ret
 }

@@ -32,7 +32,7 @@ import (
 type csvTestColumnTuple struct {
 	col                  model.Column
 	colInfo              rowcodec.ColInfo
-	want                 interface{}
+	want                 any
 	BinaryEncodingMethod string
 }
 

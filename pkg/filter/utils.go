@@ -15,6 +15,7 @@ package filter
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -119,12 +120,7 @@ var alterTableSubType = []timodel.ActionType{
 
 // isAlterTable returns true if the given job type is alter table's subtype.
 func isAlterTable(jobType timodel.ActionType) bool {
-	for _, t := range alterTableSubType {
-		if t == jobType {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(alterTableSubType, jobType)
 }
 
 // SupportedEventTypes returns the supported event types.

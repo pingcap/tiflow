@@ -222,11 +222,9 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 		return errors.Trace(err)
 	}
 
-	up.wg.Add(1)
-	go func() {
-		defer up.wg.Done()
+	up.wg.Go(func() {
 		up.PDClock.Run(ctx)
-	}()
+	})
 
 	log.Info("upstream initialize successfully", zap.Uint64("upstreamID", up.ID))
 	atomic.StoreInt32(&up.status, normal)

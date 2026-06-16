@@ -41,8 +41,8 @@ type canalJSONMessageInterface interface {
 	getPhysicalTableID() int64
 	getTableID() int64
 	getQuery() string
-	getOld() map[string]interface{}
-	getData() map[string]interface{}
+	getOld() map[string]any
+	getData() map[string]any
 	getMySQLType() map[string]string
 	getJavaSQLType() map[string]int32
 	messageType() model.MessageType
@@ -70,8 +70,8 @@ type JSONMessage struct {
 	// only works for INSERT / UPDATE / DELETE events, records each column's mysql representation type.
 	MySQLType map[string]string `json:"mysqlType"`
 	// A Datum should be a string or nil
-	Data []map[string]interface{} `json:"data"`
-	Old  []map[string]interface{} `json:"old"`
+	Data []map[string]any `json:"data"`
+	Old  []map[string]any `json:"old"`
 }
 
 func (c *JSONMessage) getSchema() *string {
@@ -99,14 +99,14 @@ func (c *JSONMessage) getQuery() string {
 	return c.Query
 }
 
-func (c *JSONMessage) getOld() map[string]interface{} {
+func (c *JSONMessage) getOld() map[string]any {
 	if c.Old == nil {
 		return nil
 	}
 	return c.Old[0]
 }
 
-func (c *JSONMessage) getData() map[string]interface{} {
+func (c *JSONMessage) getData() map[string]any {
 	if c.Data == nil {
 		return nil
 	}
@@ -328,7 +328,7 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 }
 
 func canalJSONColumnMap2RowChangeColumns(
-	cols map[string]interface{},
+	cols map[string]any,
 	mysqlType map[string]string,
 	tableInfo *model.TableInfo,
 ) ([]*model.ColumnData, error) {
@@ -352,7 +352,7 @@ func canalJSONColumnMap2RowChangeColumns(
 	return result, nil
 }
 
-func canalJSONFormatColumn(columnID int64, value interface{}, mysqlTypeStr string) *model.ColumnData {
+func canalJSONFormatColumn(columnID int64, value any, mysqlTypeStr string) *model.ColumnData {
 	mysqlType := utils.ExtractBasicMySQLType(mysqlTypeStr)
 	result := &model.ColumnData{
 		ColumnID: columnID,

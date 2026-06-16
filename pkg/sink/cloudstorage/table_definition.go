@@ -38,14 +38,14 @@ const (
 
 // TableCol denotes the column info for a table definition.
 type TableCol struct {
-	ID        string      `json:"ColumnId,omitempty"`
-	Name      string      `json:"ColumnName" `
-	Tp        string      `json:"ColumnType"`
-	Default   interface{} `json:"ColumnDefault,omitempty"`
-	Precision string      `json:"ColumnPrecision,omitempty"`
-	Scale     string      `json:"ColumnScale,omitempty"`
-	Nullable  string      `json:"ColumnNullable,omitempty"`
-	IsPK      string      `json:"ColumnIsPk,omitempty"`
+	ID        string `json:"ColumnId,omitempty"`
+	Name      string `json:"ColumnName" `
+	Tp        string `json:"ColumnType"`
+	Default   any    `json:"ColumnDefault,omitempty"`
+	Precision string `json:"ColumnPrecision,omitempty"`
+	Scale     string `json:"ColumnScale,omitempty"`
+	Nullable  string `json:"ColumnNullable,omitempty"`
+	IsPK      string `json:"ColumnIsPk,omitempty"`
 }
 
 // FromTiColumnInfo converts from TiDB ColumnInfo to TableCol.

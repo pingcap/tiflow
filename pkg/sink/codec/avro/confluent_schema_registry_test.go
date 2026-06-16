@@ -125,7 +125,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 
 	topic := "cdctest"
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		err = manager.ClearRegistry(ctx, topic)
 		require.NoError(t, err)
 	}
@@ -152,7 +152,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	require.NoError(t, err)
 
 	id := 0
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		id1, err := manager.Register(ctx, topic, codec.Schema())
 		require.NoError(t, err)
 		require.True(t, id == 0 || id == id1.confluentSchemaID)
@@ -236,12 +236,10 @@ func TestGetCachedOrRegister(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		finalI := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
+		wg.Go(func() {
+			for range 100 {
 				codec, header, err := manager.GetCachedOrRegister(
 					ctx,
 					topic,
@@ -254,7 +252,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 				require.Greater(t, cID, uint32(0))
 				require.NotNil(t, codec)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 }

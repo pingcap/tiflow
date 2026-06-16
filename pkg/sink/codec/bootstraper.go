@@ -88,7 +88,7 @@ func (b *bootstrapWorker) run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-sendTicker.C:
-			b.activeTables.Range(func(key, value interface{}) bool {
+			b.activeTables.Range(func(key, value any) bool {
 				table := value.(*tableStatistic)
 				err = b.sendBootstrapMsg(ctx, table)
 				return err == nil
@@ -180,7 +180,7 @@ func (b *bootstrapWorker) generateEvents(
 }
 
 func (b *bootstrapWorker) gcInactiveTables() {
-	b.activeTables.Range(func(key, value interface{}) bool {
+	b.activeTables.Range(func(key, value any) bool {
 		table := value.(*tableStatistic)
 		if table.isInactive(b.maxInactiveDuration) {
 			log.Info("A table is removed from the bootstrap worker",

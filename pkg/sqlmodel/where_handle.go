@@ -130,7 +130,7 @@ func allColsNotNull(idx *model.IndexInfo, cols []*model.ColumnInfo) bool {
 // - an UNIQUE index whose columns are all NOT NULL, or
 // - an UNIQUE index and the data are all NOT NULL.
 // For the last case, last used index is swapped to front.
-func (h *WhereHandle) getWhereIdxByData(data []interface{}) *model.IndexInfo {
+func (h *WhereHandle) getWhereIdxByData(data []any) *model.IndexInfo {
 	if h == nil {
 		log.L().DPanic("WhereHandle is nil")
 		return nil

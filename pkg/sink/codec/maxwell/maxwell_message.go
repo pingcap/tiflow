@@ -26,16 +26,16 @@ import (
 )
 
 type maxwellMessage struct {
-	Database string                 `json:"database"`
-	Table    string                 `json:"table"`
-	Type     string                 `json:"type"`
-	Ts       int64                  `json:"ts"`
-	Xid      int                    `json:"xid,omitempty"`
-	Xoffset  int                    `json:"xoffset,omitempty"`
-	Position string                 `json:"position,omitempty"`
-	Gtid     string                 `json:"gtid,omitempty"`
-	Data     map[string]interface{} `json:"data,omitempty"`
-	Old      map[string]interface{} `json:"old,omitempty"`
+	Database string         `json:"database"`
+	Table    string         `json:"table"`
+	Type     string         `json:"type"`
+	Ts       int64          `json:"ts"`
+	Xid      int            `json:"xid,omitempty"`
+	Xoffset  int            `json:"xoffset,omitempty"`
+	Position string         `json:"position,omitempty"`
+	Gtid     string         `json:"gtid,omitempty"`
+	Data     map[string]any `json:"data,omitempty"`
+	Old      map[string]any `json:"old,omitempty"`
 }
 
 // Encode encodes the message to bytes
@@ -61,8 +61,8 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 		Ts:       0,
 		Database: e.TableInfo.GetSchemaName(),
 		Table:    e.TableInfo.GetTableName(),
-		Data:     make(map[string]interface{}),
-		Old:      make(map[string]interface{}),
+		Data:     make(map[string]any),
+		Old:      make(map[string]any),
 	}
 	physicalTime := oracle.GetTimeFromTS(e.CommitTs)
 	value.Ts = physicalTime.Unix()
@@ -178,8 +178,8 @@ type ddlMaxwellMessage struct {
 	Type     string      `json:"type"`
 	Database string      `json:"database"`
 	Table    string      `json:"table"`
-	Old      tableStruct `json:"old,omitempty"`
-	Def      tableStruct `json:"def,omitempty"`
+	Old      tableStruct `json:"old"`
+	Def      tableStruct `json:"def"`
 	Ts       uint64      `json:"ts"`
 	SQL      string      `json:"sql"`
 	Position string      `json:"position,omitempty"`

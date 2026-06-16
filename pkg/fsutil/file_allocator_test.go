@@ -66,7 +66,7 @@ func benchmarkWriteData(b *testing.B, size int, useFileAlloctor bool) {
 	}
 
 	data := make([]byte, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		data[i] = byte(i)
 	}
 

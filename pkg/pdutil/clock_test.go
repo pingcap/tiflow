@@ -55,8 +55,7 @@ func TestTimeFromPD(t *testing.T) {
 func TestEventTimeAndProcessingTime(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	mockPDClient := &MockPDClient{}
 	clock, err := NewClock(ctx, mockPDClient)
 	require.NoError(t, err)

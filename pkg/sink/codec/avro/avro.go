@@ -256,7 +256,7 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 func (a *BatchEncoder) EncodeCheckpointEvent(ts uint64) (*common.Message, error) {
 	if a.config.EnableTiDBExtension && a.config.AvroEnableWatermark {
 		buf := new(bytes.Buffer)
-		data := []interface{}{checkpointByte, ts}
+		data := []any{checkpointByte, ts}
 		for _, v := range data {
 			err := binary.Write(buf, binary.BigEndian, v)
 			if err != nil {
@@ -327,9 +327,9 @@ func getOperation(e *model.RowChangedEvent) string {
 }
 
 func (a *BatchEncoder) nativeValueWithExtension(
-	native map[string]interface{},
+	native map[string]any,
 	e *model.RowChangedEvent,
-) map[string]interface{} {
+) map[string]any {
 	native[tidbOp] = getOperation(e)
 	native[tidbCommitTs] = int64(e.CommitTs)
 	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
@@ -343,10 +343,10 @@ func (a *BatchEncoder) nativeValueWithExtension(
 }
 
 type avroSchemaTop struct {
-	Tp        string                   `json:"type"`
-	Name      string                   `json:"name"`
-	Namespace string                   `json:"namespace"`
-	Fields    []map[string]interface{} `json:"fields"`
+	Tp        string           `json:"type"`
+	Name      string           `json:"name"`
+	Namespace string           `json:"namespace"`
+	Fields    []map[string]any `json:"fields"`
 }
 
 const (
@@ -474,26 +474,26 @@ type avroSchema struct {
 
 type avroLogicalTypeSchema struct {
 	avroSchema
-	LogicalType string      `json:"logicalType"`
-	Precision   interface{} `json:"precision,omitempty"`
-	Scale       interface{} `json:"scale,omitempty"`
+	LogicalType string `json:"logicalType"`
+	Precision   any    `json:"precision,omitempty"`
+	Scale       any    `json:"scale,omitempty"`
 }
 
 func (a *BatchEncoder) schemaWithExtension(
 	top *avroSchemaTop,
 ) *avroSchemaTop {
 	top.Fields = append(top.Fields,
-		map[string]interface{}{
+		map[string]any{
 			"name":    tidbOp,
 			"type":    "string",
 			"default": "",
 		},
-		map[string]interface{}{
+		map[string]any{
 			"name":    tidbCommitTs,
 			"type":    "long",
 			"default": 0,
 		},
-		map[string]interface{}{
+		map[string]any{
 			"name":    tidbPhysicalTime,
 			"type":    "long",
 			"default": 0,
@@ -502,17 +502,17 @@ func (a *BatchEncoder) schemaWithExtension(
 
 	if a.config.EnableRowChecksum {
 		top.Fields = append(top.Fields,
-			map[string]interface{}{
+			map[string]any{
 				"name":    tidbRowLevelChecksum,
 				"type":    "string",
 				"default": "",
 			},
-			map[string]interface{}{
+			map[string]any{
 				"name":    tidbCorrupted,
 				"type":    "boolean",
 				"default": false,
 			},
-			map[string]interface{}{
+			map[string]any{
 				"name":    tidbChecksumVersion,
 				"type":    "int",
 				"default": 0,
@@ -539,7 +539,7 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 		if err != nil {
 			return nil, err
 		}
-		field := make(map[string]interface{})
+		field := make(map[string]any)
 		field["name"] = common.SanitizeName(colx.GetName())
 
 		copied := colx
@@ -553,7 +553,7 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 		// https://github.com/linkedin/goavro/issues/202
 		if _, ok := avroType.(avroLogicalTypeSchema); ok {
 			if colx.GetFlag().IsNullable() {
-				field["type"] = []interface{}{"null", avroType}
+				field["type"] = []any{"null", avroType}
 				field["default"] = nil
 			} else {
 				field["type"] = avroType
@@ -561,9 +561,9 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 		} else {
 			if colx.GetFlag().IsNullable() {
 				if defaultValue == nil {
-					field["type"] = []interface{}{"null", avroType}
+					field["type"] = []any{"null", avroType}
 				} else {
-					field["type"] = []interface{}{avroType, "null"}
+					field["type"] = []any{avroType, "null"}
 				}
 				field["default"] = defaultValue
 			} else {
@@ -617,8 +617,8 @@ func (a *BatchEncoder) key2AvroSchema(tableName model.TableName, keyColumns avro
 	return string(str), nil
 }
 
-func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]interface{}, error) {
-	ret := make(map[string]interface{}, len(input.columns))
+func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]any, error) {
+	ret := make(map[string]any, len(input.columns))
 	for _, col := range input.columns {
 		colx := model.GetColumnDataX(col, input.TableInfo)
 		if colx.ColumnData == nil {
@@ -642,7 +642,7 @@ func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]inter
 	return ret, nil
 }
 
-func (a *BatchEncoder) columnToAvroSchema(col model.ColumnDataX) (interface{}, error) {
+func (a *BatchEncoder) columnToAvroSchema(col model.ColumnDataX) (any, error) {
 	tt := getTiDBTypeFromColumn(col)
 
 	switch col.GetType() {
@@ -779,7 +779,7 @@ func (a *BatchEncoder) columnToAvroSchema(col model.ColumnDataX) (interface{}, e
 	}
 }
 
-func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (interface{}, string, error) {
+func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (any, string, error) {
 	if col.Value == nil {
 		return nil, "null", nil
 	}
@@ -949,7 +949,7 @@ const (
 
 func (r *avroEncodeResult) toEnvelope() ([]byte, error) {
 	buf := new(bytes.Buffer)
-	data := []interface{}{r.header, r.data}
+	data := []any{r.header, r.data}
 	for _, v := range data {
 		err := binary.Write(buf, binary.BigEndian, v)
 		if err != nil {

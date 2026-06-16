@@ -25,7 +25,7 @@ func BenchmarkMap(b *testing.B) {
 	sm := SyncMap{}
 
 	spans := [100]tablepb.Span{}
-	for i := 0; i < len(spans); i++ {
+	for i := range len(spans) {
 		spans[i] = TableIDToComparableSpan(int64(i))
 	}
 	for i, span := range spans {

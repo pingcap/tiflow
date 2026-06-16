@@ -244,11 +244,11 @@ func (d *Decoder) assembleHandleKeyOnlyRowChangedEvent(m *message) (*model.RowCh
 
 func (d *Decoder) buildData(
 	holder *common.ColumnsHolder, fieldTypeMap map[string]*types.FieldType, timezone string,
-) map[string]interface{} {
+) map[string]any {
 	columnsCount := holder.Length()
-	result := make(map[string]interface{}, columnsCount)
+	result := make(map[string]any, columnsCount)
 
-	for i := 0; i < columnsCount; i++ {
+	for i := range columnsCount {
 		col := holder.Types[i]
 		value := holder.Values[i]
 

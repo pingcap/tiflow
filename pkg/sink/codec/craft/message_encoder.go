@@ -176,7 +176,7 @@ func encodeSizeTables(bits []byte, tables [][]int64) []byte {
 }
 
 // EncodeTiDBType encodes TiDB types
-func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagType, value interface{}) []byte {
+func EncodeTiDBType(allocator *SliceAllocator, ty byte, flag model.ColumnFlagType, value any) []byte {
 	if value == nil {
 		return nil
 	}

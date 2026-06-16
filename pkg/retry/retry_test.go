@@ -148,7 +148,7 @@ func TestDoCornerCases(t *testing.T) {
 	require.Equal(t, callCount, 2)
 
 	var i uint64
-	for i = 0; i < 10; i++ {
+	for i = range 10 {
 		callCount = 0
 		err = Do(context.Background(), f,
 			WithBackoffBaseDelay(int64(i)), WithBackoffMaxDelay(int64(i)), WithMaxTries(i))

@@ -58,8 +58,7 @@ func testFilePathGenerator(ctx context.Context, t *testing.T, dir string) *FileP
 func TestGenerateDataFilePath(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+	ctx := t.Context()
 
 	table := VersionedTableName{
 		TableNameWithPhysicTableID: model.TableName{
@@ -159,8 +158,7 @@ func TestGenerateDataFilePath(t *testing.T) {
 func TestFetchIndexFromFileName(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+	ctx := t.Context()
 
 	dir := t.TempDir()
 	f := testFilePathGenerator(ctx, t, dir)
@@ -207,8 +205,7 @@ func TestFetchIndexFromFileName(t *testing.T) {
 func TestGenerateDataFilePathWithIndexFile(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.TODO())
-	defer cancel()
+	ctx := t.Context()
 
 	dir := t.TempDir()
 	f := testFilePathGenerator(ctx, t, dir)
@@ -291,8 +288,7 @@ func TestIsSchemaFile(t *testing.T) {
 func TestCheckOrWriteSchema(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dir := t.TempDir()
 	f := testFilePathGenerator(ctx, t, dir)
 
@@ -355,8 +351,7 @@ func TestCheckOrWriteSchema(t *testing.T) {
 func TestRemoveExpiredFilesWithoutPartition(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	dir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?flush-interval=2s", dir)
 	storage, err := util.GetExternalStorageFromURI(ctx, uri)

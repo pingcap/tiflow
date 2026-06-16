@@ -94,12 +94,12 @@ func (r RowDatas) Less(i, j int) bool {
 func (r RowDatas) Swap(i, j int) { r.Rows[i], r.Rows[j] = r.Rows[j], r.Rows[i] }
 
 // Push implements heap.Interface's Push function
-func (r *RowDatas) Push(x interface{}) {
+func (r *RowDatas) Push(x any) {
 	r.Rows = append(r.Rows, x.(RowData))
 }
 
 // Pop implements heap.Interface's Pop function
-func (r *RowDatas) Pop() interface{} {
+func (r *RowDatas) Pop() any {
 	if len(r.Rows) == 0 {
 		return nil
 	}

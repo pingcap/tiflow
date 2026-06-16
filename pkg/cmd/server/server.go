@@ -232,7 +232,7 @@ func (o *Options) validate() error {
 	if len(o.ServerPdAddr) == 0 {
 		return cerror.ErrInvalidServerOption.GenWithStack("empty PD address")
 	}
-	for _, ep := range strings.Split(o.ServerPdAddr, ",") {
+	for ep := range strings.SplitSeq(o.ServerPdAddr, ",") {
 		// NOTICE: The configuration used here is the one that has been completed,
 		// as it may be configured by the configuration file.
 		if err := util.VerifyPdEndpoint(ep, o.ServerConfig.Security.IsTLSEnabled()); err != nil {

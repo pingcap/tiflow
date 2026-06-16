@@ -38,7 +38,7 @@ func (p *Logger) WithFields(fields log.Fields) log.Entry {
 }
 
 // WithField with field
-func (p *Logger) WithField(name string, value interface{}) log.Entry {
+func (p *Logger) WithField(name string, value any) log.Entry {
 	return &Logger{p.zapLogger.With(zap.Any(name, value))}
 }
 
@@ -48,42 +48,42 @@ func (p *Logger) WithError(err error) log.Entry {
 }
 
 // Debug debug
-func (p *Logger) Debug(args ...interface{}) {
+func (p *Logger) Debug(args ...any) {
 	p.zapLogger.Sugar().Debug(args...)
 }
 
 // Info info
-func (p *Logger) Info(args ...interface{}) {
+func (p *Logger) Info(args ...any) {
 	p.zapLogger.Sugar().Info(args...)
 }
 
 // Warn warn
-func (p *Logger) Warn(args ...interface{}) {
+func (p *Logger) Warn(args ...any) {
 	p.zapLogger.Sugar().Warn(args...)
 }
 
 // Error error
-func (p *Logger) Error(args ...interface{}) {
+func (p *Logger) Error(args ...any) {
 	p.zapLogger.Sugar().Error(args...)
 }
 
 // Debugf debugf
-func (p *Logger) Debugf(format string, args ...interface{}) {
+func (p *Logger) Debugf(format string, args ...any) {
 	p.zapLogger.Sugar().Debugf(format, args...)
 }
 
 // Infof infof
-func (p *Logger) Infof(format string, args ...interface{}) {
+func (p *Logger) Infof(format string, args ...any) {
 	p.zapLogger.Sugar().Infof(format, args...)
 }
 
 // Warnf warnf
-func (p *Logger) Warnf(format string, args ...interface{}) {
+func (p *Logger) Warnf(format string, args ...any) {
 	p.zapLogger.Sugar().Warnf(format, args...)
 }
 
 // Errorf errorf
-func (p *Logger) Errorf(format string, args ...interface{}) {
+func (p *Logger) Errorf(format string, args ...any) {
 	p.zapLogger.Sugar().Errorf(format, args...)
 }
 

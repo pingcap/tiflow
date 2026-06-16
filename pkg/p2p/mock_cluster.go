@@ -85,28 +85,22 @@ func newMockNode(t *testing.T, id NodeID) *MockNode {
 	grpcServer := grpc.NewServer()
 	proto.RegisterCDCPeerToPeerServer(grpcServer, ret.Server)
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		lis, err := net.Listen("tcp", addr)
 		require.NoError(t, err)
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		err := ret.Server.Run(ctx, nil)
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		<-ctx.Done()
 		grpcServer.Stop()
-	}()
+	})
 
 	return ret
 }
@@ -124,7 +118,7 @@ func NewMockCluster(t *testing.T, nodeCount int) *MockCluster {
 		Nodes: make(map[NodeID]*MockNode),
 	}
 
-	for i := 0; i < nodeCount; i++ {
+	for i := range nodeCount {
 		id := fmt.Sprintf("capture-%d", i)
 		ret.Nodes[id] = newMockNode(t, id)
 	}

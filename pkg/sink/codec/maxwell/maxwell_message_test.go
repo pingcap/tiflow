@@ -31,7 +31,7 @@ func TestMaxwellFormatCol(t *testing.T) {
 		Xoffset:  1,
 		Position: "",
 		Gtid:     "",
-		Data: map[string]interface{}{
+		Data: map[string]any{
 			"id": "1",
 		},
 	}

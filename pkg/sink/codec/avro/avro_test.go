@@ -14,7 +14,6 @@
 package avro
 
 import (
-	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -33,8 +32,7 @@ import (
 func TestDMLEventE2E(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolAvro)
 	codecConfig.EnableTiDBExtension = true
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	_, event, _, _ := utils.NewLargeEvent4Test(t, config.GetDefaultReplicaConfig())
 	colInfos := event.TableInfo.GetColInfosForRowChangedEvent()
@@ -151,8 +149,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	codecConfig.AvroDecimalHandlingMode = "string"
 	codecConfig.AvroBigintUnsignedHandlingMode = "string"
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer TeardownEncoderAndSchemaRegistry4Testing()
@@ -174,7 +171,7 @@ func TestAvroEncode4EnableChecksum(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
-	m, ok := res.(map[string]interface{})
+	m, ok := res.(map[string]any)
 	require.True(t, ok)
 
 	_, found := m[tidbRowLevelChecksum]
@@ -191,8 +188,7 @@ func TestAvroEncode(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolAvro)
 	codecConfig.EnableTiDBExtension = true
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer TeardownEncoderAndSchemaRegistry4Testing()
@@ -213,12 +209,12 @@ func TestAvroEncode(t *testing.T) {
 	res, _, err := avroKeyCodec.NativeFromBinary(data)
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	for k := range res.(map[string]interface{}) {
+	for k := range res.(map[string]any) {
 		if k == "_tidb_commit_ts" || k == "_tidb_op" || k == "_tidb_commit_physical_time" {
 			require.Fail(t, "key shall not include extension fields")
 		}
 	}
-	require.Equal(t, int32(127), res.(map[string]interface{})["tu1"])
+	require.Equal(t, int32(127), res.(map[string]any)["tu1"])
 
 	bin, err = encoder.encodeValue(ctx, topic, event)
 	require.NoError(t, err)
@@ -233,7 +229,7 @@ func TestAvroEncode(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, res)
 
-	for k, v := range res.(map[string]interface{}) {
+	for k, v := range res.(map[string]any) {
 		if k == "_tidb_op" {
 			require.Equal(t, "c", v.(string))
 		}
@@ -258,7 +254,7 @@ func TestAvroEnvelope(t *testing.T) {
 
 	require.NoError(t, err)
 
-	testNativeData := make(map[string]interface{})
+	testNativeData := make(map[string]any)
 	testNativeData["id"] = 7
 
 	bin, err := avroCodec.BinaryFromNative(nil, testNativeData)
@@ -280,7 +276,7 @@ func TestAvroEnvelope(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, parsed)
 
-	id, exists := parsed.(map[string]interface{})["id"]
+	id, exists := parsed.(map[string]any)["id"]
 	require.True(t, exists)
 	require.Equal(t, int32(7), id)
 
@@ -300,7 +296,7 @@ func TestAvroEnvelope(t *testing.T) {
 	parsed, _, err = avroCodec.NativeFromBinary(evlp[18:])
 	require.NoError(t, err)
 	require.NotNil(t, parsed)
-	id, exists = parsed.(map[string]interface{})["id"]
+	id, exists = parsed.(map[string]any)["id"]
 	require.True(t, exists)
 	require.Equal(t, int32(7), id)
 }
@@ -348,8 +344,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 	codecConfig := common.NewConfig(config.ProtocolAvro)
 	codecConfig.EnableTiDBExtension = true
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	encoder, err := SetupEncoderAndSchemaRegistry4Testing(ctx, codecConfig)
 	defer TeardownEncoderAndSchemaRegistry4Testing()
 	require.NoError(t, err)
@@ -376,7 +371,7 @@ func TestArvoAppendRowChangedEventWithCallback(t *testing.T) {
 
 	expected := 0
 	count := 0
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		expected += i
 		bit := i
 		err := encoder.AppendRowChangedEvent(ctx, "", row, func() {

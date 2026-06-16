@@ -90,8 +90,7 @@ func TestRetry(t *testing.T) {
 	require.NotNil(t, err)
 	require.Containsf(t, errors.Cause(err).Error(), "mock error", "err:%v", err.Error())
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Test Txn case
 	// case 0: normal
