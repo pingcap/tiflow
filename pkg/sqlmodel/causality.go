@@ -319,20 +319,8 @@ func datumValue(d types.Datum) any {
 	if d.IsNull() {
 		return nil
 	}
-	switch d.Kind() {
-	case types.KindMysqlDecimal,
-		types.KindMysqlTime,
-		types.KindMysqlDuration,
-		types.KindMysqlEnum,
-		types.KindMysqlSet,
-		types.KindMysqlJSON,
-		types.KindBinaryLiteral,
-		types.KindMysqlBit,
-		types.KindVectorFloat32:
-		s, err := d.ToString()
-		if err == nil {
-			return s
-		}
+	if s, err := d.ToString(); err == nil {
+		return s
 	}
 	value := d.GetValue()
 	// Keep byte values comparable for identityUpdated's != check.
