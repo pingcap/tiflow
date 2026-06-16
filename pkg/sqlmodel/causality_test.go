@@ -282,6 +282,29 @@ func TestCausalityKeysExpressionIndex(t *testing.T) {
 	require.Equal(t, []string{"2.id.db.tb1"}, keys)
 }
 
+func TestCausalityKeysExpressionIndexHiddenColumnBeforeVisibleColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, "+
+		"a VARCHAR(32), "+
+		"b VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))), "+
+		"UNIQUE KEY uk_b ((lower(b))))")
+
+	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+	hiddenB := expressionIndexColumnName(t, ti, "uk_b")
+	reorderColumnsByName(t, ti, "id", "a", hiddenA, "b", hiddenB)
+
+	change := NewRowChange(source, nil, nil, []any{1, "Alice", "Bob"}, ti, nil, nil)
+	require.ElementsMatch(t, []string{
+		"alice." + hiddenA + ".db.tb1",
+		"bob." + hiddenB + ".db.tb1",
+		"1.id.db.tb1",
+	}, change.CausalityKeys())
+}
+
 func TestCausalityKeysStoredGeneratedUniqueIndex(t *testing.T) {
 	t.Parallel()
 
@@ -325,4 +348,42 @@ func corruptHiddenGeneratedExpr(t *testing.T, ti *timodel.TableInfo) {
 		}
 	}
 	require.True(t, found, "expression index should create a hidden generated column")
+}
+
+func expressionIndexColumnName(t *testing.T, ti *timodel.TableInfo, indexName string) string {
+	t.Helper()
+
+	for _, idx := range ti.Indices {
+		if idx.Name.L == indexName {
+			require.Len(t, idx.Columns, 1)
+			return idx.Columns[0].Name.L
+		}
+	}
+	require.FailNowf(t, "index not found", "index %q not found", indexName)
+	return ""
+}
+
+func reorderColumnsByName(t *testing.T, ti *timodel.TableInfo, names ...string) {
+	t.Helper()
+	require.Len(t, names, len(ti.Columns))
+
+	colsByName := make(map[string]*timodel.ColumnInfo, len(ti.Columns))
+	for _, col := range ti.Columns {
+		colsByName[col.Name.L] = col
+	}
+
+	for i, name := range names {
+		col := colsByName[name]
+		require.NotNilf(t, col, "column %q not found", name)
+		ti.Columns[i] = col
+		col.Offset = i
+	}
+
+	for _, idx := range ti.Indices {
+		for _, idxCol := range idx.Columns {
+			col := colsByName[idxCol.Name.L]
+			require.NotNilf(t, col, "index column %q not found", idxCol.Name.L)
+			idxCol.Offset = col.Offset
+		}
+	}
 }

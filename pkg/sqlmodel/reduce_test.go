@@ -163,6 +163,29 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 	}
 }
 
+func TestPrimaryOrUniqueKeyUpdatedExpressionIndexHiddenColumnBeforeVisibleColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, "+
+		"a VARCHAR(32), "+
+		"b VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))), "+
+		"UNIQUE KEY uk_b ((lower(b))))")
+
+	hiddenA := expressionIndexColumnName(t, sourceTI, "uk_a")
+	hiddenB := expressionIndexColumnName(t, sourceTI, "uk_b")
+	reorderColumnsByName(t, sourceTI, "id", "a", hiddenA, "b", hiddenB)
+
+	change := NewRowChange(source, nil,
+		[]any{1, "Alice", "Bob"},
+		[]any{1, "Alice", "Carol"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
 func TestPrimaryOrUniqueKeyUpdatedExpressionIndexMaterializeFailure(t *testing.T) {
 	t.Parallel()
 

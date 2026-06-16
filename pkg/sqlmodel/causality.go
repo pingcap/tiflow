@@ -267,7 +267,17 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		return values, false
 	}
 
-	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, cols[:len(values)])
+	visibleCols := make([]*timodel.ColumnInfo, 0, len(values))
+	for _, col := range cols {
+		if !col.Hidden {
+			visibleCols = append(visibleCols, col)
+		}
+	}
+	if len(values) != len(visibleCols) {
+		return values, false
+	}
+
+	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, visibleCols)
 	if err != nil {
 		log.L().Debug("cannot adjust row for generated column evaluation",
 			zap.String("table", r.sourceTable.String()), zap.Error(err))
@@ -276,8 +286,10 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 
 	full := make([]any, len(cols))
 	fullDatums := make([]types.Datum, len(cols))
-	copy(full, values)
-	copy(fullDatums, datums)
+	for i, col := range visibleCols {
+		full[col.Offset] = values[i]
+		fullDatums[col.Offset] = datums[i]
+	}
 
 	mutRow := chunk.MutRowFromDatums(fullDatums)
 	for _, col := range r.whereHandle.hiddenGeneratedColumnExprCache.columns {
