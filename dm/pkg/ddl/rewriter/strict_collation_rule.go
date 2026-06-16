@@ -31,6 +31,9 @@ func WithStrictCollation(
 	logger log.Logger,
 ) Option {
 	return optionFunc(func(options *rewriteOptions) {
+		if logger.Logger == nil {
+			logger = log.L()
+		}
 		options.rules = append(options.rules, strictCollationRule{
 			statusVars:                 statusVars,
 			charsetAndDefaultCollation: charsetAndDefaultCollation,
@@ -77,17 +80,21 @@ func (r strictCollationRule) rewriteCreateTable(createStmt *ast.CreateTableStmt)
 		}
 	}
 	if justCharset == "" {
-		r.warn("detect create table risk which use implicit charset and collation")
+		r.logger.Warn("detect create table risk which use implicit charset and collation",
+			zap.String("originSQL", r.originSQL))
 		return changed
 	}
 
 	collation, ok := r.charsetAndDefaultCollation[strings.ToLower(justCharset)]
 	if !ok {
-		r.warn("not found charset default collation.", zap.String("charset", strings.ToLower(justCharset)))
+		r.logger.Warn("not found charset default collation.",
+			zap.String("originSQL", r.originSQL),
+			zap.String("charset", strings.ToLower(justCharset)))
 		return changed
 	}
-	r.info(
+	r.logger.Info(
 		"detect create table risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS",
+		zap.String("originSQL", r.originSQL),
 		zap.String("collation", collation),
 	)
 	createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collation})
@@ -110,25 +117,33 @@ func (r strictCollationRule) rewriteCreateDatabase(createStmt *ast.CreateDatabas
 		var ok bool
 		collation, ok = r.charsetAndDefaultCollation[strings.ToLower(justCharset)]
 		if !ok {
-			r.warn("not found charset default collation.", zap.String("charset", strings.ToLower(justCharset)))
+			r.logger.Warn("not found charset default collation.",
+				zap.String("originSQL", r.originSQL),
+				zap.String("charset", strings.ToLower(justCharset)))
 			return false
 		}
-		r.info(
+		r.logger.Info(
 			"detect create database risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS",
+			zap.String("originSQL", r.originSQL),
 			zap.String("collation", collation),
 		)
 	} else {
 		var err error
 		collation, err = event.GetServerCollationByStatusVars(r.statusVars, r.idAndCollationMap)
 		if err != nil {
-			r.error("can not get charset server collation from binlog statusVars.", zap.Error(err))
+			r.logger.Error("can not get charset server collation from binlog statusVars.",
+				zap.Error(err),
+				zap.String("originSQL", r.originSQL))
 		}
 		if collation == "" {
-			r.error("get server collation from binlog statusVars is nil.", zap.Error(err))
+			r.logger.Error("get server collation from binlog statusVars is nil.",
+				zap.Error(err),
+				zap.String("originSQL", r.originSQL))
 			return false
 		}
-		r.info(
+		r.logger.Info(
 			"detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars",
+			zap.String("originSQL", r.originSQL),
 			zap.String("collation", collation),
 		)
 	}
@@ -152,8 +167,9 @@ ColumnLoop:
 
 		collation, ok := r.charsetAndDefaultCollation[strings.ToLower(fieldType.GetCharset())]
 		if !ok {
-			r.warn(
+			r.logger.Warn(
 				"not found charset default collation for column.",
+				zap.String("originSQL", r.originSQL),
 				zap.String("table", createStmt.Table.Name.String()),
 				zap.String("column", col.Name.String()),
 				zap.String("charset", strings.ToLower(fieldType.GetCharset())),
@@ -164,25 +180,4 @@ ColumnLoop:
 		changed = true
 	}
 	return changed
-}
-
-func (r strictCollationRule) info(msg string, fields ...zap.Field) {
-	if r.logger.Logger == nil {
-		return
-	}
-	r.logger.Info(msg, append([]zap.Field{zap.String("originSQL", r.originSQL)}, fields...)...)
-}
-
-func (r strictCollationRule) warn(msg string, fields ...zap.Field) {
-	if r.logger.Logger == nil {
-		return
-	}
-	r.logger.Warn(msg, append([]zap.Field{zap.String("originSQL", r.originSQL)}, fields...)...)
-}
-
-func (r strictCollationRule) error(msg string, fields ...zap.Field) {
-	if r.logger.Logger == nil {
-		return
-	}
-	r.logger.Error(msg, append(fields, zap.String("originSQL", r.originSQL))...)
 }
