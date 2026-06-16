@@ -494,11 +494,9 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *check.C) {
 	// step 4: watch source bound from startRev
 	var wg sync.WaitGroup
 	ctx1, cancel1 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		c.Assert(s.observeSourceBound(ctx1, startRev), check.IsNil)
-	}()
+	})
 	// step 4.1: should stop the running worker, source bound has been deleted, should stop this worker
 	c.Assert(utils.WaitSomething(20, 100*time.Millisecond, func() bool {
 		return s.getSourceWorker(true) == nil
@@ -516,11 +514,9 @@ func (t *testServer) TestWatchSourceBoundEtcdCompact(c *check.C) {
 	c.Assert(s.stopSourceWorker(sourceCfg.SourceID, true, true), check.IsNil)
 	// step 5: start observeSourceBound from compacted revision again, should start worker
 	ctx2, cancel2 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		c.Assert(s.observeSourceBound(ctx2, startRev), check.IsNil)
-	}()
+	})
 	c.Assert(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
 		return s.getSourceWorker(true) != nil
 	}), check.IsTrue)
@@ -751,7 +747,7 @@ func (t *testServer) TestServerDataRace(c *check.C) {
 	defer s.Close()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()

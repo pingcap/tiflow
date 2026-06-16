@@ -186,7 +186,7 @@ func TestCheck(t *testing.T) {
 	latestResumeTime = rtsc.subtaskAutoResume[taskName].LatestResumeTime
 	latestPausedTime = rtsc.subtaskAutoResume[taskName].LatestPausedTime
 	require.Equal(t, 10*time.Second, bf.Current())
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		rtsc.check()
 		require.Equal(t, latestResumeTime, rtsc.subtaskAutoResume[taskName].LatestResumeTime)
 		require.True(t, latestPausedTime.Before(rtsc.subtaskAutoResume[taskName].LatestPausedTime))
@@ -269,7 +269,7 @@ func TestCheckTaskIndependent(t *testing.T) {
 
 	task1LatestResumeTime = rtsc.subtaskAutoResume[task1].LatestResumeTime
 	task2LatestResumeTime = rtsc.subtaskAutoResume[task2].LatestResumeTime
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		time.Sleep(backoffMin)
 		rtsc.check()
 		require.Equal(t, task1LatestResumeTime, rtsc.subtaskAutoResume[task1].LatestResumeTime)

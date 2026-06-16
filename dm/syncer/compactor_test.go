@@ -34,7 +34,7 @@ import (
 )
 
 // mockExecute mock a kv store.
-func mockExecute(kv map[interface{}][]interface{}, dmls []*sqlmodel.RowChange) map[interface{}][]interface{} {
+func mockExecute(kv map[any][]any, dmls []*sqlmodel.RowChange) map[any][]any {
 	for _, dml := range dmls {
 		switch dml.Type() {
 		case sqlmodel.RowChangeInsert:
@@ -86,12 +86,12 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 	updateIdentifyProbability := 0.1
 
 	// generate DMLs
-	kv := make(map[interface{}][]interface{})
-	for i := 0; i < dmlNum; i++ {
+	kv := make(map[any][]any)
+	for range dmlNum {
 		newID := rand.Intn(maxID)
 		newCol1 := rand.Intn(maxID * 10)
 		newName := randString(rand.Intn(20))
-		values := []interface{}{newID, newCol1, newName}
+		values := []any{newID, newCol1, newName}
 		oldValues, ok := kv[newID]
 		if !ok {
 			// insert
@@ -101,7 +101,7 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 				// update
 				// check whether to update ID
 				if rand.Float64() < updateIdentifyProbability {
-					for try := 0; try < 10; try++ {
+					for range 10 {
 						newID := rand.Intn(maxID)
 						if _, ok := kv[newID]; !ok {
 							values[0] = newID
@@ -120,15 +120,12 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 		dmls = append(dmls, dml)
 	}
 
-	kv = make(map[interface{}][]interface{})
-	compactKV := make(map[interface{}][]interface{})
+	kv = make(map[any][]any)
+	compactKV := make(map[any][]any)
 
 	// mock compactJob
 	for i := 0; i < len(dmls); i += batch {
-		end := i + batch
-		if end > len(dmls) {
-			end = len(dmls)
-		}
+		end := min(i+batch, len(dmls))
 		kv = mockExecute(kv, dmls[i:end])
 
 		for _, dml := range dmls[i:end] {
@@ -184,37 +181,37 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *check.C) {
 		{
 			input: []*job{
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{1, 1, "a"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "b"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{2, 2, "b"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, []any{1, 1, "a"}, []any{3, 3, "c"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, nil, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, []any{2, 2, "b"}, nil, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{1, 1, "a"}, ti, nil, nil),
 					ec,
 				),
 			},
 			output: []*job{
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{3, 3, "c"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{3, 3, "c"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, nil, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, []any{2, 2, "b"}, nil, ti, nil, nil),
 					ecWithSafeMode,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{1, 1, "a"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 			},
@@ -223,45 +220,45 @@ func (s *testSyncerSuite) TestCompactorSafeMode(c *check.C) {
 		{
 			input: []*job{
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{1, 1, "a"}, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "b"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{2, 2, "b"}, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{1, 1, "a"}, []interface{}{3, 3, "c"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, []any{1, 1, "a"}, []any{3, 3, "c"}, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, nil, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, []any{2, 2, "b"}, nil, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{1, 1, "a"}, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "b"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{2, 2, "b"}, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, []interface{}{2, 2, "b"}, []interface{}{2, 2, "c"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, []any{2, 2, "b"}, []any{2, 2, "c"}, ti, nil, nil),
 					ec,
 				),
 			},
 			output: []*job{
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{3, 3, "c"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{3, 3, "c"}, ti, nil, nil),
 					ec,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{1, 1, "a"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{1, 1, "a"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 				newDMLJob(
-					sqlmodel.NewRowChange(sourceTable, nil, nil, []interface{}{2, 2, "c"}, ti, nil, nil),
+					sqlmodel.NewRowChange(sourceTable, nil, nil, []any{2, 2, "c"}, ti, nil, nil),
 					ecWithSafeMode,
 				),
 			},

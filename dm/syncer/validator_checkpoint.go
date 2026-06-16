@@ -99,7 +99,7 @@ func (c *validatorPersistHelper) init(tctx *tcontext.Context) error {
 	c.db = c.validator.toDB
 
 	if !c.schemaInitialized.Load() {
-		workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+		workFunc := func(tctx *tcontext.Context) (any, error) {
 			return nil, c.createSchemaAndTables(tctx)
 		}
 		if _, cnt, err := c.retryer.Apply(tctx, workFunc); err != nil {
@@ -207,14 +207,14 @@ type rowChangeDataForPersist struct {
 	Key       string           `json:"key"`
 	Tp        rowChangeJobType `json:"tp"`
 	Size      int32            `json:"size"`
-	Data      []interface{}    `json:"data"`
+	Data      []any            `json:"data"`
 	FailedCnt int              `json:"failed-cnt"` // failed count
 }
 
 var triggeredFailOnPersistForIntegrationTest bool
 
-func (c *validatorPersistHelper) execQueriesWithRetry(tctx *tcontext.Context, queries []string, args [][]interface{}) error {
-	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+func (c *validatorPersistHelper) execQueriesWithRetry(tctx *tcontext.Context, queries []string, args [][]any) error {
+	workFunc := func(tctx *tcontext.Context) (any, error) {
 		for i, q := range queries {
 			failpoint.Inject("ValidatorFailOnPersist", func() {
 				// on persist pending row changes, the queries would be [delete, insert...]
@@ -246,7 +246,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 	tableStatus := c.validator.getTableStatusMap()
 	count := len(tableStatus) + int(c.validator.getNewErrorRowCount())
 	queries := make([]string, 0, count)
-	args := make([][]interface{}, 0, count)
+	args := make([][]any, 0, count)
 
 	// upsert table status
 	for _, state := range tableStatus {
@@ -262,7 +262,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 					message = VALUES(message)
 				`
 		queries = append(queries, query)
-		args = append(args, []interface{}{
+		args = append(args, []any{
 			c.cfg.SourceID, state.source.Schema, state.source.Name, state.target.Schema, state.target.Name,
 			int(state.stage), state.message,
 		},
@@ -292,7 +292,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 			if err != nil {
 				return err
 			}
-			dstData := make([]interface{}, len(r.dstData))
+			dstData := make([]any, len(r.dstData))
 			for i, d := range r.dstData {
 				if d.Valid {
 					dstData[i] = d.String
@@ -304,7 +304,7 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 			}
 			sourceTable := row.GetSourceTable()
 			targetTable := row.GetTargetTable()
-			args = append(args, []interface{}{
+			args = append(args, []any{
 				c.cfg.SourceID, sourceTable.Schema, sourceTable.Table, r.srcJob.Key,
 				targetTable.Schema, targetTable.Table,
 				string(srcDataBytes), string(dstDataBytes), r.tp, pb.ValidateErrorState_NewErr,
@@ -318,11 +318,11 @@ func (c *validatorPersistHelper) persistTableStatusAndErrors(tctx *tcontext.Cont
 func (c *validatorPersistHelper) persistPendingRows(tctx *tcontext.Context, rev int64) error {
 	count := int(c.validator.getAllPendingRowCount()) + 1
 	queries := make([]string, 0, count)
-	args := make([][]interface{}, 0, count)
+	args := make([][]any, 0, count)
 
 	// delete pending rows left by previous failed call of "persist"
 	queries = append(queries, `DELETE FROM `+c.pendingChangeTableName+` WHERE source = ? and revision = ?`)
-	args = append(args, []interface{}{c.cfg.SourceID, rev})
+	args = append(args, []any{c.cfg.SourceID, rev})
 	// insert pending row changes with revision=rev
 	for _, worker := range c.validator.getWorkers() {
 		for _, tblChange := range worker.getPendingChangesMap() {
@@ -344,7 +344,7 @@ func (c *validatorPersistHelper) persistPendingRows(tctx *tcontext.Context, rev 
 						(source, schema_name, table_name, row_pk, data, revision) VALUES (?, ?, ?, ?, ?, ?)`
 				queries = append(queries, query)
 				sourceTable := row.GetSourceTable()
-				args = append(args, []interface{}{
+				args = append(args, []any{
 					c.cfg.SourceID,
 					sourceTable.Schema,
 					sourceTable.Table,
@@ -393,12 +393,12 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 			revision = VALUES(revision)
 		`
 	rowCounts := c.validator.getProcessedRowCounts()
-	args := []interface{}{
+	args := []any{
 		c.cfg.SourceID, loc.Position.Name, loc.Position.Pos, loc.GTIDSetStr(),
 		rowCounts[rowInsert], rowCounts[rowUpdated], rowCounts[rowDeleted],
 		nextRevision,
 	}
-	if err := c.execQueriesWithRetry(newCtx, []string{query}, [][]interface{}{args}); err != nil {
+	if err := c.execQueriesWithRetry(newCtx, []string{query}, [][]any{args}); err != nil {
 		return err
 	}
 
@@ -406,8 +406,8 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 	// but we need to clean up previous pending row changes, i.e. rows with different revision.
 	// it's ok to fail here, next persist will try to delete again, so just log it.
 	query = `DELETE FROM ` + c.pendingChangeTableName + ` WHERE source = ? and revision != ?`
-	args = []interface{}{c.cfg.SourceID, nextRevision}
-	if err := c.execQueriesWithRetry(newCtx, []string{query}, [][]interface{}{args}); err != nil {
+	args = []any{c.cfg.SourceID, nextRevision}
+	if err := c.execQueriesWithRetry(newCtx, []string{query}, [][]any{args}); err != nil {
 		c.L.Warn("failed to delete previous pending row changes", zap.Error(err), zap.Reflect("args", args))
 		// nolint:nilerr
 	}
@@ -430,7 +430,7 @@ func (c *validatorPersistHelper) loadPersistedDataRetry(tctx *tcontext.Context) 
 	start := time.Now()
 	newCtx, cancelFunc := tctx.WithTimeout(validationDBTimeout)
 	defer cancelFunc()
-	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+	workFunc := func(tctx *tcontext.Context) (any, error) {
 		return c.loadPersistedData(tctx)
 	}
 	ret, i, err := c.retryer.Apply(newCtx, workFunc)
@@ -637,7 +637,7 @@ func (c *validatorPersistHelper) loadError(tctx *tcontext.Context, db *conn.Base
 		err  error
 	)
 	res := make([]*pb.ValidationError, 0)
-	args := []interface{}{
+	args := []any{
 		c.cfg.SourceID,
 	}
 	query := "SELECT id, source, src_schema_name, src_table_name, dst_schema_name, dst_table_name, data, dst_data, error_type, status, update_time " +
@@ -696,7 +696,7 @@ func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, db *conn.B
 		c.L.Warn("unsupported validator error operation", zap.Reflect("op", validateOp))
 		return nil
 	}
-	args := []interface{}{
+	args := []any{
 		int(setStatus),
 		c.cfg.SourceID,
 	}
@@ -710,7 +710,7 @@ func (c *validatorPersistHelper) operateError(tctx *tcontext.Context, db *conn.B
 }
 
 func (c *validatorPersistHelper) deleteError(tctx *tcontext.Context, db *conn.BaseDB, errID uint64, isAll bool) error {
-	args := []interface{}{
+	args := []any{
 		c.cfg.SourceID,
 	}
 	query := "DELETE FROM " + c.errorChangeTableName + " WHERE source=?"

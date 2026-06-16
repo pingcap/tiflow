@@ -55,60 +55,60 @@ func TestGenSQL(t *testing.T) {
 	createSQL := "create table db.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
 
 	cases := []struct {
-		preValues  []interface{}
-		postValues []interface{}
+		preValues  []any
+		postValues []any
 		safeMode   bool
 
 		expectedSQLs []string
-		expectedArgs [][]interface{}
+		expectedArgs [][]any
 	}{
 		{
 			nil,
-			[]interface{}{1, 2, 3, "haha"},
+			[]any{1, 2, 3, "haha"},
 			false,
 
 			[]string{"INSERT INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1, 2, 3, "haha"}},
+			[][]any{{1, 2, 3, "haha"}},
 		},
 		{
 			nil,
-			[]interface{}{1, 2, 3, "haha"},
+			[]any{1, 2, 3, "haha"},
 			true,
 
 			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1, 2, 3, "haha"}},
+			[][]any{{1, 2, 3, "haha"}},
 		},
 		{
-			[]interface{}{1, 2, 3, "haha"},
+			[]any{1, 2, 3, "haha"},
 			nil,
 			false,
 
 			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{1}},
+			[][]any{{1}},
 		},
 		{
-			[]interface{}{1, 2, 3, "haha"},
-			[]interface{}{4, 5, 6, "hihi"},
+			[]any{1, 2, 3, "haha"},
+			[]any{4, 5, 6, "hihi"},
 			false,
 
 			[]string{"UPDATE `targetSchema`.`targetTable` SET `id` = ?, `col1` = ?, `col2` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{4, 5, 6, "hihi", 1}},
+			[][]any{{4, 5, 6, "hihi", 1}},
 		},
 		{
-			[]interface{}{1, 2, 3, "haha"},
-			[]interface{}{1, 2, 3, "hihi"},
+			[]any{1, 2, 3, "haha"},
+			[]any{1, 2, 3, "hihi"},
 			true,
 
 			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1, 2, 3, "hihi"}},
+			[][]any{{1, 2, 3, "hihi"}},
 		},
 		{
-			[]interface{}{1, 2, 3, "haha"},
-			[]interface{}{4, 5, 6, "hihi"},
+			[]any{1, 2, 3, "haha"},
+			[]any{4, 5, 6, "hihi"},
 			true,
 
 			[]string{"DELETE FROM `targetSchema`.`targetTable` WHERE `id` = ? LIMIT 1", "REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
-			[][]interface{}{{1}, {4, 5, 6, "hihi"}},
+			[][]any{{1}, {4, 5, 6, "hihi"}},
 		},
 	}
 
@@ -155,18 +155,18 @@ func TestShouldDisableForeignKeyChecksForJob(t *testing.T) {
 	target := &cdcmodel.TableName{Schema: "target", Table: "tb"}
 	tableInfo := mockTableInfo(t, "create table db.tb(id int primary key, name varchar(10))")
 
-	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, "v"}, tableInfo, nil, nil)
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []any{1, "v"}, tableInfo, nil, nil)
 	insertJob := &job{tp: dml, safeMode: true, dml: insertChange}
 	require.False(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
 
 	worker.foreignKeyChecksEnabled = true
 	require.True(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
 
-	updateChange := sqlmodel.NewRowChange(source, target, []interface{}{1, "a"}, []interface{}{1, "b"}, tableInfo, nil, nil)
+	updateChange := sqlmodel.NewRowChange(source, target, []any{1, "a"}, []any{1, "b"}, tableInfo, nil, nil)
 	updateJob := &job{tp: dml, safeMode: true, dml: updateChange}
 	require.True(t, worker.shouldDisableForeignKeyChecksForJob(updateJob))
 
-	deleteChange := sqlmodel.NewRowChange(source, target, []interface{}{1, "a"}, nil, tableInfo, nil, nil)
+	deleteChange := sqlmodel.NewRowChange(source, target, []any{1, "a"}, nil, tableInfo, nil, nil)
 	deleteJob := &job{tp: dml, safeMode: true, dml: deleteChange}
 	require.False(t, worker.shouldDisableForeignKeyChecksForJob(deleteJob))
 
@@ -182,18 +182,18 @@ func TestShouldDisableForeignKeyChecks(t *testing.T) {
 	target := &cdcmodel.TableName{Schema: "target", Table: "tbl"}
 	tableInfo := mockTableInfo(t, "create table db.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))")
 
-	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, 2, 3, "v"}, tableInfo, nil, nil)
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []any{1, 2, 3, "v"}, tableInfo, nil, nil)
 	insertJob := newDMLJob(insertChange, ecWithSafeMode)
 	require.True(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
 
 	insertJob.safeMode = false
 	require.False(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
 
-	updateChange := sqlmodel.NewRowChange(source, target, []interface{}{1, 2, 3, "v"}, []interface{}{1, 2, 3, "v2"}, tableInfo, nil, nil)
+	updateChange := sqlmodel.NewRowChange(source, target, []any{1, 2, 3, "v"}, []any{1, 2, 3, "v2"}, tableInfo, nil, nil)
 	updateJob := newDMLJob(updateChange, ecWithSafeMode)
 	require.True(t, worker.shouldDisableForeignKeyChecksForJob(updateJob))
 
-	deleteChange := sqlmodel.NewRowChange(source, target, []interface{}{1, 2, 3, "v"}, nil, tableInfo, nil, nil)
+	deleteChange := sqlmodel.NewRowChange(source, target, []any{1, 2, 3, "v"}, nil, tableInfo, nil, nil)
 	deleteJob := newDMLJob(deleteChange, ecWithSafeMode)
 	require.False(t, worker.shouldDisableForeignKeyChecksForJob(deleteJob))
 
@@ -217,24 +217,24 @@ func TestValidateSafeModeForeignKeyUpdate(t *testing.T) {
 	// PK change
 	pkUpdate := sqlmodel.NewRowChange(
 		source, target,
-		[]interface{}{1, "a", "x"},
-		[]interface{}{2, "a", "x"},
+		[]any{1, "a", "x"},
+		[]any{2, "a", "x"},
 		tableInfo, nil, nil,
 	)
 
 	// UK change
 	ukUpdate := sqlmodel.NewRowChange(
 		source, target,
-		[]interface{}{1, "a", "x"},
-		[]interface{}{1, "b", "x"},
+		[]any{1, "a", "x"},
+		[]any{1, "b", "x"},
 		tableInfo, nil, nil,
 	)
 
 	// Non-key change
 	nonKeyUpdate := sqlmodel.NewRowChange(
 		source, target,
-		[]interface{}{1, "a", "x"},
-		[]interface{}{1, "a", "y"},
+		[]any{1, "a", "x"},
+		[]any{1, "a", "y"},
 		tableInfo, nil, nil,
 	)
 
@@ -267,7 +267,7 @@ func TestExecuteBatchJobsWithForeignKey(t *testing.T) {
 	t.Parallel()
 
 	// helper: convert []interface{} -> []driver.Value
-	toDriverValues := func(args []interface{}) []driver.Value {
+	toDriverValues := func(args []any) []driver.Value {
 		out := make([]driver.Value, len(args))
 		for i, v := range args {
 			out[i] = v
@@ -302,8 +302,8 @@ func TestExecuteBatchJobsWithForeignKey(t *testing.T) {
 	createSQL := "create table db.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
 	tableInfo := mockTableInfo(t, createSQL)
 
-	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, 2, 3, "normal"}, tableInfo, nil, nil)
-	replaceChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{2, 3, 4, "safe"}, tableInfo, nil, nil)
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []any{1, 2, 3, "normal"}, tableInfo, nil, nil)
+	replaceChange := sqlmodel.NewRowChange(source, target, nil, []any{2, 3, 4, "safe"}, tableInfo, nil, nil)
 
 	insertJob := newDMLJob(insertChange, ec)
 	replaceJob := newDMLJob(replaceChange, ecWithSafeMode)

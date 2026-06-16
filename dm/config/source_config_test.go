@@ -71,7 +71,7 @@ func TestConfigFunctions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint32(100), cfg1.ServerID)
 	cfg.Filters = []*bf.BinlogEventRule{}
-	cfg.Tracer = map[string]interface{}{}
+	cfg.Tracer = map[string]any{}
 
 	var cfg2 SourceConfig
 	require.NoError(t, cfg2.FromToml(originCfgStr))

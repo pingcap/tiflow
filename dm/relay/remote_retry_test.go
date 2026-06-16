@@ -41,13 +41,13 @@ func (t *testReaderRetrySuite) TestRetry(c *check.C) {
 	ctx := context.Background()
 
 	// check some times
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		c.Assert(rr.Check(ctx, retryableErr), check.IsTrue)
 	}
 	c.Assert(rr.bf.Current(), check.Equals, 8*time.Millisecond)
 
 	// check more times, until reach Max
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		c.Assert(rr.Check(ctx, retryableErr), check.IsTrue)
 	}
 	c.Assert(rr.bf.Current(), check.Equals, rr.cfg.BackoffMax)

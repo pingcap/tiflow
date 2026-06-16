@@ -26,8 +26,8 @@ type Cond struct {
 	PkValues  [][]string
 }
 
-func (c *Cond) GetArgs() []interface{} {
-	var res []interface{}
+func (c *Cond) GetArgs() []any {
+	var res []any
 	for _, v := range c.PkValues {
 		for _, val := range v {
 			res = append(res, val)

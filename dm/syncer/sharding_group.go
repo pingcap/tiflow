@@ -72,6 +72,7 @@ package syncer
 
 import (
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/pingcap/tidb/pkg/util/dbutil"
@@ -279,9 +280,7 @@ func (sg *ShardingGroup) Sources() map[string]bool {
 	sg.RLock()
 	defer sg.RUnlock()
 	ret := make(map[string]bool, len(sg.sources))
-	for k, v := range sg.sources {
-		ret[k] = v
-	}
+	maps.Copy(ret, sg.sources)
 	return ret
 }
 
@@ -366,7 +365,7 @@ func (sg *ShardingGroup) ActiveDDLFirstLocation() (binlog.Location, error) {
 }
 
 // FlushData returns sharding meta flush SQLs and args.
-func (sg *ShardingGroup) FlushData(targetTableID string) ([]string, [][]interface{}) {
+func (sg *ShardingGroup) FlushData(targetTableID string) ([]string, [][]any) {
 	sg.RLock()
 	defer sg.RUnlock()
 	return sg.meta.FlushData(sg.sourceID, targetTableID)
@@ -619,9 +618,7 @@ func (k *ShardingGroupKeeper) Groups() map[string]*ShardingGroup {
 
 	// do a copy
 	groups := make(map[string]*ShardingGroup, len(k.groups))
-	for key, value := range k.groups {
-		groups[key] = value
-	}
+	maps.Copy(groups, k.groups)
 	return groups
 }
 
@@ -662,12 +659,12 @@ func (k *ShardingGroupKeeper) ActiveDDLFirstLocation(targetTable *filter.Table) 
 }
 
 // PrepareFlushSQLs returns all sharding meta flushed SQLs except for given table IDs.
-func (k *ShardingGroupKeeper) PrepareFlushSQLs(exceptTableIDs map[string]bool) ([]string, [][]interface{}) {
+func (k *ShardingGroupKeeper) PrepareFlushSQLs(exceptTableIDs map[string]bool) ([]string, [][]any) {
 	k.RLock()
 	defer k.RUnlock()
 	var (
 		sqls = make([]string, 0, len(k.groups))
-		args = make([][]interface{}, 0, len(k.groups))
+		args = make([][]any, 0, len(k.groups))
 	)
 	for id, group := range k.groups {
 		if group.IsSchemaOnly {

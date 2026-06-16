@@ -126,9 +126,7 @@ func batchOperateTask(taskOp pb.TaskOp, batchSize int, sources []string, subTask
 	var wg sync.WaitGroup
 	resultCh := make(chan *operateTaskResult, 1)
 	for i := 0; i < batchSize; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			for name := range workCh {
 				taskResult := operateTaskResult{Task: name, Op: taskOp.String()}
@@ -143,7 +141,7 @@ func batchOperateTask(taskOp pb.TaskOp, batchSize int, sources []string, subTask
 				}
 				resultCh <- &taskResult
 			}
-		}()
+		})
 	}
 
 	go func() {

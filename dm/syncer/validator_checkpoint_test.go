@@ -125,9 +125,9 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
 		tp:      deletedRowExists,
 		dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
-		srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
+		srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []any{1, "a"}),
 	})
-	validator.dispatchRowChange("1", genRowChangeJob(tbl, tblInfo, "1", rowInsert, []interface{}{1, "a"}))
+	validator.dispatchRowChange("1", genRowChangeJob(tbl, tblInfo, "1", rowInsert, []any{1, "a"}))
 	validator.newErrorRowCount.Store(1)
 
 	// fail on first persist
@@ -179,7 +179,7 @@ func TestValidatorCheckpointPersist(t *testing.T) {
 	validator.workers[0].errorRows = append(validator.workers[0].errorRows, &validateFailedRow{
 		tp:      deletedRowExists,
 		dstData: []*sql.NullString{{String: "1", Valid: true}, {String: "a", Valid: true}},
-		srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []interface{}{1, "a"}),
+		srcJob:  genRowChangeJob(tbl, tblInfo, "1", rowDeleted, []any{1, "a"}),
 	})
 	validator.newErrorRowCount.Store(1)
 	validator.flushedLoc = nil

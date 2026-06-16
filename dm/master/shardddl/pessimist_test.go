@@ -404,9 +404,7 @@ func (t *testPessimistSuite) TestSourceReEntrant() {
 
 	// 4. wait exec operation for the owner become available.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		opCh := make(chan pessimism.Operation, 10)
 		errCh := make(chan error, 10)
 		ctx2, cancel2 := context.WithTimeout(ctx, watchTimeout)
@@ -419,7 +417,7 @@ func (t *testPessimistSuite) TestSourceReEntrant() {
 		op := <-opCh
 		require.True(t.T(), op.Exec)
 		require.False(t.T(), op.Done)
-	}()
+	})
 
 	// 5. put i13, the lock will become synced, then an operation PUT for the owner will be triggered.
 	_, err = pessimism.PutInfo(t.etcdTestCli, i13)
@@ -445,9 +443,7 @@ func (t *testPessimistSuite) TestSourceReEntrant() {
 	require.False(t.T(), op11.Done)
 
 	// 9. wait exec operation for the non-owner become available.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		opCh = make(chan pessimism.Operation, 10)
 		errCh = make(chan error, 10)
 		ctx2, cancel2 = context.WithTimeout(ctx, watchTimeout)
@@ -460,7 +456,7 @@ func (t *testPessimistSuite) TestSourceReEntrant() {
 		op := <-opCh
 		require.False(t.T(), op.Exec)
 		require.False(t.T(), op.Done)
-	}()
+	})
 
 	// 10. mark exec operation for the owner as `done` (and delete the info).
 	op11c := op11
@@ -815,11 +811,9 @@ func (t *testPessimistSuite) TestUnlockSourceOwnerRemoved() {
 
 	// 4. put done for the replace owner then can unlock the lock.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t.putDoneForSource(ctx, task, source2, i11, true, rev1+1, watchTimeout)
-	}()
+	})
 	require.NoError(t.T(), p.UnlockLock(ctx, ID, source2, false))
 	wg.Wait()
 
@@ -908,15 +902,13 @@ func (t *testPessimistSuite) TestMeetEtcdCompactError() {
 		// step 2: start running, i11 and i12 should be handled successfully
 		ctx2, cancel2 := context.WithCancel(ctx)
 		var wg sync.WaitGroup
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			rev1, rev2 := revCompacted, revThreshold
 			if i == 1 {
 				rev1, rev2 = rev2, rev1
 			}
 			require.NoError(t.T(), p.run(ctx2, t.etcdTestCli, rev1, rev2))
-		}()
+		})
 		// PUT i11, will create a lock but not synced.
 		require.Eventually(t.T(), func() bool {
 			return len(p.Locks()) == 1

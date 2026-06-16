@@ -225,14 +225,14 @@ func (s *testSQLGenImplSuite) TestDMLBasic() {
 	s.checkTruncateSQL(sql)
 
 	theMCP := mcp.NewModificationCandidatePool(8192)
-	for i := 0; i < 4096; i++ {
+	for i := range 4096 {
 		s.Nil(
-			theMCP.AddUK(mcp.NewUniqueKey(i, map[string]interface{}{
+			theMCP.AddUK(mcp.NewUniqueKey(i, map[string]any{
 				"id": i,
 			})),
 		)
 	}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		uk = theMCP.NextUK()
 		sql, err = g.GenUpdateRow(uk)
 		s.Nil(err, "generate update sql error")
@@ -264,7 +264,7 @@ func (s *testSQLGenImplSuite) TestWhereNULL() {
 		UniqueKeyColumnNames: []string{"name", "team_id"},
 	}
 	g := NewSQLGeneratorImpl(theTableConfig)
-	theUK := mcp.NewUniqueKey(-1, map[string]interface{}{
+	theUK := mcp.NewUniqueKey(-1, map[string]any{
 		"name":    "ABCDEFG",
 		"team_id": nil,
 	})
@@ -286,7 +286,7 @@ func (s *testSQLGenImplSuite) TestDMLAbnormalUK() {
 		uk  *mcp.UniqueKey
 	)
 	g := NewSQLGeneratorImpl(s.tableConfig)
-	uk = mcp.NewUniqueKey(-1, map[string]interface{}{
+	uk = mcp.NewUniqueKey(-1, map[string]any{
 		"abcdefg": 123,
 	})
 	_, err = g.GenUpdateRow(uk)
@@ -294,7 +294,7 @@ func (s *testSQLGenImplSuite) TestDMLAbnormalUK() {
 	_, err = g.GenDeleteRow(uk)
 	s.NotNil(err)
 
-	uk = mcp.NewUniqueKey(-1, map[string]interface{}{
+	uk = mcp.NewUniqueKey(-1, map[string]any{
 		"id":      123,
 		"abcdefg": 321,
 	})
@@ -308,7 +308,7 @@ func (s *testSQLGenImplSuite) TestDMLAbnormalUK() {
 	s.T().Logf("Generated SQL: %s\n", sql)
 	s.checkDeleteSQL(sql, s.tableConfig.UniqueKeyColumnNames)
 
-	uk = mcp.NewUniqueKey(-1, map[string]interface{}{})
+	uk = mcp.NewUniqueKey(-1, map[string]any{})
 	_, err = g.GenUpdateRow(uk)
 	s.NotNil(err)
 }
@@ -332,13 +332,13 @@ func (s *testSQLGenImplSuite) TestDMLWithNoUK() {
 	s.T().Logf("Generated SQL: %s\n; Unique key: %v\n", sql, theUK)
 	s.checkInsertSQL(sql)
 
-	theUK = mcp.NewUniqueKey(-1, map[string]interface{}{})
+	theUK = mcp.NewUniqueKey(-1, map[string]any{})
 	_, err = g.GenUpdateRow(theUK)
 	s.NotNil(err)
 	_, err = g.GenDeleteRow(theUK)
 	s.NotNil(err)
 
-	theUK = mcp.NewUniqueKey(-1, map[string]interface{}{
+	theUK = mcp.NewUniqueKey(-1, map[string]any{
 		"id": 123, // the column is filtered out by the UK configs
 	})
 	_, err = g.GenUpdateRow(theUK)

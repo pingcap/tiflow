@@ -56,15 +56,13 @@ func (t *statusSuite) TestStatusRace(c *check.C) {
 	}
 
 	wg := sync.WaitGroup{}
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			ret := s.Status(sourceStatus)
 			status := ret.(*pb.SyncStatus)
 			c.Assert(status.MasterBinlog, check.Equals, "(mysql-bin.000123, 223)")
 			c.Assert(status.SyncerBinlog, check.Equals, "(mysql-bin.000123, 123)")
-		}()
+		})
 	}
 	wg.Wait()
 }

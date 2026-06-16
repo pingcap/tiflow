@@ -98,9 +98,9 @@ func (c *CtlClient) updateMasterClient() error {
 func (c *CtlClient) sendRequest(
 	ctx context.Context,
 	reqName string,
-	req interface{},
-	respPointer interface{},
-	opts ...interface{},
+	req any,
+	respPointer any,
+	opts ...any,
 ) error {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -121,12 +121,12 @@ func (c *CtlClient) sendRequest(
 }
 
 // SendRequest send request to master.
-func SendRequest(ctx context.Context, reqName string, req interface{}, respPointer interface{}) error {
+func SendRequest(ctx context.Context, reqName string, req any, respPointer any) error {
 	err := GlobalCtlClient.sendRequest(ctx, reqName, req, respPointer)
 	if err == nil {
 		return nil
 	}
-	var opts []interface{}
+	var opts []any
 	switch status.Code(err) {
 	case codes.ResourceExhausted:
 		matches := re.FindStringSubmatch(err.Error())
@@ -199,7 +199,7 @@ func GlobalConfig() *Config {
 }
 
 // PrintLinesf adds a wrap to support `\n` within `chzyer/readline`.
-func PrintLinesf(format string, a ...interface{}) {
+func PrintLinesf(format string, a ...any) {
 	fmt.Println(fmt.Sprintf(format, a...))
 }
 
@@ -214,7 +214,7 @@ func PrettyPrintResponse(resp proto.Message) {
 }
 
 // PrettyPrintInterface prints an interface through encoding/json prettily.
-func PrettyPrintInterface(resp interface{}) {
+func PrettyPrintInterface(resp any) {
 	s, err := json.MarshalIndent(resp, "", "    ")
 	if err != nil {
 		PrintLinesf("%v", err)

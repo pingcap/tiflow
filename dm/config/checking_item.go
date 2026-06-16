@@ -16,6 +16,7 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"maps"
 
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -130,9 +131,7 @@ func SupportCheckingItems() string {
 // FilterCheckingItems filters ignored items from all checking items.
 func FilterCheckingItems(ignoredItems []string) map[string]string {
 	checkingItems := make(map[string]string)
-	for item, desc := range AllCheckingItems {
-		checkingItems[item] = desc
-	}
+	maps.Copy(checkingItems, AllCheckingItems)
 	delete(checkingItems, AllChecking)
 
 	for _, item := range ignoredItems {

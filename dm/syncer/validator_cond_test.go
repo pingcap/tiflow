@@ -66,7 +66,7 @@ func TestValidatorCondSelectMultiKey(t *testing.T) {
 		");"
 	// get table diff
 	pkValues := make([][]string, 0)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		// 3 primary key
 		key1, key2 := strconv.Itoa(i+1), strconv.Itoa(i+2)
 		pkValues = append(pkValues, []string{key1, key2})
@@ -141,11 +141,11 @@ func TestValidatorCondGetWhereArgs(t *testing.T) {
 			},
 		},
 	}
-	for i := 0; i < len(cases); i++ {
+	for i := range cases {
 		cond := genValidationCond(t, cases[i].schemaName, cases[i].tblName, cases[i].creatTbl, cases[i].pks)
 		require.Equal(t, cases[i].where, cond.GetWhere())
 		rawArgs := cond.GetArgs()
-		for j := 0; j < 3; j++ {
+		for j := range 3 {
 			curData := fmt.Sprintf("%v", rawArgs[j])
 			require.Equal(t, cases[i].args[j], curData)
 		}

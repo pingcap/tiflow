@@ -258,7 +258,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 	var (
 		affect  int
 		queries []string
-		args    [][]interface{}
+		args    [][]any
 		db      = w.toDBConns[queueID]
 		err     error
 		dmls    = make([]*sqlmodel.RowChange, 0, len(jobs))
@@ -375,16 +375,16 @@ func (w *DMLWorker) setForeignKeyChecks(queueID int, enable bool) error {
 }
 
 // genSQLs generate SQLs in single row mode or multiple rows mode.
-func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]interface{}) {
+func (w *DMLWorker) genSQLs(jobs []*job) ([]string, [][]any) {
 	if w.multipleRows {
 		return genDMLsWithSameOp(jobs)
 	}
 
 	queries := make([]string, 0, len(jobs))
-	args := make([][]interface{}, 0, len(jobs))
+	args := make([][]any, 0, len(jobs))
 	for _, j := range jobs {
 		var query string
-		var arg []interface{}
+		var arg []any
 		appendQueryAndArg := func() {
 			queries = append(queries, query)
 			args = append(args, arg)

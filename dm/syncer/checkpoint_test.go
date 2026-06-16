@@ -260,8 +260,8 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *check.C, cp CheckPoint) {
 	dir := c.MkDir()
 
 	filename := filepath.Join(dir, "metadata")
-	err = os.WriteFile(filename, []byte(
-		fmt.Sprintf("SHOW MASTER STATUS:\n\tLog: %s\n\tPos: %d\n\tGTID:\n\nSHOW SLAVE STATUS:\n\tHost: %s\n\tLog: %s\n\tPos: %d\n\tGTID:\n\n", pos1.Name, pos1.Pos, "slave_host", pos1.Name, pos1.Pos+1000)),
+	err = os.WriteFile(filename,
+		fmt.Appendf(nil, "SHOW MASTER STATUS:\n\tLog: %s\n\tPos: %d\n\tGTID:\n\nSHOW SLAVE STATUS:\n\tHost: %s\n\tLog: %s\n\tPos: %d\n\tGTID:\n\n", pos1.Name, pos1.Pos, "slave_host", pos1.Name, pos1.Pos+1000),
 		0o644)
 	c.Assert(err, check.IsNil)
 	s.cfg.Mode = config.ModeAll
@@ -285,8 +285,8 @@ func (s *testCheckpointSuite) testGlobalCheckPoint(c *check.C, cp CheckPoint) {
 	c.Assert(err, check.IsNil)
 
 	// check dumpling write exitSafeModeLocation in metadata
-	err = os.WriteFile(filename, []byte(
-		fmt.Sprintf(`SHOW MASTER STATUS:
+	err = os.WriteFile(filename,
+		fmt.Appendf(nil, `SHOW MASTER STATUS:
 	Log: %s
 	Pos: %d
 	GTID:
@@ -301,7 +301,7 @@ SHOW MASTER STATUS: /* AFTER CONNECTION POOL ESTABLISHED */
 	Log: %s
 	Pos: %d
 	GTID:
-`, pos1.Name, pos1.Pos, "slave_host", pos1.Name, pos1.Pos+1000, pos2.Name, pos2.Pos)), 0o644)
+`, pos1.Name, pos1.Pos, "slave_host", pos1.Name, pos1.Pos+1000, pos2.Name, pos2.Pos), 0o644)
 	c.Assert(err, check.IsNil)
 	c.Assert(cp.LoadMeta(tctx.Ctx), check.IsNil)
 
@@ -539,14 +539,14 @@ func TestRemoteCheckPointLoadIntoSchemaTracker(t *testing.T) {
 
 	// create 100K comment string
 	comment := make([]byte, 0, 100000)
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		comment = append(comment, 'A')
 	}
 	ti.Comment = string(comment)
 
 	tp1 = tablePoint{ti: ti}
 	amount := 100
-	for i := 0; i < amount; i++ {
+	for i := range amount {
 		tableName := fmt.Sprintf("tbl_%d", i)
 		checkpoint.points[tbl1.Schema][tableName] = &binlogPoint{flushedPoint: tp1}
 	}

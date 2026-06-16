@@ -16,6 +16,7 @@ package dbconfig
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -150,9 +151,7 @@ func (db *DBConfig) Clone() *DBConfig {
 
 	if db.Session != nil {
 		clone.Session = make(map[string]string, len(db.Session))
-		for k, v := range db.Session {
-			clone.Session[k] = v
-		}
+		maps.Copy(clone.Session, db.Session)
 	}
 
 	clone.Security = db.Security.Clone()

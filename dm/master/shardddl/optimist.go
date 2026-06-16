@@ -81,13 +81,11 @@ func (o *Optimist) Start(pCtx context.Context, etcdCli *clientv3.Client) error {
 
 	ctx, cancel := context.WithCancel(pCtx)
 
-	o.wg.Add(1)
-	go func() {
-		defer o.wg.Done()
+	o.wg.Go(func() {
 		// TODO: handle fatal error from run
 		//nolint:errcheck
 		o.run(ctx, revSource, revInfo, revOperation)
-	}()
+	})
 
 	o.closed = false // started now, no error will interrupt the start process.
 	o.cancel = cancel

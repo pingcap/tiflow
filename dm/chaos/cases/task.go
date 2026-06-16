@@ -224,7 +224,7 @@ func (t *task) genFullData() error {
 	)
 
 	// generate `CREATE TABLE` statements.
-	for i := 0; i < tableCount; i++ {
+	for range tableCount {
 		query, name, err := t.ss[0].CreateTableStmt()
 		if err != nil {
 			return err
@@ -258,7 +258,7 @@ func (t *task) genFullData() error {
 	for _, conn := range t.sourceConns {
 		conn2 := conn
 		eg.Go(func() error {
-			for i := 0; i < fullInsertCount; i++ {
+			for range fullInsertCount {
 				query, _, err2 := t.ss[0].InsertStmt(false)
 				if err2 != nil {
 					return err2

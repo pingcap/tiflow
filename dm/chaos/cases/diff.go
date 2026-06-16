@@ -28,7 +28,7 @@ import (
 
 // diffDataLoop checks whether target has the same data with source via `sync-diff-inspector` multiple times.
 func diffDataLoop(ctx context.Context, count int, interval time.Duration, schema string, tables []string, targetDB *sql.DB, sourceDBs ...*sql.DB) (err error) {
-	for i := 0; i < count; i++ {
+	for i := range count {
 		select {
 		case <-ctx.Done():
 			return nil

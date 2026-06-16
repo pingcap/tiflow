@@ -32,7 +32,7 @@ func TestRunMain(_ *testing.T) {
 	var (
 		args   []string
 		exit   = make(chan int)
-		waitCh = make(chan interface{}, 1)
+		waitCh = make(chan any, 1)
 	)
 	for _, arg := range os.Args {
 		switch {

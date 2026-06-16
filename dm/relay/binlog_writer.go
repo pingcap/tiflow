@@ -144,11 +144,9 @@ func (w *BinlogWriter) Open(uuid, filename string) error {
 	w.err.Store(nilErr)
 
 	w.input = make(chan []byte, chanSize)
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		w.run()
-	}()
+	})
 
 	return nil
 }

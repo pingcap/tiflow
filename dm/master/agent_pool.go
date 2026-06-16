@@ -29,7 +29,7 @@ const (
 	ErrorNoEmitToken = "fail to get emit opportunity for %s"
 )
 
-type emitFunc func(args ...interface{})
+type emitFunc func(args ...any)
 
 // AgentPool is a pool to control communication with dm-workers
 // It provides rate limit control for agent acquire, including dispatch rate r
@@ -108,7 +108,7 @@ func (ap *AgentPool) Start(ctx context.Context) {
 }
 
 // Emit applies for an agent to communicates with dm-worker.
-func (ap *AgentPool) Emit(ctx context.Context, id int, fn emitFunc, errFn emitFunc, args ...interface{}) {
+func (ap *AgentPool) Emit(ctx context.Context, id int, fn emitFunc, errFn emitFunc, args ...any) {
 	if agent := ap.Apply(ctx, id); agent == nil {
 		errFn(args...)
 	} else {

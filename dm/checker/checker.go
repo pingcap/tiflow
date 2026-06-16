@@ -235,7 +235,7 @@ func (c *Checker) getTablePairInfo(ctx context.Context) (info *tablePairInfo, er
 		pool := checker.NewWorkerPoolWithContext[job, int64](ctx, func(result int64) {
 			info.totalDataSize.Add(result)
 		})
-		for i := 0; i < concurrency; i++ {
+		for range concurrency {
 			pool.Go(func(ctx context.Context, job job) (int64, error) {
 				return conn.FetchTableEstimatedBytes(
 					ctx,
@@ -644,7 +644,7 @@ func (c *Checker) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	if result.Summary.Successful != result.Summary.Total {
 		rawResult, err = json.MarshalIndent(result, "\t", "\t")
 		if err != nil {
-			rawResult = []byte(fmt.Sprintf("marshal error %v", err))
+			rawResult = fmt.Appendf(nil, "marshal error %v", err)
 		}
 	}
 	c.result.Lock()
@@ -830,14 +830,14 @@ func (c *Checker) IsFreshTask() (bool, error) {
 }
 
 // Status implements Unit interface.
-func (c *Checker) Status(_ *binlog.SourceStatus) interface{} {
+func (c *Checker) Status(_ *binlog.SourceStatus) any {
 	c.result.RLock()
 	res := c.result.detail
 	c.result.RUnlock()
 
 	rawResult, err := json.Marshal(res)
 	if err != nil {
-		rawResult = []byte(fmt.Sprintf("marshal %+v error %v", res, err))
+		rawResult = fmt.Appendf(nil, "marshal %+v error %v", res, err)
 	}
 
 	return &pb.CheckStatus{
@@ -851,7 +851,7 @@ func (c *Checker) Status(_ *binlog.SourceStatus) interface{} {
 }
 
 // Error implements Unit interface.
-func (c *Checker) Error() interface{} {
+func (c *Checker) Error() any {
 	return &pb.CheckError{}
 }
 

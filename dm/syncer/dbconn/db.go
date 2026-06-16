@@ -88,7 +88,7 @@ func (conn *DBConn) QuerySQL(
 	tctx *tcontext.Context,
 	metricProxies *metrics.Proxies,
 	query string,
-	args ...interface{},
+	args ...any,
 ) (*sql.Rows, error) {
 	if conn == nil || conn.baseConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database base connection not valid")
@@ -104,7 +104,7 @@ func (conn *DBConn) QuerySQL(
 	ret, _, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
-		func(ctx *tcontext.Context) (interface{}, error) {
+		func(ctx *tcontext.Context) (any, error) {
 			startTime := time.Now()
 			ret, err := conn.baseConn.QuerySQL(ctx, query, args...)
 			if err == nil {
@@ -143,7 +143,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 	metricProxies *metrics.Proxies,
 	ignoreError func(error) bool,
 	queries []string,
-	args ...[]interface{},
+	args ...[]any,
 ) (int, error) {
 	failpoint.Inject("ExecuteSQLWithIgnoreFailed", func(val failpoint.Value) {
 		queryPattern := val.(string)
@@ -173,7 +173,7 @@ func (conn *DBConn) ExecuteSQLWithIgnore(
 	ret, numRetries, err := conn.baseConn.ApplyRetryStrategy(
 		tctx,
 		params,
-		func(ctx *tcontext.Context) (interface{}, error) {
+		func(ctx *tcontext.Context) (any, error) {
 			startTime := time.Now()
 			var histProxy *prometheus.HistogramVec
 			if metricProxies != nil {
@@ -218,7 +218,7 @@ func (conn *DBConn) ExecuteSQL(
 	tctx *tcontext.Context,
 	metricProxies *metrics.Proxies,
 	queries []string,
-	args ...[]interface{},
+	args ...[]any,
 ) (int, error) {
 	return conn.ExecuteSQLWithIgnore(tctx, metricProxies, nil, queries, args...)
 }
@@ -229,7 +229,7 @@ func (conn *DBConn) ExecuteSQLAutoSplit(
 	tctx *tcontext.Context,
 	metricProxies *metrics.Proxies,
 	queries []string,
-	args ...[]interface{},
+	args ...[]any,
 ) error {
 	if conn == nil {
 		// only happens in test
@@ -261,7 +261,7 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 			_, resetRetries, resetErr := conn.baseConn.ApplyRetryStrategy(
 				tctx,
 				resetRetryParams,
-				func(ctx *tcontext.Context) (interface{}, error) {
+				func(ctx *tcontext.Context) (any, error) {
 					err = conn.ResetConn(tctx)
 					return nil, err
 				})
@@ -330,7 +330,7 @@ func CreateConns(tctx *tcontext.Context, cfg *config.SubTaskConfig, dbCfg conn.S
 	if err != nil {
 		return nil, nil, err
 	}
-	for i := 0; i < count; i++ {
+	for range count {
 		baseConn, err := baseDB.GetBaseConn(tctx.Context())
 		if err != nil {
 			CloseBaseDB(tctx, baseDB)

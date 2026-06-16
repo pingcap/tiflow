@@ -470,11 +470,9 @@ func (v *DataValidator) errorProcessRoutine() {
 
 		if errors.Cause(err) != context.Canceled && !stopped {
 			stopped = true
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				v.stopInner()
-			}()
+			})
 		}
 	}
 	wg.Wait()
@@ -915,7 +913,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 	estimatedRowSize := int32(header.EventSize) / int32(len(ev.Rows))
 	for i := 0; i < len(ev.Rows); i += step {
-		var beforeImage, afterImage []interface{}
+		var beforeImage, afterImage []any
 		switch changeType {
 		case rowInsert:
 			afterImage = ev.Rows[i]
@@ -1043,7 +1041,7 @@ func (v *DataValidator) loadPersistedData() error {
 		// aggregate using target table just as worker did.
 		pendingChanges[validateTbl.targetTable.String()] = pendingTblChange
 		for _, row := range tblChange.rows {
-			var beforeImage, afterImage []interface{}
+			var beforeImage, afterImage []any
 			switch row.Tp {
 			case rowInsert:
 				afterImage = row.Data

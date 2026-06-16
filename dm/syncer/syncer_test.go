@@ -76,7 +76,7 @@ type (
 	mockBinlogEvents []mockBinlogEvent
 	mockBinlogEvent  struct {
 		typ  int
-		args []interface{}
+		args []any
 	}
 )
 
@@ -180,7 +180,7 @@ func (s *testSyncerSuite) generateEvents(binlogEvents mockBinlogEvents, c *check
 					Schema:     e.args[1].(string),
 					Table:      e.args[2].(string),
 					ColumnType: e.args[3].([]byte),
-					Rows:       e.args[4].([][]interface{}),
+					Rows:       e.args[4].([][]any),
 				},
 			}
 			var eventType replication.EventType
@@ -237,7 +237,7 @@ func (s *testSyncerSuite) TestSampleUnhandledEvents(c *check.C) {
 	entries := logs.All()
 	c.Assert(entries, check.HasLen, 2)
 
-	seen := make(map[string][]map[string]interface{}, len(entries))
+	seen := make(map[string][]map[string]any, len(entries))
 	for _, entry := range entries {
 		seen[entry.Message] = append(seen[entry.Message], entry.ContextMap())
 	}
@@ -337,33 +337,33 @@ func (s *testSyncerSuite) TestSelectTable(c *check.C) {
 	}
 	s.resetEventsGenerator(c)
 	events := mockBinlogEvents{
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"s1"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"s1", "create table s1.log(id int)"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"s1"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"s1"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"s1", "create table s1.log(id int)"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"s1"}},
 
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"mysql", "create table mysql.test(id int)"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"mysql", "test"}},
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"stest"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest", "create table stest.log(id int)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest", "create table stest.t(id int)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest", "create table stest.log2(id int)"}},
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "stest", "t", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}},
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(9), "stest", "log", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}},
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(10), "stest", "log2", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest", "log"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest", "t"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest", "log2"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"stest"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"mysql", "create table mysql.test(id int)"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"mysql", "test"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"stest"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest", "create table stest.log(id int)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest", "create table stest.t(id int)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest", "create table stest.log2(id int)"}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "stest", "t", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(9), "stest", "log", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(10), "stest", "log2", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest", "log"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest", "t"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest", "log2"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"stest"}},
 
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"t2"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"t2", "create table t2.log(id int)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"t2", "create table t2.log1(id int)"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"t2", "log"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"t2"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"t2"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"t2", "create table t2.log(id int)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"t2", "create table t2.log1(id int)"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"t2", "log"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"t2"}},
 
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"ptest1"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"ptest1", "create table ptest1.t1(id int)"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"ptest1"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"ptest1"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"ptest1", "create table ptest1.t1(id int)"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"ptest1"}},
 	}
 
 	allEvents := s.generateEvents(events, c)
@@ -417,18 +417,18 @@ func (s *testSyncerSuite) TestIgnoreDB(c *check.C) {
 
 	s.resetEventsGenerator(c)
 	events := mockBinlogEvents{
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"s1"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"s1"}},
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"s2"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"s2"}},
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"btest"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"btest"}},
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"b1"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"b1"}},
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"stest"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"stest"}},
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"st"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"st"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"s1"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"s1"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"s2"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"s2"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"btest"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"btest"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"b1"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"b1"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"stest"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"stest"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"st"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"st"}},
 	}
 
 	allEvents := s.generateEvents(events, c)
@@ -480,31 +480,31 @@ func (s *testSyncerSuite) TestIgnoreTable(c *check.C) {
 
 	s.resetEventsGenerator(c)
 	events := mockBinlogEvents{
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"s1"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"s1", "create table s1.log(id int)"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"s1"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"mysql", "create table mysql.test(id int)"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"mysql", "test"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"s1"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"s1", "create table s1.log(id int)"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"s1"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"mysql", "create table mysql.test(id int)"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"mysql", "test"}},
 
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"stest"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest", "create table stest.log(id int)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest", "create table stest.t(id int)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest", "create table stest.log2(id int)"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"stest"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest", "create table stest.log(id int)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest", "create table stest.t(id int)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest", "create table stest.log2(id int)"}},
 
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "stest", "t", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}},
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(9), "stest", "log", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}},
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(10), "stest", "log2", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "stest", "t", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(9), "stest", "log", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(10), "stest", "log2", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}},
 		// TODO event generator support generate an event with multiple tables DDL
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest", "log"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest", "t"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest", "log2"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"stest"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest", "log"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest", "t"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest", "log2"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"stest"}},
 
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"t2"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"t2", "create table t2.log(id int)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"t2", "create table t2.log1(id int)"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"t2", "log"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"t2"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"t2"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"t2", "create table t2.log(id int)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"t2", "create table t2.log1(id int)"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"t2", "log"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"t2"}},
 	}
 	allEvents := s.generateEvents(events, c)
 
@@ -584,49 +584,49 @@ func (s *testSyncerSuite) TestSkipDML(c *check.C) {
 
 	sqls := make([]SQLChecker, 0, 16)
 
-	evs := s.generateEvents([]mockBinlogEvent{{DBCreate, []interface{}{"foo"}}}, c)
+	evs := s.generateEvents([]mockBinlogEvent{{DBCreate, []any{"foo"}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: false, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{TableCreate, []interface{}{"foo", "create table foo.bar(id int)"}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{TableCreate, []any{"foo", "create table foo.bar(id int)"}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: false, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Write, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Write, []any{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(1)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Update, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(2)}, {int32(1)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Update, []any{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(2)}, {int32(1)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: true})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Delete, []interface{}{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(2)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Delete, []any{uint64(8), "foo", "bar", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(2)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: true})
 
-	evs = s.generateEvents([]mockBinlogEvent{{DBDrop, []interface{}{"foo1"}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{DBDrop, []any{"foo1"}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: false, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{DBCreate, []interface{}{"foo1"}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{DBCreate, []any{"foo1"}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: false, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{TableCreate, []interface{}{"foo1", "create table foo1.bar1(id int)"}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{TableCreate, []any{"foo1", "create table foo1.bar1(id int)"}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: false, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Write, []interface{}{uint64(9), "foo1", "bar1", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Write, []any{uint64(9), "foo1", "bar1", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(1)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Update, []interface{}{uint64(9), "foo1", "bar1", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(2)}, {int32(1)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Update, []any{uint64(9), "foo1", "bar1", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(2)}, {int32(1)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: true})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Delete, []interface{}{uint64(9), "foo1", "bar1", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(2)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Delete, []any{uint64(9), "foo1", "bar1", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(2)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: true})
 
-	evs = s.generateEvents([]mockBinlogEvent{{TableCreate, []interface{}{"foo1", "create table foo1.bar2(id int)"}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{TableCreate, []any{"foo1", "create table foo1.bar2(id int)"}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: false, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Write, []interface{}{uint64(10), "foo1", "bar2", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(1)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Write, []any{uint64(10), "foo1", "bar2", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(1)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: false})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Update, []interface{}{uint64(10), "foo1", "bar2", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(2)}, {int32(1)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Update, []any{uint64(10), "foo1", "bar2", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(2)}, {int32(1)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: true})
 
-	evs = s.generateEvents([]mockBinlogEvent{{Delete, []interface{}{uint64(10), "foo1", "bar2", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(2)}}}}}, c)
+	evs = s.generateEvents([]mockBinlogEvent{{Delete, []any{uint64(10), "foo1", "bar2", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(2)}}}}}, c)
 	sqls = append(sqls, SQLChecker{events: evs, isDML: true, expected: true})
 
 	p := parser.New()
@@ -684,10 +684,10 @@ func (s *testSyncerSuite) TestColumnMapping(c *check.C) {
 
 	// create db and tables
 	events := mockBinlogEvents{
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"stest_3"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest_3", "create table stest_3.log(id varchar(45))"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest_3", "create table stest_3.t_2(name varchar(45), id bigint)"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"stest_3", "create table stest_3.a(id int)"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"stest_3"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest_3", "create table stest_3.log(id varchar(45))"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest_3", "create table stest_3.t_2(name varchar(45), id bigint)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"stest_3", "create table stest_3.a(id int)"}},
 	}
 
 	createEvents := s.generateEvents(events, c)
@@ -696,19 +696,19 @@ func (s *testSyncerSuite) TestColumnMapping(c *check.C) {
 	type dml struct {
 		events []*replication.BinlogEvent
 		column []string
-		data   []interface{}
+		data   []any
 	}
 
 	dmls := make([]dml, 0, 3)
 
-	evs := s.generateEvents([]mockBinlogEvent{{typ: Write, args: []interface{}{uint64(8), "stest_3", "t_2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG}, [][]interface{}{{"ian", int32(10)}}}}}, c)
-	dmls = append(dmls, dml{events: evs, column: []string{"name", "id"}, data: []interface{}{"ian", int64(1<<59 | 3<<52 | 2<<44 | 10)}})
+	evs := s.generateEvents([]mockBinlogEvent{{typ: Write, args: []any{uint64(8), "stest_3", "t_2", []byte{mysql.MYSQL_TYPE_STRING, mysql.MYSQL_TYPE_LONG}, [][]any{{"ian", int32(10)}}}}}, c)
+	dmls = append(dmls, dml{events: evs, column: []string{"name", "id"}, data: []any{"ian", int64(1<<59 | 3<<52 | 2<<44 | 10)}})
 
-	evs = s.generateEvents([]mockBinlogEvent{{typ: Write, args: []interface{}{uint64(9), "stest_3", "log", []byte{mysql.MYSQL_TYPE_STRING}, [][]interface{}{{"10"}}}}}, c)
-	dmls = append(dmls, dml{events: evs, column: []string{"id"}, data: []interface{}{"test:10"}})
+	evs = s.generateEvents([]mockBinlogEvent{{typ: Write, args: []any{uint64(9), "stest_3", "log", []byte{mysql.MYSQL_TYPE_STRING}, [][]any{{"10"}}}}}, c)
+	dmls = append(dmls, dml{events: evs, column: []string{"id"}, data: []any{"test:10"}})
 
-	evs = s.generateEvents([]mockBinlogEvent{{typ: Write, args: []interface{}{uint64(10), "stest_3", "a", []byte{mysql.MYSQL_TYPE_LONG}, [][]interface{}{{int32(10)}}}}}, c)
-	dmls = append(dmls, dml{events: evs, column: []string{"id"}, data: []interface{}{int32(10)}})
+	evs = s.generateEvents([]mockBinlogEvent{{typ: Write, args: []any{uint64(10), "stest_3", "a", []byte{mysql.MYSQL_TYPE_LONG}, [][]any{{int32(10)}}}}}, c)
+	dmls = append(dmls, dml{events: evs, column: []string{"id"}, data: []any{int32(10)}})
 
 	dmlEvents := make([]*replication.BinlogEvent, 0, 15)
 	for _, dml := range dmls {
@@ -718,10 +718,10 @@ func (s *testSyncerSuite) TestColumnMapping(c *check.C) {
 	// drop tables and db
 	events = mockBinlogEvents{
 		// TODO event generator support generate an event with multiple tables DDL
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest_3", "log"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest_3", "t_2"}},
-		mockBinlogEvent{typ: TableDrop, args: []interface{}{"stest_3", "a"}},
-		mockBinlogEvent{typ: DBDrop, args: []interface{}{"stest_3"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest_3", "log"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest_3", "t_2"}},
+		mockBinlogEvent{typ: TableDrop, args: []any{"stest_3", "a"}},
+		mockBinlogEvent{typ: DBDrop, args: []any{"stest_3"}},
 	}
 	dropEvents := s.generateEvents(events, c)
 
@@ -832,19 +832,19 @@ func (s *testSyncerSuite) TestRun(c *check.C) {
 
 	syncer.reset()
 	events1 := mockBinlogEvents{
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"test_1"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"test_1", "create table test_1.t_1(id int primary key, name varchar(24))"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"test_1", "create table test_1.t_2(id int primary key, name varchar(24))"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"test_1"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"test_1", "create table test_1.t_1(id int primary key, name varchar(24))"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"test_1", "create table test_1.t_2(id int primary key, name varchar(24))"}},
 
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), "a"}}}},
-		mockBinlogEvent{typ: DDL, args: []interface{}{"test_1", "alter table test_1.t_1 add index index1(name)"}},
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(2), "b"}}}},
-		mockBinlogEvent{typ: Delete, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), "a"}}}},
-		mockBinlogEvent{typ: Update, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(2), "b"}, {int32(1), "b"}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(1), "a"}}}},
+		mockBinlogEvent{typ: DDL, args: []any{"test_1", "alter table test_1.t_1 add index index1(name)"}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(2), "b"}}}},
+		mockBinlogEvent{typ: Delete, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(1), "a"}}}},
+		mockBinlogEvent{typ: Update, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(2), "b"}, {int32(1), "b"}}}},
 
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"test_1", "create table test_1.t_3(id int primary key, name varchar(24))"}},
-		mockBinlogEvent{typ: DDL, args: []interface{}{"test_1", "alter table test_1.t_3 drop primary key"}},
-		mockBinlogEvent{typ: DDL, args: []interface{}{"test_1", "alter table test_1.t_3 add primary key(id, name)"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"test_1", "create table test_1.t_3(id int primary key, name varchar(24))"}},
+		mockBinlogEvent{typ: DDL, args: []any{"test_1", "alter table test_1.t_3 drop primary key"}},
+		mockBinlogEvent{typ: DDL, args: []any{"test_1", "alter table test_1.t_3 add primary key(id, name)"}},
 	}
 
 	mockStreamerProducer := &MockStreamProducer{s.generateEvents(events1, c)}
@@ -899,7 +899,7 @@ func (s *testSyncerSuite) TestRun(c *check.C) {
 		}, {
 			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(1), "a"}},
+			[][]any{{int64(1), "a"}},
 		}, {
 			flush,
 			nil,
@@ -911,16 +911,16 @@ func (s *testSyncerSuite) TestRun(c *check.C) {
 		}, {
 			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(2), "b"}},
+			[][]any{{int64(2), "b"}},
 		}, {
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int64(1)}},
+			[][]any{{int64(1)}},
 		}, {
 			// safe mode is true, will split update to delete + replace
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(2)}, {int64(1), "b"}},
+			[][]any{{int64(2)}, {int64(1), "b"}},
 		}, {
 			flush,
 			nil,
@@ -991,8 +991,8 @@ func (s *testSyncerSuite) TestRun(c *check.C) {
 	c.Assert(syncer.timezone.String(), check.Equals, "+01:00")
 
 	events2 := mockBinlogEvents{
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(3), "c"}}}},
-		mockBinlogEvent{typ: Delete, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(3), "c"}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(3), "c"}}}},
+		mockBinlogEvent{typ: Delete, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(3), "c"}}}},
 	}
 
 	ctx, cancel = context.WithCancel(context.Background())
@@ -1029,11 +1029,11 @@ func (s *testSyncerSuite) TestRun(c *check.C) {
 		{
 			dml,
 			[]string{"INSERT INTO `test_1`.`t_2` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(3), "c"}},
+			[][]any{{int64(3), "c"}},
 		}, {
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_2` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int64(3)}},
+			[][]any{{int64(3)}},
 		}, {
 			flush,
 			nil,
@@ -1165,12 +1165,12 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *check.C) {
 	syncer.reset()
 
 	events1 := mockBinlogEvents{
-		mockBinlogEvent{typ: DBCreate, args: []interface{}{"test_1"}},
-		mockBinlogEvent{typ: TableCreate, args: []interface{}{"test_1", "create table test_1.t_1(id int primary key, name varchar(24))"}},
+		mockBinlogEvent{typ: DBCreate, args: []any{"test_1"}},
+		mockBinlogEvent{typ: TableCreate, args: []any{"test_1", "create table test_1.t_1(id int primary key, name varchar(24))"}},
 
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), "a"}}}},
-		mockBinlogEvent{typ: Delete, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), "a"}}}},
-		mockBinlogEvent{typ: Update, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(2), "b"}, {int32(1), "b"}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(1), "a"}}}},
+		mockBinlogEvent{typ: Delete, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(1), "a"}}}},
+		mockBinlogEvent{typ: Update, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(2), "b"}, {int32(1), "b"}}}},
 	}
 
 	generatedEvents1 := s.generateEvents(events1, c)
@@ -1182,9 +1182,9 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *check.C) {
 
 	// check after safeModeExitLocation, safe mode is turned off
 	events2 := mockBinlogEvents{
-		mockBinlogEvent{typ: Write, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), "a"}}}},
-		mockBinlogEvent{typ: Delete, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(1), "a"}}}},
-		mockBinlogEvent{typ: Update, args: []interface{}{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]interface{}{{int32(2), "b"}, {int32(1), "b"}}}},
+		mockBinlogEvent{typ: Write, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(1), "a"}}}},
+		mockBinlogEvent{typ: Delete, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(1), "a"}}}},
+		mockBinlogEvent{typ: Update, args: []any{uint64(8), "test_1", "t_1", []byte{mysql.MYSQL_TYPE_LONG, mysql.MYSQL_TYPE_STRING}, [][]any{{int32(2), "b"}, {int32(1), "b"}}}},
 	}
 	generatedEvents2 := s.generateEvents(events2, c)
 
@@ -1248,28 +1248,28 @@ func (s *testSyncerSuite) TestExitSafeModeByConfig(c *check.C) {
 		}, {
 			dml,
 			[]string{"REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(1), "a"}},
+			[][]any{{int64(1), "a"}},
 		}, {
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int64(1)}},
+			[][]any{{int64(1)}},
 		}, {
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1", "REPLACE INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(2)}, {int64(1), "b"}},
+			[][]any{{int64(2)}, {int64(1), "b"}},
 		}, {
 			// start from this event, location passes safeModeExitLocation and safe mode should exit
 			dml,
 			[]string{"INSERT INTO `test_1`.`t_1` (`id`,`name`) VALUES (?,?)"},
-			[][]interface{}{{int64(1), "a"}},
+			[][]any{{int64(1), "a"}},
 		}, {
 			dml,
 			[]string{"DELETE FROM `test_1`.`t_1` WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int64(1)}},
+			[][]any{{int64(1)}},
 		}, {
 			dml,
 			[]string{"UPDATE `test_1`.`t_1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1"},
-			[][]interface{}{{int64(1), "b", int64(2)}},
+			[][]any{{int64(1), "b", int64(2)}},
 		}, {
 			flush,
 			nil,
@@ -1515,7 +1515,7 @@ func checkEventWithTableResult(c *check.C, syncer *Syncer, allEvents []*replicat
 }
 
 func executeSQLAndWait(expectJobNum int) {
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		time.Sleep(time.Second)
 
 		testJobs.RLock()
@@ -1531,7 +1531,7 @@ func executeSQLAndWait(expectJobNum int) {
 type expectJob struct {
 	tp       opType
 	sqlInJob []string
-	args     [][]interface{}
+	args     [][]any
 }
 
 var defaultDMLType = map[sqlmodel.RowChangeType]sqlmodel.DMLType{
@@ -1554,7 +1554,7 @@ func checkJobs(c *check.C, jobs []*job, expectJobs []*expectJob) {
 			if !job.safeMode {
 				sql, args := job.dml.GenSQL(defaultDMLType[job.dml.Type()])
 				c.Assert([]string{sql}, check.DeepEquals, expectJobs[i].sqlInJob)
-				c.Assert([][]interface{}{args}, check.DeepEquals, expectJobs[i].args)
+				c.Assert([][]any{args}, check.DeepEquals, expectJobs[i].args)
 				continue
 			}
 
@@ -1563,16 +1563,16 @@ func checkJobs(c *check.C, jobs []*job, expectJobs []*expectJob) {
 			case sqlmodel.RowChangeInsert:
 				sql, args := job.dml.GenSQL(sqlmodel.DMLReplace)
 				c.Assert([]string{sql}, check.DeepEquals, expectJobs[i].sqlInJob)
-				c.Assert([][]interface{}{args}, check.DeepEquals, expectJobs[i].args)
+				c.Assert([][]any{args}, check.DeepEquals, expectJobs[i].args)
 			case sqlmodel.RowChangeUpdate:
 				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
 				sql2, args2 := job.dml.GenSQL(sqlmodel.DMLReplace)
 				c.Assert([]string{sql, sql2}, check.DeepEquals, expectJobs[i].sqlInJob)
-				c.Assert([][]interface{}{args, args2}, check.DeepEquals, expectJobs[i].args)
+				c.Assert([][]any{args, args2}, check.DeepEquals, expectJobs[i].args)
 			case sqlmodel.RowChangeDelete:
 				sql, args := job.dml.GenSQL(sqlmodel.DMLDelete)
 				c.Assert([]string{sql}, check.DeepEquals, expectJobs[i].sqlInJob)
-				c.Assert([][]interface{}{args}, check.DeepEquals, expectJobs[i].args)
+				c.Assert([][]any{args}, check.DeepEquals, expectJobs[i].args)
 			}
 		}
 	}
@@ -1934,11 +1934,9 @@ func TestWaitBeforeRunExit(t *testing.T) {
 
 	wg := &sync.WaitGroup{}
 	errCh := make(chan error, 1)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		errCh <- syncer.Run(ctx)
-	}()
+	})
 	time.Sleep(time.Second) // wait s.Run start
 
 	// test s.Run will not exit unit caller cancel ctx or call s.runCancel

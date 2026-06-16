@@ -270,7 +270,7 @@ func (m *Dumpling) Update(context.Context, *config.SubTaskConfig) error {
 }
 
 // Status implements Unit.Status.
-func (m *Dumpling) Status(_ *binlog.SourceStatus) interface{} {
+func (m *Dumpling) Status(_ *binlog.SourceStatus) any {
 	// NOTE: try to add some status, like dumped file count
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -369,7 +369,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 			return nil, err1
 		}
 	}
-	dumpConfig.SessionParams = map[string]interface{}{
+	dumpConfig.SessionParams = map[string]any{
 		"time_zone": tz,
 	}
 

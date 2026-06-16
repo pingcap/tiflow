@@ -123,7 +123,7 @@ func (cp *LightningCheckpointList) RegisterCheckPoint(ctx context.Context) error
 	cp.logger.Info("initial checkpoint record",
 		zap.String("task", cp.taskName),
 		zap.String("source", cp.sourceName))
-	args := []interface{}{cp.taskName, cp.sourceName}
+	args := []any{cp.taskName, cp.sourceName}
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql}, args)
 	if err != nil {
@@ -145,7 +145,7 @@ func (cp *LightningCheckpointList) UpdateStatus(ctx context.Context, status ligh
 		zap.Stringer("status", status))
 	tctx := tcontext.NewContext(ctx, log.With(zap.String("job", "lightning-checkpoint")))
 	_, err = connection.ExecuteSQL(tctx, nil, "lightning-checkpoint", []string{sql},
-		[]interface{}{status.String(), cp.taskName, cp.sourceName})
+		[]any{status.String(), cp.taskName, cp.sourceName})
 	if err != nil {
 		return terror.WithScope(terror.Annotate(err, "update lightning status"), terror.ScopeDownstream)
 	}

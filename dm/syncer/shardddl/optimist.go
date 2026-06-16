@@ -217,7 +217,7 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 // DoneOperation marks the shard DDL lock operation as done.
 func (o *Optimist) DoneOperation(op optimism.Operation) error {
 	op.Done = true
-	_, _, err := etcdutil.DoTxnWithRepeatable(o.cli, func(_ *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+	_, _, err := etcdutil.DoTxnWithRepeatable(o.cli, func(_ *tcontext.Context, cli *clientv3.Client) (any, error) {
 		_, _, err := optimism.PutOperation(cli, false, op, 0)
 		return nil, err
 	})

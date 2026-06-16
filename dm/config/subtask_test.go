@@ -462,14 +462,12 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 	require.Equal(t, cfg.DumpIOTotalBytes.Load(), uint64(200))
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 
 			data, err := json.Marshal(cfg)
 			require.NoError(t, err)
-			jsonMap := make(map[string]interface{})
+			jsonMap := make(map[string]any)
 			err = json.Unmarshal(data, &jsonMap)
 			require.NoError(t, err)
 
@@ -487,11 +485,9 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 			_, hasDumpUUID := jsonMap["dump-uuid"]
 			require.False(t, hasUUID, "UUID should not be in JSON")
 			require.False(t, hasDumpUUID, "DumpUUID should not be in JSON")
-		}()
+		})
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 
 			newCfg, err := cfg.Clone()
 			require.NoError(t, err)
@@ -501,14 +497,12 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 			require.GreaterOrEqual(t, newCfg.DumpIOTotalBytes.Load(), uint64(200))
 			require.Equal(t, newCfg.UUID, uuid)
 			require.Equal(t, newCfg.DumpUUID, dumpUUID)
-		}()
+		})
 
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			cfg.IOTotalBytes.Add(1)
 			cfg.DumpIOTotalBytes.Add(1)
-		}()
+		})
 	}
 	wg.Wait()
 

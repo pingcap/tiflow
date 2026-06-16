@@ -222,7 +222,7 @@ func (g *CaseGenerator) genSQLs(ctx context.Context) {
 			for _, table := range g.tables {
 				rand.Shuffle(len(g.testCases), func(i, j int) { g.testCases[i], g.testCases[j] = g.testCases[j], g.testCases[i] })
 				casesNum := rand.Intn(len(g.testCases) + 1)
-				for i := 0; i < casesNum; i++ {
+				for i := range casesNum {
 					for _, sqls := range g.testCases[i] {
 						fullSqls := make(SQLs, len(sqls))
 						copy(fullSqls, sqls)

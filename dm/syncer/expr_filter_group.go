@@ -179,7 +179,7 @@ func (g *ExprFilterGroup) ResetExprs(table *filter.Table) {
 }
 
 // SkipDMLByExpression returns true when given row matches the expr, which means this row should be skipped.
-func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr expression.Expression, upstreamCols []*model.ColumnInfo) (bool, error) {
+func SkipDMLByExpression(ctx sessionctx.Context, row []any, expr expression.Expression, upstreamCols []*model.ColumnInfo) (bool, error) {
 	// TODO: add MetricsProxies
 	data, err := utils.AdjustBinaryProtocolForDatum(ctx, row, upstreamCols)
 	if err != nil {

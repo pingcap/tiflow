@@ -35,7 +35,7 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 		active     bool
 		err        error
 		sqls       []string
-		args       [][]interface{}
+		args       [][]any
 		location   binlog.Location
 		filename   = "mysql-bin.000001"
 		table1     = "table1"
@@ -60,7 +60,7 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 	)
 
 	// 1st round sharding DDL sync
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		active, err = meta.AddItem(items[i])
 		c.Assert(err, check.IsNil)
 		if i%3 == 0 {
@@ -104,7 +104,7 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 	}
 
 	// 2nd round sharding DDL sync
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		if i%3 == 0 {
 			continue
 		}
@@ -150,7 +150,7 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 	}
 
 	// 3rd round sharding DDL sync
-	for i := 0; i < 9; i++ {
+	for i := range 9 {
 		if i%3 != 2 {
 			continue
 		}
@@ -186,7 +186,7 @@ func (t *testShardMetaSuite) TestShardingMeta(c *check.C) {
 	c.Assert(sqls, check.HasLen, 1)
 	c.Assert(args, check.HasLen, 1)
 	c.Assert(sqls[0], check.Matches, "DELETE FROM .*")
-	c.Assert(args[0], check.DeepEquals, []interface{}{sourceID, tableID})
+	c.Assert(args[0], check.DeepEquals, []any{sourceID, tableID})
 }
 
 func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
@@ -208,7 +208,7 @@ func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
 	)
 
 	// 1st round sharding DDL sync
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		active, err = meta.AddItem(items[i])
 		c.Assert(err, check.IsNil)
 		if i%3 == 0 {
@@ -221,7 +221,7 @@ func (t *testShardMetaSuite) TestShardingMetaWrongSequence(c *check.C) {
 	c.Assert(meta.ResolveShardingDDL(), check.IsFalse)
 
 	// 2nd round sharding DDL sync
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if i%3 == 0 {
 			continue
 		}

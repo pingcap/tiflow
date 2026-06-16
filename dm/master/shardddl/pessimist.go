@@ -83,13 +83,11 @@ func (p *Pessimist) Start(pCtx context.Context, etcdCli *clientv3.Client) error 
 		return err
 	}
 	ctx, cancel := context.WithCancel(pCtx)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
+	p.wg.Go(func() {
 		// TODO: handle fatal error from run
 		//nolint:errcheck
 		p.run(ctx, etcdCli, rev1, rev2)
-	}()
+	})
 
 	p.closed = false // started now.
 	p.cancel = cancel
