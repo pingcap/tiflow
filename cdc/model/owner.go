@@ -261,7 +261,11 @@ func (p ProcessorsInfos) String() string {
 	var s strings.Builder
 	s.WriteString("{")
 	for id, sinfo := range p {
-		s.WriteString(fmt.Sprintf("%s: %+v,", id, *sinfo))
+		if sinfo == nil {
+			fmt.Fprintf(&s, "%s: nil,", id)
+		} else {
+			fmt.Fprintf(&s, "%s: %+v,", id, *sinfo)
+		}
 	}
 
 	s.WriteString("}")

@@ -193,9 +193,12 @@ func buildColumnList(names []string) string {
 	return b.String()
 }
 
-// placeHolder returns a string separated by comma
-// n must be greater or equal than 1, or the function will panic
+// placeHolder returns a string of n placeholders separated by comma.
+// It returns an empty string when n <= 0.
 func placeHolder(n int) string {
+	if n <= 0 {
+		return ""
+	}
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 1)
 	for i := range n {

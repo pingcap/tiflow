@@ -153,11 +153,8 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 		return errors.ErrCredentialNotFound.GenWithStackByArgs(errMsg)
 	}
 
-	allowed := false
 	serverCfg := config.GetGlobalServerConfig()
-	if slices.Contains(serverCfg.Security.ClientAllowedUser, username) {
-		allowed = true
-	}
+	allowed := slices.Contains(serverCfg.Security.ClientAllowedUser, username)
 	if !allowed {
 		errMsg := "The user is not allowed."
 		if username == "" {
