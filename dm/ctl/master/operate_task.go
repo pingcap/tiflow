@@ -127,7 +127,6 @@ func batchOperateTask(taskOp pb.TaskOp, batchSize int, sources []string, subTask
 	resultCh := make(chan *operateTaskResult, 1)
 	for i := 0; i < batchSize; i++ {
 		wg.Go(func() {
-
 			for name := range workCh {
 				taskResult := operateTaskResult{Task: name, Op: taskOp.String()}
 				taskOpResp, err := common.OperateTask(taskOp, name, sources)
