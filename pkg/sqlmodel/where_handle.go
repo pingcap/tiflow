@@ -44,6 +44,9 @@ type WhereHandle struct {
 }
 
 type generatedColumnExprCache struct {
+	// ExprContext is cached with the per-table WhereHandle. The handle is rebuilt
+	// after DDL invalidates the schema cache. Within one Syncer lifetime, DM uses
+	// a fixed downstream apply SQL mode/timezone for expression-index evaluation.
 	sourceTableInfo *model.TableInfo
 	columns         []*model.ColumnInfo
 	once            sync.Once

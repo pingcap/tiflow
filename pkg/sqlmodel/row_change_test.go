@@ -155,6 +155,14 @@ func (s *dpanicSuite) TestGenDelete() {
 			"DELETE FROM `db`.`tb2` WHERE `c` = ? AND `c2` IS ? LIMIT 1",
 			[]interface{}{1, nil},
 		},
+		{
+			"CREATE TABLE tb1 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			"CREATE TABLE tb2 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			[]interface{}{"Alice"},
+
+			"DELETE FROM `db`.`tb2` WHERE `name` = ? LIMIT 1",
+			[]interface{}{"Alice"},
+		},
 		// next 2 cases test using downstream table to generate WHERE
 		{
 			"CREATE TABLE tb1 (id INT PRIMARY KEY, user_id INT NOT NULL UNIQUE)",
@@ -235,6 +243,15 @@ func (s *dpanicSuite) TestGenUpdate() {
 
 			"UPDATE `db`.`tb2` SET `c` = ?, `c2` = ? WHERE `c` = ? AND `c2` = ? LIMIT 1",
 			[]interface{}{3, 4, 1, 2},
+		},
+		{
+			"CREATE TABLE tb1 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			"CREATE TABLE tb2 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			[]interface{}{"Alice"},
+			[]interface{}{"Bob"},
+
+			"UPDATE `db`.`tb2` SET `name` = ? WHERE `name` = ? LIMIT 1",
+			[]interface{}{"Bob", "Alice"},
 		},
 		// next 2 cases test generated column
 		{

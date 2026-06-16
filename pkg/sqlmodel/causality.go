@@ -267,12 +267,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		return values, false
 	}
 
-	visibleCols := make([]*timodel.ColumnInfo, 0, len(values))
-	for _, col := range cols {
-		if !col.Hidden {
-			visibleCols = append(visibleCols, col)
-		}
-	}
+	visibleCols := visibleColumns(cols)
 	if len(values) != len(visibleCols) {
 		return values, false
 	}

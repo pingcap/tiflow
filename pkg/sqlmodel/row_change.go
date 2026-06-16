@@ -239,16 +239,28 @@ func (r *RowChange) lazyInitWhereHandle() {
 	r.whereHandle = GetWhereHandle(r.sourceTableInfo, r.targetTableInfo)
 }
 
+func visibleColumns(columns []*timodel.ColumnInfo) []*timodel.ColumnInfo {
+	visible := make([]*timodel.ColumnInfo, 0, len(columns))
+	for _, column := range columns {
+		if !column.Hidden {
+			visible = append(visible, column)
+		}
+	}
+	return visible
+}
+
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitWhereHandle()
 
-	columns, values := r.sourceTableInfo.Columns, r.preValues
-
+	values := r.preValues
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
+	var columns []*timodel.ColumnInfo
 	if uniqueIndex != nil {
 		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
+	} else {
+		columns = visibleColumns(r.sourceTableInfo.Columns)
 	}
 
 	columnNames := make([]string, 0, len(columns))
