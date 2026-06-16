@@ -187,6 +187,7 @@ func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.Exp
 	vars := tiSessionCtx.GetSessionVars()
 	charset, collation := vars.GetCharsetInfo()
 	// TODO(joechenrh): Carry downstream charset/collation for collation-sensitive expression indexes.
+	// Remove this once DM initializes these session settings from downstream.
 	evalCtx := exprstatic.NewEvalContext(
 		exprstatic.WithLocation(vars.Location()),
 		exprstatic.WithSQLMode(vars.SQLMode),

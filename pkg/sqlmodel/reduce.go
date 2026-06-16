@@ -134,7 +134,8 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	)
 
 	if r.whereHandle.hiddenGeneratedColumnExprCache != nil {
-		// Use causality indexes only when both row images are fully materialized.
+		// Use expression indexes only when both row images are fully materialized.
+		// Otherwise fall back to visible-column unique indexes.
 		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
 		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
 		if preOK && postOK {
