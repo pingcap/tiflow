@@ -279,20 +279,6 @@ func mapCollation(collation string) (string, bool) {
 	return "", false
 }
 
-func filterColumnOptions(col *ast.ColumnDef, drop func(*ast.ColumnOption) bool) bool {
-	options := col.Options[:0]
-	changed := false
-	for _, opt := range col.Options {
-		if drop(opt) {
-			changed = true
-			continue
-		}
-		options = append(options, opt)
-	}
-	col.Options = options
-	return changed
-}
-
 func keepDefaultExpr(col *ast.ColumnDef, expr ast.ExprNode) bool {
 	expr = unwrapParentheses(expr)
 	if _, ok := expr.(ast.ValueExpr); ok {
@@ -332,16 +318,6 @@ func isJSONGenerated(col *ast.ColumnDef) bool {
 	return false
 }
 
-func unwrapParentheses(expr ast.ExprNode) ast.ExprNode {
-	for {
-		p, ok := expr.(*ast.ParenthesesExpr)
-		if !ok {
-			return expr
-		}
-		expr = p.Expr
-	}
-}
-
 func isZeroTimeDefault(expr ast.ExprNode) bool {
 	valExpr, ok := expr.(ast.ValueExpr)
 	if !ok {
@@ -378,15 +354,6 @@ func isZeroTimeString(value string) bool {
 		return false
 	}
 	return strings.Trim(rest[len("00:00:00."):], "0") == ""
-}
-
-func isTimeType(tp byte) bool {
-	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		return true
-	default:
-		return false
-	}
 }
 
 func isTextBlobOrJSON(ft *types.FieldType) bool {
