@@ -149,10 +149,7 @@ func (db *DBConfig) Clone() *DBConfig {
 		clone.MaxAllowedPacket = &packet
 	}
 
-	if db.Session != nil {
-		clone.Session = make(map[string]string, len(db.Session))
-		maps.Copy(clone.Session, db.Session)
-	}
+	clone.Session = maps.Clone(db.Session)
 
 	clone.Security = db.Security.Clone()
 

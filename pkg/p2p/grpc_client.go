@@ -250,9 +250,8 @@ func (c *grpcMessageClient) runTx(ctx context.Context, stream MessageClientStrea
 
 // retrySending retries sending messages when the gRPC stream is re-established.
 func (c *grpcMessageClient) retrySending(ctx context.Context, stream MessageClientStream) error {
-	topicsCloned := make(map[string]*topicEntry)
 	c.topicMu.RLock()
-	maps.Copy(topicsCloned, c.topics)
+	topicsCloned := maps.Clone(c.topics)
 	c.topicMu.RUnlock()
 
 	batcher := c.newSenderFn(stream)

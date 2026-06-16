@@ -45,8 +45,7 @@ func TestCheckingItems(t *testing.T) {
 	require.Empty(t, FilterCheckingItems(ignoredCheckingItems))
 
 	// ignore shard checking items
-	checkingItems := make(map[string]string)
-	maps.Copy(checkingItems, AllCheckingItems)
+	checkingItems := maps.Clone(AllCheckingItems)
 	delete(checkingItems, AllChecking)
 
 	require.Equal(t, checkingItems, FilterCheckingItems(ignoredCheckingItems[:0]))

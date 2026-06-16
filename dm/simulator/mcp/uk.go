@@ -67,9 +67,7 @@ func (uk *UniqueKey) SetRowID(rowID int) {
 func (uk *UniqueKey) GetValue() map[string]any {
 	uk.RLock()
 	defer uk.RUnlock()
-	result := make(map[string]any)
-	maps.Copy(result, uk.value)
-	return result
+	return maps.Clone(uk.value)
 }
 
 // GetValueHash return hash for values.
@@ -107,9 +105,8 @@ func (uk *UniqueKey) Clone() *UniqueKey {
 	defer uk.RUnlock()
 	result := &UniqueKey{
 		rowID: uk.rowID,
-		value: map[string]any{},
+		value: maps.Clone(uk.value),
 	}
-	maps.Copy(result.value, uk.value)
 	return result
 }
 

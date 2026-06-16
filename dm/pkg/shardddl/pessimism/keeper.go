@@ -85,8 +85,7 @@ func (lk *LockKeeper) Locks() map[string]*Lock {
 	lk.mu.RLock()
 	defer lk.mu.RUnlock()
 
-	locks := make(map[string]*Lock, len(lk.locks))
-	maps.Copy(locks, lk.locks)
+	locks := maps.Clone(lk.locks)
 	return locks
 }
 

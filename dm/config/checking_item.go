@@ -130,8 +130,7 @@ func SupportCheckingItems() string {
 
 // FilterCheckingItems filters ignored items from all checking items.
 func FilterCheckingItems(ignoredItems []string) map[string]string {
-	checkingItems := make(map[string]string)
-	maps.Copy(checkingItems, AllCheckingItems)
+	checkingItems := maps.Clone(AllCheckingItems)
 	delete(checkingItems, AllChecking)
 
 	for _, item := range ignoredItems {

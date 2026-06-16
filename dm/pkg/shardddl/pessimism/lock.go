@@ -137,8 +137,7 @@ func (l *Lock) Ready() map[string]bool {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
-	ret := make(map[string]bool, len(l.ready))
-	maps.Copy(ret, l.ready)
+	ret := maps.Clone(l.ready)
 	return ret
 }
 
