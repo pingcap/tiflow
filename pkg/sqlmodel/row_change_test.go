@@ -198,6 +198,19 @@ func (s *dpanicSuite) TestGenDelete() {
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `id` = ? LIMIT 1", sql)
 	s.Equal([]interface{}{1}, args)
 
+	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"b INT UNIQUE, "+
+		"c INT, "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+	hiddenA := expressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
+	change = NewRowChange(source, nil, []interface{}{"Alice", 1, 9}, nil, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLDelete)
+	s.Equal("DELETE FROM `db`.`tb1` WHERE `b` = ? LIMIT 1", sql)
+	s.Equal([]interface{}{1}, args)
+
+	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
 	change = NewRowChange(source, nil, nil, []interface{}{3, 4}, sourceTI, nil, nil)
 	s.Panics(func() {
 		change.GenSQL(DMLDelete)

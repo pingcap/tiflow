@@ -186,6 +186,45 @@ func TestPrimaryOrUniqueKeyUpdatedInterleavedHiddenColumn(t *testing.T) {
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 }
 
+func TestPrimaryOrUniqueKeyUpdatedUniqueAfterHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"b INT NOT NULL UNIQUE, "+
+		"c VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+
+	hiddenA := expressionIndexColumnName(t, sourceTI, "uk_a")
+	reorderColumnsByName(t, sourceTI, "a", hiddenA, "b", "c")
+
+	change := NewRowChange(source, nil,
+		[]any{"Alice", 1, "old"},
+		[]any{"Alice", 2, "old"},
+		sourceTI, nil, nil)
+	require.NotPanics(t, func() {
+		require.True(t, change.IsIdentityUpdated())
+	})
+	require.NotPanics(t, func() {
+		require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+	})
+
+	change = NewRowChange(source, nil,
+		[]any{"Alice", 1, "old"},
+		[]any{"Alice", 1, "new"},
+		sourceTI, nil, nil)
+	require.NotPanics(t, func() {
+		require.False(t, change.IsIdentityUpdated())
+	})
+	require.NotPanics(t, func() {
+		require.Equal(t, []any{1}, change.RowIdentity())
+	})
+	require.NotPanics(t, func() {
+		require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+	})
+}
+
 func TestPrimaryOrUniqueKeyUpdatedExpressionIndexMaterializeFailure(t *testing.T) {
 	t.Parallel()
 

@@ -211,7 +211,8 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	causalityIndexes := r.whereHandle.causalityIdxs
 	if len(causalityIndexes) == 0 {
 		// No causality index: use the whole row.
-		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
+		columns := r.whereHandle.rowMapper.columnsForValues(r.sourceTableInfo.Columns, values)
+		return []string{genKeyString(sourceTable.String(), columns, values)}
 	}
 
 	ret := make([]string, 0, len(causalityIndexes))
@@ -230,7 +231,14 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 			continue
 		}
 
-		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
+		cols, vals, ok := r.whereHandle.rowMapper.columnsAndValuesByIndex(
+			r.sourceTableInfo.Columns,
+			indexCols,
+			values,
+		)
+		if !ok {
+			continue
+		}
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
 		key := genKeyString(sourceTable.String(), cols, truncVals)
@@ -243,7 +251,8 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 	if len(ret) == 0 {
 		// No index key was generated; fall back to the whole row.
-		return []string{genKeyString(sourceTable.String(), r.sourceTableInfo.Columns, values)}
+		columns := r.whereHandle.rowMapper.columnsForValues(r.sourceTableInfo.Columns, values)
+		return []string{genKeyString(sourceTable.String(), columns, values)}
 	}
 
 	return ret
@@ -258,7 +267,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 	}
 
 	cols := r.sourceTableInfo.Columns
-	if len(values) >= len(cols) {
+	if r.whereHandle.rowMapper.isFullValues(values) {
 		return values, true
 	}
 
@@ -267,7 +276,7 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		return values, false
 	}
 
-	visibleCols := visibleColumns(cols)
+	visibleCols := r.whereHandle.rowMapper.visibleColumns
 	if len(values) != len(visibleCols) {
 		return values, false
 	}

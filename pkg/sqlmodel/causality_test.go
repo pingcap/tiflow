@@ -337,6 +337,51 @@ func TestCausalityKeysExpressionIndexMaterializeFailure(t *testing.T) {
 	require.Equal(t, []string{"1.id.db.tb1"}, keys)
 }
 
+func TestCausalityKeysMaterializeFailureVisibleUniqueAfterHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"b INT UNIQUE, "+
+		"c VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+
+	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+	reorderColumnsByName(t, ti, "a", hiddenA, "b", "c")
+	corruptHiddenGeneratedExpr(t, ti)
+
+	change := NewRowChange(source, nil, nil, []any{"Alice", 7, "tail"}, ti, nil, nil)
+
+	var keys []string
+	require.NotPanics(t, func() {
+		keys = change.CausalityKeys()
+	})
+	require.Equal(t, []string{"7.b.db.tb1"}, keys)
+}
+
+func TestCausalityKeysMaterializeFailureWholeRowFallbackWithHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	ti := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"c VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+
+	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+	reorderColumnsByName(t, ti, "a", hiddenA, "c")
+	corruptHiddenGeneratedExpr(t, ti)
+
+	change := NewRowChange(source, nil, nil, []any{"Alice", "tail"}, ti, nil, nil)
+
+	var keys []string
+	require.NotPanics(t, func() {
+		keys = change.CausalityKeys()
+	})
+	require.Equal(t, []string{"Alice.a.tail.c.db.tb1"}, keys)
+}
+
 func corruptHiddenGeneratedExpr(t *testing.T, ti *timodel.TableInfo) {
 	t.Helper()
 

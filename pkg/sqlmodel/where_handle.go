@@ -41,18 +41,106 @@ type WhereHandle struct {
 	// causalityIdxs is a superset of UniqueIdxs and also includes expression indexes.
 	causalityIdxs                  []*model.IndexInfo
 	hiddenGeneratedColumnExprCache *generatedColumnExprCache
+	rowMapper                      rowValueMapper
+}
+
+type rowValueMapper struct {
+	visibleColumns              []*model.ColumnInfo
+	visibleOffsetByColumnOffset []int
+}
+
+func newRowValueMapper(columns []*model.ColumnInfo) rowValueMapper {
+	visibleColumns := make([]*model.ColumnInfo, 0, len(columns))
+	visibleOffsetByColumnOffset := make([]int, len(columns))
+	for i := range visibleOffsetByColumnOffset {
+		visibleOffsetByColumnOffset[i] = -1
+	}
+	for _, column := range columns {
+		if column.Hidden {
+			continue
+		}
+		visibleOffsetByColumnOffset[column.Offset] = len(visibleColumns)
+		visibleColumns = append(visibleColumns, column)
+	}
+	return rowValueMapper{
+		visibleColumns:              visibleColumns,
+		visibleOffsetByColumnOffset: visibleOffsetByColumnOffset,
+	}
+}
+
+func (m rowValueMapper) isFullValues(values []any) bool {
+	return len(values) == len(m.visibleOffsetByColumnOffset)
+}
+
+func (m rowValueMapper) columnsForValues(columns []*model.ColumnInfo, values []any) []*model.ColumnInfo {
+	if m.isFullValues(values) {
+		return columns
+	}
+	return m.visibleColumns
+}
+
+func (m rowValueMapper) columnsAndValuesByIndex(
+	columns []*model.ColumnInfo,
+	indexInfo *model.IndexInfo,
+	values []any,
+) ([]*model.ColumnInfo, []any, bool) {
+	cols := make([]*model.ColumnInfo, 0, len(indexInfo.Columns))
+	vals := make([]any, 0, len(indexInfo.Columns))
+	if values == nil {
+		return cols, vals, true
+	}
+	for _, column := range indexInfo.Columns {
+		if column.Offset < 0 || column.Offset >= len(columns) {
+			return nil, nil, false
+		}
+		offset, ok := m.valueOffset(column.Offset, values)
+		if !ok {
+			return nil, nil, false
+		}
+		cols = append(cols, columns[column.Offset])
+		vals = append(vals, values[offset])
+	}
+	return cols, vals, true
+}
+
+func (m rowValueMapper) valuesByIndex(indexInfo *model.IndexInfo, values []any) []any {
+	ret := make([]any, 0, len(indexInfo.Columns))
+	if values == nil {
+		return ret
+	}
+	for _, column := range indexInfo.Columns {
+		offset, ok := m.valueOffset(column.Offset, values)
+		if !ok {
+			return nil
+		}
+		ret = append(ret, values[offset])
+	}
+	return ret
+}
+
+func (m rowValueMapper) valueOffset(columnOffset int, values []any) (int, bool) {
+	if m.isFullValues(values) {
+		return columnOffset, columnOffset < len(values)
+	}
+	if len(values) != len(m.visibleColumns) ||
+		columnOffset < 0 ||
+		columnOffset >= len(m.visibleOffsetByColumnOffset) {
+		return 0, false
+	}
+	visibleOffset := m.visibleOffsetByColumnOffset[columnOffset]
+	return visibleOffset, visibleOffset >= 0 && visibleOffset < len(values)
 }
 
 type generatedColumnExprCache struct {
-	// ExprContext is cached with the per-table WhereHandle. The handle is rebuilt
-	// after DDL invalidates the schema cache. Within one Syncer lifetime, DM uses
-	// a fixed downstream apply SQL mode/timezone for expression-index evaluation.
 	sourceTableInfo *model.TableInfo
 	columns         []*model.ColumnInfo
 	once            sync.Once
-	exprCtx         *exprstatic.ExprContext
-	exprs           map[int]expression.Expression
-	ok              bool
+	// ExprContext is cached with the per-table WhereHandle. The handle is rebuilt
+	// after DDL invalidates the schema cache. Within one Syncer lifetime, DM uses
+	// a fixed downstream apply SQL mode/timezone for expression-index evaluation.
+	exprCtx *exprstatic.ExprContext
+	exprs   map[int]expression.Expression
+	ok      bool
 }
 
 func newGeneratedColumnExprCache(source *model.TableInfo) *generatedColumnExprCache {
@@ -80,10 +168,10 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 			if err != nil {
 				// Current causality callers cannot surface this error to the
 				// scheduler, so keep the existing degraded behavior: skip the
-				// hidden-column index. This can reduce causality, but after DM
-				// has tracked the DDL, a build failure usually means a
-				// schema/session mismatch that may also fail the downstream DML.
-				log.Warn("cannot build generated column expression, its index will be skipped for causality",
+				// table's hidden-column indexes. This can reduce causality, but
+				// after DM has tracked the DDL, a build failure usually means a
+				// schema/session mismatch that may also fail downstream DML.
+				log.Warn("cannot build generated column expression, hidden-column indexes will be skipped for causality",
 					zap.String("column", col.Name.O), zap.Error(err))
 				return
 			}
@@ -115,7 +203,9 @@ func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.Exp
 // GetWhereHandle calculates a WhereHandle by source/target TableInfo's indices,
 // columns and state. Other component can cache the result.
 func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
-	ret := WhereHandle{}
+	ret := WhereHandle{
+		rowMapper: newRowValueMapper(source.Columns),
+	}
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
@@ -238,8 +328,12 @@ func (h *WhereHandle) getWhereIdxByData(data []interface{}) *model.IndexInfo {
 	}
 	for i, idx := range h.UniqueIdxs {
 		ok := true
-		for _, idxCol := range idx.Columns {
-			if data[idxCol.Offset] == nil {
+		values := h.rowMapper.valuesByIndex(idx, data)
+		if len(values) != len(idx.Columns) {
+			ok = false
+		}
+		for _, value := range values {
+			if value == nil {
 				ok = false
 				break
 			}

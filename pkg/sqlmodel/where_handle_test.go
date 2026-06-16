@@ -218,6 +218,27 @@ CREATE TABLE t (
 	require.Nil(t, idx)
 }
 
+func TestGetWhereIdxByDataUniqueAfterHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	ti := mockTableInfo(t, "CREATE TABLE t ("+
+		"a VARCHAR(32), "+
+		"b INT UNIQUE, "+
+		"c INT, "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+
+	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+	reorderColumnsByName(t, ti, "a", hiddenA, "b", "c")
+
+	handle := GetWhereHandle(ti, ti)
+	idx := handle.getWhereIdxByData([]interface{}{"Alice", 1, nil})
+	require.NotNil(t, idx)
+	require.Equal(t, "b", idx.Columns[0].Name.L)
+
+	idx = handle.getWhereIdxByData([]interface{}{"Alice", nil, 1})
+	require.Nil(t, idx)
+}
+
 func TestGetWhereHandleExpressionIndex(t *testing.T) {
 	t.Parallel()
 

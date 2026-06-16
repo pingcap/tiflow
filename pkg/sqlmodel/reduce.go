@@ -62,11 +62,7 @@ func (r *RowChange) RowIdentity() []interface{} {
 		return targetVals
 	}
 
-	identityVals := make([]interface{}, 0, len(indexInfo.Columns))
-	for _, column := range indexInfo.Columns {
-		identityVals = append(identityVals, targetVals[column.Offset])
-	}
-	return identityVals
+	return r.whereHandle.rowMapper.valuesByIndex(indexInfo, targetVals)
 }
 
 // RowStrIdentity returns the identity of the row change as string slice
@@ -164,18 +160,8 @@ func (r *RowChange) identityValuesByIndex(
 	preValues []any,
 	postValues []any,
 ) ([]any, []any) {
-	pre := make([]any, 0, len(indexInfo.Columns))
-	post := make([]any, 0, len(indexInfo.Columns))
-
-	for _, column := range indexInfo.Columns {
-		if preValues != nil {
-			pre = append(pre, preValues[column.Offset])
-		}
-		if postValues != nil {
-			post = append(post, postValues[column.Offset])
-		}
-	}
-	return pre, post
+	return r.whereHandle.rowMapper.valuesByIndex(indexInfo, preValues),
+		r.whereHandle.rowMapper.valuesByIndex(indexInfo, postValues)
 }
 
 // genKey gens key by values e.g. "a.1.b".
