@@ -211,7 +211,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	causalityIndexes := r.whereHandle.causalityIdxs
 	if len(causalityIndexes) == 0 {
 		// No causality index: use the whole row.
-		columns := r.whereHandle.rowMapper.columnsForValues(r.sourceTableInfo.Columns, values)
+		columns := r.whereHandle.rowMapper.columnsForValues(values)
 		return []string{genKeyString(sourceTable.String(), columns, values)}
 	}
 
@@ -232,7 +232,6 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 		}
 
 		cols, vals := r.whereHandle.rowMapper.columnsAndValuesByIndex(
-			r.sourceTableInfo.Columns,
 			indexCols,
 			values,
 		)
@@ -248,7 +247,7 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 
 	if len(ret) == 0 {
 		// No index key was generated; fall back to the whole row.
-		columns := r.whereHandle.rowMapper.columnsForValues(r.sourceTableInfo.Columns, values)
+		columns := r.whereHandle.rowMapper.columnsForValues(values)
 		return []string{genKeyString(sourceTable.String(), columns, values)}
 	}
 

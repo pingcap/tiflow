@@ -45,6 +45,7 @@ type WhereHandle struct {
 }
 
 type rowValueMapper struct {
+	columns                     []*model.ColumnInfo
 	visibleColumns              []*model.ColumnInfo
 	visibleOffsetByColumnOffset []int
 }
@@ -63,6 +64,7 @@ func newRowValueMapper(columns []*model.ColumnInfo) rowValueMapper {
 		visibleColumns = append(visibleColumns, column)
 	}
 	return rowValueMapper{
+		columns:                     columns,
 		visibleColumns:              visibleColumns,
 		visibleOffsetByColumnOffset: visibleOffsetByColumnOffset,
 	}
@@ -72,15 +74,14 @@ func (m rowValueMapper) isFullValues(values []any) bool {
 	return len(values) == len(m.visibleOffsetByColumnOffset)
 }
 
-func (m rowValueMapper) columnsForValues(columns []*model.ColumnInfo, values []any) []*model.ColumnInfo {
+func (m rowValueMapper) columnsForValues(values []any) []*model.ColumnInfo {
 	if m.isFullValues(values) {
-		return columns
+		return m.columns
 	}
 	return m.visibleColumns
 }
 
 func (m rowValueMapper) columnsAndValuesByIndex(
-	columns []*model.ColumnInfo,
 	indexInfo *model.IndexInfo,
 	values []any,
 ) ([]*model.ColumnInfo, []any) {
@@ -88,7 +89,7 @@ func (m rowValueMapper) columnsAndValuesByIndex(
 	vals := make([]any, 0, len(indexInfo.Columns))
 	for _, column := range indexInfo.Columns {
 		offset := m.valueOffset(column.Offset, values)
-		cols = append(cols, columns[column.Offset])
+		cols = append(cols, m.columns[column.Offset])
 		vals = append(vals, values[offset])
 	}
 	return cols, vals

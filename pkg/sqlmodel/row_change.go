@@ -249,7 +249,6 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
 		columns, values = r.whereHandle.rowMapper.columnsAndValuesByIndex(
-			r.sourceTableInfo.Columns,
 			uniqueIndex,
 			values,
 		)
