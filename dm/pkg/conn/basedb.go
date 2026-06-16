@@ -116,8 +116,8 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 		net = config.Net
 	}
 	var dsn strings.Builder
-	dsn.WriteString(fmt.Sprintf("%s:%s@%s(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
-		config.User, config.Password, net, hostPort))
+	fmt.Fprintf(&dsn, "%s:%s@%s(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
+		config.User, config.Password, net, hostPort)
 
 	doFuncInClose := func() {}
 	if config.Security != nil {
