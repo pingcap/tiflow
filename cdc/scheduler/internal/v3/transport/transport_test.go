@@ -14,7 +14,6 @@
 package transport
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -30,8 +29,7 @@ func TestTransSendRecv(t *testing.T) {
 	cluster := p2p.NewMockCluster(t, 3)
 	defer cluster.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	var err error
@@ -93,8 +91,7 @@ func TestTransUnknownAddr(t *testing.T) {
 	cluster := p2p.NewMockCluster(t, 3)
 	defer cluster.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	var err error
@@ -118,8 +115,7 @@ func TestTransEmptyRecv(t *testing.T) {
 	cluster := p2p.NewMockCluster(t, 3)
 	defer cluster.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	var err error
@@ -143,8 +139,7 @@ func TestTransTwoRolesInOneNode(t *testing.T) {
 	cluster := p2p.NewMockCluster(t, 1)
 	defer cluster.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeedID := model.ChangeFeedID{Namespace: "test", ID: "test"}
 
 	for _, node := range cluster.Nodes {

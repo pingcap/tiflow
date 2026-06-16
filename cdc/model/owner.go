@@ -16,6 +16,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -257,14 +258,15 @@ type ProcessorsInfos map[CaptureID]*TaskStatus
 
 // String implements fmt.Stringer interface.
 func (p ProcessorsInfos) String() string {
-	s := "{"
+	var s strings.Builder
+	s.WriteString("{")
 	for id, sinfo := range p {
-		s += fmt.Sprintf("%s: %+v,", id, *sinfo)
+		s.WriteString(fmt.Sprintf("%s: %+v,", id, *sinfo))
 	}
 
-	s += "}"
+	s.WriteString("}")
 
-	return s
+	return s.String()
 }
 
 // ChangeFeedStatus stores information about a ChangeFeed

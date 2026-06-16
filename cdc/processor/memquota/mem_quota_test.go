@@ -59,18 +59,14 @@ func TestMemQuotaBlockAcquire(t *testing.T) {
 	m.Record(span, model.NewResolvedTs(2), 50)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := m.BlockAcquire(50)
 		require.NoError(t, err)
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		err := m.BlockAcquire(50)
 		require.NoError(t, err)
-	}()
+	})
 	m.Release(span, model.NewResolvedTs(1))
 	m.Release(span, model.NewResolvedTs(2))
 	wg.Wait()
@@ -87,37 +83,29 @@ func TestMemQuotaClose(t *testing.T) {
 	m.Record(span, model.NewResolvedTs(2), 100)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := m.BlockAcquire(50)
 		if err != nil {
 			require.ErrorIs(t, err, context.Canceled)
 		}
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		err := m.BlockAcquire(50)
 		if err != nil {
 			require.ErrorIs(t, err, context.Canceled)
 		}
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		err := m.BlockAcquire(50)
 		if err != nil {
 			require.ErrorIs(t, err, context.Canceled)
 		}
-	}()
+	})
 
 	// Randomly release some memory.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		m.Release(span, model.NewResolvedTs(2))
-	}()
+	})
 	m.Close()
 	wg.Wait()
 }
@@ -136,12 +124,10 @@ func TestMemQuotaRefund(t *testing.T) {
 
 	// Test notify the blocked acquire.
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := m.BlockAcquire(50)
 		require.NoError(t, err)
-	}()
+	})
 	m.Refund(50)
 	wg.Wait()
 }

@@ -78,7 +78,7 @@ type rangeLockEntry struct {
 	lockedRangeState LockedRangeState
 	// waiterSignalChs is a list of channels that are used to
 	// notify the waiter of this lock entry that the lock is released.
-	waiterSignalChs []chan<- interface{}
+	waiterSignalChs []chan<- any
 }
 
 func rangeLockEntryWithKey(key []byte) *rangeLockEntry {
@@ -407,7 +407,7 @@ func (l *RangeLock) getOverlappedLockEntries(startKey, endKey []byte, regionID u
 //   - If the current region's version is stale, it will return LockRangeStatusStale and the overlapping ranges to the caller.
 //   - If the current region's version is not stale, it will return LockRangeStatusWait and the overlapping ranges to the caller,
 //     and the caller should wait for the overlapping ranges to be released and retry to lock the rest of the range.
-func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersion uint64) (LockRangeResult, []<-chan interface{}) {
+func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersion uint64) (LockRangeResult, []<-chan any) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.stopped {
@@ -501,10 +501,10 @@ func (l *RangeLock) tryLockRange(startKey, endKey []byte, regionID, regionVersio
 		}, nil
 	}
 
-	var lockReleaseSignalChs []<-chan interface{}
+	var lockReleaseSignalChs []<-chan any
 
 	for _, r := range overlappedRangeLocks {
-		ch := make(chan interface{}, 1)
+		ch := make(chan any, 1)
 		lockReleaseSignalChs = append(lockReleaseSignalChs, ch)
 		r.waiterSignalChs = append(r.waiterSignalChs, ch)
 	}

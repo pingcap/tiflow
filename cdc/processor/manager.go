@@ -43,7 +43,7 @@ const (
 
 type command struct {
 	tp      commandTp
-	payload interface{}
+	payload any
 	done    chan<- error
 }
 
@@ -324,7 +324,7 @@ func (m *managerImpl) WriteDebugInfo(
 // sendCommands sends command to manager.
 // `done` is closed upon command completion or sendCommand returns error.
 func (m *managerImpl) sendCommand(
-	ctx context.Context, tp commandTp, payload interface{}, done chan<- error,
+	ctx context.Context, tp commandTp, payload any, done chan<- error,
 ) error {
 	cmd := &command{tp: tp, payload: payload, done: done}
 	select {
