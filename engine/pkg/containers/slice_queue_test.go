@@ -103,14 +103,12 @@ func TestSliceQueueConcurrentWriteAndRead(t *testing.T) {
 	q := NewSliceQueue[int]()
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		for i := range numElems {
 			q.Push(i)
 		}
 	})
 
 	wg.Go(func() {
-
 		counter := 0
 		for {
 			<-q.C

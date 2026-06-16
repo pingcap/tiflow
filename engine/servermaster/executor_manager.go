@@ -107,7 +107,6 @@ func (e *ExecutorManagerImpl) removeExecutorLocked(id model.ExecutorID) error {
 	// We use ttl mechanism to manage the executor's life cycle. So we can tolerate
 	// that a tombstone executor may be left in the database.
 	e.wg.Go(func() {
-
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 		defer cancel()
 

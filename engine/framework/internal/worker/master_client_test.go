@@ -92,7 +92,6 @@ func (h *masterClientTestHelper) PopHeartbeat(t *testing.T) *frameModel.Heartbea
 
 func (h *masterClientTestHelper) SimulateWorkerClose(timeout time.Duration) {
 	h.wg.Go(func() {
-
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 

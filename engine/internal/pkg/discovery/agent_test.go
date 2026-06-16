@@ -73,7 +73,6 @@ func TestAgent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-
 		err := agent.Run(ctx)
 		require.ErrorIs(t, err, context.Canceled)
 	})
