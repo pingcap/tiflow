@@ -37,7 +37,7 @@ func TestRollback(t *testing.T) {
 		expected = append(expected, i) // [4, 3, 2, 1, 0]
 	}
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		h.Add(FuncRollback{Name: fmt.Sprintf("test-%d", i), Fn: rf})
 	}
 	h.RollbackReverseOrder()
