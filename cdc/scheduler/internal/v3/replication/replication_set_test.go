@@ -784,8 +784,7 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 
 func clone(r *ReplicationSet) *ReplicationSet {
 	rClone := *r
-	rClone.Captures = make(map[string]Role)
-	maps.Copy(rClone.Captures, r.Captures)
+	rClone.Captures = maps.Clone(r.Captures)
 	return &rClone
 }
 
