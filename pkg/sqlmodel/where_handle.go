@@ -75,6 +75,11 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 		for _, col := range c.columns {
 			e, err := expression.ParseSimpleExprWithTableInfo(c.exprCtx, col.GeneratedExprString, c.sourceTableInfo)
 			if err != nil {
+				// Current causality callers cannot surface this error to the
+				// scheduler, so keep the existing degraded behavior: skip the
+				// hidden-column index. This can reduce causality, but after DM
+				// has tracked the DDL, a build failure usually means a
+				// schema/session mismatch that may also fail the downstream DML.
 				log.Warn("cannot build generated column expression, its index will be skipped for causality",
 					zap.String("column", col.Name.O), zap.Error(err))
 				return
