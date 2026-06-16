@@ -392,6 +392,7 @@ func (t *TaskConfig) ComputeConfigHash() (string, error) {
 	for _, c := range targetCheckTables {
 		hash = append(hash, []byte(c)...)
 	}
+	hash = append(hash, 0)
 	hash = append(hash, []byte(t.SyncpointChangefeed)...)
 
 	return fmt.Sprintf("%x", sha256.Sum256(hash)), nil
