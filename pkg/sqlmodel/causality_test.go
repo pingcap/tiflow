@@ -282,7 +282,7 @@ func TestCausalityKeysExpressionIndex(t *testing.T) {
 	require.Equal(t, []string{"2.id.db.tb1"}, keys)
 }
 
-func TestCausalityKeysExpressionIndexHiddenColumnBeforeVisibleColumn(t *testing.T) {
+func TestCausalityKeysInterleavedHiddenColumn(t *testing.T) {
 	t.Parallel()
 
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}

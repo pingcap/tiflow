@@ -163,7 +163,7 @@ func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 	}
 }
 
-func TestPrimaryOrUniqueKeyUpdatedExpressionIndexHiddenColumnBeforeVisibleColumn(t *testing.T) {
+func TestPrimaryOrUniqueKeyUpdatedInterleavedHiddenColumn(t *testing.T) {
 	t.Parallel()
 
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
