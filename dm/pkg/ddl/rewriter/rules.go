@@ -22,6 +22,9 @@ import (
 	tidbtypes "github.com/pingcap/tidb/pkg/types"
 )
 
+// maxVarcharLen keeps rewritten VARCHAR columns within TiDB's default maximum index length.
+// TiDB limits an index to 3072 bytes, which is 768 characters with 4-byte UTF-8 encoding.
+// See https://docs.pingcap.com/tidb/stable/tidb-limitations/#limitations-on-indexes.
 const maxVarcharLen = 768
 
 var defaultRules = []rule{
@@ -36,6 +39,7 @@ var defaultRules = []rule{
 	jsonGeneratedRule{},
 }
 
+// collationRule rewrites common MariaDB-only or unsupported charsets/collations to TiDB-supported ones.
 type collationRule struct{}
 
 func (r collationRule) Apply(node ast.Node) (bool, error) {
@@ -51,6 +55,7 @@ func (r collationRule) Apply(node ast.Node) (bool, error) {
 	}
 }
 
+// zeroTimestampRule removes zero date/time defaults that TiDB rejects.
 type zeroTimestampRule struct{}
 
 func (r zeroTimestampRule) Apply(node ast.Node) (bool, error) {
@@ -63,6 +68,7 @@ func (r zeroTimestampRule) Apply(node ast.Node) (bool, error) {
 	}), nil
 }
 
+// keyLengthRule caps oversized VARCHAR columns so indexes on them can fit TiDB's index length limit.
 type keyLengthRule struct{}
 
 func (r keyLengthRule) Apply(node ast.Node) (bool, error) {
@@ -77,6 +83,7 @@ func (r keyLengthRule) Apply(node ast.Node) (bool, error) {
 	return false, nil
 }
 
+// indexPrefixRule adds explicit prefix lengths for string and blob indexes that MariaDB allows to omit.
 type indexPrefixRule struct{}
 
 func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
@@ -121,6 +128,7 @@ func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 	return changed, nil
 }
 
+// integerWidthRule removes integer display widths that TiDB no longer preserves.
 type integerWidthRule struct{}
 
 func (r integerWidthRule) Apply(node ast.Node) (bool, error) {
@@ -135,6 +143,7 @@ func (r integerWidthRule) Apply(node ast.Node) (bool, error) {
 	return true, nil
 }
 
+// textBlobDefaultRule removes defaults from TEXT, BLOB, and JSON columns that TiDB rejects.
 type textBlobDefaultRule struct{}
 
 func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
@@ -147,6 +156,7 @@ func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
 	}), nil
 }
 
+// jsonCheckRule removes MariaDB JSON_VALID checks that duplicate JSON column validation.
 type jsonCheckRule struct{}
 
 func (r jsonCheckRule) Apply(node ast.Node) (bool, error) {
@@ -172,6 +182,7 @@ func (r jsonCheckRule) Apply(node ast.Node) (bool, error) {
 	}
 }
 
+// functionDefaultRule removes function defaults from column types where TiDB does not allow them.
 type functionDefaultRule struct{}
 
 func (r functionDefaultRule) Apply(node ast.Node) (bool, error) {
@@ -184,6 +195,7 @@ func (r functionDefaultRule) Apply(node ast.Node) (bool, error) {
 	}), nil
 }
 
+// jsonGeneratedRule removes generated expressions from JSON columns that TiDB rejects.
 type jsonGeneratedRule struct{}
 
 func (r jsonGeneratedRule) Apply(node ast.Node) (bool, error) {
