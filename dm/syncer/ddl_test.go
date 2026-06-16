@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	ddlrewriter "github.com/pingcap/tiflow/dm/pkg/ddl/rewriter"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -747,11 +748,6 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{
-		Flavor:              mysql.MySQLFlavor,
-		CollationCompatible: config.StrictCollationCompatible,
-	}, nil, nil)
-	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
 		Schema: "test",
@@ -760,7 +756,6 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 
 	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci"}
 	idAndCollationMap := map[int]string{46: "utf8mb4_bin", 277: "utf8mb4_vi_0900_ai_ci"}
-	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for i, statusVars := range statusVarsArray {
 		for j, sql := range sqls {
 			ddlInfo := &ddlInfo{
@@ -773,7 +768,17 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 			c.Assert(err, check.IsNil)
 			c.Assert(stmt, check.NotNil)
 			ddlInfo.stmtCache = stmt
-			ddlWorker.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
+			_, err = ddlrewriter.RewriteStmt(
+				ddlInfo.stmtCache,
+				ddlrewriter.WithStrictCollation(
+					statusVars,
+					charsetAndDefaultCollationMap,
+					idAndCollationMap,
+					ddlInfo.originDDL,
+					tctx.Logger,
+				),
+			)
+			c.Assert(err, check.IsNil)
 			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 			c.Assert(err, check.IsNil)
 			c.Assert(routedDDL, check.Equals, expectedSQLs[i][j])
@@ -827,11 +832,6 @@ func TestAdjustCollation(t *testing.T) {
 	}
 
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestAdjustTableCollation")))
-	syncer := NewSyncer(&config.SubTaskConfig{
-		Flavor:              mysql.MySQLFlavor,
-		CollationCompatible: config.StrictCollationCompatible,
-	}, nil, nil)
-	syncer.tctx = tctx
 	p := parser.New()
 	tab := &filter.Table{
 		Schema: "test",
@@ -840,7 +840,6 @@ func TestAdjustCollation(t *testing.T) {
 	statusVars := []byte{4, 0, 0, 0, 0, 46, 0}
 	charsetAndDefaultCollationMap := map[string]string{"utf8mb4": "utf8mb4_general_ci", "latin1": "latin1_swedish_ci"}
 	idAndCollationMap := map[int]string{46: "utf8mb4_bin"}
-	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
 	for i, sql := range sqls {
 		ddlInfo := &ddlInfo{
 			originDDL:    sql,
@@ -852,7 +851,17 @@ func TestAdjustCollation(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, stmt)
 		ddlInfo.stmtCache = stmt
-		ddlWorker.adjustCollation(ddlInfo, statusVars, charsetAndDefaultCollationMap, idAndCollationMap)
+		_, err = ddlrewriter.RewriteStmt(
+			ddlInfo.stmtCache,
+			ddlrewriter.WithStrictCollation(
+				statusVars,
+				charsetAndDefaultCollationMap,
+				idAndCollationMap,
+				ddlInfo.originDDL,
+				tctx.Logger,
+			),
+		)
+		require.NoError(t, err)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 		require.NoError(t, err)
 		require.Equal(t, expectedSQLs[i], routedDDL)

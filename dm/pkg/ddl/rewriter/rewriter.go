@@ -21,12 +21,38 @@ type rule interface {
 	Apply(ast.Node) (bool, error)
 }
 
-// RewriteStmt applies all rules to stmt in place.
-func RewriteStmt(stmt ast.StmtNode) (bool, error) {
-	if stmt == nil {
+type rewriteOptions struct {
+	rules []rule
+}
+
+// Option configures the AST rules used by RewriteStmt.
+type Option interface {
+	apply(*rewriteOptions)
+}
+
+type optionFunc func(*rewriteOptions)
+
+func (f optionFunc) apply(options *rewriteOptions) {
+	f(options)
+}
+
+// WithMariaDBCompatibility enables MariaDB compatibility AST rewrite rules.
+func WithMariaDBCompatibility() Option {
+	return optionFunc(func(options *rewriteOptions) {
+		options.rules = append(options.rules, mariaDBCompatibilityRules...)
+	})
+}
+
+// RewriteStmt applies enabled rules to stmt in place.
+func RewriteStmt(stmt ast.StmtNode, opts ...Option) (bool, error) {
+	options := rewriteOptions{}
+	for _, opt := range opts {
+		opt.apply(&options)
+	}
+	if stmt == nil || len(options.rules) == 0 {
 		return false, nil
 	}
-	visitor := &rewriteVisitor{rules: defaultRules}
+	visitor := &rewriteVisitor{rules: options.rules}
 	stmt.Accept(visitor)
 	return visitor.changed, visitor.err
 }

@@ -27,7 +27,7 @@ import (
 // See https://docs.pingcap.com/tidb/stable/tidb-limitations/#limitations-on-indexes.
 const maxVarcharLen = 768
 
-var defaultRules = []rule{
+var mariaDBCompatibilityRules = []rule{
 	collationRule{},
 	zeroTimestampRule{},
 	keyLengthRule{},

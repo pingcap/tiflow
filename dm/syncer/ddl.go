@@ -972,7 +972,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	if !qec.enableDDLRewrite {
 		return stmt, nil
 	}
-	changed, err := ddlrewriter.RewriteStmt(stmt)
+	changed, err := ddlrewriter.RewriteStmt(stmt, ddlrewriter.WithMariaDBCompatibility())
 	if err != nil {
 		return nil, terror.ErrRewriteSQL.Delegate(err, qec.originSQL)
 	}
@@ -1339,9 +1339,20 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 		targetTables: targetTables,
 	}
 
-	// "strict" will adjust collation
 	if ddl.collationCompatible == config.StrictCollationCompatible {
-		ddl.adjustCollation(ddlInfo, qec.eventStatusVars, ddl.charsetAndDefaultCollation, ddl.idAndCollationMap)
+		_, err := ddlrewriter.RewriteStmt(
+			ddlInfo.stmtCache,
+			ddlrewriter.WithStrictCollation(
+				qec.eventStatusVars,
+				ddl.charsetAndDefaultCollation,
+				ddl.idAndCollationMap,
+				ddlInfo.originDDL,
+				ddl.logger,
+			),
+		)
+		if err != nil {
+			return nil, terror.ErrRewriteSQL.Delegate(err, ddlInfo.originDDL)
+		}
 	}
 
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
@@ -1430,104 +1441,6 @@ func (ddl *Pessimist) clearOnlineDDL(tctx *tcontext.Context, targetTable *filter
 	}
 
 	return nil
-}
-
-// adjustCollation adds collation for create database and check create table.
-func (ddl *DDLWorker) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, charsetAndDefaultCollationMap map[string]string, idAndCollationMap map[int]string) {
-	switch createStmt := ddlInfo.stmtCache.(type) {
-	case *ast.CreateTableStmt:
-		if createStmt.ReferTable != nil {
-			return
-		}
-		ddl.adjustColumnsCollation(createStmt, charsetAndDefaultCollationMap)
-		var justCharset string
-		for _, tableOption := range createStmt.Options {
-			// already have 'Collation'
-			if tableOption.Tp == ast.TableOptionCollate {
-				return
-			}
-			if tableOption.Tp == ast.TableOptionCharset {
-				justCharset = tableOption.StrValue
-			}
-		}
-		if justCharset == "" {
-			ddl.logger.Warn("detect create table risk which use implicit charset and collation", zap.String("originSQL", ddlInfo.originDDL))
-			return
-		}
-		// just has charset, can add collation by charset and default collation map
-		collation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
-		if !ok {
-			ddl.logger.Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
-			return
-		}
-		ddl.logger.Info("detect create table risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
-		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collation})
-
-	case *ast.CreateDatabaseStmt:
-		var justCharset, collation string
-		var ok bool
-		var err error
-		for _, createOption := range createStmt.Options {
-			// already have 'Collation'
-			if createOption.Tp == ast.DatabaseOptionCollate {
-				return
-			}
-			if createOption.Tp == ast.DatabaseOptionCharset {
-				justCharset = createOption.Value
-			}
-		}
-
-		// just has charset, can add collation by charset and default collation map
-		if justCharset != "" {
-			collation, ok = charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
-			if !ok {
-				ddl.logger.Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
-				return
-			}
-			ddl.logger.Info("detect create database risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
-		} else {
-			// has no charset and collation
-			// add collation by server collation from binlog statusVars
-			collation, err = event.GetServerCollationByStatusVars(statusVars, idAndCollationMap)
-			if err != nil {
-				ddl.logger.Error("can not get charset server collation from binlog statusVars.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
-			}
-			if collation == "" {
-				ddl.logger.Error("get server collation from binlog statusVars is nil.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
-				return
-			}
-			// add collation
-			ddl.logger.Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
-		}
-		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
-	}
-}
-
-// adjustColumnsCollation adds column's collation.
-func (ddl *DDLWorker) adjustColumnsCollation(createStmt *ast.CreateTableStmt, charsetAndDefaultCollationMap map[string]string) {
-ColumnLoop:
-	for _, col := range createStmt.Cols {
-		for _, options := range col.Options {
-			// already have 'Collation'
-			if options.Tp == ast.ColumnOptionCollate {
-				continue ColumnLoop
-			}
-		}
-		fieldType := col.Tp
-		// already have 'Collation'
-		if fieldType.GetCollate() != "" {
-			continue
-		}
-		if fieldType.GetCharset() != "" {
-			// just have charset
-			collation, ok := charsetAndDefaultCollationMap[strings.ToLower(fieldType.GetCharset())]
-			if !ok {
-				ddl.logger.Warn("not found charset default collation for column.", zap.String("table", createStmt.Table.Name.String()), zap.String("column", col.Name.String()), zap.String("charset", strings.ToLower(fieldType.GetCharset())))
-				continue
-			}
-			col.Options = append(col.Options, &ast.ColumnOption{Tp: ast.ColumnOptionCollate, StrValue: collation})
-		}
-	}
 }
 
 type ddlInfo struct {
