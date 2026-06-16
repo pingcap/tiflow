@@ -14,6 +14,8 @@
 package sqlmodel
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/ddl"
@@ -214,4 +216,54 @@ CREATE TABLE t (
 	// no index available
 	idx = handle.getWhereIdxByData([]interface{}{1, nil, 3, nil})
 	require.Nil(t, idx)
+}
+
+func TestGetWhereIdxByDataNoRace(t *testing.T) {
+	t.Parallel()
+
+	createSQL := `
+CREATE TABLE t (
+	c1 INT,
+	c2 INT,
+	UNIQUE INDEX idx1 (c1),
+	UNIQUE INDEX idx2 (c2)
+)`
+	p := parser.New()
+	node, err := p.ParseOneStmt(createSQL, "", "")
+	require.NoError(t, err)
+	ti, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), node.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+
+	handle := GetWhereHandle(ti, ti)
+	checkIndex := func(data []interface{}, expected string) error {
+		idx := handle.getWhereIdxByData(data)
+		if idx == nil {
+			return fmt.Errorf("expected %s, got nil", expected)
+		}
+		if idx.Name.L != expected {
+			return fmt.Errorf("expected %s, got %s", expected, idx.Name.L)
+		}
+		return nil
+	}
+
+	const concurrency = 100
+	var wg sync.WaitGroup
+	errCh := make(chan error, concurrency*2)
+	for i := 0; i < concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := checkIndex([]interface{}{1, nil}, "idx1"); err != nil {
+				errCh <- err
+			}
+			if err := checkIndex([]interface{}{nil, 2}, "idx2"); err != nil {
+				errCh <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 }

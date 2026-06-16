@@ -130,7 +130,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 		}
 	}
 
-	for _, idx := range r.whereHandle.UniqueIdxs {
+	for _, idx := range r.whereHandle.getUniqueIdxs() {
 		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx {
 			continue
 		}
