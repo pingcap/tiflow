@@ -21,22 +21,12 @@ type rule interface {
 	Apply(ast.Node) (bool, error)
 }
 
-// Rewriter applies a fixed, ordered set of AST rules.
-type Rewriter struct {
-	rules []rule
-}
-
-// NewRewriter creates the default MariaDB compatibility AST rewriter.
-func NewRewriter() *Rewriter {
-	return &Rewriter{rules: append([]rule(nil), defaultRules...)}
-}
-
 // RewriteStmt applies all rules to stmt in place.
-func (r *Rewriter) RewriteStmt(stmt ast.StmtNode) (bool, error) {
-	if len(r.rules) == 0 || stmt == nil {
+func RewriteStmt(stmt ast.StmtNode) (bool, error) {
+	if stmt == nil {
 		return false, nil
 	}
-	visitor := &rewriteVisitor{rules: r.rules}
+	visitor := &rewriteVisitor{rules: defaultRules}
 	stmt.Accept(visitor)
 	return visitor.changed, visitor.err
 }

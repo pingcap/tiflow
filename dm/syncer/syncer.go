@@ -50,7 +50,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	ddlrewriter "github.com/pingcap/tiflow/dm/pkg/ddl/rewriter"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
@@ -267,7 +266,7 @@ type Syncer struct {
 	idAndCollationMap          map[int]string
 
 	ddlWorker            *DDLWorker
-	ddlRewriter          *ddlrewriter.Rewriter
+	enableDDLRewrite     bool
 	fetchBinlogLogger    *zap.Logger
 	unhandledEventLogger *zap.Logger
 }
@@ -535,9 +534,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
 
-	if strings.EqualFold(s.cfg.Flavor, mysql.MariaDBFlavor) {
-		s.ddlRewriter = ddlrewriter.NewRewriter()
-	}
+	s.enableDDLRewrite = strings.EqualFold(s.cfg.Flavor, mysql.MariaDBFlavor)
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
@@ -2773,10 +2770,10 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 type queryEventContext struct {
 	*eventContext
 
-	p           *parser.Parser // used parser
-	ddlSchema   string         // used schema
-	originSQL   string         // before split
-	ddlRewriter *ddlrewriter.Rewriter
+	p                *parser.Parser // used parser
+	ddlSchema        string         // used schema
+	originSQL        string         // before split
+	enableDDLRewrite bool
 	// split multi-schema change DDL into multiple one schema change DDL due to TiDB's limitation
 	splitDDLs      []string // after split before online ddl
 	appliedDDLs    []string // after onlineDDL apply if onlineDDL != nil
@@ -2962,14 +2959,14 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 	}
 	var err error
 	qec := &queryEventContext{
-		eventContext:    &ec,
-		ddlSchema:       string(ev.Schema),
-		originSQL:       utils.TrimCtrlChars(originSQL),
-		ddlRewriter:     s.ddlRewriter,
-		splitDDLs:       make([]string, 0),
-		appliedDDLs:     make([]string, 0),
-		sourceTbls:      make(map[string]map[string]struct{}),
-		eventStatusVars: ev.StatusVars,
+		eventContext:     &ec,
+		ddlSchema:        string(ev.Schema),
+		originSQL:        utils.TrimCtrlChars(originSQL),
+		enableDDLRewrite: s.enableDDLRewrite,
+		splitDDLs:        make([]string, 0),
+		appliedDDLs:      make([]string, 0),
+		sourceTbls:       make(map[string]map[string]struct{}),
+		eventStatusVars:  ev.StatusVars,
 	}
 	qec.p, err = event.GetParserForStatusVars(ev.StatusVars)
 	if err != nil {

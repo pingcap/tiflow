@@ -70,13 +70,11 @@ func (r keyLengthRule) Apply(node ast.Node) (bool, error) {
 	if !ok || col.Tp.GetFlen() <= maxVarcharLen {
 		return false, nil
 	}
-	switch col.Tp.GetType() {
-	case mysql.TypeVarchar, mysql.TypeVarString:
+	if tidbtypes.IsTypeVarchar(col.Tp.GetType()) {
 		col.Tp.SetFlen(maxVarcharLen)
 		return true, nil
-	default:
-		return false, nil
 	}
+	return false, nil
 }
 
 type indexPrefixRule struct{}
@@ -110,10 +108,11 @@ func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 				continue
 			}
 			switch {
-			case isTextOrBlob(col.Tp):
+			case types.IsTypeBlob(col.Tp.GetType()):
 				key.Length = 255
 				changed = true
-			case isVarcharOrChar(col.Tp) && col.Tp.GetFlen() > 0:
+			case (tidbtypes.IsTypeChar(col.Tp.GetType()) || tidbtypes.IsTypeVarchar(col.Tp.GetType())) &&
+				col.Tp.GetFlen() > 0:
 				key.Length = col.Tp.GetFlen()
 				changed = true
 			}
@@ -380,22 +379,4 @@ func isTimeType(tp byte) bool {
 
 func isTextBlobOrJSON(ft *types.FieldType) bool {
 	return types.IsTypeBlob(ft.GetType()) || ft.GetType() == mysql.TypeJSON
-}
-
-func isTextOrBlob(ft *types.FieldType) bool {
-	switch ft.GetType() {
-	case mysql.TypeTinyBlob, mysql.TypeMediumBlob, mysql.TypeBlob, mysql.TypeLongBlob:
-		return true
-	default:
-		return false
-	}
-}
-
-func isVarcharOrChar(ft *types.FieldType) bool {
-	switch ft.GetType() {
-	case mysql.TypeVarchar, mysql.TypeVarString, mysql.TypeString:
-		return true
-	default:
-		return false
-	}
 }

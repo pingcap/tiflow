@@ -82,7 +82,7 @@ type DDLWorker struct {
 	idAndCollationMap          map[int]string
 	baList                     *filter.Filter
 	foreignKeyChecksEnabled    bool
-	ddlRewriter                *ddlrewriter.Rewriter
+	enableDDLRewrite           bool
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
 	getDBInfoFromDownstream func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.DBInfo, error)
@@ -113,7 +113,7 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		idAndCollationMap:          syncer.idAndCollationMap,
 		baList:                     syncer.baList,
 		foreignKeyChecksEnabled:    config.IsForeignKeyChecksEnabled(syncer.cfg.To.Session),
-		ddlRewriter:                syncer.ddlRewriter,
+		enableDDLRewrite:           syncer.enableDDLRewrite,
 		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
 		trackDDL:                   syncer.trackDDL,
 		saveTablePoint:             syncer.saveTablePoint,
@@ -241,14 +241,14 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	}
 
 	qec := &queryEventContext{
-		eventContext:    &ec,
-		ddlSchema:       string(ev.Schema),
-		originSQL:       utils.TrimCtrlChars(originSQL),
-		ddlRewriter:     ddl.ddlRewriter,
-		splitDDLs:       make([]string, 0),
-		appliedDDLs:     make([]string, 0),
-		sourceTbls:      make(map[string]map[string]struct{}),
-		eventStatusVars: ev.StatusVars,
+		eventContext:     &ec,
+		ddlSchema:        string(ev.Schema),
+		originSQL:        utils.TrimCtrlChars(originSQL),
+		enableDDLRewrite: ddl.enableDDLRewrite,
+		splitDDLs:        make([]string, 0),
+		appliedDDLs:      make([]string, 0),
+		sourceTbls:       make(map[string]map[string]struct{}),
+		eventStatusVars:  ev.StatusVars,
 	}
 
 	defer func() {
@@ -969,10 +969,10 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 		return nil, nil
 	}
 	stmt = stmts[0]
-	if qec.ddlRewriter == nil {
+	if !qec.enableDDLRewrite {
 		return stmt, nil
 	}
-	changed, err := qec.ddlRewriter.RewriteStmt(stmt)
+	changed, err := ddlrewriter.RewriteStmt(stmt)
 	if err != nil {
 		return nil, terror.ErrRewriteSQL.Delegate(err, qec.originSQL)
 	}

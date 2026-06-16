@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	ddlrewriter "github.com/pingcap/tiflow/dm/pkg/ddl/rewriter"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -423,11 +422,11 @@ func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 func TestParseOneStmtWithMariaDBASTRewriter(t *testing.T) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestParseOneStmtWithMariaDBASTRewriter")))
 	qec := &queryEventContext{
-		eventContext: &eventContext{tctx: tctx},
-		ddlSchema:    "test",
-		originSQL:    "CREATE TABLE t(c VARCHAR(100) DEFAULT current_timestamp())",
-		p:            parser.New(),
-		ddlRewriter:  ddlrewriter.NewRewriter(),
+		eventContext:     &eventContext{tctx: tctx},
+		ddlSchema:        "test",
+		originSQL:        "CREATE TABLE t(c VARCHAR(100) DEFAULT current_timestamp())",
+		p:                parser.New(),
+		enableDDLRewrite: true,
 	}
 
 	stmt, err := parseOneStmt(qec)
