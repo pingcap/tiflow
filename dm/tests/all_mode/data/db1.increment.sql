@@ -47,6 +47,17 @@ replace into t_expr_unique values (20, 'Alice');
 replace into t_expr_unique values (30, 'Bob');
 replace into t_expr_unique values (40, 'BOB');
 
+-- test unique functional index inside table definition
+/*!80013 create table t_expr_unique_inline (
+    id int primary key,
+    name varchar(64),
+    unique key uk_lower_name ((lower(name)))
+) */;
+/*!80013 replace into t_expr_unique_inline values (10, 'Eve') */;
+/*!80013 replace into t_expr_unique_inline values (20, 'Eve') */;
+/*!80013 replace into t_expr_unique_inline values (30, 'Frank') */;
+/*!80013 replace into t_expr_unique_inline values (40, 'FRANK') */;
+
 -- test alter database
 -- tidb doesn't support alter character set from latin1 to utf8m64 so we comment this now
 -- alter database all_mode CHARACTER SET = utf8mb4;
