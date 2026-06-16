@@ -1340,6 +1340,9 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 	}
 
 	if ddl.collationCompatible == config.StrictCollationCompatible {
+		// Keep the original best-effort strict collation behavior: the rule logs and skips when
+		// upstream collation metadata is incomplete. The error check is only for the common
+		// rewriter interface; the strict collation rule itself does not fail the DDL.
 		_, err := ddlrewriter.RewriteStmt(
 			ddlInfo.stmtCache,
 			ddlrewriter.WithStrictCollation(
