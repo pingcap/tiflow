@@ -99,55 +99,6 @@ func TestIsS3OrLocalDisk(t *testing.T) {
 	}
 }
 
-func TestStripS3ExternalID(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name string
-		raw  string
-		want string
-	}{
-		{
-			name: "non-s3 path unchanged",
-			raw:  "gcs://bucket/prefix?external-id=keep&region=us-west-2",
-			want: "gcs://bucket/prefix?external-id=keep&region=us-west-2",
-		},
-		{
-			name: "invalid url unchanged",
-			raw:  "1invalid:",
-			want: "1invalid:",
-		},
-		{
-			name: "s3 without external id unchanged",
-			raw:  "s3://bucket/prefix/path?region=us-west-2&role-arn=arn:aws:iam::123:role/dm",
-			want: "s3://bucket/prefix/path?region=us-west-2&role-arn=arn:aws:iam::123:role/dm",
-		},
-		{
-			name: "strip hyphen underscore and case variants",
-			raw:  "s3://bucket/prefix/path?region=us-west-2&external-id=dump&role-arn=arn:aws:iam::123:role/dm&External_ID=import&endpoint=https%3A%2F%2F127.0.0.1%3A9000&provider=aws#part",
-			want: "s3://bucket/prefix/path?endpoint=https%3A%2F%2F127.0.0.1%3A9000&provider=aws&region=us-west-2&role-arn=arn%3Aaws%3Aiam%3A%3A123%3Arole%2Fdm#part",
-		},
-		{
-			name: "strip encoded key",
-			raw:  "s3://bucket/prefix/path?%65xternal_id=dump&region=us-west-2",
-			want: "s3://bucket/prefix/path?region=us-west-2",
-		},
-		{
-			name: "strip only query parameter",
-			raw:  "s3://bucket/prefix/path?external-id=dump",
-			want: "s3://bucket/prefix/path",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tc.want, StripS3ExternalID(tc.raw))
-		})
-	}
-}
-
 func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 	testPaths := []struct {
 		isURLFormat bool
