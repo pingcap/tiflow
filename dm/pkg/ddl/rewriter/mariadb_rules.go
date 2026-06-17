@@ -80,7 +80,7 @@ func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 	return changed, nil
 }
 
-// textBlobDefaultRule removes non-NULL defaults from TEXT, BLOB, and JSON columns that TiDB rejects.
+// textBlobDefaultRule removes literal non-NULL defaults from TEXT, BLOB, and JSON columns that TiDB rejects.
 type textBlobDefaultRule struct{}
 
 func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
@@ -89,7 +89,7 @@ func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
 		return false, nil
 	}
 	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
-		return opt.Tp == ast.ColumnOptionDefaultValue && !isNullValueExpr(opt.Expr)
+		return opt.Tp == ast.ColumnOptionDefaultValue && isNonNullLiteralValueExpr(opt.Expr)
 	}), nil
 }
 
@@ -146,10 +146,32 @@ func isUnsupportedTimeDefault(col *ast.ColumnDef, expr ast.ExprNode) bool {
 }
 
 func rewriteJSONValueExpr(expr ast.ExprNode) (ast.ExprNode, bool) {
-	fn, ok := unwrapParentheses(expr).(*ast.FuncCallExpr)
-	if !ok || fn.FnName.L != "json_value" || len(fn.Args) != 2 {
+	visitor := &jsonValueExprRewriteVisitor{}
+	node, ok := expr.Accept(visitor)
+	if !ok {
 		return expr, false
 	}
+	newExpr, ok := node.(ast.ExprNode)
+	if !ok {
+		return expr, false
+	}
+	return newExpr, visitor.changed
+}
+
+type jsonValueExprRewriteVisitor struct {
+	changed bool
+}
+
+func (v *jsonValueExprRewriteVisitor) Enter(node ast.Node) (ast.Node, bool) {
+	return node, false
+}
+
+func (v *jsonValueExprRewriteVisitor) Leave(node ast.Node) (ast.Node, bool) {
+	fn, ok := node.(*ast.FuncCallExpr)
+	if !ok || fn.FnName.L != "json_value" || len(fn.Args) != 2 {
+		return node, true
+	}
+	v.changed = true
 	jsonExtract := &ast.FuncCallExpr{
 		FnName: ast.NewCIStr(ast.JSONExtract),
 		Args:   fn.Args,
@@ -160,13 +182,13 @@ func rewriteJSONValueExpr(expr ast.ExprNode) (ast.ExprNode, bool) {
 	}, true
 }
 
-func isNullValueExpr(expr ast.ExprNode) bool {
+func isNonNullLiteralValueExpr(expr ast.ExprNode) bool {
 	expr = unwrapParentheses(expr)
 	valExpr, ok := expr.(ast.ValueExpr)
 	if !ok {
 		return false
 	}
-	return valExpr.GetValue() == nil
+	return valExpr.GetValue() != nil
 }
 
 func isTextBlobOrJSON(ft *types.FieldType) bool {

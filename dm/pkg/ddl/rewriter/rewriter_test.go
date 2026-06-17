@@ -39,13 +39,31 @@ func TestRewriteStmtKeepsTimeFunctionDefaultOnTimeColumn(t *testing.T) {
 	require.True(t, hasColumnOption(findColumn(stmt, "ts"), ast.ColumnOptionDefaultValue))
 }
 
+func TestRewriteStmtTimeFunctionDefaultRules(t *testing.T) {
+	stmt, changed := rewriteCreateTable(t, `CREATE TABLE t(
+  dec_col DECIMAL(30,6) DEFAULT CURRENT_TIMESTAMP(6),
+  time_col TIME DEFAULT CURRENT_TIMESTAMP(),
+  date_col DATE DEFAULT CURRENT_TIMESTAMP(),
+  ok_date DATE DEFAULT CURRENT_DATE,
+  ok_datetime DATETIME DEFAULT CURRENT_DATE
+)`)
+	require.True(t, changed)
+
+	require.False(t, hasColumnOption(findColumn(stmt, "dec_col"), ast.ColumnOptionDefaultValue))
+	require.False(t, hasColumnOption(findColumn(stmt, "time_col"), ast.ColumnOptionDefaultValue))
+	require.False(t, hasColumnOption(findColumn(stmt, "date_col"), ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(findColumn(stmt, "ok_date"), ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(findColumn(stmt, "ok_datetime"), ast.ColumnOptionDefaultValue))
+}
+
 func TestRewriteStmtDefaultRules(t *testing.T) {
 	input := `CREATE TABLE t (
   id INT(11),
   txt TEXT DEFAULT 'x',
   txt_null TEXT DEFAULT NULL,
+  txt_expr TEXT DEFAULT(uuid()),
   v VARCHAR(800),
-  j JSON,
+  j JSON DEFAULT(json_object('now', now())),
   g JSON GENERATED ALWAYS AS (JSON_EXTRACT(j, '$.a')) VIRTUAL,
   zero_ts TIMESTAMP DEFAULT '0000-00-00 00:00:00',
   CHECK (json_valid(j)),
@@ -63,6 +81,8 @@ func TestRewriteStmtDefaultRules(t *testing.T) {
 	require.Equal(t, 800, findColumn(stmt, "v").Tp.GetFlen())
 	require.False(t, hasColumnOption(findColumn(stmt, "txt"), ast.ColumnOptionDefaultValue))
 	require.True(t, hasColumnOption(findColumn(stmt, "txt_null"), ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(findColumn(stmt, "txt_expr"), ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(findColumn(stmt, "j"), ast.ColumnOptionDefaultValue))
 	require.True(t, hasColumnOption(findColumn(stmt, "g"), ast.ColumnOptionGenerated))
 	require.True(t, hasColumnOption(findColumn(stmt, "zero_ts"), ast.ColumnOptionDefaultValue))
 	require.True(t, hasCheckConstraint(stmt))
@@ -84,13 +104,14 @@ func TestRewriteStmtSkipsExpressionIndexPrefix(t *testing.T) {
 
 func TestRewriteStmtRewritesParenthesizedJSONValueGeneratedColumn(t *testing.T) {
 	stmt, changed := rewriteCreateTable(t,
-		"CREATE TABLE t(j JSON, g VARCHAR(64) GENERATED ALWAYS AS ((JSON_VALUE(j, '$.a'))) VIRTUAL);",
+		"CREATE TABLE t(j JSON, g TIME GENERATED ALWAYS AS (CAST((JSON_VALUE(j, '$.a')) AS TIME)) VIRTUAL);",
 	)
 	require.True(t, changed)
 	expr := generatedExpr(findColumn(stmt, "g"))
 	require.NotNil(t, expr)
 	restored := strings.ToLower(restoreNode(t, expr))
 	require.Contains(t, restored, "json_unquote(json_extract")
+	require.NotContains(t, restored, "json_value")
 }
 
 func rewriteCreateTable(t *testing.T, sql string) (*ast.CreateTableStmt, bool) {
