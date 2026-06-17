@@ -58,6 +58,8 @@ func (t RowChangeType) String() string {
 type RowChange struct {
 	sourceTable *cdcmodel.TableName
 	targetTable *cdcmodel.TableName
+	// Optional source table name used only by CausalityKeys.
+	causalityKeySourceTable *cdcmodel.TableName
 
 	preValues  []interface{}
 	postValues []interface{}
@@ -213,6 +215,11 @@ func (r *RowChange) SetForeignKeyRelations(relations []ForeignKeyCausalityRelati
 	r.foreignKeyRelations = relations
 }
 
+// SetCausalityKeySourceTable sets the source table name used by CausalityKeys.
+func (r *RowChange) SetCausalityKeySourceTable(table *cdcmodel.TableName) {
+	r.causalityKeySourceTable = table
+}
+
 // GetApproximateDataSize returns internal approximateDataSize, it could be zero
 // if this value is not set.
 func (r *RowChange) GetApproximateDataSize() int64 {
@@ -237,11 +244,14 @@ func (r *RowChange) lazyInitWhereHandle() {
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitWhereHandle()
 
-	columns, values := r.sourceTableInfo.Columns, r.preValues
-
+	columns := r.whereHandle.rowMapper.visibleColumns
+	values := r.preValues
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
-		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
+		columns, values = r.whereHandle.rowMapper.columnsAndValuesByIndex(
+			uniqueIndex,
+			values,
+		)
 	}
 
 	columnNames := make([]string, 0, len(columns))
