@@ -15,7 +15,6 @@ package rewriter
 
 import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 )
 
 func filterColumnOptions(col *ast.ColumnDef, drop func(*ast.ColumnOption) bool) bool {
@@ -30,15 +29,6 @@ func filterColumnOptions(col *ast.ColumnDef, drop func(*ast.ColumnOption) bool) 
 	}
 	col.Options = options
 	return changed
-}
-
-func isTimeType(tp byte) bool {
-	switch tp {
-	case mysql.TypeDate, mysql.TypeDatetime, mysql.TypeTimestamp:
-		return true
-	default:
-		return false
-	}
 }
 
 func unwrapParentheses(expr ast.ExprNode) ast.ExprNode {
