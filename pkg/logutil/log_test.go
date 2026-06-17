@@ -236,10 +236,13 @@ func TestMySQLLogger(t *testing.T) {
 	defer cancel()
 	err = db.PingContext(ctx)
 	require.Error(t, err)
-	// Log: [ERROR] [packets.go:37] ["unexpected EOF"] [component="[mysql]"]
-	require.Contains(t, buffer.Stripped(), "[ERROR]")
-	require.Contains(t, buffer.Stripped(), "packets.go")
-	require.Contains(t, buffer.Stripped(), "unexpected EOF")
-	require.Contains(t, buffer.Stripped(), "[mysql]")
+	// Log: [ERROR] [<caller>] ["unexpected EOF"] [component="[mysql]"]
+	// Caller file depends on go-sql-driver/mysql version: v1.7.x logs from
+	// packets.go; v1.8.x logs from connection.go.
+	out := buffer.Stripped()
+	require.Contains(t, out, "[ERROR]")
+	require.Regexp(t, `(packets|connection)\.go`, out)
+	require.Contains(t, out, "unexpected EOF")
+	require.Contains(t, out, "[mysql]")
 	wg.Wait()
 }
