@@ -173,7 +173,7 @@ RowLoop:
 			originalValue,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
@@ -250,7 +250,7 @@ RowLoop:
 			oriChangedValues,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
@@ -304,7 +304,7 @@ RowLoop:
 			nil,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
 		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
 		dmls = append(dmls, rowChange)
