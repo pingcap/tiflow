@@ -445,10 +445,10 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
 	}
 
-	sessionVars := map[string]string{
+	vars := map[string]string{
 		"time_zone": s.timezone.String(),
 	}
-	s.sessCtx = utils.NewSessionCtx(sessionVars)
+	s.sessCtx = utils.NewSessionCtx(vars)
 	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
 
 	causalityVars := map[string]string{

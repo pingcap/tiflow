@@ -169,8 +169,11 @@ func (c *generatedColumnExprCache) getOrBuildExprs(
 func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.ExprContext {
 	vars := tiSessionCtx.GetSessionVars()
 	charset, collation := vars.GetCharsetInfo()
-	// TODO(joechenrh): Carry downstream charset/collation for collation-sensitive expression indexes.
-	// Remove this once DM initializes these session settings from downstream.
+	// TODO(joechenrh): Carry downstream charset/collation for collation-sensitive
+	// expression indexes. Until then, causality keys use the current session
+	// charset/collation and may not exactly match downstream unique-index
+	// comparison semantics. Remove this once DM initializes these session
+	// settings from downstream.
 	evalCtx := exprstatic.NewEvalContext(
 		exprstatic.WithLocation(vars.Location()),
 		exprstatic.WithSQLMode(vars.SQLMode),
