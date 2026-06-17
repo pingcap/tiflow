@@ -13,23 +13,17 @@
 
 package rewriter
 
-import (
-	"github.com/pingcap/tidb/pkg/parser/ast"
-)
+import "github.com/pingcap/tidb/pkg/parser/ast"
 
-func filterColumnOptions(
-	col *ast.ColumnDef,
-	filterFunc func(*ast.ColumnOption) (changed bool, drop bool),
-) bool {
+func filterColumnOptions(col *ast.ColumnDef, drop func(*ast.ColumnOption) bool) bool {
 	options := col.Options[:0]
 	changed := false
 	for _, opt := range col.Options {
-		c, drop := filterFunc(opt)
-		if !drop {
-			options = append(options, opt)
+		if drop(opt) {
+			changed = true
+			continue
 		}
-		changed = changed || c
-
+		options = append(options, opt)
 	}
 	col.Options = options
 	return changed

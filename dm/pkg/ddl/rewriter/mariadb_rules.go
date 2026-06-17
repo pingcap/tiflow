@@ -17,10 +17,10 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
-	tidbtypes "github.com/pingcap/tidb/pkg/types"
 )
 
-// maxStringIndexPrefixLen is TiDB's default maximum index length.
+// maxStringIndexPrefixLen keeps rewritten string index prefixes within TiDB's default maximum index length.
+// TiDB limits an index to 3072 bytes, which is 768 characters with 4-byte UTF-8 encoding.
 // See https://docs.pingcap.com/tidb/stable/tidb-limitations/#limitations-on-indexes.
 const maxStringIndexPrefixLen = 768
 
@@ -66,7 +66,7 @@ func (r secondaryIndexPrefixRule) Apply(node ast.Node) bool {
 			case types.IsTypeBlob(col.Tp.GetType()):
 				key.Length = defaultBlobIndexPrefixLen
 				changed = true
-			case tidbtypes.IsTypeChar(col.Tp.GetType()):
+			case types.IsTypeChar(col.Tp.GetType()):
 				if col.Tp.GetFlen() > maxStringIndexPrefixLen {
 					key.Length = maxStringIndexPrefixLen
 					changed = true
@@ -85,14 +85,9 @@ func (r columnDefaultValueRule) Apply(node ast.Node) bool {
 	if !ok || !isTextBlobOrJSON(col.Tp) {
 		return false
 	}
-	return filterColumnOptions(
-		col,
-		func(opt *ast.ColumnOption) (bool, bool) {
-			dropped := opt.Tp == ast.ColumnOptionDefaultValue &&
-				isNonNullLiteralValueExpr(opt.Expr)
-			return dropped, dropped
-		},
-	)
+	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
+		return opt.Tp == ast.ColumnOptionDefaultValue && isNonNullLiteralValueExpr(opt.Expr)
+	})
 }
 
 func isNonNullLiteralValueExpr(expr ast.ExprNode) bool {
@@ -112,14 +107,9 @@ func (r functionDefaultRule) Apply(node ast.Node) bool {
 	if !ok {
 		return false
 	}
-	return filterColumnOptions(
-		col,
-		func(opt *ast.ColumnOption) (bool, bool) {
-			dropped := opt.Tp == ast.ColumnOptionDefaultValue &&
-				isUnsupportedTimeDefault(col.Tp.GetType(), opt.Expr)
-			return dropped, dropped
-		},
-	)
+	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
+		return opt.Tp == ast.ColumnOptionDefaultValue && isUnsupportedTimeDefault(col.Tp.GetType(), opt.Expr)
+	})
 }
 
 func isUnsupportedTimeDefault(colType byte, expr ast.ExprNode) bool {
@@ -140,7 +130,7 @@ func isUnsupportedTimeDefault(colType byte, expr ast.ExprNode) bool {
 	}
 }
 
-// jsonValueRule rewrites MariaDB JSON_VALUE to supported JSON functions.
+// jsonValueRule rewrites MariaDB JSON_VALUE in generated column expressions to supported JSON functions.
 type jsonValueRule struct{}
 
 func (r jsonValueRule) Apply(node ast.Node) bool {
@@ -148,18 +138,17 @@ func (r jsonValueRule) Apply(node ast.Node) bool {
 	if !ok {
 		return false
 	}
-	return filterColumnOptions(
-		col,
-		func(opt *ast.ColumnOption) (bool, bool) {
-			if opt.Tp == ast.ColumnOptionGenerated {
-				if expr, ok := rewriteJSONValueExpr(opt.Expr); ok {
-					opt.Expr = expr
-					return true, false
-				}
-			}
-			return false, false
-		},
-	)
+	changed := false
+	for _, opt := range col.Options {
+		if opt.Tp != ast.ColumnOptionGenerated {
+			continue
+		}
+		if expr, ok := rewriteJSONValueExpr(opt.Expr); ok {
+			opt.Expr = expr
+			changed = true
+		}
+	}
+	return changed
 }
 
 func rewriteJSONValueExpr(expr ast.ExprNode) (ast.ExprNode, bool) {
