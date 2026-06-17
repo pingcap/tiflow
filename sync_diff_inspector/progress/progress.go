@@ -438,9 +438,26 @@ func (tpp *tableProgressPrinter) flush(stateIsChanged bool) {
 	// show bar
 	// 60 '='+'-'
 	coe := float32(tpp.progressTableNums*tpp.progress)/float32(tpp.tableNums*(tpp.total+1)) + float32(tpp.finishTableNums)/float32(tpp.tableNums)
+	// Clamp the coefficient: an underestimated total can drive coe above 1, which
+	// would make strings.Repeat receive a negative count (panic) and render >100%.
+	if coe > 1 {
+		coe = 1
+	}
+	if coe < 0 {
+		coe = 0
+	}
 	numLeft := int(60 * coe)
 	percent := int(100 * coe)
-	tpp.output.Write("Progress [%s>%s] %d%% %d/%d\n", strings.Repeat("=", numLeft), strings.Repeat("-", 60-numLeft), percent, tpp.progress, tpp.total)
+	// Mark the figures as estimated while any active table still has a growing
+	// (non-finalized) total, so users know the denominator may still change.
+	mark := ""
+	for _, e := range tpp.tableMap {
+		if !e.Value.(*TableProgress).totalStopUpdate {
+			mark = "~"
+			break
+		}
+	}
+	tpp.output.Write("Progress [%s>%s] %s%d%% %d/%s%d\n", strings.Repeat("=", numLeft), strings.Repeat("-", 60-numLeft), mark, percent, tpp.progress, mark, tpp.total)
 }
 
 var progress *tableProgressPrinter = nil
