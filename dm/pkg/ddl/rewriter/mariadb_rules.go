@@ -19,13 +19,15 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/types"
 )
 
-// maxStringIndexPrefixLen keeps rewritten string index prefixes within TiDB's default maximum index length.
-// TiDB limits an index to 3072 bytes, which is 768 characters with 4-byte UTF-8 encoding.
-// See https://docs.pingcap.com/tidb/stable/tidb-limitations/#limitations-on-indexes.
-const maxStringIndexPrefixLen = 768
+const (
+	// maxStringIndexPrefixLen keeps rewritten string index prefixes within TiDB's default maximum index length.
+	// TiDB limits an index to 3072 bytes, which is 768 characters with 4-byte UTF-8 encoding.
+	// See https://docs.pingcap.com/tidb/stable/tidb-limitations/#limitations-on-indexes.
+	maxStringIndexPrefixLen = 768
 
-// defaultBlobIndexPrefixLen follows a common MySQL/MariaDB prefix length for BLOB/TEXT indexes.
-const defaultBlobIndexPrefixLen = 255
+	// defaultBlobIndexPrefixLen follows a common MySQL/MariaDB prefix length for BLOB/TEXT indexes.
+	defaultBlobIndexPrefixLen = 255
+)
 
 var mariaDBCompatibilityRules = []rule{
 	secondaryIndexPrefixRule{},
@@ -86,7 +88,8 @@ func (r columnDefaultValueRule) Apply(node ast.Node) bool {
 		return false
 	}
 	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
-		return opt.Tp == ast.ColumnOptionDefaultValue && isNonNullLiteralValueExpr(opt.Expr)
+		return opt.Tp == ast.ColumnOptionDefaultValue &&
+			isNonNullLiteralValueExpr(opt.Expr)
 	})
 }
 
@@ -108,7 +111,8 @@ func (r functionDefaultRule) Apply(node ast.Node) bool {
 		return false
 	}
 	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
-		return opt.Tp == ast.ColumnOptionDefaultValue && isUnsupportedTimeDefault(col.Tp.GetType(), opt.Expr)
+		return opt.Tp == ast.ColumnOptionDefaultValue &&
+			isUnsupportedTimeDefault(col.Tp.GetType(), opt.Expr)
 	})
 }
 
@@ -130,7 +134,8 @@ func isUnsupportedTimeDefault(colType byte, expr ast.ExprNode) bool {
 	}
 }
 
-// jsonValueRule rewrites MariaDB JSON_VALUE in generated column expressions to supported JSON functions.
+// jsonValueRule rewrites MariaDB JSON_VALUE in generated column expressions
+// to supported JSON functions.
 type jsonValueRule struct{}
 
 func (r jsonValueRule) Apply(node ast.Node) bool {
@@ -140,12 +145,11 @@ func (r jsonValueRule) Apply(node ast.Node) bool {
 	}
 	changed := false
 	for _, opt := range col.Options {
-		if opt.Tp != ast.ColumnOptionGenerated {
-			continue
-		}
-		if expr, ok := rewriteJSONValueExpr(opt.Expr); ok {
-			opt.Expr = expr
-			changed = true
+		if opt.Tp == ast.ColumnOptionGenerated {
+			if expr, ok := rewriteJSONValueExpr(opt.Expr); ok {
+				opt.Expr = expr
+				changed = true
+			}
 		}
 	}
 	return changed
