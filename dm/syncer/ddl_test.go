@@ -768,7 +768,7 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 			c.Assert(err, check.IsNil)
 			c.Assert(stmt, check.NotNil)
 			ddlInfo.stmtCache = stmt
-			_, err = ddlrewriter.RewriteStmt(
+			ddlrewriter.RewriteStmt(
 				ddlInfo.stmtCache,
 				ddlrewriter.WithStrictCollation(
 					statusVars,
@@ -778,7 +778,6 @@ func (s *testDDLSuite) TestAdjustDatabaseCollation(c *check.C) {
 					tctx.Logger,
 				),
 			)
-			c.Assert(err, check.IsNil)
 			routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 			c.Assert(err, check.IsNil)
 			c.Assert(routedDDL, check.Equals, expectedSQLs[i][j])
@@ -851,7 +850,7 @@ func TestAdjustCollation(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, stmt)
 		ddlInfo.stmtCache = stmt
-		_, err = ddlrewriter.RewriteStmt(
+		ddlrewriter.RewriteStmt(
 			ddlInfo.stmtCache,
 			ddlrewriter.WithStrictCollation(
 				statusVars,
@@ -861,7 +860,6 @@ func TestAdjustCollation(t *testing.T) {
 				tctx.Logger,
 			),
 		)
-		require.NoError(t, err)
 		routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)
 		require.NoError(t, err)
 		require.Equal(t, expectedSQLs[i], routedDDL)

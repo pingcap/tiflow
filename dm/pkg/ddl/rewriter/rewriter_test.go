@@ -130,8 +130,7 @@ func TestRewriteStmtRewritesParenthesizedJSONValueGeneratedColumn(t *testing.T) 
 func rewriteCreateTable(t *testing.T, sql string) (*ast.CreateTableStmt, bool) {
 	t.Helper()
 	stmt := parseCreateTable(t, sql)
-	changed, err := RewriteStmt(stmt, WithMariaDBCompatibility())
-	require.NoError(t, err)
+	changed := RewriteStmt(stmt, WithMariaDBCompatibility())
 	return stmt, changed
 }
 

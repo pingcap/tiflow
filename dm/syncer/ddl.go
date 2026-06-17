@@ -969,17 +969,13 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 		return nil, nil
 	}
 	stmt = stmts[0]
-	if !qec.enableDDLRewrite {
-		return stmt, nil
-	}
-	changed, err := ddlrewriter.RewriteStmt(stmt, ddlrewriter.WithMariaDBCompatibility())
-	if err != nil {
-		return nil, terror.ErrRewriteSQL.Delegate(err, qec.originSQL)
-	}
-	if changed {
-		qec.tctx.L().Info("rewrite MariaDB DDL with AST compatibility rules",
-			zap.String("event", "query"),
-			zap.String("originSQL", qec.originSQL))
+	if qec.enableDDLRewrite {
+		changed := ddlrewriter.RewriteStmt(stmt, ddlrewriter.WithMariaDBCompatibility())
+		if changed {
+			qec.tctx.L().Info("rewrite MariaDB DDL with AST compatibility rules",
+				zap.String("event", "query"),
+				zap.String("originSQL", qec.originSQL))
+		}
 	}
 	return stmt, nil
 }
@@ -1340,10 +1336,7 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 	}
 
 	if ddl.collationCompatible == config.StrictCollationCompatible {
-		// Keep the original best-effort strict collation behavior: the rule logs and skips when
-		// upstream collation metadata is incomplete. The error check is only for the common
-		// rewriter interface; the strict collation rule itself does not fail the DDL.
-		_, err := ddlrewriter.RewriteStmt(
+		ddlrewriter.RewriteStmt(
 			ddlInfo.stmtCache,
 			ddlrewriter.WithStrictCollation(
 				qec.eventStatusVars,
@@ -1353,9 +1346,6 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 				ddl.logger,
 			),
 		)
-		if err != nil {
-			return nil, terror.ErrRewriteSQL.Delegate(err, ddlInfo.originDDL)
-		}
 	}
 
 	routedDDL, err := parserpkg.RenameDDLTable(ddlInfo.stmtCache, ddlInfo.targetTables)

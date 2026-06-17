@@ -20,8 +20,7 @@ import (
 	tidbtypes "github.com/pingcap/tidb/pkg/types"
 )
 
-// maxStringIndexPrefixLen keeps rewritten string index prefixes within TiDB's default maximum index length.
-// TiDB limits an index to 3072 bytes, which is 768 characters with 4-byte UTF-8 encoding.
+// maxStringIndexPrefixLen is TiDB's default maximum index length.
 // See https://docs.pingcap.com/tidb/stable/tidb-limitations/#limitations-on-indexes.
 const maxStringIndexPrefixLen = 768
 
@@ -29,22 +28,19 @@ const maxStringIndexPrefixLen = 768
 const defaultBlobIndexPrefixLen = 255
 
 var mariaDBCompatibilityRules = []rule{
-	// Do not add rules for DDL failures that can be solved by downstream SQL mode.
-	// DM's AdjustSQLModeCompatible already disables strict zero-date checks by default,
-	// and users can override the downstream session SQL mode when needed.
-	indexPrefixRule{},
-	textBlobDefaultRule{},
+	secondaryIndexPrefixRule{},
+	columnDefaultValueRule{},
 	functionDefaultRule{},
-	jsonGeneratedRule{},
+	jsonValueRule{},
 }
 
-// indexPrefixRule adds explicit prefix lengths for plain secondary indexes that TiDB rejects.
-type indexPrefixRule struct{}
+// secondaryIndexPrefixRule adds explicit prefix lengths for plain secondary indexes that TiDB rejects.
+type secondaryIndexPrefixRule struct{}
 
-func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
+func (r secondaryIndexPrefixRule) Apply(node ast.Node) bool {
 	stmt, ok := node.(*ast.CreateTableStmt)
 	if !ok {
-		return false, nil
+		return false
 	}
 	colMap := make(map[string]*ast.ColumnDef, len(stmt.Cols))
 	for _, col := range stmt.Cols {
@@ -59,10 +55,7 @@ func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 			continue
 		}
 		for _, key := range cons.Keys {
-			if key.Length > 0 {
-				continue
-			}
-			if key.Column == nil {
+			if key.Length > 0 || key.Column == nil {
 				continue
 			}
 			col := colMap[key.Column.Name.L]
@@ -73,64 +66,63 @@ func (r indexPrefixRule) Apply(node ast.Node) (bool, error) {
 			case types.IsTypeBlob(col.Tp.GetType()):
 				key.Length = defaultBlobIndexPrefixLen
 				changed = true
-			case (tidbtypes.IsTypeChar(col.Tp.GetType()) || tidbtypes.IsTypeVarchar(col.Tp.GetType())) &&
-				col.Tp.GetFlen() > maxStringIndexPrefixLen:
-				key.Length = maxStringIndexPrefixLen
-				changed = true
+			case tidbtypes.IsTypeChar(col.Tp.GetType()):
+				if col.Tp.GetFlen() > maxStringIndexPrefixLen {
+					key.Length = maxStringIndexPrefixLen
+					changed = true
+				}
 			}
 		}
 	}
-	return changed, nil
+	return changed
 }
 
-// textBlobDefaultRule removes literal non-NULL defaults from TEXT, BLOB, and JSON columns that TiDB rejects.
-type textBlobDefaultRule struct{}
+// columnDefaultValueRule removes literal non-NULL defaults from TEXT/BLOB/JSON columns.
+type columnDefaultValueRule struct{}
 
-func (r textBlobDefaultRule) Apply(node ast.Node) (bool, error) {
+func (r columnDefaultValueRule) Apply(node ast.Node) bool {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok || !isTextBlobOrJSON(col.Tp) {
-		return false, nil
+		return false
 	}
-	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
-		return opt.Tp == ast.ColumnOptionDefaultValue && isNonNullLiteralValueExpr(opt.Expr)
-	}), nil
+	return filterColumnOptions(
+		col,
+		func(opt *ast.ColumnOption) (bool, bool) {
+			dropped := opt.Tp == ast.ColumnOptionDefaultValue &&
+				isNonNullLiteralValueExpr(opt.Expr)
+			return dropped, dropped
+		},
+	)
+}
+
+func isNonNullLiteralValueExpr(expr ast.ExprNode) bool {
+	expr = unwrapParentheses(expr)
+	valExpr, ok := expr.(ast.ValueExpr)
+	if !ok {
+		return false
+	}
+	return valExpr.GetValue() != nil
 }
 
 // functionDefaultRule removes time-function defaults from column types that TiDB rejects.
 type functionDefaultRule struct{}
 
-func (r functionDefaultRule) Apply(node ast.Node) (bool, error) {
+func (r functionDefaultRule) Apply(node ast.Node) bool {
 	col, ok := node.(*ast.ColumnDef)
 	if !ok {
-		return false, nil
+		return false
 	}
-	return filterColumnOptions(col, func(opt *ast.ColumnOption) bool {
-		return opt.Tp == ast.ColumnOptionDefaultValue && isUnsupportedTimeDefault(col, opt.Expr)
-	}), nil
+	return filterColumnOptions(
+		col,
+		func(opt *ast.ColumnOption) (bool, bool) {
+			dropped := opt.Tp == ast.ColumnOptionDefaultValue &&
+				isUnsupportedTimeDefault(col.Tp.GetType(), opt.Expr)
+			return dropped, dropped
+		},
+	)
 }
 
-// jsonGeneratedRule rewrites MariaDB JSON_VALUE generated expressions to TiDB-supported JSON functions.
-type jsonGeneratedRule struct{}
-
-func (r jsonGeneratedRule) Apply(node ast.Node) (bool, error) {
-	col, ok := node.(*ast.ColumnDef)
-	if !ok {
-		return false, nil
-	}
-	changed := false
-	for _, opt := range col.Options {
-		if opt.Tp != ast.ColumnOptionGenerated {
-			continue
-		}
-		if expr, ok := rewriteJSONValueExpr(opt.Expr); ok {
-			opt.Expr = expr
-			changed = true
-		}
-	}
-	return changed, nil
-}
-
-func isUnsupportedTimeDefault(col *ast.ColumnDef, expr ast.ExprNode) bool {
+func isUnsupportedTimeDefault(colType byte, expr ast.ExprNode) bool {
 	expr = unwrapParentheses(expr)
 	fn, ok := expr.(*ast.FuncCallExpr)
 	if !ok {
@@ -138,14 +130,36 @@ func isUnsupportedTimeDefault(col *ast.ColumnDef, expr ast.ExprNode) bool {
 	}
 	switch fn.FnName.L {
 	case ast.CurrentTimestamp, ast.Now, ast.LocalTime, ast.LocalTimestamp:
-		return col.Tp.GetType() != mysql.TypeTimestamp && col.Tp.GetType() != mysql.TypeDatetime
+		return colType != mysql.TypeTimestamp && colType != mysql.TypeDatetime
 	case ast.CurrentDate:
-		return col.Tp.GetType() != mysql.TypeDate && col.Tp.GetType() != mysql.TypeDatetime
+		return colType != mysql.TypeDate && colType != mysql.TypeDatetime
 	case ast.CurrentTime:
-		return col.Tp.GetType() != mysql.TypeDuration
+		return colType != mysql.TypeDuration
 	default:
 		return false
 	}
+}
+
+// jsonValueRule rewrites MariaDB JSON_VALUE to supported JSON functions.
+type jsonValueRule struct{}
+
+func (r jsonValueRule) Apply(node ast.Node) bool {
+	col, ok := node.(*ast.ColumnDef)
+	if !ok {
+		return false
+	}
+	return filterColumnOptions(
+		col,
+		func(opt *ast.ColumnOption) (bool, bool) {
+			if opt.Tp == ast.ColumnOptionGenerated {
+				if expr, ok := rewriteJSONValueExpr(opt.Expr); ok {
+					opt.Expr = expr
+					return true, false
+				}
+			}
+			return false, false
+		},
+	)
 }
 
 func rewriteJSONValueExpr(expr ast.ExprNode) (ast.ExprNode, bool) {
@@ -183,15 +197,6 @@ func (v *jsonValueExprRewriteVisitor) Leave(node ast.Node) (ast.Node, bool) {
 		FnName: ast.NewCIStr(ast.JSONUnquote),
 		Args:   []ast.ExprNode{jsonExtract},
 	}, true
-}
-
-func isNonNullLiteralValueExpr(expr ast.ExprNode) bool {
-	expr = unwrapParentheses(expr)
-	valExpr, ok := expr.(ast.ValueExpr)
-	if !ok {
-		return false
-	}
-	return valExpr.GetValue() != nil
 }
 
 func isTextBlobOrJSON(ft *types.FieldType) bool {

@@ -17,8 +17,9 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 )
 
+// rule defines a rule to apply to AST nodes with best effort.
 type rule interface {
-	Apply(ast.Node) (bool, error)
+	Apply(ast.Node) bool
 }
 
 type rewriteOptions struct {
@@ -47,42 +48,31 @@ func WithMariaDBCompatibility() Option {
 // It is a best-effort compatibility layer for parsed AST nodes; parser failures and
 // DDL failures that can be handled by downstream session settings, such as SQL mode,
 // are intentionally left to the normal DM flow.
-func RewriteStmt(stmt ast.StmtNode, opts ...Option) (bool, error) {
+func RewriteStmt(stmt ast.StmtNode, opts ...Option) bool {
 	options := rewriteOptions{}
 	for _, opt := range opts {
 		opt.apply(&options)
 	}
 	if stmt == nil || len(options.rules) == 0 {
-		return false, nil
+		return false
 	}
 	visitor := &rewriteVisitor{rules: options.rules}
 	stmt.Accept(visitor)
-	return visitor.changed, visitor.err
+	return visitor.changed
 }
 
 type rewriteVisitor struct {
 	rules   []rule
 	changed bool
-	err     error
 }
 
 func (v *rewriteVisitor) Enter(node ast.Node) (ast.Node, bool) {
-	if v.err != nil {
-		return node, true
-	}
 	return node, false
 }
 
 func (v *rewriteVisitor) Leave(node ast.Node) (ast.Node, bool) {
-	if v.err != nil {
-		return node, false
-	}
 	for _, rule := range v.rules {
-		changed, err := rule.Apply(node)
-		if err != nil {
-			v.err = err
-			return node, false
-		}
+		changed := rule.Apply(node)
 		v.changed = v.changed || changed
 	}
 	return node, true

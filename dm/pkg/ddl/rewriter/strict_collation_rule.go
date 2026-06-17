@@ -53,14 +53,14 @@ type strictCollationRule struct {
 	logger                     log.Logger
 }
 
-func (r strictCollationRule) Apply(node ast.Node) (bool, error) {
+func (r strictCollationRule) Apply(node ast.Node) bool {
 	switch createStmt := node.(type) {
 	case *ast.CreateTableStmt:
-		return r.rewriteCreateTable(createStmt), nil
+		return r.rewriteCreateTable(createStmt)
 	case *ast.CreateDatabaseStmt:
-		return r.rewriteCreateDatabase(createStmt), nil
+		return r.rewriteCreateDatabase(createStmt)
 	default:
-		return false, nil
+		return false
 	}
 }
 

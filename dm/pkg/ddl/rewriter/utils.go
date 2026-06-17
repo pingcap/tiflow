@@ -17,15 +17,19 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 )
 
-func filterColumnOptions(col *ast.ColumnDef, drop func(*ast.ColumnOption) bool) bool {
+func filterColumnOptions(
+	col *ast.ColumnDef,
+	filterFunc func(*ast.ColumnOption) (changed bool, drop bool),
+) bool {
 	options := col.Options[:0]
 	changed := false
 	for _, opt := range col.Options {
-		if drop(opt) {
-			changed = true
-			continue
+		c, drop := filterFunc(opt)
+		if !drop {
+			options = append(options, opt)
 		}
-		options = append(options, opt)
+		changed = changed || c
+
 	}
 	col.Options = options
 	return changed
