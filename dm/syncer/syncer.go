@@ -170,6 +170,7 @@ type Syncer struct {
 	baList          *filter.Filter
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
+	causalityCtx    sessionctx.Context
 
 	foreignKeyRouteTopologyMu sync.Mutex
 	// foreignKeyRouteTopologyChecked records a successful task-level 1:1 route
@@ -444,18 +445,23 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return terror.ErrSyncerUnitGenBinlogEventFilter.Delegate(err)
 	}
 
-	vars := map[string]string{
+	sessionVars := map[string]string{
+		"time_zone": s.timezone.String(),
+	}
+	s.sessCtx = utils.NewSessionCtx(sessionVars)
+	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
+
+	causalityVars := map[string]string{
 		"time_zone": s.timezone.String(),
 	}
 	// Expression-index causality uses the downstream apply SQL mode.
 	for k, v := range s.cfg.To.Session {
 		if strings.EqualFold(k, "sql_mode") {
-			vars["sql_mode"] = v
+			causalityVars["sql_mode"] = v
 			break
 		}
 	}
-	s.sessCtx = utils.NewSessionCtx(vars)
-	s.exprFilterGroup = NewExprFilterGroup(s.tctx, s.sessCtx, s.cfg.ExprFilter)
+	s.causalityCtx = utils.NewSessionCtx(causalityVars)
 	// create an empty Tracker and will be initialized in `Run`
 	s.schemaTracker = schema.NewTracker()
 
