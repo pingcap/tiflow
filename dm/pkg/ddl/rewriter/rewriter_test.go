@@ -39,6 +39,19 @@ func TestRewriteStmtKeepsTimeFunctionDefaultOnTimeColumn(t *testing.T) {
 	require.True(t, hasColumnOption(findColumn(stmt, "ts"), ast.ColumnOptionDefaultValue))
 }
 
+func TestRewriteStmtKeepsZeroTimeDefaults(t *testing.T) {
+	stmt, changed := rewriteCreateTable(t, `CREATE TABLE t(
+  d DATE DEFAULT '0000-00-00',
+  dt DATETIME DEFAULT '0000-00-00 00:00:00',
+  ts TIMESTAMP DEFAULT '0000-00-00 00:00:00'
+)`)
+	require.False(t, changed)
+
+	require.True(t, hasColumnOption(findColumn(stmt, "d"), ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(findColumn(stmt, "dt"), ast.ColumnOptionDefaultValue))
+	require.True(t, hasColumnOption(findColumn(stmt, "ts"), ast.ColumnOptionDefaultValue))
+}
+
 func TestRewriteStmtTimeFunctionDefaultRules(t *testing.T) {
 	stmt, changed := rewriteCreateTable(t, `CREATE TABLE t(
   dec_col DECIMAL(30,6) DEFAULT CURRENT_TIMESTAMP(6),

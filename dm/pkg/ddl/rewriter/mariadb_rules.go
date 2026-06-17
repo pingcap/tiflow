@@ -29,6 +29,9 @@ const maxStringIndexPrefixLen = 768
 const defaultBlobIndexPrefixLen = 255
 
 var mariaDBCompatibilityRules = []rule{
+	// Do not add rules for DDL failures that can be solved by downstream SQL mode.
+	// DM's AdjustSQLModeCompatible already disables strict zero-date checks by default,
+	// and users can override the downstream session SQL mode when needed.
 	indexPrefixRule{},
 	textBlobDefaultRule{},
 	functionDefaultRule{},

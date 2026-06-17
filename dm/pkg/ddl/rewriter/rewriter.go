@@ -45,7 +45,8 @@ func WithMariaDBCompatibility() Option {
 
 // RewriteStmt applies enabled rules to stmt in place.
 // It is a best-effort compatibility layer for parsed AST nodes; parser failures and
-// unsupported DDL validation failures are intentionally left to the normal DM flow.
+// DDL failures that can be handled by downstream session settings, such as SQL mode,
+// are intentionally left to the normal DM flow.
 func RewriteStmt(stmt ast.StmtNode, opts ...Option) (bool, error) {
 	options := rewriteOptions{}
 	for _, opt := range opts {
