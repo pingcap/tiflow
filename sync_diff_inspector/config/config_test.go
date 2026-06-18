@@ -52,6 +52,10 @@ func TestParseConfig(t *testing.T) {
 	// this time will be ok, because we remove the last outputDir.
 	require.Nil(t, cfg.Init())
 	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))
+	require.True(t, cfg.ExportFixSQL)
+	require.True(t, cfg.Task.ExportFixSQL)
+	require.Equal(t, SplitterStrategyAuto, cfg.SplitterStrategy)
+	require.Equal(t, SplitterStrategyAuto, cfg.Task.SplitterStrategy)
 
 	require.True(t, cfg.CheckConfig())
 
@@ -63,7 +67,7 @@ func TestParseConfig(t *testing.T) {
 	require.JSONEq(t, cfg.String(), expectedJSON)
 	hash, err := cfg.Task.ComputeConfigHash()
 	require.NoError(t, err)
-	require.Equal(t, hash, "4ca9790b4e6743e6a1468071038ae069e12c4f3694ec5cfa424839fdef4ee48d")
+	require.Equal(t, "da56a5b0a5179c3f23a3df82571a378543c196776327b315b65a2d63bde83bf9", hash)
 	require.True(t, cfg.TableConfigs["config1"].Valid())
 }
 
