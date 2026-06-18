@@ -8,6 +8,17 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 API_VERSION="v1alpha1"
 ILLEGAL_CHAR_NAME='t-Ë!s`t'
 
+function check_expression_index_case_enabled() {
+	run_sql_source1 "select count(*) as expression_index_table_count from information_schema.tables where table_schema = 'all_mode' and table_name = 't_expr_unique_inline';"
+	if grep -Fq "expression_index_table_count: 0" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
+		echo "unique functional index case is skipped because upstream does not support /*!80013 */ syntax"
+		return
+	fi
+
+	run_sql_source1 "select count(*) as expression_index_count from information_schema.statistics where table_schema = 'all_mode' and table_name in ('t_expr_unique', 't_expr_unique_inline') and index_name = 'uk_lower_name';"
+	check_contains "expression_index_count: 2"
+}
+
 function test_session_config() {
 	echo "[$(date)] <<<<<< start test_session_config >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -266,8 +277,8 @@ function test_regexpr_router() {
 	run_sql_tidb 'create database dtest2;'
 	run_sql_tidb 'drop database if exists dtest4;'
 	run_sql_tidb 'create database dtest4;'
-	run_sql_tidb 'create table if not exists dtest2.dtable2(a int, b int);'
-	run_sql_tidb 'create table if not exists dtest4.dtable4(a int, b int);'
+	run_sql_tidb 'create table if not exists dtest2.dtable2(a int, b int, primary key(a));'
+	run_sql_tidb 'create table if not exists dtest4.dtable4(a int, b int, primary key(a));'
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -503,6 +514,7 @@ function run() {
 		"\"result\": true" 2
 	# we used failpoint to imitate an upstream switching, which purged whole relay dir
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_expression_index_case_enabled
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-relay -s mysql-replica-01" \

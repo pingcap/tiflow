@@ -16,6 +16,7 @@ package sqlmodel
 import (
 	"strings"
 
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
@@ -40,18 +41,7 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 		return r.preValues, r.postValues
 	}
 
-	pre := make([]interface{}, 0, len(indexInfo.Columns))
-	post := make([]interface{}, 0, len(indexInfo.Columns))
-
-	for _, column := range indexInfo.Columns {
-		if r.preValues != nil {
-			pre = append(pre, r.preValues[column.Offset])
-		}
-		if r.postValues != nil {
-			post = append(post, r.postValues[column.Offset])
-		}
-	}
-	return pre, post
+	return r.identityValuesByIndex(indexInfo, r.preValues, r.postValues)
 }
 
 // RowIdentity returns the identity of this row change, caller should
@@ -72,11 +62,7 @@ func (r *RowChange) RowIdentity() []interface{} {
 		return targetVals
 	}
 
-	identityVals := make([]interface{}, 0, len(indexInfo.Columns))
-	for _, column := range indexInfo.Columns {
-		identityVals = append(identityVals, targetVals[column.Offset])
-	}
-	return identityVals
+	return r.whereHandle.rowMapper.valuesByIndex(indexInfo, targetVals)
 }
 
 // RowStrIdentity returns the identity of the row change as string slice
@@ -107,6 +93,76 @@ func (r *RowChange) IsIdentityUpdated() bool {
 		}
 	}
 	return false
+}
+
+// IsPrimaryOrUniqueKeyUpdated returns true when any primary or unique key value changes.
+func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
+	if r.tp != RowChangeUpdate {
+		return false
+	}
+
+	r.lazyInitWhereHandle()
+	identityUpdated := func(pre, post []any) bool {
+		if len(pre) != len(post) {
+			// should not happen
+			return true
+		}
+		for i := range pre {
+			if pre[i] != post[i] {
+				return true
+			}
+		}
+		return false
+	}
+
+	if idx := r.whereHandle.UniqueNotNullIdx; idx != nil {
+		pre, post := r.identityValuesByIndex(idx, r.preValues, r.postValues)
+		if identityUpdated(pre, post) {
+			return true
+		}
+	} else {
+		if identityUpdated(r.preValues, r.postValues) {
+			return true
+		}
+	}
+
+	var (
+		preValues     = r.preValues
+		postValues    = r.postValues
+		checkIndexes  = r.whereHandle.UniqueIdxs
+		preOK, postOK bool
+	)
+
+	if r.whereHandle.hiddenGeneratedColumnExprCache != nil {
+		// Use expression indexes only when both row images are fully materialized.
+		// Otherwise fall back to visible-column unique indexes.
+		preValues, preOK = r.fillVirtualGeneratedValues(r.preValues)
+		postValues, postOK = r.fillVirtualGeneratedValues(r.postValues)
+		if preOK && postOK {
+			checkIndexes = r.whereHandle.causalityIdxs
+		}
+	}
+	for _, idx := range checkIndexes {
+		if idx == nil || idx == r.whereHandle.UniqueNotNullIdx {
+			continue
+		}
+		pre, post := r.identityValuesByIndex(idx, preValues, postValues)
+		if identityUpdated(pre, post) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// identityValuesByIndex extracts pre and post column values of given index
+func (r *RowChange) identityValuesByIndex(
+	indexInfo *timodel.IndexInfo,
+	preValues []any,
+	postValues []any,
+) ([]any, []any) {
+	return r.whereHandle.rowMapper.valuesByIndex(indexInfo, preValues),
+		r.whereHandle.rowMapper.valuesByIndex(indexInfo, postValues)
 }
 
 // genKey gens key by values e.g. "a.1.b".

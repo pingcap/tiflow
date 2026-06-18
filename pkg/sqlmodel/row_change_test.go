@@ -155,6 +155,14 @@ func (s *dpanicSuite) TestGenDelete() {
 			"DELETE FROM `db`.`tb2` WHERE `c` = ? AND `c2` IS ? LIMIT 1",
 			[]interface{}{1, nil},
 		},
+		{
+			"CREATE TABLE tb1 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			"CREATE TABLE tb2 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			[]interface{}{"Alice"},
+
+			"DELETE FROM `db`.`tb2` WHERE `name` = ? LIMIT 1",
+			[]interface{}{"Alice"},
+		},
 		// next 2 cases test using downstream table to generate WHERE
 		{
 			"CREATE TABLE tb1 (id INT PRIMARY KEY, user_id INT NOT NULL UNIQUE)",
@@ -190,6 +198,30 @@ func (s *dpanicSuite) TestGenDelete() {
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `id` = ? LIMIT 1", sql)
 	s.Equal([]interface{}{1}, args)
 
+	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"b INT UNIQUE, "+
+		"c INT, "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+	hiddenA := expressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
+	change = NewRowChange(source, nil, []interface{}{"Alice", 1, 9}, nil, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLDelete)
+	s.Equal("DELETE FROM `db`.`tb1` WHERE `b` = ? LIMIT 1", sql)
+	s.Equal([]interface{}{1}, args)
+
+	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"c INT, "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+	hiddenA = expressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "c")
+	change = NewRowChange(source, nil, []interface{}{"Alice", 9}, nil, sourceTI, nil, nil)
+	sql, args = change.GenSQL(DMLDelete)
+	s.Equal("DELETE FROM `db`.`tb1` WHERE `a` = ? AND `c` = ? LIMIT 1", sql)
+	s.Equal([]interface{}{"Alice", 9}, args)
+
+	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
 	change = NewRowChange(source, nil, nil, []interface{}{3, 4}, sourceTI, nil, nil)
 	s.Panics(func() {
 		change.GenSQL(DMLDelete)
@@ -235,6 +267,15 @@ func (s *dpanicSuite) TestGenUpdate() {
 
 			"UPDATE `db`.`tb2` SET `c` = ?, `c2` = ? WHERE `c` = ? AND `c2` = ? LIMIT 1",
 			[]interface{}{3, 4, 1, 2},
+		},
+		{
+			"CREATE TABLE tb1 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			"CREATE TABLE tb2 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
+			[]interface{}{"Alice"},
+			[]interface{}{"Bob"},
+
+			"UPDATE `db`.`tb2` SET `name` = ? WHERE `name` = ? LIMIT 1",
+			[]interface{}{"Bob", "Alice"},
 		},
 		// next 2 cases test generated column
 		{
@@ -364,4 +405,41 @@ func TestGenInsert(t *testing.T) {
 		require.Equal(t, c.expectedInsertOnDupSQL, sql)
 		require.Equal(t, c.expectedArgs, args)
 	}
+}
+
+func TestGenDMLWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	target := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, "+
+		"name VARCHAR(32), "+
+		"payload VARCHAR(32), "+
+		"UNIQUE KEY uk_name ((lower(name))))")
+	targetTI := mockTableInfo(t, "CREATE TABLE tb2 ("+
+		"id INT PRIMARY KEY, "+
+		"name VARCHAR(32), "+
+		"payload VARCHAR(32), "+
+		"UNIQUE KEY uk_name ((lower(name))))")
+	hiddenName := expressionIndexColumnName(t, sourceTI, "uk_name")
+	reorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
+
+	insertChange := NewRowChange(source, target, nil, []interface{}{2, "Bob", "p2"}, sourceTI, targetTI, nil)
+	sql, args := insertChange.GenSQL(DMLReplace)
+	require.Equal(t, "REPLACE INTO `db`.`tb2` (`id`,`name`,`payload`) VALUES (?,?,?)", sql)
+	require.Equal(t, []interface{}{2, "Bob", "p2"}, args)
+
+	updateChange := NewRowChange(
+		source,
+		target,
+		[]interface{}{2, "Bob", "p2"},
+		[]interface{}{2, "Bob", "p2-updated"},
+		sourceTI,
+		targetTI,
+		nil,
+	)
+	sql, args = updateChange.GenSQL(DMLUpdate)
+	require.Equal(t, "UPDATE `db`.`tb2` SET `id` = ?, `name` = ?, `payload` = ? WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []interface{}{2, "Bob", "p2-updated", 2}, args)
 }

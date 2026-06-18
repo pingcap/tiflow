@@ -44,6 +44,234 @@ func TestIdentity(t *testing.T) {
 	require.Equal(t, []interface{}{5, 6}, post)
 }
 
+func TestIdentityUpdatedWithUniqueKeys(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, uk1 INT UNIQUE NOT NULL, uk2 INT UNIQUE, val INT)")
+
+	change := NewRowChange(source, nil, []interface{}{1, 10, 100, 7}, []interface{}{1, 10, 100, 9}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{1, 10, 100, 7}, []interface{}{2, 10, 100, 7}, sourceTI, nil, nil)
+	require.True(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{2, 10, 100, 7}, []interface{}{2, 20, 100, 7}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{2, 20, 100, 7}, []interface{}{2, 20, 200, 7}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil, []interface{}{2, 20, nil, 7}, []interface{}{2, 20, 200, 7}, sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
+func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	cases := []struct {
+		name       string
+		createSQL  string
+		preValues  []any
+		postValues []any
+		updated    bool
+	}{
+		{
+			name: "expression unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, name VARCHAR(255), " +
+				"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))",
+			preValues:  []any{1, "Bob"},
+			postValues: []any{1, "Charlie"},
+		},
+		{
+			name: "expression changed",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, name VARCHAR(255), " +
+				"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))",
+			preValues:  []any{1, "Bob"},
+			postValues: []any{1, "Alice"},
+			updated:    true,
+		},
+		{
+			name: "ordinary unique changed with lower expression index",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, email VARCHAR(255) UNIQUE, name VARCHAR(255), " +
+				"UNIQUE KEY lower_name ((lower(name))))",
+			preValues:  []any{1, "a@example.com", "Bob"},
+			postValues: []any{1, "b@example.com", "Bob"},
+			updated:    true,
+		},
+		{
+			name: "arithmetic expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, code INT, name VARCHAR(255), " +
+				"UNIQUE KEY next_code ((code + 1)))",
+			preValues:  []any{1, 10, "Bob"},
+			postValues: []any{1, 10, "Alice"},
+		},
+		{
+			name: "composite expression index changed by visible column",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, score INT, code INT, " +
+				"UNIQUE KEY next_score_code ((score + 1), code))",
+			preValues:  []any{1, -7, 10},
+			postValues: []any{1, -7, 20},
+			updated:    true,
+		},
+		{
+			name: "binary expression index changed",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, payload VARBINARY(16), " +
+				"UNIQUE KEY uk_payload_expr ((CAST(payload AS BINARY(16)))))",
+			preValues:  []any{1, "alice"},
+			postValues: []any{1, "bob"},
+			updated:    true,
+		},
+		{
+			name: "binary expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, payload VARBINARY(16), note VARCHAR(16), " +
+				"UNIQUE KEY uk_payload_expr ((CAST(payload AS BINARY(16)))))",
+			preValues:  []any{1, "alice", "old"},
+			postValues: []any{1, "alice", "new"},
+		},
+		{
+			name: "decimal expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, price DECIMAL(10, 2), note VARCHAR(16), " +
+				"UNIQUE KEY uk_price_expr ((price + 0)))",
+			preValues:  []any{1, "12.30", "old"},
+			postValues: []any{1, "12.30", "new"},
+		},
+		{
+			name: "bit expression index unchanged",
+			createSQL: "CREATE TABLE tb1 (id INT PRIMARY KEY, flag BIT(8), note VARCHAR(16), " +
+				"UNIQUE KEY uk_flag_expr ((flag | b'00000000')))",
+			preValues:  []any{1, uint64(1), "old"},
+			postValues: []any{1, uint64(1), "new"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			sourceTI := mockTableInfo(t, tc.createSQL)
+			change := NewRowChange(source, nil, tc.preValues, tc.postValues, sourceTI, nil, nil)
+			require.False(t, change.IsIdentityUpdated())
+			require.Equal(t, tc.updated, change.IsPrimaryOrUniqueKeyUpdated())
+		})
+	}
+}
+
+func TestPrimaryOrUniqueKeyUpdatedInterleavedHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, "+
+		"a VARCHAR(32), "+
+		"b VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))), "+
+		"UNIQUE KEY uk_b ((lower(b))))")
+
+	hiddenA := expressionIndexColumnName(t, sourceTI, "uk_a")
+	hiddenB := expressionIndexColumnName(t, sourceTI, "uk_b")
+	reorderColumnsByName(t, sourceTI, "id", "a", hiddenA, "b", hiddenB)
+
+	change := NewRowChange(source, nil,
+		[]any{1, "Alice", "Bob"},
+		[]any{1, "Alice", "Carol"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
+func TestPrimaryOrUniqueKeyUpdatedUniqueAfterHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"a VARCHAR(32), "+
+		"b INT NOT NULL UNIQUE, "+
+		"c VARCHAR(32), "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+
+	hiddenA := expressionIndexColumnName(t, sourceTI, "uk_a")
+	reorderColumnsByName(t, sourceTI, "a", hiddenA, "b", "c")
+
+	change := NewRowChange(source, nil,
+		[]any{"Alice", 1, "old"},
+		[]any{"Alice", 2, "old"},
+		sourceTI, nil, nil)
+	require.NotPanics(t, func() {
+		require.True(t, change.IsIdentityUpdated())
+	})
+	require.NotPanics(t, func() {
+		require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+	})
+
+	change = NewRowChange(source, nil,
+		[]any{"Alice", 1, "old"},
+		[]any{"Alice", 1, "new"},
+		sourceTI, nil, nil)
+	require.NotPanics(t, func() {
+		require.False(t, change.IsIdentityUpdated())
+	})
+	require.NotPanics(t, func() {
+		require.Equal(t, []any{1}, change.RowIdentity())
+	})
+	require.NotPanics(t, func() {
+		require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+	})
+}
+
+func TestPrimaryOrUniqueKeyUpdatedExpressionIndexMaterializeFailure(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, email VARCHAR(255) UNIQUE, name VARCHAR(255), "+
+		"UNIQUE KEY lower_name ((lower(name))))")
+	corruptHiddenGeneratedExpr(t, sourceTI)
+
+	change := NewRowChange(source, nil,
+		[]any{1, "a@example.com", "Bob"},
+		[]any{1, "b@example.com", "Alice"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]any{1, "a@example.com", "Bob"},
+		[]any{1, "a@example.com", "Alice"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
+func TestPrimaryOrUniqueKeyUpdatedWithStoredGeneratedUniqueIndex(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"lower_name VARCHAR(255) GENERATED ALWAYS AS (lower(name)) STORED, "+
+		"UNIQUE KEY uk_lower_name (lower_name))")
+
+	change := NewRowChange(source, nil,
+		[]any{1, "Alice", "alice"},
+		[]any{1, "ALICE", "alice"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]any{1, "Alice", "alice"},
+		[]any{1, "Bob", "bob"},
+		sourceTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+}
+
 func TestSplit(t *testing.T) {
 	t.Parallel()
 

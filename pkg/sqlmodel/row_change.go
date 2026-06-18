@@ -230,11 +230,14 @@ func (r *RowChange) lazyInitWhereHandle() {
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitWhereHandle()
 
-	columns, values := r.sourceTableInfo.Columns, r.preValues
-
+	columns := r.whereHandle.rowMapper.visibleColumns
+	values := r.preValues
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
-		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
+		columns, values = r.whereHandle.rowMapper.columnsAndValuesByIndex(
+			uniqueIndex,
+			values,
+		)
 	}
 
 	columnNames := make([]string, 0, len(columns))
@@ -309,19 +312,17 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 	// Build target generated columns lower names set to accelerate following check
 	generatedColumns := generatedColumnsNameSet(r.targetTableInfo.Columns)
+	writableColumns := r.writableSourceColumns(generatedColumns)
+	rowMapper := r.whereHandle.rowMapper
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
-	for i, col := range r.sourceTableInfo.Columns {
-		if _, ok := generatedColumns[col.Name.L]; ok {
-			continue
-		}
-
+	for _, col := range writableColumns {
 		if writtenFirstCol {
 			buf.WriteString(", ")
 		}
 		writtenFirstCol = true
 		fmt.Fprintf(&buf, "%s = ?", quotes.QuoteName(col.Name.O))
-		args = append(args, r.postValues[i])
+		args = append(args, r.postValues[rowMapper.valueOffset(col.Offset, r.postValues)])
 	}
 
 	buf.WriteString(" WHERE ")
@@ -330,6 +331,25 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 	args = append(args, whereArgs...)
 	return buf.String(), args
+}
+
+func (r *RowChange) writableSourceColumns(generatedColumns map[string]struct{}) []*timodel.ColumnInfo {
+	r.lazyInitWhereHandle()
+	return writableSourceColumns(r.whereHandle.rowMapper.visibleColumns, generatedColumns)
+}
+
+func writableSourceColumns(
+	visibleColumns []*timodel.ColumnInfo,
+	generatedColumns map[string]struct{},
+) []*timodel.ColumnInfo {
+	columns := make([]*timodel.ColumnInfo, 0, len(visibleColumns))
+	for _, col := range visibleColumns {
+		if _, ok := generatedColumns[col.Name.L]; ok {
+			continue
+		}
+		columns = append(columns, col)
+	}
+	return columns
 }
 
 func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {

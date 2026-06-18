@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
@@ -154,21 +156,33 @@ func truncateIndexValues(
 }
 
 func (r *RowChange) getCausalityString(values []interface{}) []string {
-	pkAndUks := r.whereHandle.UniqueIdxs
-	if len(pkAndUks) == 0 {
-		// the table has no PK/UK, all values of the row consists the causality key
-		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
+	causalityIndexes := r.whereHandle.causalityIdxs
+	if len(causalityIndexes) == 0 {
+		// No causality index: use the whole row.
+		columns := r.whereHandle.rowMapper.columnsForValues(values)
+		return []string{genKeyString(r.sourceTable.String(), columns, values)}
 	}
 
-	ret := make([]string, 0, len(pkAndUks))
+	ret := make([]string, 0, len(causalityIndexes))
 
-	for _, indexCols := range pkAndUks {
+	values, fullValuesOK := r.fillVirtualGeneratedValues(values)
+
+	for _, indexCols := range causalityIndexes {
 		// TODO: should not support multi value index and generate the value
 		// TODO: also fix https://github.com/pingcap/tiflow/issues/3286#issuecomment-971264282
 		if indexCols.MVIndex {
 			continue
 		}
-		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
+
+		// Only hidden-column indexes require materialized values.
+		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
+			continue
+		}
+
+		cols, vals := r.whereHandle.rowMapper.columnsAndValuesByIndex(
+			indexCols,
+			values,
+		)
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
 		key := genKeyString(r.sourceTable.String(), cols, truncVals)
@@ -180,10 +194,87 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	}
 
 	if len(ret) == 0 {
-		// the table has no PK/UK, or all UK are NULL. all values of the row
-		// consists the causality key
-		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
+		// No index key was generated; fall back to the whole row.
+		columns := r.whereHandle.rowMapper.columnsForValues(values)
+		return []string{genKeyString(r.sourceTable.String(), columns, values)}
 	}
 
 	return ret
+}
+
+// fillVirtualGeneratedValues returns a copy of values extended to the full
+// source column list, with hidden/virtual generated columns evaluated. The bool
+// reports whether full values are available.
+func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
+	if r.whereHandle.hiddenGeneratedColumnExprCache == nil {
+		return values, false
+	}
+
+	cols := r.sourceTableInfo.Columns
+	if r.whereHandle.rowMapper.isFullValues(values) {
+		return values, true
+	}
+
+	exprs, exprCtx, ok := r.whereHandle.hiddenGeneratedColumnExprCache.getOrBuildExprs(r.tiSessionCtx)
+	if !ok {
+		return values, false
+	}
+
+	visibleCols := r.whereHandle.rowMapper.visibleColumns
+	if len(values) != len(visibleCols) {
+		return values, false
+	}
+
+	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, visibleCols)
+	if err != nil {
+		log.L().Debug("cannot adjust row for generated column evaluation",
+			zap.String("table", r.sourceTable.String()), zap.Error(err))
+		return values, false
+	}
+
+	full := make([]any, len(cols))
+	fullDatums := make([]types.Datum, len(cols))
+	fieldTypes := make([]*types.FieldType, len(cols))
+	for i, col := range cols {
+		fieldTypes[i] = &col.FieldType
+	}
+	mutRow := chunk.MutRowFromTypes(fieldTypes)
+	for i, col := range visibleCols {
+		full[col.Offset] = values[i]
+		fullDatums[col.Offset] = datums[i]
+		mutRow.SetDatum(col.Offset, datums[i])
+	}
+
+	for _, col := range r.whereHandle.hiddenGeneratedColumnExprCache.columns {
+		expr, ok := exprs[col.Offset]
+		if !ok {
+			return values, false
+		}
+		d, err := expr.Eval(exprCtx.GetEvalCtx(), mutRow.ToRow())
+		if err != nil {
+			log.L().Debug("cannot evaluate generated column expression",
+				zap.String("table", r.sourceTable.String()),
+				zap.String("column", col.Name.O), zap.Error(err))
+			return values, false
+		}
+		full[col.Offset] = datumValue(d)
+		fullDatums[col.Offset] = d
+		mutRow.SetDatum(col.Offset, d)
+	}
+	return full, true
+}
+
+func datumValue(d types.Datum) any {
+	if d.IsNull() {
+		return nil
+	}
+	if s, err := d.ToString(); err == nil {
+		return s
+	}
+	value := d.GetValue()
+	// Keep byte values comparable for identityUpdated's != check.
+	if bs, ok := value.([]byte); ok {
+		return string(bs)
+	}
+	return value
 }

@@ -143,6 +143,7 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		originalDataSeq = extendData
@@ -173,9 +174,9 @@ RowLoop:
 			originalValue,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -202,6 +203,7 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		originalData = extendData
@@ -250,9 +252,9 @@ RowLoop:
 			oriChangedValues,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -274,6 +276,7 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		dataSeq = extendData
@@ -304,9 +307,9 @@ RowLoop:
 			nil,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		dmls = append(dmls, rowChange)
 	}
 
