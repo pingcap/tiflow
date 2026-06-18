@@ -84,8 +84,29 @@ type downstreamTracker struct {
 
 // DownstreamTableInfo contains tableinfo and index cache.
 type DownstreamTableInfo struct {
-	TableInfo   *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
-	WhereHandle *sqlmodel.WhereHandle
+	TableInfo            *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
+	defaultWhereHandle   *sqlmodel.WhereHandle
+	whereHandlesMu       sync.Mutex
+	whereHandlesBySource map[string]*sqlmodel.WhereHandle
+}
+
+// DefaultWhereHandle returns the handle built when the downstream table cache is
+// initialized.
+func (dti *DownstreamTableInfo) DefaultWhereHandle() *sqlmodel.WhereHandle {
+	return dti.defaultWhereHandle
+}
+
+// WhereHandle returns the downstream where handle for the given source table.
+func (dti *DownstreamTableInfo) WhereHandle(sourceTable *filter.Table, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
+	sourceKey := utils.GenTableID(sourceTable)
+	dti.whereHandlesMu.Lock()
+	defer dti.whereHandlesMu.Unlock()
+	if handle, ok := dti.whereHandlesBySource[sourceKey]; ok {
+		return handle
+	}
+	handle := sqlmodel.GetWhereHandle(sourceTI, dti.TableInfo)
+	dti.whereHandlesBySource[sourceKey] = handle
+	return handle
 }
 
 type executorContext struct {
@@ -497,8 +518,9 @@ func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, o
 		}
 
 		dti = &DownstreamTableInfo{
-			TableInfo:   downstreamTI,
-			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+			TableInfo:            downstreamTI,
+			defaultWhereHandle:   sqlmodel.GetWhereHandle(originTI, downstreamTI),
+			whereHandlesBySource: make(map[string]*sqlmodel.WhereHandle),
 		}
 		dt.tableInfos[tableID] = dti
 	}

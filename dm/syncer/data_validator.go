@@ -834,7 +834,7 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
 	}
-	pk := downstreamTableInfo.WhereHandle.UniqueNotNullIdx
+	pk := downstreamTableInfo.DefaultWhereHandle().UniqueNotNullIdx
 	if pk == nil {
 		res.message = tableWithoutPrimaryKeyMsg
 		return res, nil
@@ -933,7 +933,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			tableInfo, downstreamTableInfo.TableInfo,
 			nil,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(downstreamTableInfo.DefaultWhereHandle())
 		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
 			delRow, insRow := rowChange.SplitUpdate()
