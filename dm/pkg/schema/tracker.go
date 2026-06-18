@@ -97,14 +97,15 @@ type downstreamWhereHandleCache struct {
 	bySource      map[string]*sqlmodel.WhereHandle
 }
 
-// WhereHandle returns the downstream where handle for the given source table.
-// Empty sourceKey returns the default handle built when the downstream table
-// cache is initialized.
-func (dti *DownstreamTableInfo) WhereHandle(sourceKey string, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
-	if sourceKey == "" {
-		return dti.whereHandleCache.defaultHandle
-	}
+// DefaultWhereHandle returns the handle built when the downstream table cache is
+// initialized.
+func (dti *DownstreamTableInfo) DefaultWhereHandle() *sqlmodel.WhereHandle {
+	return dti.whereHandleCache.defaultHandle
+}
 
+// WhereHandle returns the downstream where handle for the given source table.
+func (dti *DownstreamTableInfo) WhereHandle(sourceTable *filter.Table, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
+	sourceKey := utils.GenTableID(sourceTable)
 	dti.whereHandleCache.mu.Lock()
 	defer dti.whereHandleCache.mu.Unlock()
 	if handle, ok := dti.whereHandleCache.bySource[sourceKey]; ok {
