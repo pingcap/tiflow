@@ -142,6 +142,7 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := sqlmodel.GetWhereHandle(param.sourceTableInfo, downstreamTableInfo.TableInfo)
 
 	if extendData != nil {
 		originalDataSeq = extendData
@@ -175,7 +176,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
@@ -203,6 +204,7 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := sqlmodel.GetWhereHandle(param.sourceTableInfo, downstreamTableInfo.TableInfo)
 
 	if extendData != nil {
 		originalData = extendData
@@ -254,7 +256,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
@@ -277,6 +279,7 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := sqlmodel.GetWhereHandle(param.sourceTableInfo, downstreamTableInfo.TableInfo)
 
 	if extendData != nil {
 		dataSeq = extendData
@@ -310,7 +313,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
