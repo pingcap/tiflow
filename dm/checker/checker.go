@@ -37,6 +37,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/loader"
@@ -566,6 +567,9 @@ func (c *Checker) fetchSourceTargetDB(
 		return nil, nil, terror.ErrTaskCheckGenBAList.Delegate(err)
 	}
 	instance.baList = bAList
+	if err := sameTargetTableNameDetectionForRouteRules(instance.cfg.CaseSensitive, instance.cfg.RouteRules); err != nil {
+		return nil, nil, err
+	}
 	r, err := regexprrouter.NewRegExprRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 	if err != nil {
 		return nil, nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
@@ -861,6 +865,61 @@ func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 
 	for tbl := range tables {
 		name := tbl.String()
+		nameL := strings.ToLower(name)
+		if nameO, ok := tableNameSets[nameL]; !ok {
+			tableNameSets[nameL] = name
+		} else {
+			messages = append(messages, fmt.Sprintf("same target table %v vs %s", nameO, name))
+		}
+	}
+
+	if len(messages) > 0 {
+		return terror.ErrTaskCheckSameTableName.Generate(messages)
+	}
+
+	return nil
+}
+
+func sameTargetTableNameDetectionForRouteRules(caseSensitive bool, rules []*router.TableRule) error {
+	if caseSensitive {
+		return nil
+	}
+
+	// regexprrouter matches source patterns case-insensitively in this mode and
+	// reports "matches more than one rule" before the checker can build target
+	// table mappings. Detect the same-target-table conflict from the route
+	// rules first so the precheck reports the actionable table names.
+	sourceTableToTargetNameSets := make(map[string]map[string]string)
+	var messages []string
+	for _, rule := range rules {
+		if rule == nil || rule.TablePattern == "" || rule.TargetSchema == "" {
+			continue
+		}
+
+		targetTable := rule.TargetTable
+		if targetTable == "" {
+			targetTable = rule.TablePattern
+		}
+		if targetTable == "" {
+			continue
+		}
+
+		source := filter.Table{
+			Schema: rule.SchemaPattern,
+			Name:   rule.TablePattern,
+		}
+		sourceNameL := strings.ToLower(source.String())
+		tableNameSets := sourceTableToTargetNameSets[sourceNameL]
+		if tableNameSets == nil {
+			tableNameSets = make(map[string]string)
+			sourceTableToTargetNameSets[sourceNameL] = tableNameSets
+		}
+
+		target := filter.Table{
+			Schema: rule.TargetSchema,
+			Name:   targetTable,
+		}
+		name := target.String()
 		nameL := strings.ToLower(name)
 		if nameO, ok := tableNameSets[nameL]; !ok {
 			tableNameSets[nameL] = name
