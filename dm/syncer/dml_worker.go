@@ -335,6 +335,12 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 			}()
 		}
 	}
+	// Don't start a new batch once the syncer is cancelled, so an unbound
+	// worker can't keep writing while a new owner replays the same source.
+	if w.syncCtx.Ctx.Err() != nil {
+		err = w.syncCtx.Ctx.Err()
+		return
+	}
 	// use background context to execute sqls as much as possible
 	// set timeout to maxDMLConnectionDuration to make sure dmls can be replicated to downstream event if the latency is high
 	// if users need to quit this asap, we can support pause-task/stop-task --force in the future
