@@ -137,12 +137,13 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 
 	// Build gegerated columns lower name set to accelerate the following check
 	targetGeneratedColSet := generatedColumnsNameSet(first.targetTableInfo.Columns)
+	writableColumns := first.writableSourceColumns(targetGeneratedColSet)
 
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
 	// Use this value in order to identify which is the first CaseWhenThen line,
 	// because generated column can happen any where and it will be skipped.
 	isFirstCaseWhenThenLine := true
-	for _, column := range first.writableSourceColumns(targetGeneratedColSet) {
+	for _, column := range writableColumns {
 		if !isFirstCaseWhenThenLine {
 			// insert ", " after END of each lines except for the first line.
 			buf.WriteString(", ")
@@ -169,7 +170,6 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 	buf.WriteString(")")
 
 	// Build args of the UPDATE SQL
-	writableColumns := first.writableSourceColumns(targetGeneratedColSet)
 	assignValueColumnCount := len(writableColumns)
 	whereValuesAtTheEnd := make([]any, 0, len(changes)*len(whereColumns))
 	args := make([]any, 0,
@@ -192,9 +192,13 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 
 		whereValuesAtTheEnd = append(whereValuesAtTheEnd, whereValues...)
 
+		rowMapper := change.whereHandle.rowMapper
 		for writeableCol, col := range writableColumns {
 			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], whereValues...)
-			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], change.valueByColumn(col, change.postValues))
+			argsPerCol[writeableCol] = append(
+				argsPerCol[writeableCol],
+				change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)],
+			)
 		}
 	}
 	for _, a := range argsPerCol {
@@ -262,8 +266,10 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 
 	args := make([]interface{}, 0, len(changes)*len(writableColumns))
 	for _, change := range changes {
+		change.lazyInitWhereHandle()
+		rowMapper := change.whereHandle.rowMapper
 		for _, col := range writableColumns {
-			args = append(args, change.valueByColumn(col, change.postValues))
+			args = append(args, change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)])
 		}
 	}
 	return buf.String(), args

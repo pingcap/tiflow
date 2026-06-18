@@ -326,15 +326,17 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 	// Build target generated columns lower names set to accelerate following check
 	generatedColumns := generatedColumnsNameSet(r.targetTableInfo.Columns)
+	writableColumns := r.writableSourceColumns(generatedColumns)
+	rowMapper := r.whereHandle.rowMapper
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
-	for _, col := range r.writableSourceColumns(generatedColumns) {
+	for _, col := range writableColumns {
 		if writtenFirstCol {
 			buf.WriteString(", ")
 		}
 		writtenFirstCol = true
 		fmt.Fprintf(&buf, "%s = ?", quotes.QuoteName(col.Name.O))
-		args = append(args, r.valueByColumn(col, r.postValues))
+		args = append(args, r.postValues[rowMapper.valueOffset(col.Offset, r.postValues)])
 	}
 
 	buf.WriteString(" WHERE ")
@@ -356,11 +358,6 @@ func (r *RowChange) writableSourceColumns(generatedColumns map[string]struct{}) 
 		columns = append(columns, col)
 	}
 	return columns
-}
-
-func (r *RowChange) valueByColumn(col *timodel.ColumnInfo, values []interface{}) interface{} {
-	r.lazyInitWhereHandle()
-	return values[r.whereHandle.rowMapper.valueOffset(col.Offset, values)]
 }
 
 func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
