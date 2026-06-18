@@ -37,8 +37,8 @@ DB_COUNT=4
 
 # case 1
 rm -rf $WORK_DIR && mkdir -p $CASE1_WORK_DIR $CASE2_WORK_DIR
-start_tidb_cluster --workdir $CASE1_WORK_DIR
 trap stop_tidb_cluster EXIT
+start_tidb_cluster --workdir $CASE1_WORK_DIR
 
 run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
