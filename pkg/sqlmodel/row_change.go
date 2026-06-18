@@ -328,17 +328,13 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	generatedColumns := generatedColumnsNameSet(r.targetTableInfo.Columns)
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
-	for i, col := range r.sourceTableInfo.Columns {
-		if _, ok := generatedColumns[col.Name.L]; ok {
-			continue
-		}
-
+	for _, col := range r.writableSourceColumns(generatedColumns) {
 		if writtenFirstCol {
 			buf.WriteString(", ")
 		}
 		writtenFirstCol = true
 		fmt.Fprintf(&buf, "%s = ?", quotes.QuoteName(col.Name.O))
-		args = append(args, r.postValues[i])
+		args = append(args, r.valueByColumn(col, r.postValues))
 	}
 
 	buf.WriteString(" WHERE ")
@@ -347,6 +343,24 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 	args = append(args, whereArgs...)
 	return buf.String(), args
+}
+
+func (r *RowChange) writableSourceColumns(generatedColumns map[string]struct{}) []*timodel.ColumnInfo {
+	r.lazyInitWhereHandle()
+
+	columns := make([]*timodel.ColumnInfo, 0, len(r.whereHandle.rowMapper.visibleColumns))
+	for _, col := range r.whereHandle.rowMapper.visibleColumns {
+		if _, ok := generatedColumns[col.Name.L]; ok {
+			continue
+		}
+		columns = append(columns, col)
+	}
+	return columns
+}
+
+func (r *RowChange) valueByColumn(col *timodel.ColumnInfo, values []interface{}) interface{} {
+	r.lazyInitWhereHandle()
+	return values[r.whereHandle.rowMapper.valueOffset(col.Offset, values)]
 }
 
 func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {

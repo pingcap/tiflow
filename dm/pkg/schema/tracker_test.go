@@ -168,6 +168,36 @@ func TestDDL(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestTrackerExpressionIndexHiddenColumnState(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+	table := &filter.Table{Schema: "testdb", Name: "foo"}
+
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	require.NoError(t, tracker.Exec(ctx, "", parseSQL(t, p, "create database testdb")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "create table foo (id int primary key, name varchar(64))")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "alter table foo add unique key uk_lower_name ((lower(name)))")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "alter table foo add column payload varchar(64)")))
+
+	ti, err := tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	for _, idx := range ti.Indices {
+		if idx.Name.L != "uk_lower_name" {
+			continue
+		}
+		require.Len(t, idx.Columns, 1)
+		col := ti.Columns[idx.Columns[0].Offset]
+		require.True(t, col.Hidden)
+		require.True(t, col.IsGenerated())
+		require.Equal(t, model.StatePublic, col.State)
+		return
+	}
+	require.FailNow(t, "expression index not found")
+}
+
 func TestGetSingleColumnIndices(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
