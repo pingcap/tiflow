@@ -27,6 +27,8 @@ set -xeu
 CUR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
+CASE1_WORK_DIR=$WORK_DIR/case1
+CASE2_WORK_DIR=$WORK_DIR/case2
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
@@ -34,16 +36,16 @@ CDC_COUNT=3
 DB_COUNT=4
 
 # case 1
-rm -rf $WORK_DIR && mkdir -p $WORK_DIR
-start_tidb_cluster --workdir $WORK_DIR
+rm -rf $WORK_DIR && mkdir -p $CASE1_WORK_DIR $CASE2_WORK_DIR
+start_tidb_cluster --workdir $CASE1_WORK_DIR
 trap stop_tidb_cluster EXIT
 
 run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "set global sql_mode='NO_BACKSLASH_ESCAPES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
-cd $WORK_DIR
+cd $CASE1_WORK_DIR
 start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
-run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+run_cdc_server --workdir $CASE1_WORK_DIR --binary $CDC_BINARY
 
 SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
 run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-1"
@@ -61,14 +63,15 @@ if [ "$SINK_TYPE" == "mysql" ]; then
 fi
 
 stop_tidb_cluster
-start_tidb_cluster --workdir $WORK_DIR
+start_tidb_cluster --workdir $CASE2_WORK_DIR
 
 ## case 2
 run_sql "set global sql_mode='ANSI_QUOTES';" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 run_sql "set global sql_mode='ANSI_QUOTES';" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 
+cd $CASE2_WORK_DIR
 start_ts=$(run_cdc_cli_tso_query ${UP_PD_HOST_1} ${UP_PD_PORT_1})
-run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY
+run_cdc_server --workdir $CASE2_WORK_DIR --binary $CDC_BINARY
 
 SINK_URI="mysql://root@127.0.0.1:3306/?max-txn-row=1"
 run_cdc_cli changefeed create --start-ts=$start_ts --sink-uri="$SINK_URI" --changefeed-id="test-2"

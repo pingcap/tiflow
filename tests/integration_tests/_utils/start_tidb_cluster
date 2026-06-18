@@ -89,3 +89,7 @@ while [ $i -le $retry_times ]; do
 	let i++
 	echo "start tidb cluster failed"
 done
+
+if [ $i -gt $retry_times ]; then
+	exit 1
+fi
