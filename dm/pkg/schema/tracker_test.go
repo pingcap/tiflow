@@ -237,6 +237,34 @@ func TestTrackerAlterTableRenameWithExpressionIndex(t *testing.T) {
 	requireExpressionIndexHiddenColumnsPublic(t, ti)
 }
 
+func TestTrackerRenameTableStmtWithExpressionIndex(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	require.NoError(t, tracker.Exec(ctx, "", parseSQL(t, p, "create database testdb")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p,
+		"create table foo (id int primary key, name varchar(64), unique key uk_lower_name ((lower(name))))")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p,
+		"create table baz (id int primary key, email varchar(64), unique key uk_lower_email ((lower(email))))")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p,
+		"rename table foo to bar, baz to qux")))
+
+	_, err = tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: "foo"})
+	require.True(t, IsTableNotExists(err))
+	_, err = tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: "baz"})
+	require.True(t, IsTableNotExists(err))
+
+	for _, tableName := range []string{"bar", "qux"} {
+		ti, err := tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: tableName})
+		require.NoError(t, err)
+		requireExpressionIndexHiddenColumnsPublic(t, ti)
+	}
+}
+
 func TestCloneTableInfoPromotesExpressionIndexHiddenColumn(t *testing.T) {
 	ti := buildTrackerTestTableInfo(t,
 		"create table foo (id int primary key, name varchar(64), unique key uk_lower_name ((lower(name))))")
