@@ -85,10 +85,34 @@ type downstreamTracker struct {
 // DownstreamTableInfo contains tableinfo and index cache.
 type DownstreamTableInfo struct {
 	TableInfo           *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
-	WhereHandle         *sqlmodel.WhereHandle
+	whereHandleCache    *downstreamWhereHandleCache
 	ForeignKeyRelations []sqlmodel.ForeignKeyCausalityRelation
 	foreignKeyInitOnce  sync.Once
 	foreignKeyInitErr   error
+}
+
+type downstreamWhereHandleCache struct {
+	defaultHandle *sqlmodel.WhereHandle
+	mu            sync.Mutex
+	bySource      map[string]*sqlmodel.WhereHandle
+}
+
+// WhereHandle returns the downstream where handle for the given source table.
+// Empty sourceKey returns the default handle built when the downstream table
+// cache is initialized.
+func (dti *DownstreamTableInfo) WhereHandle(sourceKey string, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
+	if sourceKey == "" {
+		return dti.whereHandleCache.defaultHandle
+	}
+
+	dti.whereHandleCache.mu.Lock()
+	defer dti.whereHandleCache.mu.Unlock()
+	if handle, ok := dti.whereHandleCache.bySource[sourceKey]; ok {
+		return handle
+	}
+	handle := sqlmodel.GetWhereHandle(sourceTI, dti.TableInfo)
+	dti.whereHandleCache.bySource[sourceKey] = handle
+	return handle
 }
 
 // TableRouteResolver resolves a source table to its downstream routed table.
@@ -522,7 +546,7 @@ func (tr *Tracker) InitDownStreamForeignKeyRelations(
 		}
 		return &DownstreamTableInfo{
 			TableInfo:           dti.TableInfo,
-			WhereHandle:         dti.WhereHandle,
+			whereHandleCache:    dti.whereHandleCache,
 			ForeignKeyRelations: relations,
 		}, nil
 	}
@@ -565,8 +589,11 @@ func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, o
 		}
 
 		dti = &DownstreamTableInfo{
-			TableInfo:   downstreamTI,
-			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+			TableInfo: downstreamTI,
+			whereHandleCache: &downstreamWhereHandleCache{
+				defaultHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+				bySource:      make(map[string]*sqlmodel.WhereHandle),
+			},
 		}
 		dt.tableInfos[tableID] = dti
 	}

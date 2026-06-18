@@ -764,7 +764,7 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 			AddRow("test", "create table t(a int, b int, c varchar(20000), primary key(a, b), key(c(20000)))/*!90000 SHARD_ROW_ID_BITS=6 */"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
-	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+	require.NotNil(t, dti.WhereHandle("", nil).UniqueNotNullIdx)
 }
 
 func TestForeignKeyRelationBuildsRootParents(t *testing.T) {
@@ -1738,7 +1738,7 @@ func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
 			AddRow("test", "create table t(a bigint(20), b varbinary(767), c varbinary(767), d varbinary(767), e varbinary(767), primary key(a), key(b, c, d, e, a))"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
-	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+	require.NotNil(t, dti.WhereHandle("", nil).UniqueNotNullIdx)
 }
 
 func TestReTrackDownStreamIndex(t *testing.T) {

@@ -3904,13 +3904,7 @@ func (s *Syncer) precheckForeignKeyReferencedTables(
 }
 
 func basicDownStreamTableInfo(dti *schema.DownstreamTableInfo) *schema.DownstreamTableInfo {
-	if dti == nil {
-		return nil
-	}
-	return &schema.DownstreamTableInfo{
-		TableInfo:   dti.TableInfo,
-		WhereHandle: dti.WhereHandle,
-	}
+	return dti
 }
 
 func (s *Syncer) prepareDownStreamTableInfo(

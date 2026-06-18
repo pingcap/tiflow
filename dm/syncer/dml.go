@@ -27,6 +27,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -142,7 +143,7 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
-	whereHandle := sqlmodel.GetWhereHandle(param.sourceTableInfo, downstreamTableInfo.TableInfo)
+	whereHandle := downstreamTableInfo.WhereHandle(utils.GenTableID(param.sourceTable), param.sourceTableInfo)
 
 	if extendData != nil {
 		originalDataSeq = extendData
@@ -204,7 +205,7 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	if err != nil {
 		return nil, err
 	}
-	whereHandle := sqlmodel.GetWhereHandle(param.sourceTableInfo, downstreamTableInfo.TableInfo)
+	whereHandle := downstreamTableInfo.WhereHandle(utils.GenTableID(param.sourceTable), param.sourceTableInfo)
 
 	if extendData != nil {
 		originalData = extendData
@@ -279,7 +280,7 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
-	whereHandle := sqlmodel.GetWhereHandle(param.sourceTableInfo, downstreamTableInfo.TableInfo)
+	whereHandle := downstreamTableInfo.WhereHandle(utils.GenTableID(param.sourceTable), param.sourceTableInfo)
 
 	if extendData != nil {
 		dataSeq = extendData
