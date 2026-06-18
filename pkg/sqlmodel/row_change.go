@@ -349,9 +349,15 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 func (r *RowChange) writableSourceColumns(generatedColumns map[string]struct{}) []*timodel.ColumnInfo {
 	r.lazyInitWhereHandle()
+	return writableSourceColumns(r.whereHandle.rowMapper.visibleColumns, generatedColumns)
+}
 
-	columns := make([]*timodel.ColumnInfo, 0, len(r.whereHandle.rowMapper.visibleColumns))
-	for _, col := range r.whereHandle.rowMapper.visibleColumns {
+func writableSourceColumns(
+	visibleColumns []*timodel.ColumnInfo,
+	generatedColumns map[string]struct{},
+) []*timodel.ColumnInfo {
+	columns := make([]*timodel.ColumnInfo, 0, len(visibleColumns))
+	for _, col := range visibleColumns {
 		if _, ok := generatedColumns[col.Name.L]; ok {
 			continue
 		}

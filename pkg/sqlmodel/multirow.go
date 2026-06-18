@@ -140,8 +140,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 	writableColumns := first.writableSourceColumns(targetGeneratedColSet)
 
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
-	// Use this value in order to identify which is the first CaseWhenThen line,
-	// because generated column can happen any where and it will be skipped.
+	// Use this value to identify which is the first CaseWhenThen line.
 	isFirstCaseWhenThenLine := true
 	for _, column := range writableColumns {
 		if !isFirstCaseWhenThenLine {
@@ -233,7 +232,8 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 
 	// build gegerated columns lower name set to accelerate the following check
 	generatedColumns := generatedColumnsNameSet(first.targetTableInfo.Columns)
-	writableColumns := first.writableSourceColumns(generatedColumns)
+	rowMapper := newRowValueMapper(first.sourceTableInfo.Columns)
+	writableColumns := writableSourceColumns(rowMapper.visibleColumns, generatedColumns)
 	for _, col := range writableColumns {
 		if columnNum != 0 {
 			buf.WriteByte(',')
@@ -266,8 +266,6 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 
 	args := make([]interface{}, 0, len(changes)*len(writableColumns))
 	for _, change := range changes {
-		change.lazyInitWhereHandle()
-		rowMapper := change.whereHandle.rowMapper
 		for _, col := range writableColumns {
 			args = append(args, change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)])
 		}

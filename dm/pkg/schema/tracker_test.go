@@ -171,31 +171,116 @@ func TestDDL(t *testing.T) {
 func TestTrackerExpressionIndexHiddenColumnState(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
-	table := &filter.Table{Schema: "testdb", Name: "foo"}
+
+	cases := []struct {
+		name string
+		ddls []string
+	}{
+		{
+			name: "create table",
+			ddls: []string{
+				"create table foo (id int primary key, name varchar(64), unique key uk_lower_name ((lower(name))))",
+			},
+		},
+		{
+			name: "create index",
+			ddls: []string{
+				"create table foo (id int primary key, name varchar(64))",
+				"create unique index uk_lower_name on foo ((lower(name)))",
+			},
+		},
+		{
+			name: "alter table add index",
+			ddls: []string{
+				"create table foo (id int primary key, name varchar(64))",
+				"alter table foo add unique key uk_lower_name ((lower(name)))",
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+			require.NoError(t, err)
+			defer tracker.Close()
+
+			require.NoError(t, tracker.Exec(ctx, "", parseSQL(t, p, "create database testdb")))
+			for _, ddl := range tc.ddls {
+				require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, ddl)))
+			}
+
+			ti, err := tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: "foo"})
+			require.NoError(t, err)
+			requireExpressionIndexHiddenColumnsPublic(t, ti)
+		})
+	}
+}
+
+func TestTrackerAlterTableRenameWithExpressionIndex(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
 
 	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
 	require.NoError(t, err)
 	defer tracker.Close()
 
 	require.NoError(t, tracker.Exec(ctx, "", parseSQL(t, p, "create database testdb")))
-	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "create table foo (id int primary key, name varchar(64))")))
-	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "alter table foo add unique key uk_lower_name ((lower(name)))")))
-	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "alter table foo add column payload varchar(64)")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p,
+		"create table foo (id int primary key, name varchar(64), unique key uk_lower_name ((lower(name))))")))
+	require.NoError(t, tracker.Exec(ctx, "testdb", parseSQL(t, p, "alter table foo rename to bar")))
 
-	ti, err := tracker.GetTableInfo(table)
+	_, err = tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: "foo"})
+	require.True(t, IsTableNotExists(err))
+
+	ti, err := tracker.GetTableInfo(&filter.Table{Schema: "testdb", Name: "bar"})
 	require.NoError(t, err)
+	requireExpressionIndexHiddenColumnsPublic(t, ti)
+}
+
+func TestCloneTableInfoPromotesExpressionIndexHiddenColumn(t *testing.T) {
+	ti := buildTrackerTestTableInfo(t,
+		"create table foo (id int primary key, name varchar(64), unique key uk_lower_name ((lower(name))))")
+	requireExpressionIndexHiddenColumnsPublic(t, ti)
+
+	for _, col := range ti.Columns {
+		if col.Hidden && col.IsGenerated() {
+			col.State = model.StateNone
+		}
+	}
+
+	clone := cloneTableInfo(ti)
+	requireExpressionIndexHiddenColumnsPublic(t, clone)
+}
+
+func buildTrackerTestTableInfo(t *testing.T, sql string) *model.TableInfo {
+	t.Helper()
+
+	p := parser.New()
+	node, err := p.ParseOneStmt(sql, "", "")
+	require.NoError(t, err)
+	ti, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), node.(*ast.CreateTableStmt))
+	require.NoError(t, err)
+	return ti
+}
+
+func requireExpressionIndexHiddenColumnsPublic(t *testing.T, ti *model.TableInfo) {
+	t.Helper()
+
+	found := false
 	for _, idx := range ti.Indices {
-		if idx.Name.L != "uk_lower_name" {
+		if idx.State != model.StatePublic {
 			continue
 		}
-		require.Len(t, idx.Columns, 1)
-		col := ti.Columns[idx.Columns[0].Offset]
-		require.True(t, col.Hidden)
-		require.True(t, col.IsGenerated())
-		require.Equal(t, model.StatePublic, col.State)
-		return
+		for _, idxCol := range idx.Columns {
+			col := ti.Columns[idxCol.Offset]
+			if !col.Hidden || !col.IsGenerated() {
+				continue
+			}
+			found = true
+			require.Equal(t, model.StatePublic, col.State, "hidden generated column %s", col.Name.O)
+		}
 	}
-	require.FailNow(t, "expression index not found")
+	require.True(t, found, "expression index hidden generated column not found")
 }
 
 func TestGetSingleColumnIndices(t *testing.T) {

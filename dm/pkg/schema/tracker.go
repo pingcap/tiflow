@@ -209,14 +209,28 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 	case *ast.DropDatabaseStmt:
 		return tr.upstreamTracker.DropSchema(tr.se, v)
 	case *ast.CreateTableStmt:
-		return tr.upstreamTracker.CreateTable(tr.se, v)
+		if err := tr.upstreamTracker.CreateTable(tr.se, v); err != nil {
+			return err
+		}
+		return tr.normalizeExpressionIndexHiddenColumns(ast.Ident{Schema: v.Table.Schema, Name: v.Table.Name})
 	case *ast.AlterTableStmt:
 		if err := tr.upstreamTracker.AlterTable(ctx, tr.se, v); err != nil {
 			return err
 		}
-		return tr.normalizeExpressionIndexHiddenColumns(ast.Ident{Schema: v.Table.Schema, Name: v.Table.Name})
+		return tr.normalizeExpressionIndexHiddenColumns(alterTableTargetIdent(v))
 	case *ast.RenameTableStmt:
-		return tr.upstreamTracker.RenameTable(tr.se, v)
+		if err := tr.upstreamTracker.RenameTable(tr.se, v); err != nil {
+			return err
+		}
+		for _, tablePair := range v.TableToTables {
+			if err := tr.normalizeExpressionIndexHiddenColumns(ast.Ident{
+				Schema: tablePair.NewTable.Schema,
+				Name:   tablePair.NewTable.Name,
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	case *ast.DropTableStmt:
 		return tr.upstreamTracker.DropTable(tr.se, v)
 	case *ast.CreateIndexStmt:
@@ -235,12 +249,22 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 	return nil
 }
 
+func alterTableTargetIdent(stmt *ast.AlterTableStmt) ast.Ident {
+	ident := ast.Ident{Schema: stmt.Table.Schema, Name: stmt.Table.Name}
+	for _, spec := range stmt.Specs {
+		if spec.Tp == ast.AlterTableRenameTable && spec.NewTable != nil {
+			return ast.Ident{Schema: spec.NewTable.Schema, Name: spec.NewTable.Name}
+		}
+	}
+	return ident
+}
+
 func (tr *Tracker) normalizeExpressionIndexHiddenColumns(ident ast.Ident) error {
 	tblInfo, err := tr.upstreamTracker.TableClonedByName(ident.Schema, ident.Name)
 	if err != nil {
 		return err
 	}
-	if !normalizeExpressionIndexHiddenColumns(tblInfo) {
+	if !promoteExpressionIndexHiddenColumns(tblInfo) {
 		return nil
 	}
 	return tr.upstreamTracker.PutTable(ident.Schema, tblInfo)
@@ -355,7 +379,8 @@ func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
 // cloneTableInfo creates a clone of the TableInfo.
 func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 	ret := ti.Clone()
-	normalizeExpressionIndexHiddenColumns(ret)
+	// Tables loaded from checkpoint may have been tracked before this fix.
+	promoteExpressionIndexHiddenColumns(ret)
 	ret.Lock = nil
 	// FIXME pingcap/parser's Clone() doesn't clone Partition yet
 	if ret.Partition != nil {
@@ -366,7 +391,12 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 	return ret
 }
 
-func normalizeExpressionIndexHiddenColumns(ti *model.TableInfo) bool {
+// promoteExpressionIndexHiddenColumns promotes hidden generated columns backing
+// public expression indexes to StatePublic. TiDB DDL can leave those generated
+// columns non-public while the backing expression index is already public,
+// which breaks later DDL tracking in DM's schema tracker. It returns true when
+// at least one column state was changed.
+func promoteExpressionIndexHiddenColumns(ti *model.TableInfo) bool {
 	changed := false
 	for _, idx := range ti.Indices {
 		if idx.State != model.StatePublic {
