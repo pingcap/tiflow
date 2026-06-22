@@ -62,6 +62,10 @@ check-struct-only = false
     # tables need to check. *Include `schema` and `table`. Use `.` to split*
     target-check-tables = ["schema*.table*", "!c.*", "test2.t2"]
 
+    # Optional. When both source and target snapshots are set to "auto",
+    # restrict syncpoint lookup to this TiCDC changefeed.
+    # syncpoint-changefeed = "namespace/changefeed-id"
+
     # extra table config
     target-configs= ["config1"]
 
