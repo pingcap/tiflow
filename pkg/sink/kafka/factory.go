@@ -86,6 +86,7 @@ type AsyncProducer interface {
 
 type saramaSyncProducer struct {
 	id       model.ChangeFeedID
+	client   sarama.Client
 	producer sarama.SyncProducer
 }
 
@@ -100,17 +101,13 @@ func (p *saramaSyncProducer) SendMessage(
 		Value:     sarama.ByteEncoder(value),
 		Partition: partitionNum,
 	})
-	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	return err
 }
 
-<<<<<<< HEAD
 func (p *saramaSyncProducer) SendMessages(ctx context.Context,
 	topic string, partitionNum int32,
 	key []byte, value []byte,
 ) error {
-=======
-func (p *saramaSyncProducer) SendMessages(_ context.Context, topic string, partitionNum int32, message *common.Message) error {
->>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	msgs := make([]*sarama.ProducerMessage, partitionNum)
 	for i := 0; i < int(partitionNum); i++ {
 		msgs[i] = &sarama.ProducerMessage{
@@ -120,25 +117,49 @@ func (p *saramaSyncProducer) SendMessages(_ context.Context, topic string, parti
 			Partition: int32(i),
 		}
 	}
-	err := p.producer.SendMessages(msgs)
-	return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
+	return p.producer.SendMessages(msgs)
 }
 
 func (p *saramaSyncProducer) Close() {
-	start := time.Now()
-	err := p.producer.Close()
-	if err != nil {
-		log.Error("Close Kafka DDL producer with error",
-			zap.String("namespace", p.id.Namespace),
-			zap.String("changefeed", p.id.ID),
-			zap.Duration("duration", time.Since(start)),
-			zap.Error(err))
-	} else {
-		log.Info("Kafka DDL producer closed",
-			zap.String("namespace", p.id.Namespace),
-			zap.String("changefeed", p.id.ID),
-			zap.Duration("duration", time.Since(start)))
-	}
+	go func() {
+		// We need to close it asynchronously. Otherwise, we might get stuck
+		// with an unhealthy(i.e. Network jitter, isolation) state of Kafka.
+		// Factory has a background thread to fetch and update the metadata.
+		// If we close the client synchronously, we might get stuck.
+		// Safety:
+		// * If the kafka cluster is running well, it will be closed as soon as possible.
+		// * If there is a problem with the kafka cluster,
+		//   no data will be lost because this is a synchronous client.
+		// * There is a risk of goroutine leakage, but it is acceptable and our main
+		//   goal is not to get stuck with the owner tick.
+		start := time.Now()
+		if err := p.client.Close(); err != nil {
+			log.Warn("Close Kafka DDL client with error",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Kafka DDL client closed",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+		start = time.Now()
+		err := p.producer.Close()
+		if err != nil {
+			log.Error("Close Kafka DDL producer with error",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)),
+				zap.Error(err))
+		} else {
+			log.Info("Kafka DDL producer closed",
+				zap.String("namespace", p.id.Namespace),
+				zap.String("changefeed", p.id.ID),
+				zap.Duration("duration", time.Since(start)))
+		}
+	}()
 }
 
 type saramaAsyncProducer struct {

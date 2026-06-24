@@ -69,13 +69,9 @@ func (k *kafkaDDLProducer) SyncBroadcastMessage(ctx context.Context, topic strin
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
-<<<<<<< HEAD
 		err := k.syncProducer.SendMessages(ctx, topic,
 			totalPartitionsNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
-=======
-		return k.syncProducer.SendMessages(ctx, topic, totalPartitionsNum, message)
->>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	}
 }
 
@@ -93,13 +89,9 @@ func (k *kafkaDDLProducer) SyncSendMessage(ctx context.Context, topic string,
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
 	default:
-<<<<<<< HEAD
 		err := k.syncProducer.SendMessage(ctx, topic,
 			partitionNum, message.Key, message.Value)
 		return cerror.WrapError(cerror.ErrKafkaSendMessage, err)
-=======
-		return k.syncProducer.SendMessage(ctx, topic, partitionNum, message)
->>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	}
 }
 

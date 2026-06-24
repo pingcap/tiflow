@@ -16,6 +16,7 @@ package mq
 import (
 	"context"
 
+	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
@@ -64,7 +65,8 @@ type DDLSink struct {
 	// topicManager used to manage topics.
 	// It is also responsible for creating topics.
 	topicManager manager.TopicManager
-	encoder      codec.RowEventEncoder
+	// encoderBuilder builds encoder for the sink.
+	encoderBuilder codec.RowEventEncoderBuilder
 	// producer used to send events to the MQ system.
 	// Usually it is a sync producer.
 	producer ddlproducer.DDLProducer
@@ -80,11 +82,10 @@ func newDDLSink(ctx context.Context,
 	adminClient kafka.ClusterAdminClient,
 	topicManager manager.TopicManager,
 	eventRouter *dispatcher.EventRouter,
-	encoder codec.RowEventEncoder,
+	encoderBuilder codec.RowEventEncoderBuilder,
 	protocol config.Protocol,
 ) *DDLSink {
 	return &DDLSink{
-<<<<<<< HEAD
 		id:             changefeedID,
 		protocol:       protocol,
 		eventRouter:    eventRouter,
@@ -93,24 +94,15 @@ func newDDLSink(ctx context.Context,
 		producer:       producer,
 		statistics:     metrics.NewStatistics(ctx, changefeedID, sink.RowSink),
 		admin:          adminClient,
-=======
-		id:           changefeedID,
-		protocol:     protocol,
-		eventRouter:  eventRouter,
-		topicManager: topicManager,
-		encoder:      encoder,
-		producer:     producer,
-		statistics:   metrics.NewStatistics(changefeedID, sink.RowSink),
-		admin:        adminClient,
->>>>>>> 4c631d5951 (kafka(ticdc): ddl sink close the underline sink if send ddl or checkpoint failed and refactor the kafka ddl sink (#12112))
 	}
 }
 
 // WriteDDLEvent encodes the DDL event and sends it to the MQ system.
 func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
-	msg, err := k.encoder.EncodeDDLEvent(ddl)
+	encoder := k.encoderBuilder.Build()
+	msg, err := encoder.EncodeDDLEvent(ddl)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	if msg == nil {
 		log.Info("Skip ddl event", zap.Uint64("commitTs", ddl.CommitTs),
@@ -134,30 +126,29 @@ func (k *DDLSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error 
 	// then the auto-created topic will not be created as configured by ticdc.
 	partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 
 	if partitionRule == PartitionAll {
-		return k.statistics.RecordDDLExecution(func() error {
+		err = k.statistics.RecordDDLExecution(func() error {
 			return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		})
+		return errors.Trace(err)
 	}
-	return k.statistics.RecordDDLExecution(func() error {
+	err = k.statistics.RecordDDLExecution(func() error {
 		return k.producer.SyncSendMessage(ctx, topic, 0, msg)
 	})
+	return errors.Trace(err)
 }
 
 // WriteCheckpointTs sends the checkpoint ts to the MQ system.
 func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
-	var (
-		err          error
-		partitionNum int32
-	)
-	msg, err := k.encoder.EncodeCheckpointEvent(ts)
+	encoder := k.encoderBuilder.Build()
+	msg, err := encoder.EncodeCheckpointEvent(ts)
 	if err != nil {
-		return err
+		return errors.Trace(err)
 	}
 	if msg == nil {
 		return nil
@@ -167,13 +158,14 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	// This will be compatible with the old behavior.
 	if len(tables) == 0 {
 		topic := k.eventRouter.GetDefaultTopic()
-		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		log.Debug("Emit checkpointTs to default topic",
 			zap.String("topic", topic), zap.Uint64("checkpointTs", ts))
-		return k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
+		return errors.Trace(err)
 	}
 	var tableNames []model.TableName
 	for _, table := range tables {
@@ -181,13 +173,13 @@ func (k *DDLSink) WriteCheckpointTs(ctx context.Context,
 	}
 	topics := k.eventRouter.GetActiveTopics(tableNames)
 	for _, topic := range topics {
-		partitionNum, err = k.topicManager.GetPartitionNum(ctx, topic)
+		partitionNum, err := k.topicManager.GetPartitionNum(ctx, topic)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 		err = k.producer.SyncBroadcastMessage(ctx, topic, partitionNum, msg)
 		if err != nil {
-			return err
+			return errors.Trace(err)
 		}
 	}
 	return nil
