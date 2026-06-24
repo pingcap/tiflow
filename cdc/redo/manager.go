@@ -385,13 +385,10 @@ func (m *logManager) RemoveTable(span tablepb.Span) {
 
 func (m *logManager) prepareForFlush() *spanz.HashMap[model.Ts] {
 	tableRtsMap := spanz.NewHashMap[model.Ts]()
-	m.rtsMap.Range(func(span tablepb.Span, value interface{}) bool {
+	m.rtsMap.Range(func(span tablepb.Span, value any) bool {
 		rts := value.(*statefulRts)
 		unflushed := rts.getUnflushed()
-		flushed := rts.getFlushed()
-		if unflushed > flushed {
-			flushed = unflushed
-		}
+		flushed := max(unflushed, rts.getFlushed())
 		tableRtsMap.ReplaceOrInsert(span, flushed)
 		return true
 	})

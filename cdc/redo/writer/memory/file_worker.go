@@ -135,7 +135,7 @@ func newFileWorkerGroup(
 		extStorage:    extStorage,
 		uuidGenerator: uuid.NewGenerator(),
 		pool: sync.Pool{
-			New: func() interface{} {
+			New: func() any {
 				// Use pointer here to prevent static checkers from reporting errors.
 				// Ref: https://github.com/dominikh/go-tools/issues/1336.
 				buf := make([]byte, 0, cfg.MaxLogSizeInBytes)

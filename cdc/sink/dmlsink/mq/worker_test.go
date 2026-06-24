@@ -90,7 +90,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	count := 512
 	total := 0
 	expected := 0
-	for i := 0; i < count; i++ {
+	for i := range count {
 		expected += i
 
 		bit := i
@@ -107,11 +107,9 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = worker.run(ctx)
-	}()
+	})
 
 	mp := p.(*dmlproducer.MockDMLProducer)
 	require.Eventually(t, func() bool {
@@ -129,8 +127,7 @@ func TestNonBatchEncode_SendMessages(t *testing.T) {
 func TestBatchEncode_Batch(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	worker, _ := newBatchEncodeWorker(t)
 	defer worker.close()
 	key := model.TopicPartitionKey{
@@ -146,7 +143,7 @@ func TestBatchEncode_Batch(t *testing.T) {
 		Columns:   model.Columns2ColumnDatas(cols, tableInfo),
 	}
 
-	for i := 0; i < 512; i++ {
+	for range 512 {
 		worker.msgChan.In() <- mqEvent{
 			key: key,
 			rowEvent: &dmlsink.RowChangeCallbackableEvent{
@@ -437,11 +434,9 @@ func TestBatchEncode_SendMessages(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = worker.run(ctx)
-	}()
+	})
 
 	for _, event := range events {
 		worker.msgChan.In() <- event
@@ -473,12 +468,10 @@ func TestBatchEncodeWorker_Abort(t *testing.T) {
 	defer worker.close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := worker.run(ctx)
 		require.Error(t, context.Canceled, err)
-	}()
+	})
 
 	cancel()
 	wg.Wait()
@@ -550,11 +543,9 @@ func TestNonBatchEncode_SendMessagesWhenTableStopping(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = worker.run(ctx)
-	}()
+	})
 	mp := p.(*dmlproducer.MockDMLProducer)
 	require.Eventually(t, func() bool {
 		return len(mp.GetAllEvents()) == 2
@@ -569,12 +560,10 @@ func TestNonBatchEncodeWorker_Abort(t *testing.T) {
 	defer worker.close()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := worker.run(ctx)
 		require.Error(t, context.Canceled, err)
-	}()
+	})
 
 	cancel()
 	wg.Wait()

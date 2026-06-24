@@ -69,7 +69,7 @@ func generateTxnEvents(
 	// assume we have a large transaction and it is splitted into 10 small transactions
 	txns := make([]*dmlsink.TxnCallbackableEvent, 0, 10)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		txn := &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
 				CommitTs:         100,
@@ -100,7 +100,7 @@ func generateTxnEvents(
 			},
 		}
 		tableInfo := model.WrapTableInfo(100, "test", 33, tidbTableInfo)
-		for j := 0; j < batch; j++ {
+		for j := range batch {
 			row := &model.RowChangedEvent{
 				CommitTs:  100,
 				TableInfo: tableInfo,
