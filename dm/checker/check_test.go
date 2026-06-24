@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -792,6 +793,98 @@ func TestSameTargetTableDetection(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	_, err = RunCheckOnConfigs(context.Background(), cfgs, false, 100, 100)
 	require.ErrorContains(t, err, "same table name in case-insensitive")
+}
+
+func TestSameTargetTableDetectionBeforeRouteDupMatch(t *testing.T) {
+	cfgs := []*config.SubTaskConfig{
+		{
+			RouteRules: []*router.TableRule{
+				{
+					SchemaPattern: "test",
+					TargetSchema:  "test",
+					TablePattern:  "T",
+					TargetTable:   "T",
+				}, {
+					SchemaPattern: "test",
+					TargetSchema:  "test",
+					TablePattern:  "t",
+					TargetTable:   "t",
+				},
+			},
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
+	cfgsWithSameTarget := []*config.SubTaskConfig{
+		{
+			RouteRules: []*router.TableRule{
+				{
+					SchemaPattern: "test",
+					TargetSchema:  "test",
+					TablePattern:  "T",
+					TargetTable:   "T",
+				}, {
+					SchemaPattern: "test",
+					TargetSchema:  "test",
+					TablePattern:  "t",
+					TargetTable:   "T",
+				},
+			},
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
+
+	require.NoError(t, sameTargetTableNameDetectionForRouteRules(false, []*router.TableRule{
+		{
+			SchemaPattern: "test",
+			TargetSchema:  "test",
+			TablePattern:  "a",
+			TargetTable:   "T",
+		}, {
+			SchemaPattern: "test",
+			TargetSchema:  "test",
+			TablePattern:  "b",
+			TargetTable:   "t",
+		},
+	}))
+	require.NoError(t, sameTargetTableNameDetectionForRouteRules(true, cfgs[0].RouteRules))
+
+	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "same table name in case-insensitive")
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
+	require.NotContains(t, err.Error(), "matches more than one rule")
+	require.Len(t, msg, 0)
+
+	_, err = RunCheckOnConfigs(context.Background(), cfgs, false, 100, 100)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "same table name in case-insensitive")
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
+	require.NotContains(t, err.Error(), "matches more than one rule")
+
+	processErr := unit.NewProcessError(err)
+	require.Contains(t, processErr.Message, "same table name in case-insensitive")
+	require.Contains(t, processErr.Message, "same target table `test`.`T` vs `test`.`t`")
+	require.Empty(t, processErr.RawCause)
+
+	msg, err = CheckSyncConfig(context.Background(), cfgsWithSameTarget, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "same table name in case-insensitive")
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`T`")
+	require.NotContains(t, err.Error(), "matches more than one rule")
+	require.Len(t, msg, 0)
+
+	_, err = RunCheckOnConfigs(context.Background(), cfgsWithSameTarget, false, 100, 100)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "same table name in case-insensitive")
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`T`")
+	require.NotContains(t, err.Error(), "matches more than one rule")
+
+	processErr = unit.NewProcessError(err)
+	require.Contains(t, processErr.Message, "same table name in case-insensitive")
+	require.Contains(t, processErr.Message, "same target table `test`.`T` vs `test`.`T`")
+	require.Empty(t, processErr.RawCause)
 }
 
 func TestMetaPositionChecking(t *testing.T) {
