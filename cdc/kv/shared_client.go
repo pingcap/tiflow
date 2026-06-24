@@ -170,6 +170,14 @@ func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 	return SubscriptionID(subscriptionIDGen.Add(1))
 }
 
+// GetTS returns the current PD TSO.
+func (s *SharedClient) GetTS(ctx context.Context) (int64, int64, error) {
+	if s.pd == nil {
+		return 0, 0, errors.New("pd client is nil")
+	}
+	return s.pd.GetTS(ctx)
+}
+
 // Subscribe the given table span.
 // NOTE: `span.TableID` must be set correctly.
 func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startTs uint64, eventCh chan<- MultiplexingEvent) {
