@@ -38,12 +38,10 @@ type UniqueKey struct {
 // the map values are cloned into the new UK instance,
 // so that the further changes in the value map won't affect the values inside the UK.
 func NewUniqueKey(rowID int, value map[string]any) *UniqueKey {
-	result := &UniqueKey{
+	return &UniqueKey{
 		rowID: rowID,
-		value: make(map[string]any),
+		value: maps.Clone(value),
 	}
-	maps.Copy(result.value, value)
-	return result
 }
 
 // GetRowID gets the row ID of the unique key.
@@ -67,9 +65,7 @@ func (uk *UniqueKey) SetRowID(rowID int) {
 func (uk *UniqueKey) GetValue() map[string]any {
 	uk.RLock()
 	defer uk.RUnlock()
-	result := make(map[string]any)
-	maps.Copy(result, uk.value)
-	return result
+	return maps.Clone(uk.value)
 }
 
 // GetValueHash return hash for values.
@@ -96,8 +92,7 @@ func (uk *UniqueKey) GetValueHash() string {
 func (uk *UniqueKey) SetValue(value map[string]any) {
 	uk.Lock()
 	defer uk.Unlock()
-	uk.value = make(map[string]any)
-	maps.Copy(uk.value, value)
+	uk.value = maps.Clone(value)
 }
 
 // Clone is to clone a UK into a new one.
@@ -105,12 +100,10 @@ func (uk *UniqueKey) SetValue(value map[string]any) {
 func (uk *UniqueKey) Clone() *UniqueKey {
 	uk.RLock()
 	defer uk.RUnlock()
-	result := &UniqueKey{
+	return &UniqueKey{
 		rowID: uk.rowID,
-		value: map[string]any{},
+		value: maps.Clone(uk.value),
 	}
-	maps.Copy(result.value, uk.value)
-	return result
 }
 
 // String returns the string representation of a UK.

@@ -839,13 +839,10 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	}
 	resps := s.getStatusFromWorkers(ctx, sources, req.Name, specifiedSource)
 	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources)) // sourceName -> worker QueryStatusResponse
-	inSlice := func(s []string, e string) bool {
-		return slices.Contains(s, e)
-	}
 	for _, workerResp := range resps {
 		workerRespMap[workerResp.SourceStatus.Source] = append(workerRespMap[workerResp.SourceStatus.Source], workerResp)
 		// append some offline worker responses
-		if !inSlice(sources, workerResp.SourceStatus.Source) {
+		if !slices.Contains(sources, workerResp.SourceStatus.Source) {
 			sources = append(sources, workerResp.SourceStatus.Source)
 		}
 	}

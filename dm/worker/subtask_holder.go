@@ -105,7 +105,5 @@ func (h *subTaskHolder) findSubTask(name string) *SubTask {
 func (h *subTaskHolder) getAllSubTasks() map[string]*SubTask {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	result := make(map[string]*SubTask, len(h.subTasks))
-	maps.Copy(result, h.subTasks)
-	return result
+	return maps.Clone(h.subTasks)
 }

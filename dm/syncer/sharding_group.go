@@ -279,9 +279,7 @@ func (sg *ShardingGroup) UnresolvedGroupInfo() *pb.ShardingGroup {
 func (sg *ShardingGroup) Sources() map[string]bool {
 	sg.RLock()
 	defer sg.RUnlock()
-	ret := make(map[string]bool, len(sg.sources))
-	maps.Copy(ret, sg.sources)
-	return ret
+	return maps.Clone(sg.sources)
 }
 
 // Tables returns all source tables' <schema, table> pair.
@@ -617,9 +615,7 @@ func (k *ShardingGroupKeeper) Groups() map[string]*ShardingGroup {
 	defer k.RUnlock()
 
 	// do a copy
-	groups := make(map[string]*ShardingGroup, len(k.groups))
-	maps.Copy(groups, k.groups)
-	return groups
+	return maps.Clone(k.groups)
 }
 
 // UnresolvedGroups returns sharding groups which are un-resolved
