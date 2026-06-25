@@ -842,11 +842,10 @@ func genCreateStmt(cols ...string) string {
 	var str strings.Builder
 	str.WriteString("CREATE TABLE tbl(")
 	for idx, col := range cols {
-		if idx == 0 {
-			str.WriteString(col)
-		} else {
-			str.WriteString(", " + col)
+		if idx != 0 {
+			str.WriteString(", ")
 		}
+		str.WriteString(col)
 	}
 	str.WriteString(")")
 	return str.String()

@@ -82,7 +82,7 @@ type GetResponse struct {
 // String only for debug
 func (resp *GetResponse) String() string {
 	var s strings.Builder
-	s.WriteString(fmt.Sprintf("header:[%s];kvs:[", resp.Header))
+	fmt.Fprintf(&s, "header:[%s];kvs:[", resp.Header)
 	for _, kv := range resp.Kvs {
 		s.WriteString(kv.String())
 	}

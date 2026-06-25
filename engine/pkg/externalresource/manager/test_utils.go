@@ -99,8 +99,7 @@ func (p *MockExecutorInfoProvider) WatchExecutors(
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	executors := make(map[model.ExecutorID]string, len(p.executorSet))
-	maps.Copy(executors, p.executorSet)
+	executors := maps.Clone(p.executorSet)
 
 	return executors, p.notifier.NewReceiver(), nil
 }
@@ -155,8 +154,7 @@ func (jp *MockJobStatusProvider) WatchJobStatuses(
 	jp.mu.Lock()
 	defer jp.mu.Unlock()
 
-	snapCopy := make(JobStatusesSnapshot, len(jp.jobInfos))
-	maps.Copy(snapCopy, jp.jobInfos)
+	snapCopy := maps.Clone(jp.jobInfos)
 
 	return snapCopy, jp.notifier.NewReceiver(), nil
 }
