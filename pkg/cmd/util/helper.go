@@ -19,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -117,7 +118,7 @@ func findProxyFields() []zap.Field {
 
 // StrictDecodeFile decodes the toml file strictly. If any item in confFile file is not mapped
 // into the Config struct, issue an error and stop the server from starting.
-func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems ...string) error {
+func StrictDecodeFile(path, component string, cfg any, ignoreCheckItems ...string) error {
 	metaData, err := toml.DecodeFile(path, cfg)
 	if err != nil {
 		return errors.Trace(err)
@@ -125,12 +126,7 @@ func StrictDecodeFile(path, component string, cfg interface{}, ignoreCheckItems 
 
 	// check if item is a ignoreCheckItem
 	hasIgnoreItem := func(item []string) bool {
-		for _, ignoreCheckItem := range ignoreCheckItems {
-			if item[0] == ignoreCheckItem {
-				return true
-			}
-		}
-		return false
+		return slices.Contains(ignoreCheckItems, item[0])
 	}
 
 	if undecoded := metaData.Undecoded(); len(undecoded) > 0 {
@@ -179,7 +175,7 @@ func VerifyPdEndpoint(pdEndpoint string, useTLS bool) error {
 }
 
 // JSONPrint will output the data in JSON format.
-func JSONPrint(cmd *cobra.Command, v interface{}) error {
+func JSONPrint(cmd *cobra.Command, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return err

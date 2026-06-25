@@ -204,17 +204,17 @@ CREATE TABLE t (
 	require.NoError(t, err)
 
 	handle := GetWhereHandle(ti, ti)
-	idx := handle.getWhereIdxByData([]interface{}{nil, 2, 3, 4})
+	idx := handle.getWhereIdxByData([]any{nil, 2, 3, 4})
 	require.Equal(t, "idx2", idx.Name.L)
 	require.Equal(t, idx, handle.UniqueIdxs[0])
 
 	// last used index is moved to front
-	idx = handle.getWhereIdxByData([]interface{}{1, 2, 3, nil})
+	idx = handle.getWhereIdxByData([]any{1, 2, 3, nil})
 	require.Equal(t, "idx1", idx.Name.L)
 	require.Equal(t, idx, handle.UniqueIdxs[0])
 
 	// no index available
-	idx = handle.getWhereIdxByData([]interface{}{1, nil, 3, nil})
+	idx = handle.getWhereIdxByData([]any{1, nil, 3, nil})
 	require.Nil(t, idx)
 }
 
@@ -231,11 +231,11 @@ func TestGetWhereIdxByDataUniqueAfterHiddenColumn(t *testing.T) {
 	reorderColumnsByName(t, ti, "a", hiddenA, "b", "c")
 
 	handle := GetWhereHandle(ti, ti)
-	idx := handle.getWhereIdxByData([]interface{}{"Alice", 1, nil})
+	idx := handle.getWhereIdxByData([]any{"Alice", 1, nil})
 	require.NotNil(t, idx)
 	require.Equal(t, "b", idx.Columns[0].Name.L)
 
-	idx = handle.getWhereIdxByData([]interface{}{"Alice", nil, 1})
+	idx = handle.getWhereIdxByData([]any{"Alice", nil, 1})
 	require.Nil(t, idx)
 }
 

@@ -186,8 +186,8 @@ type tidbConnIdleDuration struct {
 	duration sql.NullFloat64
 }
 
-func (m *tidbConnIdleDuration) columns() []interface{} {
-	return []interface{}{&m.ts, &m.instance, &m.inTxn, &m.quantile, &m.duration}
+func (m *tidbConnIdleDuration) columns() []any {
+	return []any{&m.ts, &m.instance, &m.inTxn, &m.quantile, &m.duration}
 }
 
 type tidbConnCount struct {
@@ -196,8 +196,8 @@ type tidbConnCount struct {
 	count    sql.NullInt32
 }
 
-func (m *tidbConnCount) columns() []interface{} {
-	return []interface{}{&m.ts, &m.instance, &m.count}
+func (m *tidbConnCount) columns() []any {
+	return []any{&m.ts, &m.instance, &m.count}
 }
 
 type tidbQueryDuration struct {
@@ -207,8 +207,8 @@ type tidbQueryDuration struct {
 	duration  sql.NullFloat64
 }
 
-func (m *tidbQueryDuration) columns() []interface{} {
-	return []interface{}{&m.ts, &m.instance, &m.queryType, &m.duration}
+func (m *tidbQueryDuration) columns() []any {
+	return []any{&m.ts, &m.instance, &m.queryType, &m.duration}
 }
 
 type tidbTxnDuration struct {
@@ -218,8 +218,8 @@ type tidbTxnDuration struct {
 	duration sql.NullFloat64
 }
 
-func (m *tidbTxnDuration) columns() []interface{} {
-	return []interface{}{&m.ts, &m.instance, &m.opType, &m.duration}
+func (m *tidbTxnDuration) columns() []any {
+	return []any{&m.ts, &m.instance, &m.opType, &m.duration}
 }
 
 type metricColumnImpl interface {
@@ -228,7 +228,7 @@ type metricColumnImpl interface {
 
 type metricColumnIface[T metricColumnImpl] interface {
 	*T
-	columns() []interface{}
+	columns() []any
 }
 
 func queryMetrics[T metricColumnImpl, F metricColumnIface[T]](

@@ -26,22 +26,22 @@ func TestIdentity(t *testing.T) {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	sourceTI1 := mockTableInfo(t, "CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)")
 
-	change := NewRowChange(source, nil, []interface{}{1, 2}, nil, sourceTI1, nil, nil)
+	change := NewRowChange(source, nil, []any{1, 2}, nil, sourceTI1, nil, nil)
 	pre, post := change.IdentityValues()
-	require.Equal(t, []interface{}{1}, pre)
+	require.Equal(t, []any{1}, pre)
 	require.Len(t, post, 0)
 
-	change = NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{1, 4}, sourceTI1, nil, nil)
+	change = NewRowChange(source, nil, []any{1, 2}, []any{1, 4}, sourceTI1, nil, nil)
 	pre, post = change.IdentityValues()
-	require.Equal(t, []interface{}{1}, pre)
-	require.Equal(t, []interface{}{1}, post)
+	require.Equal(t, []any{1}, pre)
+	require.Equal(t, []any{1}, post)
 	require.False(t, change.IsIdentityUpdated())
 
 	sourceTI2 := mockTableInfo(t, "CREATE TABLE tb1 (c INT, c2 INT)")
-	change = NewRowChange(source, nil, nil, []interface{}{5, 6}, sourceTI2, nil, nil)
+	change = NewRowChange(source, nil, nil, []any{5, 6}, sourceTI2, nil, nil)
 	pre, post = change.IdentityValues()
 	require.Len(t, pre, 0)
-	require.Equal(t, []interface{}{5, 6}, post)
+	require.Equal(t, []any{5, 6}, post)
 }
 
 func TestIdentityUpdatedWithUniqueKeys(t *testing.T) {
@@ -50,23 +50,23 @@ func TestIdentityUpdatedWithUniqueKeys(t *testing.T) {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 (id INT PRIMARY KEY, uk1 INT UNIQUE NOT NULL, uk2 INT UNIQUE, val INT)")
 
-	change := NewRowChange(source, nil, []interface{}{1, 10, 100, 7}, []interface{}{1, 10, 100, 9}, sourceTI, nil, nil)
+	change := NewRowChange(source, nil, []any{1, 10, 100, 7}, []any{1, 10, 100, 9}, sourceTI, nil, nil)
 	require.False(t, change.IsIdentityUpdated())
 	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
 
-	change = NewRowChange(source, nil, []interface{}{1, 10, 100, 7}, []interface{}{2, 10, 100, 7}, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, []any{1, 10, 100, 7}, []any{2, 10, 100, 7}, sourceTI, nil, nil)
 	require.True(t, change.IsIdentityUpdated())
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 
-	change = NewRowChange(source, nil, []interface{}{2, 10, 100, 7}, []interface{}{2, 20, 100, 7}, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, []any{2, 10, 100, 7}, []any{2, 20, 100, 7}, sourceTI, nil, nil)
 	require.False(t, change.IsIdentityUpdated())
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 
-	change = NewRowChange(source, nil, []interface{}{2, 20, 100, 7}, []interface{}{2, 20, 200, 7}, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, []any{2, 20, 100, 7}, []any{2, 20, 200, 7}, sourceTI, nil, nil)
 	require.False(t, change.IsIdentityUpdated())
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 
-	change = NewRowChange(source, nil, []interface{}{2, 20, nil, 7}, []interface{}{2, 20, 200, 7}, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, []any{2, 20, nil, 7}, []any{2, 20, 200, 7}, sourceTI, nil, nil)
 	require.False(t, change.IsIdentityUpdated())
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 }
@@ -278,7 +278,7 @@ func TestSplit(t *testing.T) {
 	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 	sourceTI1 := mockTableInfo(t, "CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)")
 
-	change := NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{3, 4}, sourceTI1, nil, nil)
+	change := NewRowChange(source, nil, []any{1, 2}, []any{3, 4}, sourceTI1, nil, nil)
 	require.True(t, change.IsIdentityUpdated())
 	del, ins := change.SplitUpdate()
 	delIDKey := del.IdentityKey()
@@ -293,47 +293,47 @@ func (s *dpanicSuite) TestReduce() {
 	sourceTI := mockTableInfo(s.T(), "CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)")
 
 	cases := []struct {
-		pre1      []interface{}
-		post1     []interface{}
-		pre2      []interface{}
-		post2     []interface{}
-		preAfter  []interface{}
-		postAfter []interface{}
+		pre1      []any
+		post1     []any
+		pre2      []any
+		post2     []any
+		preAfter  []any
+		postAfter []any
 	}{
 		// INSERT + UPDATE
 		{
 			nil,
-			[]interface{}{1, 2},
-			[]interface{}{1, 2},
-			[]interface{}{3, 4},
+			[]any{1, 2},
+			[]any{1, 2},
+			[]any{3, 4},
 			nil,
-			[]interface{}{3, 4},
+			[]any{3, 4},
 		},
 		// INSERT + DELETE
 		{
 			nil,
-			[]interface{}{1, 2},
-			[]interface{}{1, 2},
+			[]any{1, 2},
+			[]any{1, 2},
 			nil,
-			[]interface{}{1, 2},
+			[]any{1, 2},
 			nil,
 		},
 		// UPDATE + UPDATE
 		{
-			[]interface{}{1, 2},
-			[]interface{}{1, 3},
-			[]interface{}{1, 3},
-			[]interface{}{1, 4},
-			[]interface{}{1, 2},
-			[]interface{}{1, 4},
+			[]any{1, 2},
+			[]any{1, 3},
+			[]any{1, 3},
+			[]any{1, 4},
+			[]any{1, 2},
+			[]any{1, 4},
 		},
 		// UPDATE + DELETE
 		{
-			[]interface{}{1, 2},
-			[]interface{}{1, 3},
-			[]interface{}{1, 3},
+			[]any{1, 2},
+			[]any{1, 3},
+			[]any{1, 3},
 			nil,
-			[]interface{}{1, 2},
+			[]any{1, 2},
 			nil,
 		},
 	}
@@ -349,8 +349,8 @@ func (s *dpanicSuite) TestReduce() {
 	}
 
 	// test reduce on IdentityUpdated will DPanic
-	change1 := NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{3, 4}, sourceTI, nil, nil)
-	change2 := NewRowChange(source, nil, []interface{}{3, 4}, []interface{}{5, 6}, sourceTI, nil, nil)
+	change1 := NewRowChange(source, nil, []any{1, 2}, []any{3, 4}, sourceTI, nil, nil)
+	change2 := NewRowChange(source, nil, []any{3, 4}, []any{5, 6}, sourceTI, nil, nil)
 	s.Panics(func() {
 		change2.Reduce(change1)
 	})

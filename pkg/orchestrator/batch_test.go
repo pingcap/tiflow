@@ -25,12 +25,12 @@ func TestGetBatchChangeState(t *testing.T) {
 	t.Parallel()
 	patchGroupSize := 1000
 	patchGroup := make([][]DataPatch, patchGroupSize)
-	for i := 0; i < patchGroupSize; i++ {
+	for i := range patchGroupSize {
 		i := i
 		patches := []DataPatch{&SingleDataPatch{
 			Key: util.NewEtcdKey(fmt.Sprintf("/key%d", i)),
 			Func: func(old []byte) (newValue []byte, changed bool, err error) {
-				newValue = []byte(fmt.Sprintf("abc%d", i))
+				newValue = fmt.Appendf(nil, "abc%d", i)
 				return newValue, true, nil
 			},
 		}}
@@ -42,7 +42,7 @@ func TestGetBatchChangeState(t *testing.T) {
 	require.LessOrEqual(t, n, len(patchGroup))
 	require.LessOrEqual(t, size, etcdTxnMaxSize)
 	require.LessOrEqual(t, len(changedState), etcdTxnMaxOps)
-	require.Equal(t, []byte(fmt.Sprintf("abc%d", 0)), changedState[util.NewEtcdKey("/key0")])
+	require.Equal(t, fmt.Appendf(nil, "abc%d", 0), changedState[util.NewEtcdKey("/key0")])
 
 	// test single patch exceed txn max size
 	largeSizePatches := []DataPatch{&SingleDataPatch{
@@ -63,7 +63,7 @@ func TestGetBatchChangeState(t *testing.T) {
 		manyOpsPatches = append(manyOpsPatches, &SingleDataPatch{
 			Key: util.NewEtcdKey(fmt.Sprintf("/key%d", i)),
 			Func: func(old []byte) (newValue []byte, changed bool, err error) {
-				newValue = []byte(fmt.Sprintf("abc%d", i))
+				newValue = fmt.Appendf(nil, "abc%d", i)
 				return newValue, true, nil
 			},
 		})

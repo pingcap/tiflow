@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"path"
@@ -129,9 +130,7 @@ func (r *Request) WithURI(uri string) *Request {
 		if r.params == nil {
 			r.params = make(url.Values)
 		}
-		for k, v := range vals {
-			r.params[k] = v
-		}
+		maps.Copy(r.params, vals)
 	}
 	return r
 }
@@ -210,7 +209,7 @@ func (r *Request) WithMaxRetries(maxRetries uint64) *Request {
 // only supports two types now:
 //  1. io.Reader
 //  2. type which can be json marshalled
-func (r *Request) WithBody(obj interface{}) *Request {
+func (r *Request) WithBody(obj any) *Request {
 	if r.err != nil {
 		return r
 	}
@@ -406,7 +405,7 @@ func (r Result) Error() error {
 }
 
 // Into stores the http response body into obj.
-func (r Result) Into(obj interface{}) error {
+func (r Result) Into(obj any) error {
 	if r.err != nil {
 		return r.err
 	}

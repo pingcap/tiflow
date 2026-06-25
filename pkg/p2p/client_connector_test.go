@@ -52,11 +52,9 @@ func TestClientConnector(t *testing.T) {
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, mockService)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
 	cc := newClientConnector()
 

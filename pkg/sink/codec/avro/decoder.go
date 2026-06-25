@@ -97,8 +97,8 @@ func (d *decoder) HasNext() (model.MessageType, bool, error) {
 // NextRowChangedEvent returns the next row changed event if exists
 func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	var (
-		valueMap    map[string]interface{}
-		valueSchema map[string]interface{}
+		valueMap    map[string]any
+		valueSchema map[string]any
 		err         error
 	)
 
@@ -175,9 +175,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 // valueMap hold all columns information
 // schema is corresponding to the valueMap, it can be used to decode the valueMap to construct columns.
 func assembleEvent(
-	keyMap, valueMap, schema map[string]interface{}, isDelete bool,
+	keyMap, valueMap, schema map[string]any, isDelete bool,
 ) (*model.RowChangedEvent, error) {
-	fields, ok := schema["fields"].([]interface{})
+	fields, ok := schema["fields"].([]any)
 	if !ok {
 		return nil, errors.New("schema fields should be a map")
 	}
@@ -186,7 +186,7 @@ func assembleEvent(
 	// fields is ordered by the column id, so iterate over it to build columns
 	// it's also the order to calculate the checksum.
 	for _, item := range fields {
-		field, ok := item.(map[string]interface{})
+		field, ok := item.(map[string]any)
 		if !ok {
 			return nil, errors.New("schema field should be a map")
 		}
@@ -199,18 +199,18 @@ func assembleEvent(
 		}
 
 		// query the field to get `tidbType`, and get the mysql type from it.
-		var holder map[string]interface{}
+		var holder map[string]any
 		switch ty := field["type"].(type) {
-		case []interface{}:
-			if m, ok := ty[0].(map[string]interface{}); ok {
-				holder = m["connect.parameters"].(map[string]interface{})
-			} else if m, ok := ty[1].(map[string]interface{}); ok {
-				holder = m["connect.parameters"].(map[string]interface{})
+		case []any:
+			if m, ok := ty[0].(map[string]any); ok {
+				holder = m["connect.parameters"].(map[string]any)
+			} else if m, ok := ty[1].(map[string]any); ok {
+				holder = m["connect.parameters"].(map[string]any)
 			} else {
 				log.Panic("type info is anything else", zap.Any("typeInfo", field["type"]))
 			}
-		case map[string]interface{}:
-			holder = ty["connect.parameters"].(map[string]interface{})
+		case map[string]any:
+			holder = ty["connect.parameters"].(map[string]any)
 		default:
 			log.Panic("type info is anything else", zap.Any("typeInfo", field["type"]))
 		}
@@ -273,7 +273,7 @@ func assembleEvent(
 	return event, nil
 }
 
-func isCorrupted(valueMap map[string]interface{}) bool {
+func isCorrupted(valueMap map[string]any) bool {
 	o, ok := valueMap[tidbCorrupted]
 	if !ok {
 		return false
@@ -285,7 +285,7 @@ func isCorrupted(valueMap map[string]interface{}) bool {
 
 // extract the checksum from the received value map
 // return true if the checksum found, and return error if the checksum is not valid
-func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, error) {
+func extractExpectedChecksum(valueMap map[string]any) (uint64, bool, error) {
 	o, ok := valueMap[tidbRowLevelChecksum]
 	if !ok {
 		return 0, false, nil
@@ -304,12 +304,12 @@ func extractExpectedChecksum(valueMap map[string]interface{}) (uint64, bool, err
 // value is an interface, need to convert it to the real value with the help of type info.
 // holder has the value's column info.
 func getColumnValue(
-	value interface{}, holder map[string]interface{}, mysqlType byte,
-) (interface{}, error) {
+	value any, holder map[string]any, mysqlType byte,
+) (any, error) {
 	switch t := value.(type) {
 	// for nullable columns, the value is encoded as a map with one pair.
 	// key is the encoded type, value is the encoded value, only care about the value here.
-	case map[string]interface{}:
+	case map[string]any:
 		for _, v := range t {
 			value = v
 		}
@@ -422,7 +422,7 @@ func extractGlueSchemaIDAndBinaryData(data []byte) (string, []byte, error) {
 
 func decodeRawBytes(
 	ctx context.Context, schemaM SchemaManager, data []byte, topic string,
-) (map[string]interface{}, map[string]interface{}, error) {
+) (map[string]any, map[string]any, error) {
 	var schemaID schemaID
 	var binary []byte
 	var err error
@@ -456,12 +456,12 @@ func decodeRawBytes(
 		return nil, nil, err
 	}
 
-	result, ok := native.(map[string]interface{})
+	result, ok := native.(map[string]any)
 	if !ok {
 		return nil, nil, errors.New("raw avro message is not a map")
 	}
 
-	schema := make(map[string]interface{})
+	schema := make(map[string]any)
 	if err := json.Unmarshal([]byte(codec.Schema()), &schema); err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -469,13 +469,13 @@ func decodeRawBytes(
 	return result, schema, nil
 }
 
-func (d *decoder) decodeKey(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
+func (d *decoder) decodeKey(ctx context.Context) (map[string]any, map[string]any, error) {
 	data := d.key
 	d.key = nil
 	return decodeRawBytes(ctx, d.schemaM, data, d.topic)
 }
 
-func (d *decoder) decodeValue(ctx context.Context) (map[string]interface{}, map[string]interface{}, error) {
+func (d *decoder) decodeValue(ctx context.Context) (map[string]any, map[string]any, error) {
 	data := d.value
 	d.value = nil
 	return decodeRawBytes(ctx, d.schemaM, data, d.topic)

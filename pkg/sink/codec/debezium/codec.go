@@ -42,7 +42,7 @@ type dbzCodec struct {
 
 // truncateValueForLog truncates large values to avoid log flooding.
 // Returns the original value if it's small enough, otherwise returns a truncated string representation.
-func truncateValueForLog(value interface{}, maxLen int) interface{} {
+func truncateValueForLog(value any, maxLen int) any {
 	switch v := value.(type) {
 	case []byte:
 		if len(v) > maxLen {

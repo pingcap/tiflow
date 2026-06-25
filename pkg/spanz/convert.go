@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"unsafe"
 
 	"github.com/pingcap/log"
@@ -27,11 +28,11 @@ import (
 // HexKey returns a hex string generated from the key.
 func HexKey(key []byte) string {
 	// TODO(qupeng): improve the function.
-	str := ""
+	var str strings.Builder
 	for _, c := range key {
-		str += fmt.Sprintf("%02X", c)
+		str.WriteString(fmt.Sprintf("%02X", c))
 	}
-	return str
+	return str.String()
 }
 
 // ArrayToSpan converts an array of TableID to an array of Span.

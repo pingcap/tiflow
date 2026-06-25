@@ -114,8 +114,7 @@ func TestBootstrapWorker(t *testing.T) {
 		defaultMaxInactiveDuration)
 
 	// Start the worker in a separate goroutine
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	go func() {
 		_ = worker.run(ctx)
 	}()

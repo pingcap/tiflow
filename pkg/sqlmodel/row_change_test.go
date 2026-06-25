@@ -68,8 +68,8 @@ func TestNewRowChange(t *testing.T) {
 	expected := &RowChange{
 		sourceTable:     source,
 		targetTable:     target,
-		preValues:       []interface{}{1, 2},
-		postValues:      []interface{}{1, 3},
+		preValues:       []any{1, 2},
+		postValues:      []any{1, 3},
 		sourceTableInfo: sourceTI,
 		targetTableInfo: targetTI,
 		tiSessionCtx:    tiSession,
@@ -77,7 +77,7 @@ func TestNewRowChange(t *testing.T) {
 		whereHandle:     nil,
 	}
 
-	actual := NewRowChange(source, target, []interface{}{1, 2}, []interface{}{1, 3}, sourceTI, targetTI, tiSession)
+	actual := NewRowChange(source, target, []any{1, 2}, []any{1, 3}, sourceTI, targetTI, tiSession)
 	require.Equal(t, expected, actual)
 
 	actual.lazyInitWhereHandle()
@@ -89,18 +89,18 @@ func TestNewRowChange(t *testing.T) {
 	expected.targetTableInfo = expected.sourceTableInfo
 	expected.tiSessionCtx = utils.ZeroSessionCtx
 	expected.whereHandle = nil
-	actual = NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{1, 3}, sourceTI, nil, nil)
+	actual = NewRowChange(source, nil, []any{1, 2}, []any{1, 3}, sourceTI, nil, nil)
 	require.Equal(t, expected, actual)
 }
 
 func (s *dpanicSuite) TestRowChangeType() {
-	change := &RowChange{preValues: []interface{}{1}}
+	change := &RowChange{preValues: []any{1}}
 	change.calculateType()
 	s.Equal(RowChangeDelete, change.tp)
-	change = &RowChange{preValues: []interface{}{1}, postValues: []interface{}{2}}
+	change = &RowChange{preValues: []any{1}, postValues: []any{2}}
 	change.calculateType()
 	s.Equal(RowChangeUpdate, change.tp)
-	change = &RowChange{postValues: []interface{}{1}}
+	change = &RowChange{postValues: []any{1}}
 	change.calculateType()
 	s.Equal(RowChangeInsert, change.tp)
 
@@ -117,68 +117,68 @@ func (s *dpanicSuite) TestGenDelete() {
 	cases := []struct {
 		sourceCreateSQL string
 		targetCreateSQL string
-		preValues       []interface{}
+		preValues       []any
 
 		expectedSQL  string
-		expectedArgs []interface{}
+		expectedArgs []any
 	}{
 		{
 			"CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)",
 			"CREATE TABLE tb2 (id INT PRIMARY KEY, name INT, extra VARCHAR(20))",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"DELETE FROM `db`.`tb2` WHERE `id` = ? LIMIT 1",
-			[]interface{}{1},
+			[]any{1},
 		},
 		{
 			"CREATE TABLE tb1 (c INT, c2 INT UNIQUE)",
 			"CREATE TABLE tb2 (c INT, c2 INT UNIQUE)",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"DELETE FROM `db`.`tb2` WHERE `c2` = ? LIMIT 1",
-			[]interface{}{2},
+			[]any{2},
 		},
 		// next 2 cases test NULL value
 		{
 			"CREATE TABLE tb1 (c INT, c2 INT UNIQUE)",
 			"CREATE TABLE tb2 (c INT, c2 INT UNIQUE)",
-			[]interface{}{1, nil},
+			[]any{1, nil},
 
 			"DELETE FROM `db`.`tb2` WHERE `c` = ? AND `c2` IS ? LIMIT 1",
-			[]interface{}{1, nil},
+			[]any{1, nil},
 		},
 		{
 			"CREATE TABLE tb1 (c INT, c2 INT)",
 			"CREATE TABLE tb2 (c INT, c2 INT)",
-			[]interface{}{1, nil},
+			[]any{1, nil},
 
 			"DELETE FROM `db`.`tb2` WHERE `c` = ? AND `c2` IS ? LIMIT 1",
-			[]interface{}{1, nil},
+			[]any{1, nil},
 		},
 		{
 			"CREATE TABLE tb1 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
 			"CREATE TABLE tb2 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
-			[]interface{}{"Alice"},
+			[]any{"Alice"},
 
 			"DELETE FROM `db`.`tb2` WHERE `name` = ? LIMIT 1",
-			[]interface{}{"Alice"},
+			[]any{"Alice"},
 		},
 		// next 2 cases test using downstream table to generate WHERE
 		{
 			"CREATE TABLE tb1 (id INT PRIMARY KEY, user_id INT NOT NULL UNIQUE)",
 			"CREATE TABLE tb2 (new_id INT PRIMARY KEY, id INT, user_id INT NOT NULL UNIQUE)",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"DELETE FROM `db`.`tb2` WHERE `user_id` = ? LIMIT 1",
-			[]interface{}{2},
+			[]any{2},
 		},
 		{
 			"CREATE TABLE tb1 (id INT PRIMARY KEY, c2 INT)",
 			"CREATE TABLE tb2 (new_id INT PRIMARY KEY, id INT, c2 INT)",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"DELETE FROM `db`.`tb2` WHERE `id` = ? AND `c2` = ? LIMIT 1",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 		},
 	}
 
@@ -193,10 +193,10 @@ func (s *dpanicSuite) TestGenDelete() {
 
 	// a RowChangeUpdate can still generate DELETE SQL
 	sourceTI := mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
-	change := NewRowChange(source, nil, []interface{}{1, 2}, []interface{}{3, 4}, sourceTI, nil, nil)
+	change := NewRowChange(source, nil, []any{1, 2}, []any{3, 4}, sourceTI, nil, nil)
 	sql, args := change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `id` = ? LIMIT 1", sql)
-	s.Equal([]interface{}{1}, args)
+	s.Equal([]any{1}, args)
 
 	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 ("+
 		"a VARCHAR(32), "+
@@ -205,10 +205,10 @@ func (s *dpanicSuite) TestGenDelete() {
 		"UNIQUE KEY uk_a ((lower(a))))")
 	hiddenA := expressionIndexColumnName(s.T(), sourceTI, "uk_a")
 	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
-	change = NewRowChange(source, nil, []interface{}{"Alice", 1, 9}, nil, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, []any{"Alice", 1, 9}, nil, sourceTI, nil, nil)
 	sql, args = change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `b` = ? LIMIT 1", sql)
-	s.Equal([]interface{}{1}, args)
+	s.Equal([]any{1}, args)
 
 	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 ("+
 		"a VARCHAR(32), "+
@@ -216,13 +216,13 @@ func (s *dpanicSuite) TestGenDelete() {
 		"UNIQUE KEY uk_a ((lower(a))))")
 	hiddenA = expressionIndexColumnName(s.T(), sourceTI, "uk_a")
 	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "c")
-	change = NewRowChange(source, nil, []interface{}{"Alice", 9}, nil, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, []any{"Alice", 9}, nil, sourceTI, nil, nil)
 	sql, args = change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `a` = ? AND `c` = ? LIMIT 1", sql)
-	s.Equal([]interface{}{"Alice", 9}, args)
+	s.Equal([]any{"Alice", 9}, args)
 
 	sourceTI = mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
-	change = NewRowChange(source, nil, nil, []interface{}{3, 4}, sourceTI, nil, nil)
+	change = NewRowChange(source, nil, nil, []any{3, 4}, sourceTI, nil, nil)
 	s.Panics(func() {
 		change.GenSQL(DMLDelete)
 	})
@@ -235,66 +235,66 @@ func (s *dpanicSuite) TestGenUpdate() {
 	cases := []struct {
 		sourceCreateSQL string
 		targetCreateSQL string
-		preValues       []interface{}
-		postValues      []interface{}
+		preValues       []any
+		postValues      []any
 
 		expectedSQL  string
-		expectedArgs []interface{}
+		expectedArgs []any
 	}{
 		{
 			"CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)",
 			"CREATE TABLE tb2 (id INT PRIMARY KEY, name INT, extra VARCHAR(20))",
-			[]interface{}{1, 2},
-			[]interface{}{3, 4},
+			[]any{1, 2},
+			[]any{3, 4},
 
 			"UPDATE `db`.`tb2` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
-			[]interface{}{3, 4, 1},
+			[]any{3, 4, 1},
 		},
 		{
 			"CREATE TABLE tb1 (id INT UNIQUE, name INT)",
 			"CREATE TABLE tb2 (id INT UNIQUE, name INT)",
-			[]interface{}{nil, 2},
-			[]interface{}{3, 4},
+			[]any{nil, 2},
+			[]any{3, 4},
 
 			"UPDATE `db`.`tb2` SET `id` = ?, `name` = ? WHERE `id` IS ? AND `name` = ? LIMIT 1",
-			[]interface{}{3, 4, nil, 2},
+			[]any{3, 4, nil, 2},
 		},
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)",
 			"CREATE TABLE tb2 (c INT, c2 INT)",
-			[]interface{}{1, 2},
-			[]interface{}{3, 4},
+			[]any{1, 2},
+			[]any{3, 4},
 
 			"UPDATE `db`.`tb2` SET `c` = ?, `c2` = ? WHERE `c` = ? AND `c2` = ? LIMIT 1",
-			[]interface{}{3, 4, 1, 2},
+			[]any{3, 4, 1, 2},
 		},
 		{
 			"CREATE TABLE tb1 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
 			"CREATE TABLE tb2 (name VARCHAR(64), UNIQUE KEY uk_lower_name ((lower(name))))",
-			[]interface{}{"Alice"},
-			[]interface{}{"Bob"},
+			[]any{"Alice"},
+			[]any{"Bob"},
 
 			"UPDATE `db`.`tb2` SET `name` = ? WHERE `name` = ? LIMIT 1",
-			[]interface{}{"Bob", "Alice"},
+			[]any{"Bob", "Alice"},
 		},
 		// next 2 cases test generated column
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT AS (c+1))",
 			"CREATE TABLE tb2 (c INT PRIMARY KEY, c2 INT AS (c+1))",
-			[]interface{}{1, 2},
-			[]interface{}{3, 4},
+			[]any{1, 2},
+			[]any{3, 4},
 
 			"UPDATE `db`.`tb2` SET `c` = ? WHERE `c` = ? LIMIT 1",
-			[]interface{}{3, 1},
+			[]any{3, 1},
 		},
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT AS (c+1))",
 			"CREATE TABLE tb2 (c INT PRIMARY KEY, c2 INT)",
-			[]interface{}{1, 2},
-			[]interface{}{3, 4},
+			[]any{1, 2},
+			[]any{3, 4},
 
 			"UPDATE `db`.`tb2` SET `c` = ?, `c2` = ? WHERE `c` = ? LIMIT 1",
-			[]interface{}{3, 4, 1},
+			[]any{3, 4, 1},
 		},
 	}
 
@@ -308,7 +308,7 @@ func (s *dpanicSuite) TestGenUpdate() {
 	}
 
 	sourceTI := mockTableInfo(s.T(), "CREATE TABLE tb1 (id INT PRIMARY KEY, name INT)")
-	change := NewRowChange(source, nil, nil, []interface{}{3, 4}, sourceTI, nil, nil)
+	change := NewRowChange(source, nil, nil, []any{3, 4}, sourceTI, nil, nil)
 	s.Panics(func() {
 		change.GenSQL(DMLUpdate)
 	})
@@ -322,24 +322,24 @@ func (s *dpanicSuite) TestExpressionIndex() {
     	UNIQUE KEY j_index ((cast(json_extract(j,'$[*]') as signed array)), id)
 )`
 	ti := mockTableInfo(s.T(), sql)
-	change := NewRowChange(source, nil, nil, []interface{}{1, `[1,2,3]`}, ti, nil, nil)
+	change := NewRowChange(source, nil, nil, []any{1, `[1,2,3]`}, ti, nil, nil)
 	sql, args := change.GenSQL(DMLInsert)
 	s.Equal("INSERT INTO `db`.`tb1` (`id`,`j`) VALUES (?,?)", sql)
-	s.Equal([]interface{}{1, `[1,2,3]`}, args)
+	s.Equal([]any{1, `[1,2,3]`}, args)
 	require.Equal(s.T(), 2, change.ColumnCount())
 	keys := change.CausalityKeys()
 	// TODO: need change it after future fix
 	require.Equal(s.T(), []string{"1.id.db.tb1"}, keys)
 
-	change2 := NewRowChange(source, nil, []interface{}{1, `[1,2,3]`}, []interface{}{1, `[1,2,3,4]`}, ti, nil, nil)
+	change2 := NewRowChange(source, nil, []any{1, `[1,2,3]`}, []any{1, `[1,2,3,4]`}, ti, nil, nil)
 	sql, args = change2.GenSQL(DMLUpdate)
 	s.Equal("UPDATE `db`.`tb1` SET `id` = ?, `j` = ? WHERE `id` = ? LIMIT 1", sql)
-	s.Equal([]interface{}{1, `[1,2,3,4]`, 1}, args)
+	s.Equal([]any{1, `[1,2,3,4]`, 1}, args)
 
 	change2.Reduce(change)
 	sql, args = change2.GenSQL(DMLInsert)
 	s.Equal("INSERT INTO `db`.`tb1` (`id`,`j`) VALUES (?,?)", sql)
-	s.Equal([]interface{}{1, `[1,2,3,4]`}, args)
+	s.Equal([]any{1, `[1,2,3,4]`}, args)
 }
 
 func TestGenInsert(t *testing.T) {
@@ -351,43 +351,43 @@ func TestGenInsert(t *testing.T) {
 	cases := []struct {
 		sourceCreateSQL string
 		targetCreateSQL string
-		postValues      []interface{}
+		postValues      []any
 
 		expectedInsertSQL      string
 		expectedReplaceSQL     string
 		expectedInsertOnDupSQL string
-		expectedArgs           []interface{}
+		expectedArgs           []any
 	}{
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT)",
 			"CREATE TABLE tb2 (c INT PRIMARY KEY, c2 INT, extra VARCHAR(20))",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"INSERT INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?)",
 			"REPLACE INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?)",
 			"INSERT INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?) ON DUPLICATE KEY UPDATE `c`=VALUES(`c`),`c2`=VALUES(`c2`)",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 		},
 		// next 2 cases test generated column
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT AS (c+1))",
 			"CREATE TABLE tb2 (c INT PRIMARY KEY, c2 INT AS (c+1))",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"INSERT INTO `db`.`tb2` (`c`) VALUES (?)",
 			"REPLACE INTO `db`.`tb2` (`c`) VALUES (?)",
 			"INSERT INTO `db`.`tb2` (`c`) VALUES (?) ON DUPLICATE KEY UPDATE `c`=VALUES(`c`)",
-			[]interface{}{1},
+			[]any{1},
 		},
 		{
 			"CREATE TABLE tb1 (c INT PRIMARY KEY, c2 INT AS (c+1))",
 			"CREATE TABLE tb2 (c INT PRIMARY KEY, c2 INT)",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 
 			"INSERT INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?)",
 			"REPLACE INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?)",
 			"INSERT INTO `db`.`tb2` (`c`,`c2`) VALUES (?,?) ON DUPLICATE KEY UPDATE `c`=VALUES(`c`),`c2`=VALUES(`c2`)",
-			[]interface{}{1, 2},
+			[]any{1, 2},
 		},
 	}
 

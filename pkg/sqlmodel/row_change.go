@@ -61,8 +61,8 @@ type RowChange struct {
 	// Optional source table name used only by CausalityKeys.
 	causalityKeySourceTable *cdcmodel.TableName
 
-	preValues  []interface{}
-	postValues []interface{}
+	preValues  []any
+	postValues []any
 
 	sourceTableInfo *timodel.TableInfo
 	targetTableInfo *timodel.TableInfo
@@ -92,8 +92,8 @@ type RowChange struct {
 func NewRowChange(
 	sourceTable *cdcmodel.TableName,
 	targetTable *cdcmodel.TableName,
-	preValues []interface{},
-	postValues []interface{},
+	preValues []any,
+	postValues []any,
 	sourceTableInfo *timodel.TableInfo,
 	downstreamTableInfo *timodel.TableInfo,
 	tiCtx sessionctx.Context,
@@ -241,7 +241,7 @@ func (r *RowChange) lazyInitWhereHandle() {
 
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
-func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
+func (r *RowChange) whereColumnsAndValues() ([]string, []any) {
 	r.lazyInitWhereHandle()
 
 	columns := r.whereHandle.rowMapper.visibleColumns
@@ -274,7 +274,7 @@ func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 
 // genWhere generates WHERE clause for UPDATE and DELETE to identify the row.
 // the SQL part is written to `buf` and the args part is returned.
-func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
+func (r *RowChange) genWhere(buf *strings.Builder) []any {
 	whereColumns, whereValues := r.whereColumnsAndValues()
 
 	for i, col := range whereColumns {
@@ -291,7 +291,7 @@ func (r *RowChange) genWhere(buf *strings.Builder) []interface{} {
 	return whereValues
 }
 
-func (r *RowChange) genDeleteSQL() (string, []interface{}) {
+func (r *RowChange) genDeleteSQL() (string, []any) {
 	if r.tp != RowChangeDelete && r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genDeleteSQL",
 			zap.String("sourceTable", r.sourceTable.String()),
@@ -310,7 +310,7 @@ func (r *RowChange) genDeleteSQL() (string, []interface{}) {
 	return buf.String(), whereArgs
 }
 
-func (r *RowChange) genUpdateSQL() (string, []interface{}) {
+func (r *RowChange) genUpdateSQL() (string, []any) {
 	if r.tp != RowChangeUpdate {
 		log.L().DPanic("illegal type for genUpdateSQL",
 			zap.String("sourceTable", r.sourceTable.String()),
@@ -326,7 +326,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 	// Build target generated columns lower names set to accelerate following check
 	generatedColumns := generatedColumnsNameSet(r.targetTableInfo.Columns)
-	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
+	args := make([]any, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
 	for i, col := range r.sourceTableInfo.Columns {
 		if _, ok := generatedColumns[col.Name.L]; ok {
@@ -349,7 +349,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	return buf.String(), args
 }
 
-func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
+func (r *RowChange) genInsertSQL(tp DMLType) (string, []any) {
 	return GenInsertSQL(tp, r)
 }
 
@@ -385,7 +385,7 @@ func (t DMLType) String() string {
 }
 
 // GenSQL generated a DML SQL for this RowChange.
-func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
+func (r *RowChange) GenSQL(tp DMLType) (string, []any) {
 	switch tp {
 	case DMLInsert, DMLReplace, DMLInsertOnDuplicateUpdate:
 		return r.genInsertSQL(tp)
@@ -401,19 +401,19 @@ func (r *RowChange) GenSQL(tp DMLType) (string, []interface{}) {
 }
 
 // GetPreValues is only used in tests.
-func (r *RowChange) GetPreValues() []interface{} {
+func (r *RowChange) GetPreValues() []any {
 	return r.preValues
 }
 
 // GetPostValues is only used in tests.
-func (r *RowChange) GetPostValues() []interface{} {
+func (r *RowChange) GetPostValues() []any {
 	return r.postValues
 }
 
 // RowValues returns the values of this row change
 // for INSERT and UPDATE, it is the post values.
 // for DELETE, it is the pre values.
-func (r *RowChange) RowValues() []interface{} {
+func (r *RowChange) RowValues() []any {
 	switch r.tp {
 	case RowChangeInsert, RowChangeUpdate:
 		return r.postValues

@@ -33,7 +33,7 @@ func (r *RowChange) HasNotNullUniqueIdx() bool {
 // changes of one row.
 // We always use same index for same table structure to get IdentityValues.
 // two groups returned are from preValues and postValues.
-func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
+func (r *RowChange) IdentityValues() ([]any, []any) {
 	r.lazyInitWhereHandle()
 
 	indexInfo := r.whereHandle.UniqueNotNullIdx
@@ -49,7 +49,7 @@ func (r *RowChange) IdentityValues() ([]interface{}, []interface{}) {
 // make sure it's not updating the identity itself.
 // we extract identity from preValues for update/delete, postValues for insert.
 // if there's no primary key, return all values.
-func (r *RowChange) RowIdentity() []interface{} {
+func (r *RowChange) RowIdentity() []any {
 	r.lazyInitWhereHandle()
 
 	targetVals := r.preValues
@@ -166,7 +166,7 @@ func (r *RowChange) identityValuesByIndex(
 }
 
 // genKey gens key by values e.g. "a.1.b".
-func genKey(values []interface{}) string {
+func genKey(values []any) string {
 	builder := new(strings.Builder)
 	for i, v := range values {
 		if i != 0 {

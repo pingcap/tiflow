@@ -65,11 +65,9 @@ func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, 
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
 	cancel = func() {
 		grpcServer.Stop()
@@ -93,7 +91,7 @@ func newServerForTesting(t *testing.T, serverID string) (server *MessageServer, 
 	return
 }
 
-func mustAddHandler(ctx context.Context, t *testing.T, server *MessageServer, topic string, tpi interface{}, f func(string, interface{}) error) <-chan error {
+func mustAddHandler(ctx context.Context, t *testing.T, server *MessageServer, topic string, tpi any, f func(string, any) error) <-chan error {
 	doneCh, errCh, err := server.AddHandler(ctx, topic, tpi, f)
 	require.NoError(t, err)
 
@@ -123,15 +121,13 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 
 	localCh := make(chan RawMessageEntry, defaultMessageBatchSizeMedium)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, localCh)
 		require.Regexp(t, ".*context canceled.*", err)
-	}()
+	})
 
 	var ackWg sync.WaitGroup
-	for i := 0; i < defaultMultiClientCount; i++ {
+	for i := range defaultMultiClientCount {
 		wg.Add(1)
 		ackWg.Add(1)
 		i := i
@@ -170,7 +166,7 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 				}
 			}()
 
-			for j := 0; j < defaultMessageBatchSizeMedium; j++ {
+			for j := range defaultMessageBatchSizeMedium {
 				content := &testTopicContent{Index: int64(j + 1)}
 				bytes, err := json.Marshal(content)
 				require.NoError(t, err)
@@ -192,7 +188,7 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	lastIndices := sync.Map{}
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i any) error {
 		if strings.Contains(senderID, "server") {
 			require.Equal(t, serverID, senderID)
 		} else {
@@ -216,7 +212,7 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 	ackWg.Add(1)
 	go func() {
 		defer wg.Done()
-		for j := 0; j < defaultMessageBatchSizeLarge; j++ {
+		for j := range defaultMessageBatchSizeLarge {
 			content := &testTopicContent{Index: int64(j + 1)}
 			select {
 			case <-ctx.Done():
@@ -249,16 +245,14 @@ func TestServerMultiClientSingleTopic(t *testing.T) {
 		}()
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 		case err := <-errCh:
 			require.Error(t, err)
 			require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err.Error())
 		}
-	}()
+	})
 
 	ackWg.Wait()
 
@@ -283,18 +277,16 @@ func TestServerDeregisterHandler(t *testing.T) {
 	defer closer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	var (
 		lastIndex int64
 		removed   int32
 	)
-	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i interface{}) error {
+	errCh := mustAddHandler(ctx, t, server, "test-topic-1", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, int32(0), atomic.LoadInt32(&removed))
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
@@ -304,15 +296,13 @@ func TestServerDeregisterHandler(t *testing.T) {
 		return nil
 	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 		case err := <-errCh:
 			require.Regexp(t, ".*ErrWorkerPoolHandleCancelled.*", err.Error())
 		}
-	}()
+	})
 
 	client, closeClient := newClient()
 	defer closeClient()
@@ -330,9 +320,7 @@ func TestServerDeregisterHandler(t *testing.T) {
 	require.NoError(t, err)
 
 	removeHandler := func() {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			doneCh, err := server.RemoveHandler(ctx, "test-topic-1")
 			require.NoError(t, err)
 			select {
@@ -341,12 +329,10 @@ func TestServerDeregisterHandler(t *testing.T) {
 			case <-doneCh:
 			}
 			atomic.StoreInt32(&removed, 1)
-		}()
+		})
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer cancel()
 		defer closer()
 		var lastAck int64
@@ -367,9 +353,9 @@ func TestServerDeregisterHandler(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
-	for i := 0; i < defaultMessageBatchSizeSmall; i++ {
+	for i := range defaultMessageBatchSizeSmall {
 		content := &testTopicContent{Index: int64(i + 1)}
 		bytes, err := json.Marshal(content)
 		require.NoError(t, err)
@@ -398,12 +384,10 @@ func TestServerClosed(t *testing.T) {
 
 	cctx, cancelServer := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(cctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	client, closeClient := newClient()
 	defer closeClient()
@@ -440,12 +424,10 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 	defer closer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	client, closeClient := newClient()
 	defer closeClient()
@@ -462,9 +444,7 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			resp, err := stream.Recv()
 			require.NoError(t, err)
@@ -475,9 +455,9 @@ func TestServerTopicCongestedDueToNoHandler(t *testing.T) {
 			cancel()
 			return
 		}
-	}()
+	})
 
-	for i := 0; i < defaultMessageBatchSizeMedium; i++ {
+	for i := range defaultMessageBatchSizeMedium {
 		content := &testTopicContent{Index: int64(i + 1)}
 		bytes, err := json.Marshal(content)
 		require.NoError(t, err)
@@ -508,12 +488,10 @@ func TestServerIncomingConnectionStale(t *testing.T) {
 	defer closer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	client, closeClient := newClient()
 	defer closeClient()
@@ -574,12 +552,10 @@ func TestServerOldConnectionStale(t *testing.T) {
 	defer closer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	client, closeClient := newClient()
 	defer closeClient()
@@ -639,16 +615,14 @@ func TestServerRepeatedMessages(t *testing.T) {
 	defer closer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	var lastIndex int64
 	_ = mustAddHandler(ctx, t, server, "test-topic-1",
-		&testTopicContent{}, func(senderID string, i interface{}) error {
+		&testTopicContent{}, func(senderID string, i any) error {
 			require.Equal(t, "test-client-1", senderID)
 			require.IsType(t, &testTopicContent{}, i)
 			content := i.(*testTopicContent)
@@ -672,9 +646,7 @@ func TestServerRepeatedMessages(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer cancel()
 		for {
 			resp, err := stream.Recv()
@@ -690,9 +662,9 @@ func TestServerRepeatedMessages(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
-	for i := 0; i < defaultMessageBatchSizeSmall; i++ {
+	for i := range defaultMessageBatchSizeSmall {
 		content := &testTopicContent{Index: int64(i + 1)}
 		bytes, err := json.Marshal(content)
 		require.NoError(t, err)
@@ -740,41 +712,33 @@ func TestServerExitWhileAddingHandler(t *testing.T) {
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(serverCtx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	waitCh := make(chan struct{})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.scheduleTask(ctx, taskDebugDelay{
 			doneCh: waitCh,
 		})
 		require.NoError(t, err)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(time.Millisecond * 100)
-		_, err := server.SyncAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
+		_, err := server.SyncAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i any) error {
 			return nil
 		})
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrPeerMessageServerClosed.*", err.Error())
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(time.Millisecond * 300)
 		cancelServer()
-	}()
+	})
 
 	wg.Wait()
 }
@@ -790,19 +754,15 @@ func TestServerExitWhileRemovingHandler(t *testing.T) {
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(serverCtx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	waitCh := make(chan struct{})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		_, err := server.SyncAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i interface{}) error {
+	wg.Go(func() {
+		_, err := server.SyncAddHandler(ctx, "test-topic", &testTopicContent{}, func(s string, i any) error {
 			return nil
 		})
 		require.NoError(t, err)
@@ -813,14 +773,12 @@ func TestServerExitWhileRemovingHandler(t *testing.T) {
 		time.Sleep(time.Millisecond * 100)
 		err = server.SyncRemoveHandler(ctx, "test-topic")
 		require.NoError(t, err)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		time.Sleep(time.Millisecond * 500)
 		cancelServer()
-	}()
+	})
 
 	wg.Wait()
 }
@@ -833,12 +791,10 @@ func TestReceiverIDMismatch(t *testing.T) {
 	defer closer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	client, closeClient := newClient()
 	defer closeClient()
@@ -874,15 +830,13 @@ func TestServerDataLossAfterUnregisterHandle(t *testing.T) {
 	defer cancelServer()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(serverCtx, nil)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	var called int32
-	mustAddHandler(ctx, t, server, "blocking-handler", &testTopicContent{}, func(_ string, _ interface{}) error {
+	mustAddHandler(ctx, t, server, "blocking-handler", &testTopicContent{}, func(_ string, _ any) error {
 		if atomic.AddInt32(&called, 1) == 2 {
 			time.Sleep(1 * time.Second)
 		}
@@ -934,7 +888,7 @@ func TestServerDataLossAfterUnregisterHandle(t *testing.T) {
 	require.NoError(t, err)
 
 	// re-registers the handler
-	errCh := mustAddHandler(ctx, t, server, "blocking-handler", &testTopicContent{}, func(_ string, msg interface{}) error {
+	errCh := mustAddHandler(ctx, t, server, "blocking-handler", &testTopicContent{}, func(_ string, msg any) error {
 		require.Fail(t, "should not have been called", "value: %v", msg)
 		return nil
 	})
@@ -975,12 +929,10 @@ func TestServerDeregisterPeer(t *testing.T) {
 	server.config.MaxPendingMessageCountPerTopic = math.MaxInt64
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx, nil)
 		require.Regexp(t, ".*context canceled.*", err)
-	}()
+	})
 
 	var sendGroup sync.WaitGroup
 	sendGroup.Add(1)

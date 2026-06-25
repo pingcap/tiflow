@@ -187,7 +187,7 @@ func (m *Manager) Get(upstreamID uint64) (*Upstream, bool) {
 // Please make sure it will only be called once when capture exits.
 func (m *Manager) Close() {
 	m.cancel()
-	m.ups.Range(func(k, v interface{}) bool {
+	m.ups.Range(func(k, v any) bool {
 		v.(*Upstream).Close()
 		m.ups.Delete(k)
 		return true
@@ -197,7 +197,7 @@ func (m *Manager) Close() {
 // Visit on each upstream, return error on the first
 func (m *Manager) Visit(visitor func(up *Upstream) error) error {
 	var err error
-	m.ups.Range(func(k, v interface{}) bool {
+	m.ups.Range(func(k, v any) bool {
 		err = visitor(v.(*Upstream))
 		return err == nil
 	})
@@ -224,7 +224,7 @@ func (m *Manager) Tick(ctx context.Context,
 	defer m.mu.Unlock()
 
 	var err error
-	m.ups.Range(func(k, v interface{}) bool {
+	m.ups.Range(func(k, v any) bool {
 		select {
 		case <-ctx.Done():
 			err = ctx.Err()

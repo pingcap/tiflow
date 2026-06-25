@@ -57,10 +57,8 @@ func TestMustCompareAndIncrease(t *testing.T) {
 		doIncrease()
 	}()
 
-	wg.Add(1)
 	// Test target never decrease.
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-ctx.Done():
@@ -71,7 +69,7 @@ func TestMustCompareAndIncrease(t *testing.T) {
 				require.Greater(t, target.Load(), v)
 			}
 		}
-	}()
+	})
 
 	cancel()
 	wg.Wait()

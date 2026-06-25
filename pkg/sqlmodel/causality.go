@@ -59,7 +59,7 @@ func collationNeeds2LowerCase(collation string) bool {
 	return strings.HasSuffix(collation, "_ci")
 }
 
-func columnValue2String(value interface{}) string {
+func columnValue2String(value any) string {
 	var data string
 	switch v := value.(type) {
 	case nil:
@@ -106,7 +106,7 @@ func columnValue2String(value interface{}) string {
 func genKeyString(
 	table string,
 	columns []*timodel.ColumnInfo,
-	values []interface{},
+	values []any,
 ) string {
 	var buf strings.Builder
 	for i, data := range values {
@@ -142,9 +142,9 @@ func truncateIndexValues(
 	ti *timodel.TableInfo,
 	indexColumns *timodel.IndexInfo,
 	tiColumns []*timodel.ColumnInfo,
-	data []interface{},
-) []interface{} {
-	values := make([]interface{}, 0, len(indexColumns.Columns))
+	data []any,
+) []any {
+	values := make([]any, 0, len(indexColumns.Columns))
 	datums, err := utils.AdjustBinaryProtocolForDatum(ctx, data, tiColumns)
 	if err != nil {
 		log.L().Warn("adjust binary protocol for datum error", zap.Error(err))
@@ -157,7 +157,7 @@ func truncateIndexValues(
 	return values
 }
 
-func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string {
+func (r *RowChange) getForeignKeyCausalityString(values []any) []string {
 	if len(r.foreignKeyRelations) == 0 {
 		return nil
 	}
@@ -169,7 +169,7 @@ func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string 
 			continue
 		}
 
-		relationValues := make([]interface{}, len(relation.ChildColumnIdx))
+		relationValues := make([]any, len(relation.ChildColumnIdx))
 		skip := false
 		for i, idx := range relation.ChildColumnIdx {
 			if idx >= len(values) {
@@ -202,7 +202,7 @@ func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string 
 	return keys
 }
 
-func (r *RowChange) getCausalityString(values []interface{}) []string {
+func (r *RowChange) getCausalityString(values []any) []string {
 	sourceTable := r.sourceTable
 	if r.causalityKeySourceTable != nil {
 		// Only causality keys use this table name; r.sourceTable keeps the original source table.

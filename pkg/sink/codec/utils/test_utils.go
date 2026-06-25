@@ -165,7 +165,7 @@ func LargeColumnKeyValues() ([]string, []driver.Value) {
 }
 
 // LargeTableColumns is the columns of large table
-var LargeTableColumns = map[string]interface{}{
+var LargeTableColumns = map[string]any{
 	"t":           []uint8("127"),
 	"tu1":         []uint8("127"),
 	"tu2":         []uint8("128"),

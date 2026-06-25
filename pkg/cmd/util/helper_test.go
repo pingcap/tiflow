@@ -45,7 +45,7 @@ func TestProxyFields(t *testing.T) {
 			require.Nil(t, os.Unsetenv(env))
 		}
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if (1<<i)&mask != 0 {
 				require.Nil(t, os.Setenv(envs[i], envPreset[i]))
 			}

@@ -14,7 +14,6 @@
 package factory
 
 import (
-	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -33,8 +32,7 @@ func TestFactoryImplPdClient(t *testing.T) {
 	t.Parallel()
 	c := mock_factory.NewMockClientGetter(gomock.NewController(t))
 	f := factoryImpl{ClientGetter: c}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	cmdcontext.SetDefaultContext(ctx)
 
 	var certAllowedCN []string

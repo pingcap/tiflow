@@ -218,16 +218,16 @@ func (b *BatchDecoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 }
 
 func (b *BatchDecoder) buildColumns(
-	holder *common.ColumnsHolder, handleKeyColumns map[string]interface{},
+	holder *common.ColumnsHolder, handleKeyColumns map[string]any,
 ) []*model.Column {
 	columnsCount := holder.Length()
 	columns := make([]*model.Column, 0, columnsCount)
-	for i := 0; i < columnsCount; i++ {
+	for i := range columnsCount {
 		columnType := holder.Types[i]
 		name := columnType.Name()
 		mysqlType := types.StrToType(strings.ToLower(columnType.DatabaseTypeName()))
 
-		var value interface{}
+		var value any
 		value = holder.Values[i].([]uint8)
 
 		switch mysqlType {
@@ -262,7 +262,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 
 	tableInfo := handleKeyOnlyEvent.TableInfo
 	if handleKeyOnlyEvent.IsInsert() {
-		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
+		conditions := make(map[string]any, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
@@ -273,7 +273,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
 		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
 	} else if handleKeyOnlyEvent.IsDelete() {
-		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
+		conditions := make(map[string]any, len(handleKeyOnlyEvent.PreColumns))
 		for _, col := range handleKeyOnlyEvent.PreColumns {
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
@@ -284,7 +284,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, preColumns, indexColumns)
 		handleKeyOnlyEvent.PreColumns = model.Columns2ColumnDatas(preColumns, handleKeyOnlyEvent.TableInfo)
 	} else if handleKeyOnlyEvent.IsUpdate() {
-		conditions := make(map[string]interface{}, len(handleKeyOnlyEvent.Columns))
+		conditions := make(map[string]any, len(handleKeyOnlyEvent.Columns))
 		for _, col := range handleKeyOnlyEvent.Columns {
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value
@@ -295,7 +295,7 @@ func (b *BatchDecoder) assembleHandleKeyOnlyEvent(
 		handleKeyOnlyEvent.TableInfo = model.BuildTableInfo(schema, table, columns, indexColumns)
 		handleKeyOnlyEvent.Columns = model.Columns2ColumnDatas(columns, handleKeyOnlyEvent.TableInfo)
 
-		conditions = make(map[string]interface{}, len(handleKeyOnlyEvent.PreColumns))
+		conditions = make(map[string]any, len(handleKeyOnlyEvent.PreColumns))
 		for _, col := range handleKeyOnlyEvent.PreColumns {
 			colName := tableInfo.ForceGetColumnName(col.ColumnID)
 			conditions[colName] = col.Value

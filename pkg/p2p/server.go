@@ -150,7 +150,7 @@ type MessageServer struct {
 
 	// taskQueue is used to store internal tasks MessageServer
 	// needs to execute serially.
-	taskQueue chan interface{}
+	taskQueue chan any
 
 	// The WorkerPool instance used to execute message handlers.
 	pool workerpool.WorkerPool
@@ -204,7 +204,7 @@ func NewMessageServer(serverID NodeID, config *MessageServerConfig) *MessageServ
 		peers:           make(map[string]*cdcPeer),
 		pendingMessages: make(map[topicSenderPair][]pendingMessageEntry),
 		acks:            newAckManager(),
-		taskQueue:       make(chan interface{}, config.MaxPendingTaskCount),
+		taskQueue:       make(chan any, config.MaxPendingTaskCount),
 		pool:            workerpool.NewDefaultWorkerPool(config.WorkerPoolSize),
 		closeCh:         make(chan struct{}),
 		config:          config,
@@ -406,7 +406,7 @@ func (m *MessageServer) ScheduleDeregisterPeerTask(ctx context.Context, peerID s
 // We pass an object of the desired type, and use `reflect.TypeOf` to extract the type,
 // and then when we need it, we can use `reflect.New` to allocate a new object of this
 // type.
-type typeInformation = interface{}
+type typeInformation = any
 
 // SyncAddHandler registers a handler for messages in a given topic and waits for the operation
 // to complete.
@@ -414,7 +414,7 @@ func (m *MessageServer) SyncAddHandler(
 	ctx context.Context,
 	topic string,
 	tpi typeInformation,
-	fn func(string, interface{}) error,
+	fn func(string, any) error,
 ) (<-chan error, error) {
 	doneCh, errCh, err := m.AddHandler(ctx, topic, tpi, fn)
 	if err != nil {
@@ -435,7 +435,7 @@ func (m *MessageServer) AddHandler(
 	ctx context.Context,
 	topic string,
 	tpi typeInformation,
-	fn func(string, interface{}) error,
+	fn func(string, any) error,
 ) (chan struct{}, <-chan error, error) {
 	tp := reflect.TypeOf(tpi)
 
@@ -443,7 +443,7 @@ func (m *MessageServer) AddHandler(
 		"topic": topic,
 	})
 
-	poolHandle := m.pool.RegisterEvent(func(ctx context.Context, argsI interface{}) error {
+	poolHandle := m.pool.RegisterEvent(func(ctx context.Context, argsI any) error {
 		args, ok := argsI.(poolEventArgs)
 		if !ok {
 			// Handle message from local.
@@ -637,7 +637,7 @@ func (m *MessageServer) registerPeer(
 	return nil
 }
 
-func (m *MessageServer) scheduleTask(ctx context.Context, task interface{}) error {
+func (m *MessageServer) scheduleTask(ctx context.Context, task any) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())
@@ -648,7 +648,7 @@ func (m *MessageServer) scheduleTask(ctx context.Context, task interface{}) erro
 	return nil
 }
 
-func (m *MessageServer) scheduleTaskBlocking(ctx context.Context, task interface{}) error {
+func (m *MessageServer) scheduleTaskBlocking(ctx context.Context, task any) error {
 	select {
 	case <-ctx.Done():
 		return errors.Trace(ctx.Err())

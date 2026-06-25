@@ -50,10 +50,7 @@ type GlobalReactorState struct {
 
 // NewGlobalState creates a new global state.
 func NewGlobalState(clusterID string, captureSessionTTL int) *GlobalReactorState {
-	captureRemoveTTL := captureSessionTTL / 2
-	if captureRemoveTTL < defaultCaptureRemoveTTL {
-		captureRemoveTTL = defaultCaptureRemoveTTL
-	}
+	captureRemoveTTL := max(captureSessionTTL/2, defaultCaptureRemoveTTL)
 	return &GlobalReactorState{
 		ClusterID:        clusterID,
 		Owner:            map[string]struct{}{},
@@ -436,7 +433,7 @@ func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) 
 
 // UpdateCDCKey updates the state by a parsed etcd key
 func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) error {
-	var e interface{}
+	var e any
 	switch key.Tp {
 	case etcd.CDCKeyTypeChangefeedInfo:
 		if key.ChangefeedID != s.ID {
@@ -557,7 +554,7 @@ func (s *ChangefeedReactorState) PatchInfo(fn func(*model.ChangeFeedInfo) (*mode
 		Tp:           etcd.CDCKeyTypeChangefeedInfo,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), changefeedInfoTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), changefeedInfoTPI, func(e any) (any, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -573,7 +570,7 @@ func (s *ChangefeedReactorState) PatchStatus(fn func(*model.ChangeFeedStatus) (*
 		Tp:           etcd.CDCKeyTypeChangeFeedStatus,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), changefeedStatusTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), changefeedStatusTPI, func(e any) (any, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -590,7 +587,7 @@ func (s *ChangefeedReactorState) PatchTaskPosition(captureID model.CaptureID, fn
 		CaptureID:    captureID,
 		ChangefeedID: s.ID,
 	}
-	s.patchAny(key.String(), taskPositionTPI, func(e interface{}) (interface{}, bool, error) {
+	s.patchAny(key.String(), taskPositionTPI, func(e any) (any, bool, error) {
 		// e == nil means that the key is not exist before this patch
 		if e == nil {
 			return fn(nil)
@@ -605,14 +602,14 @@ var (
 	changefeedInfoTPI   *model.ChangeFeedInfo
 )
 
-func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(interface{}) (interface{}, bool, error)) {
+func (s *ChangefeedReactorState) patchAny(key string, tpi any, fn func(any) (any, bool, error)) {
 	patch := &SingleDataPatch{
 		Key: util.NewEtcdKey(key),
 		Func: func(v []byte) ([]byte, bool, error) {
 			if s.skipPatchesInThisTick {
 				return v, false, cerrors.ErrEtcdIgnore.GenWithStackByArgs()
 			}
-			var e interface{}
+			var e any
 			if v != nil {
 				tp := reflect.TypeOf(tpi)
 				e = reflect.New(tp.Elem()).Interface()

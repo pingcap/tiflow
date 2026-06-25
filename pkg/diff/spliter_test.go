@@ -42,14 +42,14 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *check.C) {
 		createTableSQL string
 		splitCount     int
 		originChunk    *ChunkRange
-		randomValues   [][]interface{}
+		randomValues   [][]any
 		expectResult   []chunkResult
 	}{
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))",
 			3,
 			NewChunkRange().copyAndUpdate("a", "0", "10").copyAndUpdate("b", "a", "z"),
-			[][]interface{}{
+			[][]any{
 				{5, 7},
 				{"g", "n"},
 			},
@@ -69,7 +69,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *check.C) {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
 			NewChunkRange().copyAndUpdate("b", "a", "z"),
-			[][]interface{}{
+			[][]any{
 				{"g", "n"},
 			},
 			[]chunkResult{
@@ -88,7 +88,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *check.C) {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			2,
 			NewChunkRange().copyAndUpdate("b", "a", "z"),
-			[][]interface{}{
+			[][]any{
 				{"g"},
 			},
 			[]chunkResult{
@@ -104,7 +104,7 @@ func (s *testSpliterSuite) TestSplitRangeByRandom(c *check.C) {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
 			NewChunkRange().copyAndUpdate("b", "a", "z"),
-			[][]interface{}{
+			[][]any{
 				{},
 			},
 			[]chunkResult{
@@ -142,13 +142,13 @@ func (s *testSpliterSuite) TestRandomSpliter(c *check.C) {
 	testCases := []struct {
 		createTableSQL string
 		count          int
-		randomValues   [][]interface{}
+		randomValues   [][]any
 		expectResult   []chunkResult
 	}{
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))",
 			10,
-			[][]interface{}{
+			[][]any{
 				{1, 2, 3, 4, 5},
 				{"a", "b", "c", "d", "e"},
 			},
@@ -176,7 +176,7 @@ func (s *testSpliterSuite) TestRandomSpliter(c *check.C) {
 		}, {
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			10,
-			[][]interface{}{
+			[][]any{
 				{"a", "b", "c", "d", "e"},
 			},
 			[]chunkResult{
@@ -232,7 +232,7 @@ func (s *testSpliterSuite) TestRandomSpliter(c *check.C) {
 	}
 }
 
-func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValues [][]interface{}) {
+func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValues [][]any) {
 	if count > 0 {
 		// generate fake result for get the row count of this table
 		countRows := sqlmock.NewRows([]string{"cnt"}).AddRow(count)
@@ -259,15 +259,15 @@ func (s *testSpliterSuite) TestBucketSpliter(c *check.C) {
 
 	testCases := []struct {
 		chunkSize     int
-		aRandomValues []interface{}
-		bRandomValues []interface{}
+		aRandomValues []any
+		bRandomValues []any
 		expectResult  []chunkResult
 	}{
 		{
 			// chunk size less than the count of bucket 64, and the bucket's count 64 >= 32, so will split by random in every bucket
 			32,
-			[]interface{}{32, 32 * 3, 32 * 5, 32 * 7, 32 * 9},
-			[]interface{}{6, 6 * 3, 6 * 5, 6 * 7, 6 * 9},
+			[]any{32, 32 * 3, 32 * 5, 32 * 7, 32 * 9},
+			[]any{6, 6 * 3, 6 * 5, 6 * 7, 6 * 9},
 			[]chunkResult{
 				{
 					"(`a` < ?) OR (`a` = ? AND `b` <= ?)",
@@ -439,7 +439,7 @@ func (s *testSpliterSuite) TestBucketSpliter(c *check.C) {
 	}
 }
 
-func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []interface{}) {
+func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []any) {
 	/*
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 		| Db_name | Table_name | Column_name | Is_index | Bucket_id | Count | Repeats | Lower_Bound | Upper_Bound |
@@ -454,7 +454,7 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 
 	// Mock query with subquery to get all table_ids (main table + partitions) at once
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		// Encode index bounds as real encoded keys: PRIMARY(a, b) where both a and b are integers.
 		lowerA, lowerB := i*64, i*12
 		upperA, upperB := (i+1)*64-1, (i+1)*12-1
@@ -471,7 +471,7 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(statsRows)
 
-	for i := 0; i < len(aRandomValues); i++ {
+	for i := range aRandomValues {
 		aRandomRows := sqlmock.NewRows([]string{"a"})
 		aRandomRows.AddRow(aRandomValues[i])
 		mock.ExpectQuery("ORDER BY rand_value").WillReturnRows(aRandomRows)

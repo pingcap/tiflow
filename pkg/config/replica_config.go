@@ -177,7 +177,7 @@ func (c ReplicaConfig) Value() (driver.Value, error) {
 }
 
 // Scan implements the sql.Scanner interface
-func (c *ReplicaConfig) Scan(value interface{}) error {
+func (c *ReplicaConfig) Scan(value any) error {
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")

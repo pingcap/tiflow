@@ -14,7 +14,6 @@
 package upstream
 
 import (
-	"context"
 	"fmt"
 	"strconv"
 	"sync"
@@ -90,8 +89,7 @@ func TestTrySetIdleTime(t *testing.T) {
 func TestRegisterTopo(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	clientURL, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
 	defer etcdServer.Close()
 
@@ -144,8 +142,7 @@ func TestRegisterTopo(t *testing.T) {
 func TestVerify(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	clientURL, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
 	defer etcdServer.Close()
 

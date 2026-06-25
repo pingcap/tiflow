@@ -126,7 +126,7 @@ func initChunks(ctx context.Context, db *sql.DB, instanceID, schema, table strin
 
 	valuesPlaceholders := "(?, ?, ?, ?, ?, ?, ?, ?, ?)"
 	valuesPlaceholdersArray := make([]string, 0, batch)
-	values := make([]interface{}, 0, 9*batch)
+	values := make([]any, 0, 9*batch)
 
 	for i, chunk := range chunks {
 		num++
@@ -303,7 +303,7 @@ func createCheckpointTable(ctx context.Context, db *sql.DB) error {
 // cleanCheckpoint deletes the table's checkpoint info in table `summary` and `chunk`
 func cleanCheckpoint(ctx context.Context, db *sql.DB, schema, table string) error {
 	where := "`schema` = ? AND `table` = ?"
-	args := []interface{}{schema, table}
+	args := []any{schema, table}
 
 	err := dbutil.DeleteRows(ctx, db, checkpointSchemaName, summaryTableName, where, args)
 	if err != nil {

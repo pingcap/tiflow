@@ -69,7 +69,7 @@ func (b *bufferedJSONDecoder) Write(data []byte) (n int, err error) {
 }
 
 // Decode decodes the buffer into the original message.
-func (b *bufferedJSONDecoder) Decode(v interface{}) error {
+func (b *bufferedJSONDecoder) Decode(v any) error {
 	return b.decoder.Decode(v)
 }
 
@@ -202,12 +202,12 @@ func (b *batchDecoder) assembleClaimCheckRowChangedEvent(ctx context.Context, cl
 	return b.NextRowChangedEvent()
 }
 
-func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]interface{}, map[string]string, error) {
+func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]any, map[string]string, error) {
 	columnsCount := holder.Length()
-	data := make(map[string]interface{}, columnsCount)
+	data := make(map[string]any, columnsCount)
 	mysqlTypeMap := make(map[string]string, columnsCount)
 
-	for i := 0; i < columnsCount; i++ {
+	for i := range columnsCount {
 		t := holder.Types[i]
 		name := holder.Types[i].Name()
 		mysqlType := strings.ToLower(t.DatabaseTypeName())
@@ -250,7 +250,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 		table     = message.Table
 		eventType = message.EventType
 	)
-	conditions := make(map[string]interface{}, len(message.pkNameSet()))
+	conditions := make(map[string]any, len(message.pkNameSet()))
 	for name := range message.pkNameSet() {
 		conditions[name] = message.getData()[name]
 	}
@@ -274,7 +274,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			return nil, err
 		}
 		result.MySQLType = mysqlType
-		result.Data = []map[string]interface{}{data}
+		result.Data = []map[string]any{data}
 	case "UPDATE":
 		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs, schema, table, conditions)
 		data, mysqlType, err := b.buildData(holder)
@@ -282,14 +282,14 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			return nil, err
 		}
 		result.MySQLType = mysqlType
-		result.Data = []map[string]interface{}{data}
+		result.Data = []map[string]any{data}
 
 		holder = common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		old, _, err := b.buildData(holder)
 		if err != nil {
 			return nil, err
 		}
-		result.Old = []map[string]interface{}{old}
+		result.Old = []map[string]any{old}
 	case "DELETE":
 		holder := common.MustSnapshotQuery(ctx, b.upstreamTiDB, commitTs-1, schema, table, conditions)
 		data, mysqlType, err := b.buildData(holder)
@@ -297,7 +297,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 			return nil, err
 		}
 		result.MySQLType = mysqlType
-		result.Data = []map[string]interface{}{data}
+		result.Data = []map[string]any{data}
 	}
 
 	b.msg = result
@@ -306,7 +306,7 @@ func (b *batchDecoder) assembleHandleKeyOnlyRowChangedEvent(
 
 func setColumnInfos(
 	tableInfo *timodel.TableInfo,
-	rawColumns map[string]interface{},
+	rawColumns map[string]any,
 	mysqlType map[string]string,
 	pkNames map[string]struct{},
 ) {

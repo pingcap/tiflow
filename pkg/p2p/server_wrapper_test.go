@@ -75,11 +75,9 @@ func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient 
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
 	cancel = func() {
 		grpcServer.Stop()

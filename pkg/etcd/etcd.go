@@ -653,7 +653,7 @@ func GcServiceIDForTest() string {
 
 // getFreeListenURLs get free ports and localhost as url.
 func getFreeListenURLs(n int) (urls []*url.URL, retErr error) {
-	for i := 0; i < n; i++ {
+	for range n {
 		u, err := url.Parse(tempurl.Alloc())
 		if err != nil {
 			retErr = errors.Trace(err)

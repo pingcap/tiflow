@@ -27,7 +27,7 @@ var jsonAPI = jsoniter.Config{
 }.Froze()
 
 var jWriterPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return &JSONWriter{}
 	},
 }

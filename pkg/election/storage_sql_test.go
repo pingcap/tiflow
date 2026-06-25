@@ -140,8 +140,7 @@ func TestInMemorySQLStorage(t *testing.T) {
 	s, err := NewInMemorySQLStorage(dbName, "leader_election")
 	require.NoError(t, err)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	record := &Record{
 		LeaderID: "id1",

@@ -73,7 +73,7 @@ type TxnEventEncoderBuilder interface {
 }
 
 // IsColumnValueEqual checks whether the preValue and updatedValue are equal.
-func IsColumnValueEqual(preValue, updatedValue interface{}) bool {
+func IsColumnValueEqual(preValue, updatedValue any) bool {
 	if preValue == nil || updatedValue == nil {
 		return preValue == updatedValue
 	}

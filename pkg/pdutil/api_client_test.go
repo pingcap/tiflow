@@ -68,8 +68,7 @@ func TestMetaLabelNormal(t *testing.T) {
 	require.NoError(t, err)
 	defer pc.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	err = pc.UpdateMetaLabel(ctx)
 	require.NoError(t, err)
 	mockClient.testServer.Close()
@@ -84,8 +83,7 @@ func TestMetaLabelFail(t *testing.T) {
 	defer pc.Close()
 	mockClient.url = "http://127.0.1.1:2345"
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	// test url error
 	err = pc.(*pdAPIClient).patchMetaLabel(ctx)
 	require.Error(t, err)
@@ -105,8 +103,7 @@ func TestListGcServiceSafePoint(t *testing.T) {
 
 	mockClient := newMockPDClient(true)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	pc, err := NewPDAPIClient(mockClient, nil)
 	require.NoError(t, err)
@@ -132,7 +129,7 @@ type LabelRule struct {
 	Index    int           `json:"index"`
 	Labels   []RegionLabel `json:"labels"`
 	RuleType string        `json:"rule_type"`
-	Data     interface{}   `json:"data"`
+	Data     any           `json:"data"`
 }
 
 // RegionLabel is the label of a region.
@@ -149,7 +146,7 @@ func TestMetaLabelDecodeJSON(t *testing.T) {
 	meta := LabelRulePatch{}
 	require.Nil(t, json.Unmarshal([]byte(addMetaJSON), &meta))
 	require.Len(t, meta.SetRules, 2)
-	keys := meta.SetRules[1].Data.([]interface{})[0].(map[string]interface{})
+	keys := meta.SetRules[1].Data.([]any)[0].(map[string]any)
 	startKey, err := hex.DecodeString(keys["start_key"].(string))
 	require.NoError(t, err)
 	endKey, err := hex.DecodeString(keys["end_key"].(string))
