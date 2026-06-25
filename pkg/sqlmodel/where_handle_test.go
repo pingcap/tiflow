@@ -14,10 +14,12 @@
 package sqlmodel
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/stretchr/testify/require"
@@ -214,4 +216,65 @@ CREATE TABLE t (
 	// no index available
 	idx = handle.getWhereIdxByData([]any{1, nil, 3, nil})
 	require.Nil(t, idx)
+}
+
+func TestGetWhereIdxByDataUniqueAfterHiddenColumn(t *testing.T) {
+	t.Parallel()
+
+	ti := mockTableInfo(t, "CREATE TABLE t ("+
+		"a VARCHAR(32), "+
+		"b INT UNIQUE, "+
+		"c INT, "+
+		"UNIQUE KEY uk_a ((lower(a))))")
+
+	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+	reorderColumnsByName(t, ti, "a", hiddenA, "b", "c")
+
+	handle := GetWhereHandle(ti, ti)
+	idx := handle.getWhereIdxByData([]any{"Alice", 1, nil})
+	require.NotNil(t, idx)
+	require.Equal(t, "b", idx.Columns[0].Name.L)
+
+	idx = handle.getWhereIdxByData([]any{"Alice", nil, 1})
+	require.Nil(t, idx)
+}
+
+func TestGetWhereHandleExpressionIndex(t *testing.T) {
+	t.Parallel()
+
+	// A functional/expression UNIQUE index is backed by a hidden virtual
+	// generated column that is never present in the binlog row image. It must be
+	// kept for causality (so the constraint is still enforced for conflict
+	// detection) but excluded from the WHERE candidate set, because a hidden
+	// column has no addressable name.
+	ti := mockTableInfo(t, "CREATE TABLE t (id BIGINT PRIMARY KEY, name VARCHAR(255), "+
+		"UNIQUE KEY only_one_alice ((CASE name WHEN 'Alice' THEN 1 ELSE NULL END)))")
+
+	hasHidden := slices.ContainsFunc(ti.Columns, func(c *timodel.ColumnInfo) bool {
+		return c.Hidden
+	})
+	require.True(t, hasHidden, "expression index should create a hidden generated column")
+
+	handle := GetWhereHandle(ti, ti)
+
+	// the expression index is a causality candidate.
+	inCausality := false
+	for _, idx := range handle.causalityIdxs {
+		if idx.Name.L == "only_one_alice" {
+			inCausality = true
+			require.True(t, indexHasHiddenColumn(idx, ti),
+				"expression index needs a full row with its hidden generated column materialized")
+		} else {
+			require.False(t, indexHasHiddenColumn(idx, ti))
+		}
+	}
+	require.True(t, inCausality, "expression index must be a causality candidate")
+
+	// ... but never a WHERE candidate (hidden column is not addressable).
+	for _, idx := range handle.UniqueIdxs {
+		require.NotEqual(t, "only_one_alice", idx.Name.L,
+			"expression index must not be a WHERE candidate")
+	}
+	require.NotNil(t, handle.UniqueNotNullIdx)
+	require.False(t, indexHasHiddenColumn(handle.UniqueNotNullIdx, ti))
 }

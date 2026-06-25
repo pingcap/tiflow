@@ -49,10 +49,15 @@ const (
 )
 
 const (
-	shieldDBName      = "_no__exists__db_"
-	shieldTableName   = "_no__exists__table_"
-	getSyncPointQuery = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 ORDER BY primary_ts DESC LIMIT 1"
+	shieldDBName                  = "_no__exists__db_"
+	shieldTableName               = "_no__exists__table_"
+	getSyncPointQuery             = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 ORDER BY primary_ts DESC LIMIT 1"
+	getSyncPointByChangefeedQuery = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 WHERE changefeed = ? ORDER BY primary_ts DESC LIMIT 1"
 )
+
+type syncPointQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
 
 // ChecksumInfo stores checksum and count
 type ChecksumInfo struct {
@@ -258,17 +263,42 @@ func buildSourceFromCfg(
 	return NewMySQLSources(ctx, tableDiffs, dbs, connCount, f, skipNonExistingTable)
 }
 
-func getAutoSnapshotPosition(cfg *mysql.Config) (string, string, error) {
+func queryAutoSnapshotPosition(conn syncPointQuerier, changefeed string) (string, string, error) {
+	var primaryTs, secondaryTs string
+	var err error
+	if changefeed == "" {
+		err = conn.QueryRow(getSyncPointQuery).Scan(&primaryTs, &secondaryTs)
+	} else {
+		err = conn.QueryRow(getSyncPointByChangefeedQuery, changefeed).Scan(&primaryTs, &secondaryTs)
+	}
+	if err == nil {
+		return primaryTs, secondaryTs, nil
+	}
+	if changefeed != "" && errors.Cause(err) == sql.ErrNoRows {
+		return "", "", errors.Errorf("fetching auto-position tidb_snapshot failed: no syncpoint found for changefeed %s", changefeed)
+	}
+	return "", "", errors.Annotatef(err, "fetching auto-position tidb_snapshot failed")
+}
+
+func getAutoSnapshotPosition(cfg *mysql.Config, changefeed string) (string, string, error) {
 	tmpConn, err := common.ConnectMySQL(nil, cfg, 2)
 	if err != nil {
 		return "", "", errors.Annotatef(err, "connecting to auto-position tidb_snapshot failed")
 	}
 	defer tmpConn.Close()
-	var primaryTs, secondaryTs string
-	err = tmpConn.QueryRow(getSyncPointQuery).Scan(&primaryTs, &secondaryTs)
-	if err != nil {
-		return "", "", errors.Annotatef(err, "fetching auto-position tidb_snapshot failed")
+	if changefeed == "" {
+		log.Debug("resolve auto-position tidb_snapshot without changefeed filter")
+	} else {
+		log.Debug("resolve auto-position tidb_snapshot with changefeed filter", zap.String("changefeed", changefeed))
 	}
+	primaryTs, secondaryTs, err := queryAutoSnapshotPosition(tmpConn, changefeed)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	log.Debug("resolved auto-position tidb_snapshot",
+		zap.String("changefeed", changefeed),
+		zap.String("primary-ts", primaryTs),
+		zap.String("secondary-ts", secondaryTs))
 	return primaryTs, secondaryTs, nil
 }
 
@@ -282,7 +312,7 @@ func initDBConn(_ context.Context, cfg *config.Config) error {
 		if !cfg.Task.SourceInstances[0].IsAutoSnapshot() {
 			return errors.Errorf("'auto' snapshot should be set on both target and source")
 		}
-		primaryTs, secondaryTs, err := getAutoSnapshotPosition(cfg.Task.TargetInstance.ToDriverConfig())
+		primaryTs, secondaryTs, err := getAutoSnapshotPosition(cfg.Task.TargetInstance.ToDriverConfig(), cfg.Task.SyncpointChangefeed)
 		if err != nil {
 			return err
 		}

@@ -31,7 +31,6 @@ import (
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
 	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/objstore/objectio"
-	"github.com/pingcap/tidb/pkg/objstore/s3like"
 	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 )
 
@@ -95,34 +94,6 @@ func IsS3Path(rawURL string) bool {
 		return false
 	}
 	return u.Scheme == "s3"
-}
-
-// StripS3ExternalID removes the S3 external-id query option from rawURL.
-// It keeps non-S3 paths, invalid URLs, and all other query parameters unchanged
-// semantically. Both external-id and external_id are supported, consistent with
-// storage query parameter normalization.
-func StripS3ExternalID(rawURL string) string {
-	if rawURL == "" {
-		return rawURL
-	}
-	u, err := objstore.ParseRawURL(rawURL)
-	if err != nil || u.Scheme != "s3" {
-		return rawURL
-	}
-
-	query := u.Query()
-	changed := false
-	for key := range query {
-		if strings.EqualFold(strings.ReplaceAll(key, "_", "-"), s3like.S3ExternalID) {
-			delete(query, key)
-			changed = true
-		}
-	}
-	if !changed {
-		return rawURL
-	}
-	u.RawQuery = query.Encode()
-	return u.String()
 }
 
 // IsLocalDiskPath judges if path is local disk path.

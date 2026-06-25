@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *MultiplexingPuller {
@@ -105,4 +106,39 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 	}
 	cancel()
 	wg.Wait()
+}
+
+func TestGetResolveLockTargetTs(t *testing.T) {
+	progress := &tableProgress{}
+	progress.initialized.Store(true)
+
+	pdNow := time.Now()
+	localClockNow := pdNow.Add(30 * time.Second)
+	currentTs := oracle.GoTimeToTS(pdNow)
+
+	resolvedTime := pdNow.Add(-2 * time.Second)
+	progress.resolvedTs.Store(oracle.GoTimeToTS(resolvedTime))
+	progress.resolvedTsUpdated.Store(pdNow.Add(-10 * time.Second).Unix())
+
+	tsIfUncapped := oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
+	require.Greater(t, tsIfUncapped, currentTs)
+	require.Equal(t, currentTs, progress.getResolveLockTargetTs(localClockNow, currentTs))
+
+	resolvedTime = pdNow.Add(-20 * time.Second)
+	progress.resolvedTs.Store(oracle.GoTimeToTS(resolvedTime))
+	tsIfUncapped = oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
+	require.Less(t, tsIfUncapped, currentTs)
+	require.Equal(t, tsIfUncapped, progress.getResolveLockTargetTs(localClockNow, currentTs))
+
+	progress.initialized.Store(false)
+	require.Zero(t, progress.getResolveLockTargetTs(localClockNow, currentTs))
+
+	progress.initialized.Store(true)
+	progress.resolvedTsUpdated.Store(time.Now().Unix())
+	require.Zero(t, progress.getResolveLockTargetTs(localClockNow, currentTs))
+
+	progress.resolvedTsUpdated.Store(pdNow.Add(-10 * time.Second).Unix())
+	recentResolvedTime := localClockNow.Add(-2 * time.Second)
+	progress.resolvedTs.Store(oracle.GoTimeToTS(recentResolvedTime))
+	require.Zero(t, progress.getResolveLockTargetTs(localClockNow, currentTs))
 }

@@ -244,11 +244,14 @@ func (r *RowChange) lazyInitWhereHandle() {
 func (r *RowChange) whereColumnsAndValues() ([]string, []any) {
 	r.lazyInitWhereHandle()
 
-	columns, values := r.sourceTableInfo.Columns, r.preValues
-
+	columns := r.whereHandle.rowMapper.visibleColumns
+	values := r.preValues
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
-		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
+		columns, values = r.whereHandle.rowMapper.columnsAndValuesByIndex(
+			uniqueIndex,
+			values,
+		)
 	}
 
 	columnNames := make([]string, 0, len(columns))
