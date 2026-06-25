@@ -118,7 +118,7 @@ func (jm *JobMaster) InitImpl(ctx context.Context) (err error) {
 	}
 	log.Info("cvs jobmaster list file success", zap.Any("id", jm.workerID), zap.Any("file number", filesNum))
 	// todo: store the jobmaster information into the metastore
-	for idx := 0; idx < filesNum; idx++ {
+	for idx := range filesNum {
 		jm.jobStatus.FileInfos[idx] = &SyncFileInfo{Idx: idx}
 		jm.syncFilesInfo[idx] = &WorkerInfo{
 			needCreate: *atomic.NewBool(true),

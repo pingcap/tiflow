@@ -105,8 +105,8 @@ func (s *WorkerStatus) Unmarshal(bytes []byte) error {
 }
 
 // Map is used for update the orm model
-func (s *WorkerStatus) Map() map[string]interface{} {
-	return map[string]interface{}{
+func (s *WorkerStatus) Map() map[string]any {
+	return map[string]any{
 		"project_id":    s.ProjectID,
 		"job_id":        s.JobID,
 		"id":            s.ID,

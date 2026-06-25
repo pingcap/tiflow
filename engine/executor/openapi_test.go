@@ -76,12 +76,10 @@ func TestJobAPIServer(t *testing.T) {
 
 	wg := sync.WaitGroup{}
 	stoppedJobs := make(chan engineModel.JobID, 16)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := jobAPISrv.listenStoppedJobs(context.Background(), stoppedJobs)
 		require.NoError(t, err)
-	}()
+	})
 
 	stoppedJobs <- "job1"
 	require.Eventually(t, func() bool {

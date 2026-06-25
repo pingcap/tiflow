@@ -113,7 +113,7 @@ func (wm *WorkerManager) UpdateWorkerStatus(workerStatus runtime.WorkerStatus) {
 // WorkerStatus return the worker status.
 func (wm *WorkerManager) WorkerStatus() map[string]runtime.WorkerStatus {
 	result := make(map[string]runtime.WorkerStatus)
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		result[key.(string)] = value.(runtime.WorkerStatus)
 		return true
 	})
@@ -152,7 +152,7 @@ func (wm *WorkerManager) TickImpl(ctx context.Context) error {
 
 // remove offline worker status, usually happened when worker is offline.
 func (wm *WorkerManager) removeOfflineWorkers() {
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		worker := value.(runtime.WorkerStatus)
 		if worker.IsOffline() {
 			wm.logger.Info("remove offline worker status", zap.String("task_id", worker.TaskID))
@@ -168,7 +168,7 @@ func (wm *WorkerManager) removeOfflineWorkers() {
 // stop all workers, usually happened when delete jobs.
 func (wm *WorkerManager) onJobDel(ctx context.Context) error {
 	var recordError error
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		workerStatus := value.(runtime.WorkerStatus)
 		if workerStatus.IsTombStone() {
 			return true
@@ -185,7 +185,7 @@ func (wm *WorkerManager) onJobDel(ctx context.Context) error {
 // stop unneeded workers, usually happened when update-job delete some tasks.
 func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.Job) error {
 	var recordError error
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
 			workerStatus := value.(runtime.WorkerStatus)
@@ -205,7 +205,7 @@ func (wm *WorkerManager) stopUnneededWorkers(ctx context.Context, job *metadata.
 // stop outdated workers, usually happened when update job cfgs.
 func (wm *WorkerManager) stopOutdatedWorkers(ctx context.Context, job *metadata.Job) error {
 	var recordError error
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		taskID := key.(string)
 		workerStatus := value.(runtime.WorkerStatus)
 		task, ok := job.Tasks[taskID]
@@ -418,7 +418,7 @@ func (wm *WorkerManager) stopWorker(ctx context.Context, taskID string, workerID
 }
 
 func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.WorkerID) {
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		if value.(runtime.WorkerStatus).ID == workerID {
 			wm.workerStatusMap.Delete(key)
 			return false
@@ -429,7 +429,7 @@ func (wm *WorkerManager) removeWorkerStatusByWorkerID(workerID frameModel.Worker
 
 func (wm *WorkerManager) allTombStone() bool {
 	result := true
-	wm.workerStatusMap.Range(func(key, value interface{}) bool {
+	wm.workerStatusMap.Range(func(key, value any) bool {
 		workerStatus := value.(runtime.WorkerStatus)
 		if !workerStatus.IsTombStone() {
 			result = false

@@ -38,14 +38,12 @@ func TestAllocID(t *testing.T) {
 	require.Equal(t, messageID(3), messageMatcher.allocID())
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := 0; i < 100; i++ {
+	for range 10 {
+		wg.Go(func() {
+			for range 100 {
 				messageMatcher.allocID()
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	require.Equal(t, messageID(1004), messageMatcher.allocID())
@@ -56,8 +54,7 @@ func TestMessageMatcher(t *testing.T) {
 
 	messageMatcher := newMessageMatcher()
 	mockClient := &MockClient{}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	clientCtx := context.Background()
 
@@ -291,7 +288,7 @@ type MockClient struct {
 	mock.Mock
 }
 
-func (s *MockClient) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+func (s *MockClient) SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error {
 	s.Lock()
 	defer s.Unlock()
 	args := s.Called()

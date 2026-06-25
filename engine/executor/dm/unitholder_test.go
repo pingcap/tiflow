@@ -261,7 +261,7 @@ func (u *mockUnit) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 	return nil
 }
 
-func (u *mockUnit) Status(sourceStatus *binlog.SourceStatus) interface{} {
+func (u *mockUnit) Status(sourceStatus *binlog.SourceStatus) any {
 	u.Lock()
 	defer u.Unlock()
 	return u.Called().Get(0)
@@ -321,7 +321,7 @@ func (m *mockUnitHolder) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 }
 
 // Status implement Holder.Status
-func (m *mockUnitHolder) Status(ctx context.Context) interface{} {
+func (m *mockUnitHolder) Status(ctx context.Context) any {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called()
