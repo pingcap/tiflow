@@ -66,7 +66,72 @@ type tableProgress struct {
 	scheduled atomic.Bool
 }
 
+<<<<<<< HEAD
 type tableProgressWithSubID struct {
+=======
+func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.ResolvedSpans) (err error) {
+	for _, resolvedSpan := range e.Spans {
+		if !spanz.IsSubSpan(resolvedSpan.Span, p.spans...) {
+			log.Panic("the resolved span is not in the table spans",
+				zap.String("namespace", p.changefeed.Namespace),
+				zap.String("changefeed", p.changefeed.ID),
+				zap.String("tableName", p.tableName),
+				zap.Any("spans", p.spans))
+		}
+		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.ResolvedTs)
+		if e.ResolvedTs > p.maxIngressResolvedTs.Load() {
+			p.maxIngressResolvedTs.Store(e.ResolvedTs)
+		}
+	}
+	resolvedTs := p.tsTracker.Frontier()
+
+	if resolvedTs > 0 && p.initialized.CompareAndSwap(false, true) {
+		log.Info("puller is initialized",
+			zap.String("namespace", p.changefeed.Namespace),
+			zap.String("changefeed", p.changefeed.ID),
+			zap.String("tableName", p.tableName),
+			zap.Any("tableID", p.spans),
+			zap.Uint64("resolvedTs", resolvedTs),
+			zap.Duration("duration", time.Since(p.start)),
+		)
+	}
+	if resolvedTs > p.resolvedTs.Load() {
+		p.resolvedTs.Store(resolvedTs)
+		p.resolvedTsUpdated.Store(time.Now().Unix())
+		raw := &model.RawKVEntry{CRTs: resolvedTs, OpType: model.OpTypeResolved}
+		err = p.consume.f(ctx, raw, p.spans)
+	}
+
+	return
+}
+
+func (p *tableProgress) getResolveLockTargetTs(currentTime time.Time, currentTs uint64) uint64 {
+	resolvedTsUpdated := time.Unix(p.resolvedTsUpdated.Load(), 0)
+	if !p.initialized.Load() || time.Since(resolvedTsUpdated) < resolveLockFence {
+		return 0
+	}
+	resolvedTs := p.resolvedTs.Load()
+	resolvedTime := oracle.GetTimeFromTS(resolvedTs)
+	if currentTime.Sub(resolvedTime) < resolveLockFence {
+		return 0
+	}
+
+	return min(currentTs, oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence)))
+}
+
+func (p *tableProgress) resolveLock(currentTime time.Time, currentTs uint64) {
+	targetTs := p.getResolveLockTargetTs(currentTime, currentTs)
+	if targetTs == 0 {
+		return
+	}
+
+	for _, subID := range p.subscriptionIDs {
+		p.client.ResolveLock(subID, targetTs)
+	}
+}
+
+type subscription struct {
+>>>>>>> 42ad8a6dc4 (puller(ticdc): cap resolve lock target ts by PD tso (#12741))
 	*tableProgress
 	subID kv.SubscriptionID
 }
@@ -396,13 +461,23 @@ func (p *MultiplexingPuller) checkResolveLock(ctx context.Context) error {
 			return ctx.Err()
 		case <-resolveLockTicker.C:
 		}
+<<<<<<< HEAD
 		currentTime := p.client.GetPDClock().CurrentTime()
+=======
+		physical, logical, err := p.client.GetTS(ctx)
+		if err != nil {
+			log.Warn("get ts from pd failed", zap.Error(err))
+			continue
+		}
+		currentTs := oracle.ComposeTS(physical, logical)
+		currentTime := p.pdClock.CurrentTime()
+>>>>>>> 42ad8a6dc4 (puller(ticdc): cap resolve lock target ts by PD tso (#12741))
 		for progress := range p.getAllProgresses() {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				progress.resolveLock(currentTime)
+				progress.resolveLock(currentTime, currentTs)
 			}
 		}
 	}
