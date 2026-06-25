@@ -132,7 +132,7 @@ func (m *MockUnit) Update(context.Context, *config.SubTaskConfig) error {
 	return m.errUpdate
 }
 
-func (m *MockUnit) Status(_ *binlog.SourceStatus) interface{} {
+func (m *MockUnit) Status(_ *binlog.SourceStatus) any {
 	switch m.typ {
 	case pb.UnitType_Check:
 		return &pb.CheckStatus{}
@@ -211,7 +211,7 @@ func (u *KillOrderUnit) Resume(ctx context.Context, pr chan pb.ProcessResult) { 
 
 func (u *KillOrderUnit) Update(context.Context, *config.SubTaskConfig) error { return nil }
 
-func (u *KillOrderUnit) Status(*binlog.SourceStatus) interface{} { return &pb.SyncStatus{} }
+func (u *KillOrderUnit) Status(*binlog.SourceStatus) any { return &pb.SyncStatus{} }
 
 func (u *KillOrderUnit) Type() pb.UnitType { return u.typ }
 
@@ -250,7 +250,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 
 	// finish dump
 	c.Assert(mockDumper.InjectProcessError(context.Background(), nil), check.IsNil)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if st.CurrUnit().Type() == pb.UnitType_Load {
 			break
 		}
@@ -262,7 +262,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 
 	// fail loader
 	c.Assert(mockLoader.InjectProcessError(context.Background(), errors.New("loader process error")), check.IsNil)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		res := st.Result()
 		if res != nil && st.Stage() == pb.Stage_Paused {
 			break
@@ -325,7 +325,7 @@ func (t *testSubTask) TestSubTaskNormalUsage(c *check.C) {
 
 	// finish loader
 	c.Assert(mockLoader.InjectProcessError(context.Background(), nil), check.IsNil)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		if st.Stage() == pb.Stage_Finished {
 			break
 		}
@@ -655,7 +655,7 @@ func TestSubtaskRace(t *testing.T) {
 	tempQueryStatusResponse.SubTaskStatus[0] = &tempSubTaskStatus
 	st.result.IsCanceled = false
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			_, _ = tempQueryStatusResponse.Marshal()
 		}
 	}()

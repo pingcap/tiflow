@@ -200,8 +200,8 @@ func (c *Config) adjust() error {
 
 // validate host:port format address.
 func validateAddr(addr string) error {
-	endpoints := strings.Split(addr, ",")
-	for _, endpoint := range endpoints {
+	endpoints := strings.SplitSeq(addr, ",")
+	for endpoint := range endpoints {
 		if _, _, err := net.SplitHostPort(utils.UnwrapScheme(endpoint)); err != nil {
 			return errors.Trace(err)
 		}

@@ -68,7 +68,7 @@ type BinlogReader struct {
 	usingGTID          bool
 	prevGset, currGset mysql.GTIDSet
 	// ch with size = 1, we only need to be notified whether binlog file of relay changed, not how many times
-	notifyCh chan interface{}
+	notifyCh chan any
 	relay    Process
 
 	currentSubDir string // current UUID(with suffix)
@@ -96,7 +96,7 @@ func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) 
 		indexPath:           path.Join(cfg.RelayDir, utils.UUIDIndexFilename),
 		cancel:              cancel,
 		tctx:                newtctx,
-		notifyCh:            make(chan interface{}, 1),
+		notifyCh:            make(chan any, 1),
 		relay:               relay,
 		lastFileGracefulEnd: true,
 	}
@@ -237,9 +237,7 @@ func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (reader.Streamer, erro
 	r.running = true
 	s := newLocalStreamer()
 
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		r.tctx.L().Info("start reading", zap.Stringer("position", pos))
 		err = r.parseRelay(r.tctx.Context(), s, pos)
 		if errors.Cause(err) == r.tctx.Context().Err() {
@@ -248,7 +246,7 @@ func (r *BinlogReader) StartSyncByPos(pos mysql.Position) (reader.Streamer, erro
 			s.closeWithError(err)
 			r.tctx.L().Error("parse relay stopped", zap.Error(err))
 		}
-	}()
+	})
 
 	return s, nil
 }
@@ -279,9 +277,7 @@ func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (reader.Streamer, err
 	r.running = true
 	s := newLocalStreamer()
 
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		r.tctx.L().Info("start reading", zap.Stringer("position", pos))
 		err = r.parseRelay(r.tctx.Context(), s, *pos)
 		if errors.Cause(err) == r.tctx.Context().Err() {
@@ -290,7 +286,7 @@ func (r *BinlogReader) StartSyncByGTID(gset mysql.GTIDSet) (reader.Streamer, err
 			s.closeWithError(err)
 			r.tctx.L().Error("parse relay stopped", zap.Error(err))
 		}
-	}()
+	})
 
 	return s, nil
 }
@@ -817,7 +813,7 @@ func (r *BinlogReader) advanceCurrentGtidSet(gtid string) (bool, error) {
 	return false, err
 }
 
-func (r *BinlogReader) Notified() chan interface{} {
+func (r *BinlogReader) Notified() chan any {
 	return r.notifyCh
 }
 

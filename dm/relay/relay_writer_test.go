@@ -380,9 +380,9 @@ func TestWriteMultiEvents(t *testing.T) {
 	var (
 		tableID    uint64 = 8
 		columnType        = []byte{gmysql.MYSQL_TYPE_LONG}
-		insertRows        = make([][]interface{}, 1)
+		insertRows        = make([][]any, 1)
 	)
-	insertRows[0] = []interface{}{int32(1)}
+	insertRows[0] = []any{int32(1)}
 	events, data, err = g.GenDMLEvents(replication.WRITE_ROWS_EVENTv2, []*event.DMLData{
 		{TableID: tableID, Schema: "db", Table: "tbl", ColumnType: columnType, Rows: insertRows},
 	}, 0)

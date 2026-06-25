@@ -165,7 +165,7 @@ func (c *testTLSConfig) TestClone() {
 	}
 	// When add new fields, also update this value
 	// TODO: check it
-	c.Require().Equal(10, reflect.TypeOf(*s).NumField())
+	c.Require().Equal(10, reflect.TypeFor[security.Security]().NumField())
 	clone := s.Clone()
 	c.Require().Equal(s, clone)
 	clone.CertAllowedCN[0] = "g"

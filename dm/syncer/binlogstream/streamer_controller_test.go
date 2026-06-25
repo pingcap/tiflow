@@ -69,7 +69,7 @@ func TestCanErrorRetry(t *testing.T) {
 	mockErr := errors.New("test")
 
 	// local binlog puller can always retry
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		require.True(t, controller.CanRetry(mockErr))
 	}
 

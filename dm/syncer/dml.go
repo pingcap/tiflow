@@ -38,9 +38,9 @@ type genDMLParam struct {
 	sourceTable     *filter.Table // origin table
 	targetTable     *filter.Table
 	safeMode        bool             // only used in update
-	originalData    [][]interface{}  // all data
+	originalData    [][]any          // all data
 	sourceTableInfo *model.TableInfo // all table info
-	extendData      [][]interface{}  // all data include extend data
+	extendData      [][]any          // all data include extend data
 }
 
 // latin1Decider is not usually ISO8859_1 in MySQL.
@@ -51,10 +51,10 @@ var latin1Decoder = charmap.Windows1252.NewDecoder()
 // - the values can be correctly converted to TiDB datum
 // - the values are in the correct type that go-sql-driver/mysql uses.
 func adjustValueFromBinlogData(
-	data []interface{},
+	data []any,
 	sourceTI *model.TableInfo,
-) ([]interface{}, error) {
-	value := make([]interface{}, 0, len(data))
+) ([]any, error) {
+	value := make([]any, 0, len(data))
 	var err error
 
 	columns := make([]*model.ColumnInfo, 0, len(sourceTI.Columns))
@@ -329,7 +329,7 @@ func (s *Syncer) causalityKeySourceTableNameForRowChange(sourceTable *filter.Tab
 	}
 }
 
-func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
+func castUnsigned(data any, ft *types.FieldType) any {
 	if !mysql.HasUnsignedFlag(ft.GetFlag()) {
 		return data
 	}
@@ -371,7 +371,7 @@ func checkLogColumns(skipped [][]int) error {
 }
 
 // genSQLMultipleRows generates multiple rows SQL with different dmlOpType.
-func genSQLMultipleRows(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) (queries string, args []interface{}) {
+func genSQLMultipleRows(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) (queries string, args []any) {
 	if len(dmls) > 1 {
 		log.L().Debug("generate DMLs with multiple rows", zap.Stringer("op", op), zap.Stringer("original op", dmls[0].Type()), zap.Int("rows", len(dmls)))
 	}
@@ -393,12 +393,12 @@ func genSQLMultipleRows(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) (querie
 // insert into tb(a,b,d) values(2,2,2)
 // we can only combine DMLs with same column names.
 // all dmls should have same dmlOpType and same tableName.
-func genDMLsWithSameCols(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) ([]string, [][]interface{}) {
+func genDMLsWithSameCols(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) ([]string, [][]any) {
 	queries := make([]string, 0, len(dmls))
-	args := make([][]interface{}, 0, len(dmls))
+	args := make([][]any, 0, len(dmls))
 	var lastDML *sqlmodel.RowChange
 	var query string
-	var arg []interface{}
+	var arg []any
 	groupDMLs := make([]*sqlmodel.RowChange, 0, len(dmls))
 
 	// group dmls by same columns
@@ -426,9 +426,9 @@ func genDMLsWithSameCols(op sqlmodel.DMLType, dmls []*sqlmodel.RowChange) ([]str
 
 // genDMLsWithSameTable groups and generates dmls with same table.
 // all the dmls should have same dmlOpType.
-func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]interface{}) {
+func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]any) {
 	queries := make([]string, 0, len(jobs))
-	args := make([][]interface{}, 0, len(jobs))
+	args := make([][]any, 0, len(jobs))
 	var lastTable string
 	groupDMLs := make([]*sqlmodel.RowChange, 0, len(jobs))
 
@@ -492,9 +492,9 @@ func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]inter
 
 // genDMLsWithSameOp groups and generates dmls by dmlOpType.
 // TODO: implement a volcano iterator interface for genDMLsWithSameXXX.
-func genDMLsWithSameOp(jobs []*job) ([]string, [][]interface{}) {
+func genDMLsWithSameOp(jobs []*job) ([]string, [][]any) {
 	queries := make([]string, 0, len(jobs))
-	args := make([][]interface{}, 0, len(jobs))
+	args := make([][]any, 0, len(jobs))
 	var lastOp sqlmodel.DMLType
 	jobsWithSameOp := make([]*job, 0, len(jobs))
 

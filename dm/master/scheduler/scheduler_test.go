@@ -207,11 +207,9 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	// do keep-alive for worker1.
 	ctx1, cancel1 := context.WithCancel(ctx)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
-	}()
+	})
 	// wait for source1 being bound to worker1.
 	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
@@ -334,11 +332,9 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	// CASE 3.2: start worker1 again.
 	// do keep-alive for worker1 again.
 	ctx1, cancel1 = context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
-	}()
+	})
 	// wait for source1 bound to worker1.
 	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
@@ -379,11 +375,9 @@ func (t *testSchedulerSuite) testSchedulerProgress(restart int) {
 	// CASE 4.3: the worker2 become online.
 	// do keep-alive for worker2.
 	ctx2, cancel2 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName2, keepAliveTTL))
-	}()
+	})
 	// wait for worker2 become Free.
 	require.Eventually(t.T(), func() bool {
 		w := s.GetWorkerByName(workerName2)
@@ -859,11 +853,9 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	}()
 	// step 2.2: worker start keepAlive
 	ctx1, cancel1 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
-	}()
+	})
 	// step 2.3: scheduler should bound source to worker
 	// wait for source1 bound to worker1.
 	require.Eventually(t.T(), func() bool {
@@ -898,11 +890,9 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 	require.Len(t.T(), sourceBoundCh, 0)
 	ctx2, cancel2 := context.WithCancel(ctx)
 	// trigger same keepalive event again, just for test
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName1, keepAliveTTL))
-	}()
+	})
 	checkSourceBoundCh()
 	// case 3: scheduler is restarted, but worker also broke after scheduler is down
 	// step 5: stop scheduler -> stop worker keepalive -> restart scheduler
@@ -934,11 +924,9 @@ func (t *testSchedulerSuite) TestRestartScheduler() {
 
 	// first let the source bound again
 	ctx4, cancel4 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx4, t.etcdTestCli, workerName1, keepAliveTTL))
-	}()
+	})
 	sourceBound1.Source = sourceID1
 	sourceBound1.IsDeleted = false
 	checkSourceBoundCh()
@@ -1026,16 +1014,12 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	// step 3: add two workers, and then cancel them to simulate they have lost connection
 	var wg sync.WaitGroup
 	ctx1, cancel1 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName1, keepAliveTTL))
-	}()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	})
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx1, t.etcdTestCli, workerName2, keepAliveTTL))
-	}()
+	})
 	require.Eventually(t.T(), func() bool {
 		kam, _, e := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		return e == nil && len(kam) == 2
@@ -1068,11 +1052,9 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 	// step 5: scheduler start to handle workerEvent from compact revision, should handle worker keepalive events correctly
 	ctx2, cancel2 := context.WithCancel(ctx)
 	// step 5.1: start one worker before scheduler start to handle workerEvent
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName3, keepAliveTTL))
-	}()
+	})
 	require.Eventually(t.T(), func() bool {
 		kam, _, err := ha.GetKeepAliveWorkers(t.etcdTestCli)
 		if err == nil {
@@ -1083,18 +1065,14 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 		return false
 	}, 3*time.Second, 100*time.Millisecond)
 	// step 5.2: scheduler start to handle workerEvent
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), s.observeWorkerEvent(ctx2, startRev))
-	}()
+	})
 	// step 5.3: wait for scheduler to restart handleWorkerEvent, then start a new worker
 	time.Sleep(time.Second)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), ha.KeepAlive(ctx2, t.etcdTestCli, workerName4, keepAliveTTL))
-	}()
+	})
 	require.Eventually(t.T(), func() bool {
 		unbounds := s.UnboundSources()
 		return len(unbounds) == 0
@@ -1105,11 +1083,9 @@ func (t *testSchedulerSuite) TestWatchWorkerEventEtcdCompact() {
 
 	// step 6: restart to observe workerEvents, should unbound all sources
 	ctx3, cancel3 := context.WithCancel(ctx)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), s.observeWorkerEvent(ctx3, startRev))
-	}()
+	})
 	require.Eventually(t.T(), func() bool {
 		bounds := s.BoundSources()
 		return len(bounds) == 0
@@ -1804,11 +1780,9 @@ func (t *testSchedulerSuite) TestWatchLoadTask() {
 	require.True(t.T(), s.hasLoadTaskByWorkerAndSource(workerName4, sourceID2))
 
 	// observer load tasks
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), s.observeLoadTask(ctx1, startRev))
-	}()
+	})
 
 	// put task2, source1, worker1
 	_, err = ha.PutLoadTask(t.etcdTestCli, task2, sourceID1, workerName1)

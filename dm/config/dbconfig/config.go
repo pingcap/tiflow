@@ -16,6 +16,7 @@ package dbconfig
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -148,12 +149,7 @@ func (db *DBConfig) Clone() *DBConfig {
 		clone.MaxAllowedPacket = &packet
 	}
 
-	if db.Session != nil {
-		clone.Session = make(map[string]string, len(db.Session))
-		for k, v := range db.Session {
-			clone.Session[k] = v
-		}
-	}
+	clone.Session = maps.Clone(db.Session)
 
 	clone.Security = db.Security.Clone()
 

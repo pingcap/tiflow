@@ -25,7 +25,7 @@ import (
 )
 
 // Status returns the status of the current sub task.
-func (st *SubTask) Status() interface{} {
+func (st *SubTask) Status() any {
 	if cu := st.CurrUnit(); cu != nil {
 		return cu.Status(nil)
 	}

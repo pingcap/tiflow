@@ -134,7 +134,7 @@ func (p *Pessimist) GetOperation(ctx context.Context, info pessimism.Info, rev i
 func (p *Pessimist) DoneOperationDeleteInfo(op pessimism.Operation, info pessimism.Info) error {
 	op.Done = true // mark the operation as `done`.
 
-	_, _, err := etcdutil.DoTxnWithRepeatable(p.cli, func(_ *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+	_, _, err := etcdutil.DoTxnWithRepeatable(p.cli, func(_ *tcontext.Context, cli *clientv3.Client) (any, error) {
 		done, _, err := pessimism.PutOperationDeleteExistInfo(cli, op, info)
 		if err != nil {
 			return nil, err

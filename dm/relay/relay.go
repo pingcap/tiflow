@@ -89,9 +89,9 @@ type Process interface {
 	// Pause pauses a running relay log process unit
 	Pause()
 	// Error returns error message if having one
-	Error() interface{}
+	Error() any
 	// Status returns status of relay log process unit.
-	Status(sourceStatus *binlog.SourceStatus) interface{}
+	Status(sourceStatus *binlog.SourceStatus) any
 	// Close does some clean works
 	Close()
 	// IsClosed returns whether relay log process unit was closed
@@ -1013,7 +1013,7 @@ func (r *Relay) IsActive(uuid, filename string) (bool, int64) {
 }
 
 // Status implements the dm.Unit interface.
-func (r *Relay) Status(sourceStatus *binlog.SourceStatus) interface{} {
+func (r *Relay) Status(sourceStatus *binlog.SourceStatus) any {
 	r.RLock()
 	defer r.RUnlock()
 	uuid, relayPos := r.meta.Pos()
@@ -1045,7 +1045,7 @@ func (r *Relay) Status(sourceStatus *binlog.SourceStatus) interface{} {
 }
 
 // Error implements the dm.Unit interface.
-func (r *Relay) Error() interface{} {
+func (r *Relay) Error() any {
 	return &pb.RelayError{}
 }
 

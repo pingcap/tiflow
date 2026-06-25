@@ -335,8 +335,8 @@ func (t *testFileUtilSuite) testGetTxnPosGTIDs(c *check.C, filename, flavor, pre
 		schema            = "db"
 		table             = "tbl2"
 	)
-	updateRows := make([][]interface{}, 0, 2)
-	updateRows = append(updateRows, []interface{}{int32(1)}, []interface{}{int32(2)})
+	updateRows := make([][]any, 0, 2)
+	updateRows = append(updateRows, []any{int32(1)}, []any{int32(2)})
 	dmlData := []*event.DMLData{
 		{
 			TableID:    tableID,

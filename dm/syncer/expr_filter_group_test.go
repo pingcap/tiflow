@@ -36,8 +36,8 @@ func TestSkipDMLByExpression(t *testing.T) {
 	cases := []struct {
 		exprStr    string
 		tableStr   string
-		skippedRow []interface{}
-		passedRow  []interface{}
+		skippedRow []any
+		passedRow  []any
 	}{
 		{
 			"state != 1",
@@ -50,8 +50,8 @@ create table t (
 	UNIQUE KEY uniq_id (id),
 	KEY idx_state (state)
 );`,
-			[]interface{}{100, 100, 3},
-			[]interface{}{100, 100, 1},
+			[]any{100, 100, 3},
+			[]any{100, 100, 1},
 		},
 		{
 			"f > 1.23",
@@ -59,8 +59,8 @@ create table t (
 create table t (
 	f float
 );`,
-			[]interface{}{float32(2.0)},
-			[]interface{}{float32(1.0)},
+			[]any{float32(2.0)},
+			[]any{float32(1.0)},
 		},
 		{
 			"f > a + b",
@@ -70,8 +70,8 @@ create table t (
 	a int,
 	b int
 );`,
-			[]interface{}{float32(123.45), 1, 2},
-			[]interface{}{float32(0.01), 23, 45},
+			[]any{float32(123.45), 1, 2},
+			[]any{float32(0.01), 23, 45},
 		},
 		{
 			"id = 30",
@@ -83,8 +83,8 @@ create table t (
 	ts timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 	PRIMARY KEY (id)
 );`,
-			[]interface{}{int32(30), "30", nil, "2021-06-17 10:13:05"},
-			[]interface{}{int32(20), "20", nil, "2021-06-17 10:13:05"},
+			[]any{int32(30), "30", nil, "2021-06-17 10:13:05"},
+			[]any{int32(20), "20", nil, "2021-06-17 10:13:05"},
 		},
 	}
 
@@ -143,8 +143,8 @@ func TestAllBinaryProtocolTypes(t *testing.T) {
 	cases := []struct {
 		exprStr    string
 		tableStr   string
-		skippedRow []interface{}
-		passedRow  []interface{}
+		skippedRow []any
+		passedRow  []any
 	}{
 		// MYSQL_TYPE_NULL
 		{
@@ -153,8 +153,8 @@ func TestAllBinaryProtocolTypes(t *testing.T) {
 create table t (
 	c int
 );`,
-			[]interface{}{nil},
-			[]interface{}{100},
+			[]any{nil},
+			[]any{100},
 		},
 		// MYSQL_TYPE_LONG
 		{
@@ -163,8 +163,8 @@ create table t (
 create table t (
 	c int
 );`,
-			[]interface{}{int32(1)},
-			[]interface{}{int32(100)},
+			[]any{int32(1)},
+			[]any{int32(100)},
 		},
 		// MYSQL_TYPE_TINY
 		{
@@ -173,8 +173,8 @@ create table t (
 create table t (
 	c tinyint
 );`,
-			[]interface{}{int8(2)},
-			[]interface{}{int8(-1)},
+			[]any{int8(2)},
+			[]any{int8(-1)},
 		},
 		// MYSQL_TYPE_SHORT
 		{
@@ -183,8 +183,8 @@ create table t (
 create table t (
 	c smallint
 );`,
-			[]interface{}{int16(8)},
-			[]interface{}{int16(18)},
+			[]any{int16(8)},
+			[]any{int16(18)},
 		},
 		// MYSQL_TYPE_INT24
 		{
@@ -193,8 +193,8 @@ create table t (
 create table t (
 	c mediumint
 );`,
-			[]interface{}{int32(-8)},
-			[]interface{}{int32(1)},
+			[]any{int32(-8)},
+			[]any{int32(1)},
 		},
 		// MYSQL_TYPE_LONGLONG
 		{
@@ -203,8 +203,8 @@ create table t (
 create table t (
 	c bigint
 );`,
-			[]interface{}{int64(100000000)},
-			[]interface{}{int64(200000000)},
+			[]any{int64(100000000)},
+			[]any{int64(200000000)},
 		},
 		// MYSQL_TYPE_NEWDECIMAL
 		{
@@ -213,8 +213,8 @@ create table t (
 create table t (
 	c decimal(5,2)
 );`,
-			[]interface{}{"10.10"},
-			[]interface{}{"10.11"},
+			[]any{"10.10"},
+			[]any{"10.11"},
 		},
 		// MYSQL_TYPE_FLOAT
 		{
@@ -223,8 +223,8 @@ create table t (
 create table t (
 	c float
 );`,
-			[]interface{}{float32(0.08)},
-			[]interface{}{float32(0.18)},
+			[]any{float32(0.08)},
+			[]any{float32(0.18)},
 		},
 		// MYSQL_TYPE_DOUBLE
 		{
@@ -233,8 +233,8 @@ create table t (
 create table t (
 	c double
 );`,
-			[]interface{}{float64(0.08)},
-			[]interface{}{float64(0.18)},
+			[]any{float64(0.08)},
+			[]any{float64(0.18)},
 		},
 		// MYSQL_TYPE_BIT
 		{
@@ -243,8 +243,8 @@ create table t (
 create table t (
 	c bit(4)
 );`,
-			[]interface{}{int64(1)},
-			[]interface{}{int64(2)},
+			[]any{int64(1)},
+			[]any{int64(2)},
 		},
 		// MYSQL_TYPE_TIMESTAMP, MYSQL_TYPE_TIMESTAMP2
 		// DM does not set ParseTime
@@ -255,8 +255,8 @@ create table t (
 create table t (
 	c timestamp
 );`,
-			[]interface{}{"2021-06-21 12:34:56"},
-			[]interface{}{"1970-01-01 00:00:01"},
+			[]any{"2021-06-21 12:34:56"},
+			[]any{"1970-01-01 00:00:01"},
 		},
 		// MYSQL_TYPE_DATETIME, MYSQL_TYPE_DATETIME2
 		{
@@ -265,8 +265,8 @@ create table t (
 create table t (
 	c datetime
 );`,
-			[]interface{}{"2021-06-21 00:00:12"},
-			[]interface{}{"1970-01-01 00:00:01"},
+			[]any{"2021-06-21 00:00:12"},
+			[]any{"1970-01-01 00:00:01"},
 		},
 		// MYSQL_TYPE_TIME, MYSQL_TYPE_TIME2
 		{
@@ -275,8 +275,8 @@ create table t (
 create table t (
 	c time(6)
 );`,
-			[]interface{}{"00:00:12"},
-			[]interface{}{"00:00:01"},
+			[]any{"00:00:12"},
+			[]any{"00:00:01"},
 		},
 		// MYSQL_TYPE_DATE
 		{
@@ -285,8 +285,8 @@ create table t (
 create table t (
 	c date
 );`,
-			[]interface{}{"2021-06-21"},
-			[]interface{}{"1970-01-01"},
+			[]any{"2021-06-21"},
+			[]any{"1970-01-01"},
 		},
 		// MYSQL_TYPE_YEAR
 		{
@@ -295,8 +295,8 @@ create table t (
 create table t (
 	c year
 );`,
-			[]interface{}{int(2021)},
-			[]interface{}{int(2020)},
+			[]any{int(2021)},
+			[]any{int(2020)},
 		},
 		// MYSQL_TYPE_ENUM
 		{
@@ -305,8 +305,8 @@ create table t (
 create table t (
 	c ENUM('x-small', 'small', 'medium', 'large', 'x-large')
 );`,
-			[]interface{}{int64(1)}, // 1-indexed
-			[]interface{}{int64(2)},
+			[]any{int64(1)}, // 1-indexed
+			[]any{int64(2)},
 		},
 		// MYSQL_TYPE_SET
 		{
@@ -315,8 +315,8 @@ create table t (
 create table t (
 	c SET('a', 'b', 'c', 'd')
 );`,
-			[]interface{}{int64(0b1100)}, // c,d
-			[]interface{}{int64(0b1000)}, // d
+			[]any{int64(0b1100)}, // c,d
+			[]any{int64(0b1000)}, // d
 		},
 		// MYSQL_TYPE_BLOB
 		{
@@ -325,8 +325,8 @@ create table t (
 create table t (
 	c blob
 );`,
-			[]interface{}{[]byte("\x124")}, // x'1234'
-			[]interface{}{[]byte("Vx")},    // x'5678'
+			[]any{[]byte("\x124")}, // x'1234'
+			[]any{[]byte("Vx")},    // x'5678'
 		},
 		// MYSQL_TYPE_VARCHAR, MYSQL_TYPE_VAR_STRING, MYSQL_TYPE_STRING
 		{
@@ -335,8 +335,8 @@ create table t (
 create table t (
 	c varchar(20)
 );`,
-			[]interface{}{"abc"},
-			[]interface{}{"def"},
+			[]any{"abc"},
+			[]any{"def"},
 		},
 		// MYSQL_TYPE_JSON
 		{
@@ -345,8 +345,8 @@ create table t (
 create table t (
 	c json
 );`,
-			[]interface{}{[]byte(`{"id": 1}`)},
-			[]interface{}{[]byte(`{"id": 2}`)},
+			[]any{[]byte(`{"id": 1}`)},
+			[]any{[]byte(`{"id": 2}`)},
 		},
 		// MYSQL_TYPE_GEOMETRY, parser not supported
 	}
@@ -445,10 +445,10 @@ create table t (
 	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues, errors.RedactLogDisable))
 
 	// skip nothing
-	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
+	skip, err := SkipDMLByExpression(sessCtx, []any{0}, expr, ti.Columns)
 	require.NoError(t, err)
 	require.False(t, skip)
-	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
+	skip, err = SkipDMLByExpression(sessCtx, []any{2}, expr, ti.Columns)
 	require.NoError(t, err)
 	require.False(t, skip)
 }

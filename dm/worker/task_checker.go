@@ -153,11 +153,9 @@ func (tsc *realTaskStatusChecker) Init() error {
 
 // Start implements TaskStatusChecker.Start.
 func (tsc *realTaskStatusChecker) Start() {
-	tsc.wg.Add(1)
-	go func() {
-		defer tsc.wg.Done()
+	tsc.wg.Go(func() {
 		tsc.run()
-	}()
+	})
 }
 
 // Close implements TaskStatusChecker.Close.

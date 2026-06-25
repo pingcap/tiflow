@@ -362,7 +362,7 @@ func (s *Syncer) closeJobChans() {
 	s.jobsClosed.Store(true)
 }
 
-func (s *Syncer) recordUnhandledEvent(message string, ev interface{}) {
+func (s *Syncer) recordUnhandledEvent(message string, ev any) {
 	s.unhandledEventLogger.Warn(message, zap.String("type", fmt.Sprintf("%T", ev)))
 }
 
@@ -771,9 +771,7 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			err, ok := <-runFatalChan
 			if !ok {
@@ -784,13 +782,11 @@ func (s *Syncer) Process(ctx context.Context, pr chan pb.ProcessResult) {
 			errs = append(errs, err)
 			errsMu.Unlock()
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-newCtx.Done() // ctx or newCtx
-	}()
+	})
 
 	err := s.Run(newCtx)
 	if err != nil {
@@ -1375,7 +1371,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	s.checkpointFlushWorker.Add(task)
 }
 
-func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*filter.Table, []string, [][]interface{}) {
+func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*filter.Table, []string, [][]any) {
 	snapshotInfo := s.checkpoint.Snapshot(isSyncFlush)
 	if snapshotInfo == nil {
 		return nil, nil, nil, nil
@@ -1385,7 +1381,7 @@ func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*f
 		exceptTableIDs map[string]bool
 		exceptTables   []*filter.Table
 		shardMetaSQLs  []string
-		shardMetaArgs  [][]interface{}
+		shardMetaArgs  [][]any
 	)
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		// flush all checkpoints except tables which are unresolved for sharding DDL for the pessimistic mode.
@@ -1849,12 +1845,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	s.runWg.Add(1)
 	go s.syncDML()
-	s.runWg.Add(1)
-	go func() {
-		defer s.runWg.Done()
+	s.runWg.Go(func() {
 		// also need to use a different ctx. checkpointFlushWorker worker will be closed in the first defer
 		s.checkpointFlushWorker.Run(s.tctx)
-	}()
+	})
 	s.runWg.Add(1)
 	go s.syncDDL(adminQueueName, s.ddlDBConn, s.ddlJobCh)
 	s.runWg.Add(1)
@@ -2818,13 +2812,13 @@ func (qec *queryEventContext) String() string {
 }
 
 // generateExtendColumn generate extended columns by extractor.
-func generateExtendColumn(data [][]interface{}, r *regexprrouter.RouteTable, table *filter.Table, sourceID string) [][]interface{} {
+func generateExtendColumn(data [][]any, r *regexprrouter.RouteTable, table *filter.Table, sourceID string) [][]any {
 	extendCol, extendVal := r.FetchExtendColumn(table.Schema, table.Name, sourceID)
 	if len(extendCol) == 0 {
 		return nil
 	}
 
-	rows := make([][]interface{}, len(data))
+	rows := make([][]any, len(data))
 	for i := range data {
 		rows[i] = data[i]
 		for _, v := range extendVal {
@@ -2926,10 +2920,7 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 		}
 	}
 	// skip getTable before in above loop
-	start := 1
-	if shouldTableExistNum > start {
-		start = shouldTableExistNum
-	}
+	start := max(shouldTableExistNum, 1)
 	for i := start; i < shouldRefTableExistNum; i++ {
 		if err := s.schemaTracker.CreateSchemaIfNotExists(srcTables[i].Schema); err != nil {
 			return terror.ErrSchemaTrackerCannotCreateSchema.Delegate(err, srcTables[i].Schema)
@@ -3113,8 +3104,8 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			setFirstErr(err2)
 			continue
 		}
-		stmts := bytes.Split(content, []byte(";\n"))
-		for _, stmt := range stmts {
+		stmts := bytes.SplitSeq(content, []byte(";\n"))
+		for stmt := range stmts {
 			stmt = bytes.TrimSpace(stmt)
 			if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
 				continue

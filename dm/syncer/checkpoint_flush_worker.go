@@ -30,7 +30,7 @@ type checkpointFlushTask struct {
 	// extra sharding ddl sqls
 	exceptTables  []*filter.Table
 	shardMetaSQLs []string
-	shardMetaArgs [][]interface{}
+	shardMetaArgs [][]any
 	// async flush job
 	asyncflushJob *job
 	// error chan for sync flush

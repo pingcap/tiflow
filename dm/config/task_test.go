@@ -53,7 +53,6 @@ func TestIsForeignKeyChecksEnabled(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, c.expected, IsForeignKeyChecksEnabled(c.session))
@@ -1114,7 +1113,7 @@ func TestTaskConfigForDowngrade(t *testing.T) {
 }
 
 // Clone clones src to dest.
-func Clone(dest, src interface{}) {
+func Clone(dest, src any) {
 	cloneValues(reflect.ValueOf(dest), reflect.ValueOf(src))
 }
 
@@ -1123,17 +1122,17 @@ func Clone(dest, src interface{}) {
 func cloneValues(dest, src reflect.Value) {
 	destType := dest.Type()
 	srcType := src.Type()
-	if destType.Kind() == reflect.Ptr {
+	if destType.Kind() == reflect.Pointer {
 		destType = destType.Elem()
 	}
-	if srcType.Kind() == reflect.Ptr {
+	if srcType.Kind() == reflect.Pointer {
 		srcType = srcType.Elem()
 	}
 
 	if destType.Kind() == reflect.Map {
 		destMap := reflect.MakeMap(destType)
 		for _, k := range src.MapKeys() {
-			if src.MapIndex(k).Type().Kind() == reflect.Ptr {
+			if src.MapIndex(k).Type().Kind() == reflect.Pointer {
 				newVal := reflect.New(destType.Elem().Elem())
 				cloneValues(newVal, src.MapIndex(k))
 				destMap.SetMapIndex(k, newVal)
@@ -1148,7 +1147,7 @@ func cloneValues(dest, src reflect.Value) {
 	if destType.Kind() == reflect.Slice {
 		slice := reflect.MakeSlice(destType, src.Len(), src.Cap())
 		for i := 0; i < src.Len(); i++ {
-			if slice.Index(i).Type().Kind() == reflect.Ptr {
+			if slice.Index(i).Type().Kind() == reflect.Pointer {
 				newVal := reflect.New(slice.Index(i).Type().Elem())
 				cloneValues(newVal, src.Index(i))
 				slice.Index(i).Set(newVal)
@@ -1170,10 +1169,10 @@ func cloneValues(dest, src reflect.Value) {
 			srcField := src.Elem().Field(i)
 			destFieldType := destField.Type()
 			srcFieldType := srcField.Type()
-			if destFieldType.Kind() == reflect.Ptr {
+			if destFieldType.Kind() == reflect.Pointer {
 				destFieldType = destFieldType.Elem()
 			}
-			if srcFieldType.Kind() == reflect.Ptr {
+			if srcFieldType.Kind() == reflect.Pointer {
 				srcFieldType = srcFieldType.Elem()
 			}
 			if destFieldType != srcFieldType {

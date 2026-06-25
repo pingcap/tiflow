@@ -257,34 +257,34 @@ func (meta *ShardingMeta) ActiveDDLFirstLocation() (binlog.Location, error) {
 }
 
 // FlushData returns sharding meta flush SQL and args.
-func (meta *ShardingMeta) FlushData(sourceID, tableID string) ([]string, [][]interface{}) {
+func (meta *ShardingMeta) FlushData(sourceID, tableID string) ([]string, [][]any) {
 	if len(meta.global.Items) == 0 {
 		sql2 := fmt.Sprintf("DELETE FROM %s where source_id=? and target_table_id=?", meta.tableName)
-		args2 := []interface{}{sourceID, tableID}
-		return []string{sql2}, [][]interface{}{args2}
+		args2 := []any{sourceID, tableID}
+		return []string{sql2}, [][]any{args2}
 	}
 	var (
 		sqls    = make([]string, 1+len(meta.sources))
-		args    = make([][]interface{}, 0, 1+len(meta.sources))
+		args    = make([][]any, 0, 1+len(meta.sources))
 		baseSQL = fmt.Sprintf("INSERT INTO %s (`source_id`, `target_table_id`, `source_table_id`, `active_index`, `is_global`, `data`) VALUES(?,?,?,?,?,?) ON DUPLICATE KEY UPDATE `data`=?, `active_index`=?", meta.tableName)
 	)
 	for i := range sqls {
 		sqls[i] = baseSQL
 	}
-	args = append(args, []interface{}{sourceID, tableID, "", meta.activeIdx, true, meta.global.String(), meta.global.String(), meta.activeIdx})
+	args = append(args, []any{sourceID, tableID, "", meta.activeIdx, true, meta.global.String(), meta.global.String(), meta.activeIdx})
 	for source, seq := range meta.sources {
-		args = append(args, []interface{}{sourceID, tableID, source, meta.activeIdx, false, seq.String(), seq.String(), meta.activeIdx})
+		args = append(args, []any{sourceID, tableID, source, meta.activeIdx, false, seq.String(), seq.String(), meta.activeIdx})
 	}
 	return sqls, args
 }
 
-func (meta *ShardingMeta) genRemoveSQL(sourceID, tableID string) (string, []interface{}) {
+func (meta *ShardingMeta) genRemoveSQL(sourceID, tableID string) (string, []any) {
 	sql := fmt.Sprintf("DELETE FROM %s where source_id=? and target_table_id=?", meta.tableName)
-	return sql, []interface{}{sourceID, tableID}
+	return sql, []any{sourceID, tableID}
 }
 
 // CheckAndUpdate check and fix schema and table names for all the sharding groups.
-func (meta *ShardingMeta) CheckAndUpdate(logger log.Logger, targetID string, schemaMap map[string]string, tablesMap map[string]map[string]string) ([]string, [][]interface{}, error) {
+func (meta *ShardingMeta) CheckAndUpdate(logger log.Logger, targetID string, schemaMap map[string]string, tablesMap map[string]map[string]string) ([]string, [][]any, error) {
 	if len(schemaMap) == 0 && len(tablesMap) == 0 {
 		return nil, nil, nil
 	}
@@ -330,7 +330,7 @@ func (meta *ShardingMeta) CheckAndUpdate(logger log.Logger, targetID string, sch
 	}
 	var (
 		sqls []string
-		args [][]interface{}
+		args [][]any
 	)
 	for oldID, newID := range sourceIDsMap {
 		if oldID != newID {

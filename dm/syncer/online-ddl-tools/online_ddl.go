@@ -254,7 +254,7 @@ func (s *Storage) saveToDB(tctx *tcontext.Context, ghostSchema, ghostTable strin
 	}
 
 	query := fmt.Sprintf("REPLACE INTO %s(`id`,`ghost_schema`, `ghost_table`, `ddls`) VALUES (?, ?, ?, ?)", s.tableName)
-	_, err = s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{query}, []interface{}{s.id, ghostSchema, ghostTable, string(ddlsBytes)})
+	_, err = s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{query}, []any{s.id, ghostSchema, ghostTable, string(ddlsBytes)})
 	failpoint.Inject("ExitAfterSaveOnlineDDL", func() {
 		tctx.L().Info("failpoint ExitAfterSaveOnlineDDL")
 		panic("ExitAfterSaveOnlineDDL")
@@ -277,7 +277,7 @@ func (s *Storage) delete(tctx *tcontext.Context, ghostSchema, ghostTable string)
 
 	// delete all checkpoints
 	sql := fmt.Sprintf("DELETE FROM %s WHERE `id` = ? and `ghost_schema` = ? and `ghost_table` = ?", s.tableName)
-	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql}, []interface{}{s.id, ghostSchema, ghostTable})
+	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql}, []any{s.id, ghostSchema, ghostTable})
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -293,7 +293,7 @@ func (s *Storage) Clear(tctx *tcontext.Context) error {
 
 	// delete all checkpoints
 	sql := fmt.Sprintf("DELETE FROM %s WHERE `id` = ?", s.tableName)
-	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql}, []interface{}{s.id})
+	_, err := s.dbConn.ExecuteSQL(tctx, s.metricProxies, []string{sql}, []any{s.id})
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}

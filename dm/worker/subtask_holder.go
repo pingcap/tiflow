@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"maps"
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/relay"
@@ -104,9 +105,5 @@ func (h *subTaskHolder) findSubTask(name string) *SubTask {
 func (h *subTaskHolder) getAllSubTasks() map[string]*SubTask {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	result := make(map[string]*SubTask, len(h.subTasks))
-	for name, st := range h.subTasks {
-		result[name] = st
-	}
-	return result
+	return maps.Clone(h.subTasks)
 }

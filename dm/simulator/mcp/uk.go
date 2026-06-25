@@ -15,6 +15,7 @@ package mcp
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -30,21 +31,17 @@ type UniqueKey struct {
 	rowID int
 	// value is the real value of all the UK columns.
 	// The key is the column name, the value is the real value.
-	value map[string]interface{}
+	value map[string]any
 }
 
 // NewUniqueKey creates a new unique key instance.
 // the map values are cloned into the new UK instance,
 // so that the further changes in the value map won't affect the values inside the UK.
-func NewUniqueKey(rowID int, value map[string]interface{}) *UniqueKey {
-	result := &UniqueKey{
+func NewUniqueKey(rowID int, value map[string]any) *UniqueKey {
+	return &UniqueKey{
 		rowID: rowID,
-		value: make(map[string]interface{}),
+		value: maps.Clone(value),
 	}
-	for k, v := range value {
-		result.value[k] = v
-	}
-	return result
 }
 
 // GetRowID gets the row ID of the unique key.
@@ -65,14 +62,10 @@ func (uk *UniqueKey) SetRowID(rowID int) {
 
 // GetValue gets the UK value map of a unique key.
 // The returned value is cloned, so that further modifications won't affect the value inside the UK.
-func (uk *UniqueKey) GetValue() map[string]interface{} {
+func (uk *UniqueKey) GetValue() map[string]any {
 	uk.RLock()
 	defer uk.RUnlock()
-	result := make(map[string]interface{})
-	for k, v := range uk.value {
-		result[k] = v
-	}
-	return result
+	return maps.Clone(uk.value)
 }
 
 // GetValueHash return hash for values.
@@ -96,13 +89,10 @@ func (uk *UniqueKey) GetValueHash() string {
 // SetValue sets the UK value map.
 // The input values are cloned into the UK,
 // and further modifications on the input map won't affect the values inside the UK.
-func (uk *UniqueKey) SetValue(value map[string]interface{}) {
+func (uk *UniqueKey) SetValue(value map[string]any) {
 	uk.Lock()
 	defer uk.Unlock()
-	uk.value = make(map[string]interface{})
-	for k, v := range value {
-		uk.value[k] = v
-	}
+	uk.value = maps.Clone(value)
 }
 
 // Clone is to clone a UK into a new one.
@@ -110,14 +100,10 @@ func (uk *UniqueKey) SetValue(value map[string]interface{}) {
 func (uk *UniqueKey) Clone() *UniqueKey {
 	uk.RLock()
 	defer uk.RUnlock()
-	result := &UniqueKey{
+	return &UniqueKey{
 		rowID: uk.rowID,
-		value: map[string]interface{}{},
+		value: maps.Clone(uk.value),
 	}
-	for k, v := range uk.value {
-		result.value[k] = v
-	}
-	return result
 }
 
 // String returns the string representation of a UK.

@@ -464,7 +464,7 @@ func (t *testReaderSuite) TestStartSyncByPos(c *check.C) {
 	// 1. generate relay log files
 	// 1 for the first sub directory, 2 for the second directory and 3 for the third directory
 	// so, write the same events data into (1+2+3) files.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		for j := 1; j < i+2; j++ {
 			filename := filepath.Join(baseDir, UUIDs[i], filenamePrefix+strconv.Itoa(j))
 			var content []byte
@@ -789,7 +789,7 @@ func (t *testReaderSuite) TestStartSyncByGTID(c *check.C) {
 	// exclude event except for first server
 	includeServerUUID := testCase[0].serverUUID
 	includeUUID := testCase[0].uuid
-	for _, s := range strings.Split(preGset.String(), ",") {
+	for s := range strings.SplitSeq(preGset.String(), ",") {
 		if !strings.Contains(s, includeServerUUID) {
 			excludeStrs = append(excludeStrs, s)
 		}
@@ -1070,7 +1070,7 @@ func (t *testReaderSuite) genBinlogEvents(c *check.C, latestPos uint32, latestGT
 
 	// for these tests, generates some DDL events is enough
 	count := 5 + rand.Intn(5)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		evs, err := event.GenDDLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, fmt.Sprintf("db_%d", i), fmt.Sprintf("CREATE TABLE %d (c1 INT)", i), true, false, 0)
 		c.Assert(err, check.IsNil)
 		events = append(events, evs.Events...)
@@ -1125,7 +1125,7 @@ func (t *testReaderSuite) genEvents(
 					Schema:     fmt.Sprintf("db_%d", i),
 					Table:      strconv.Itoa(i),
 					ColumnType: []byte{gmysql.MYSQL_TYPE_INT24},
-					Rows:       [][]interface{}{{int32(1)}, {int32(2)}},
+					Rows:       [][]any{{int32(1)}, {int32(2)}},
 				},
 			}
 			evs, err := event.GenDMLEvents(gmysql.MySQLFlavor, 1, latestPos, latestGTID, replication.WRITE_ROWS_EVENTv2, 10, insertDMLData, true, false, 0)
@@ -1478,7 +1478,7 @@ func (t *testReaderSuite) TestwaitBinlogChanged(c *check.C) {
 	{
 		cfg := &BinlogReaderConfig{RelayDir: relayDir, Flavor: gmysql.MySQLFlavor}
 		r := newBinlogReaderForTest(log.L(), cfg, true, "xxx.000001")
-		r.notifyCh = make(chan interface{}, 2)
+		r.notifyCh = make(chan any, 2)
 		r.notifyCh <- struct{}{}
 		r.notifyCh <- struct{}{}
 		relay := r.relay.(*Relay)

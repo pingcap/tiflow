@@ -86,24 +86,24 @@ func TestCausality(t *testing.T) {
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	causalityCh := causalityWrap(jobCh, syncer)
 	testCases := []struct {
-		preVals  []interface{}
-		postVals []interface{}
+		preVals  []any
+		postVals []any
 	}{
 		{
-			postVals: []interface{}{1, 2},
+			postVals: []any{1, 2},
 		},
 		{
-			postVals: []interface{}{2, 3},
+			postVals: []any{2, 3},
 		},
 		{
-			preVals:  []interface{}{2, 3},
-			postVals: []interface{}{3, 4},
+			preVals:  []any{2, 3},
+			postVals: []any{3, 4},
 		},
 		{
-			preVals: []interface{}{1, 2},
+			preVals: []any{1, 2},
 		},
 		{
-			postVals: []interface{}{1, 3},
+			postVals: []any{1, 3},
 		},
 	}
 	results := []opType{dml, dml, dml, dml, conflict, dml}
@@ -195,7 +195,7 @@ func (s *testSyncerSuite) TestCasualityRelation(c *check.C) {
 			c.Assert(rmMap.prevFlushJobSeq, check.Not(check.Equals), int64(index))
 		}
 
-		for ti := 0; ti < index; ti++ {
+		for ti := range index {
 			_, ok := rm.get(testCases[ti].key)
 			c.Assert(ok, check.Equals, false)
 		}

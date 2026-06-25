@@ -84,7 +84,7 @@ func TestJob(t *testing.T) {
 	schema := "create table test.tb(id int primary key, col1 int unique not null)"
 	ti := mockTableInfo(t, schema)
 
-	exampleChange := sqlmodel.NewRowChange(table, nil, nil, []interface{}{2, 2}, ti, nil, nil)
+	exampleChange := sqlmodel.NewRowChange(table, nil, nil, []any{2, 2}, ti, nil, nil)
 
 	testCases := []struct {
 		job    *job

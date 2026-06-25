@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"reflect"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -254,24 +255,18 @@ func (s *Server) Start(ctx context.Context) (err error) {
 
 	s.closed.Store(false) // the server started now.
 
-	s.bgFunWg.Add(1)
-	go func() {
-		defer s.bgFunWg.Done()
+	s.bgFunWg.Go(func() {
 		s.ap.Start(ctx)
-	}()
+	})
 
-	s.bgFunWg.Add(1)
-	go func() {
-		defer s.bgFunWg.Done()
+	s.bgFunWg.Go(func() {
 		s.electionNotify(ctx)
-	}()
+	})
 
 	runBackgroundOnce.Do(func() {
-		s.bgFunWg.Add(1)
-		go func() {
-			defer s.bgFunWg.Done()
+		s.bgFunWg.Go(func() {
 			metrics.RunBackgroundJob(ctx)
-		}()
+		})
 	})
 
 	failpoint.Inject("FailToElect", func(val failpoint.Value) {
@@ -484,7 +479,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 		var b strings.Builder
 		size := 5 * 1024 * 1024
 		b.Grow(size)
-		for i := 0; i < size; i++ {
+		for range size {
 			b.WriteByte(0)
 		}
 		resp2 = &pb.StartTaskResponse{Msg: b.String()}
@@ -844,18 +839,10 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusListRequest
 	}
 	resps := s.getStatusFromWorkers(ctx, sources, req.Name, specifiedSource)
 	workerRespMap := make(map[string][]*pb.QueryStatusResponse, len(sources)) // sourceName -> worker QueryStatusResponse
-	inSlice := func(s []string, e string) bool {
-		for _, v := range s {
-			if v == e {
-				return true
-			}
-		}
-		return false
-	}
 	for _, workerResp := range resps {
 		workerRespMap[workerResp.SourceStatus.Source] = append(workerRespMap[workerResp.SourceStatus.Source], workerResp)
 		// append some offline worker responses
-		if !inSlice(sources, workerResp.SourceStatus.Source) {
+		if !slices.Contains(sources, workerResp.SourceStatus.Source) {
 			sources = append(sources, workerResp.SourceStatus.Source)
 		}
 	}
@@ -1190,7 +1177,7 @@ func (s *Server) getStatusFromWorkers(
 
 		for _, worker := range workers {
 			wg.Add(1)
-			go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+			go s.ap.Emit(ctx, 0, func(args ...any) {
 				defer wg.Done()
 				sourceID := args[0].(string)
 				w, _ := args[1].(*scheduler.Worker)
@@ -1214,7 +1201,7 @@ func (s *Server) getStatusFromWorkers(
 				}
 				workerStatus.SourceStatus.Source = sourceID
 				setWorkerResp(workerStatus)
-			}, func(args ...interface{}) {
+			}, func(args ...any) {
 				defer wg.Done()
 				sourceID, _ := args[0].(string)
 				w, _ := args[1].(*scheduler.Worker)
@@ -1932,7 +1919,7 @@ func (s *Server) waitOperationOk(
 	cli *scheduler.Worker,
 	taskName string,
 	sourceID string,
-	masterReq interface{},
+	masterReq any,
 ) (bool, string, *pb.QueryStatusResponse, error) {
 	var expect pb.Stage
 	switch req := masterReq.(type) {
@@ -2121,7 +2108,7 @@ func (s *Server) waitOperationOk(
 	return false, "", nil, terror.ErrMasterFailToGetExpectResult
 }
 
-func (s *Server) handleOperationResult(ctx context.Context, cli *scheduler.Worker, taskName, sourceID string, req interface{}) *pb.CommonWorkerResponse {
+func (s *Server) handleOperationResult(ctx context.Context, cli *scheduler.Worker, taskName, sourceID string, req any) *pb.CommonWorkerResponse {
 	if cli == nil {
 		return errorCommonWorkerResponse(sourceID+" relevant worker-client not found", sourceID, "")
 	}
@@ -2152,7 +2139,7 @@ func sortCommonWorkerResults(sourceRespCh chan *pb.CommonWorkerResponse) []*pb.C
 	return sourceResps
 }
 
-func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName string, sources, workers []string, req interface{}) []*pb.CommonWorkerResponse {
+func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName string, sources, workers []string, req any) []*pb.CommonWorkerResponse {
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(sources))
 	var wg sync.WaitGroup
 	for i, source := range sources {
@@ -2161,7 +2148,7 @@ func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName stri
 		if i < len(workers) {
 			worker = workers[i]
 		}
-		go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+		go s.ap.Emit(ctx, 0, func(args ...any) {
 			defer wg.Done()
 			source1, _ := args[0].(string)
 			worker1, _ := args[1].(string)
@@ -2175,7 +2162,7 @@ func (s *Server) getSourceRespsAfterOperation(ctx context.Context, taskName stri
 			sourceResp := s.handleOperationResult(ctx, workerCli, taskName, source1, req)
 			sourceResp.Source = source1 // may return other source's ID during stop worker
 			sourceRespCh <- sourceResp
-		}, func(args ...interface{}) {
+		}, func(args ...any) {
 			defer wg.Done()
 			source1, _ := args[0].(string)
 			worker1, _ := args[1].(string)
@@ -2795,7 +2782,7 @@ func (s *Server) OperateRelay(ctx context.Context, req *pb.OperateRelayRequest) 
 // sharedLogic does some shared logic for each RPC implementation
 // arguments with `Pointer` suffix should be pointer to that variable its name indicated
 // return `true` means caller should return with variable that `xxPointer` modified.
-func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer interface{}, errPointer *error) bool {
+func (s *Server) sharedLogic(ctx context.Context, req any, respPointer any, errPointer *error) bool {
 	// nolint:dogsled
 	pc, _, _, _ := runtime.Caller(1)
 	fullMethodName := runtime.FuncForPC(pc).Name()
@@ -3234,7 +3221,7 @@ func sendValidationRequest[T any](
 		return
 	}
 	wg.Add(1)
-	go s.ap.Emit(ctx, 0, func(args ...interface{}) {
+	go s.ap.Emit(ctx, 0, func(args ...any) {
 		// send request in parallel
 		defer wg.Done()
 		workerResp, err := worker.SendRequest(ctx, req, s.cfg.RPCTimeout)
@@ -3245,7 +3232,7 @@ func sendValidationRequest[T any](
 			resp := getValidationWorkerResp(req, workerResp)
 			appendWorkerResp(workerRespMu, workerResps, resp.(T))
 		}
-	}, func(args ...interface{}) {
+	}, func(args ...any) {
 		defer wg.Done()
 		err := terror.ErrMasterNoEmitToken.Generate(sourceID)
 		resp := genValidationWorkerErrorResp(req, err, logMsg, worker.BaseInfo().Name, sourceID)
@@ -3253,7 +3240,7 @@ func sendValidationRequest[T any](
 	})
 }
 
-func getValidationWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) interface{} {
+func getValidationWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) any {
 	switch req.Type {
 	case workerrpc.CmdGetValidationStatus:
 		return resp.GetValidationStatus
@@ -3266,7 +3253,7 @@ func getValidationWorkerResp(req *workerrpc.Request, resp *workerrpc.Response) i
 	}
 }
 
-func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, workerID, sourceID string) interface{} {
+func genValidationWorkerErrorResp(req *workerrpc.Request, err error, logMsg, workerID, sourceID string) any {
 	log.L().Error(logMsg, zap.Error(err), zap.String("source", sourceID), zap.String("worker", workerID))
 	switch req.Type {
 	case workerrpc.CmdGetValidationStatus:

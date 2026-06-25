@@ -44,10 +44,10 @@ func TestCastUnsigned(t *testing.T) {
 
 	// ref: https://dev.mysql.com/doc/refman/5.7/en/integer-types.html
 	cases := []struct {
-		data     interface{}
+		data     any
 		unsigned bool
 		Type     byte
-		expected interface{}
+		expected any
 	}{
 		{int8(-math.Exp2(7)), false, mysql.TypeTiny, int8(-math.Exp2(7))}, // TINYINT
 		{int8(-math.Exp2(7)), true, mysql.TypeTiny, uint8(math.Exp2(7))},
@@ -96,156 +96,156 @@ func TestGenDMLWithSameOp(t *testing.T) {
 	dmls := []*job{
 		// insert
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, nil, []interface{}{1, 1, "a"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, nil, []any{1, 1, "a"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, nil, []interface{}{2, 2, "b"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, nil, []any{2, 2, "b"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable12, targetTable1, nil, []interface{}{3, 3, "c"}, tableInfo12, nil, nil),
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, nil, []any{3, 3, "c"}, tableInfo12, nil, nil),
 			ecWithSafeMode,
 		),
 
 		// update no index but safemode
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{1, 1, "a"}, []any{1, 1, "aa"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{2, 2, "b"}, []any{2, 2, "bb"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, tableInfo12, nil, nil),
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []any{3, 3, "c"}, []any{3, 3, "cc"}, tableInfo12, nil, nil),
 			ecWithSafeMode,
 		),
 
 		// update uk
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{1, 1, "aa"}, []any{1, 4, "aa"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{2, 2, "bb"}, []any{2, 5, "bb"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, tableInfo12, nil, nil),
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []any{3, 3, "cc"}, []any{3, 6, "cc"}, tableInfo12, nil, nil),
 			ecWithSafeMode,
 		),
 
 		// update pk
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{1, 4, "aa"}, []any{4, 4, "aa"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{2, 5, "bb"}, []any{5, 5, "bb"}, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, tableInfo12, nil, nil),
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []any{3, 6, "cc"}, []any{6, 6, "cc"}, tableInfo12, nil, nil),
 			ecWithSafeMode,
 		),
 		// delete
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{4, 4, "aa"}, nil, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{4, 4, "aa"}, nil, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{5, 5, "bb"}, nil, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{5, 5, "bb"}, nil, tableInfo11, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{6, 6, "cc"}, nil, tableInfo12, nil, nil),
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []any{6, 6, "cc"}, nil, tableInfo12, nil, nil),
 			ecWithSafeMode,
 		),
 
 		// target table 2
 		// insert
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, nil, []interface{}{1, 1, "a"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, nil, []any{1, 1, "a"}, tableInfo21, nil, nil),
 			ecWithSafeMode,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, nil, []interface{}{2, 2, "b"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, nil, []any{2, 2, "b"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable22, targetTable2, nil, []interface{}{3, 3, "c"}, tableInfo22, nil, nil),
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, nil, []any{3, 3, "c"}, tableInfo22, nil, nil),
 			ec,
 		),
 
 		// update no index
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{1, 1, "a"}, []interface{}{1, 1, "aa"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{1, 1, "a"}, []any{1, 1, "aa"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{2, 2, "b"}, []interface{}{2, 2, "bb"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{2, 2, "b"}, []any{2, 2, "bb"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{3, 3, "c"}, []interface{}{3, 3, "cc"}, tableInfo22, nil, nil),
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []any{3, 3, "c"}, []any{3, 3, "cc"}, tableInfo22, nil, nil),
 			ec,
 		),
 
 		// update uk
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{1, 1, "aa"}, []interface{}{1, 4, "aa"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{1, 1, "aa"}, []any{1, 4, "aa"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{2, 2, "bb"}, []interface{}{2, 5, "bb"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{2, 2, "bb"}, []any{2, 5, "bb"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{3, 3, "cc"}, []interface{}{3, 6, "cc"}, tableInfo22, nil, nil),
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []any{3, 3, "cc"}, []any{3, 6, "cc"}, tableInfo22, nil, nil),
 			ec,
 		),
 
 		// update pk
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{1, 4, "aa"}, []interface{}{4, 4, "aa"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{1, 4, "aa"}, []any{4, 4, "aa"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{2, 5, "bb"}, []interface{}{5, 5, "bb"}, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{2, 5, "bb"}, []any{5, 5, "bb"}, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{3, 6, "cc"}, []interface{}{6, 6, "cc"}, tableInfo22, nil, nil),
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []any{3, 6, "cc"}, []any{6, 6, "cc"}, tableInfo22, nil, nil),
 			ec,
 		),
 
 		// delete
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{4, 4, "aa"}, nil, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{4, 4, "aa"}, nil, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable21, targetTable2, []interface{}{5, 5, "bb"}, nil, tableInfo21, nil, nil),
+			sqlmodel.NewRowChange(sourceTable21, targetTable2, []any{5, 5, "bb"}, nil, tableInfo21, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable22, targetTable2, []interface{}{6, 6, "cc"}, nil, tableInfo22, nil, nil),
+			sqlmodel.NewRowChange(sourceTable22, targetTable2, []any{6, 6, "cc"}, nil, tableInfo22, nil, nil),
 			ec,
 		),
 
 		// table1
 		// detele
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{44, 44, "aaa"}, nil, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{44, 44, "aaa"}, nil, tableInfo11, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable11, targetTable1, []interface{}{55, 55, "bbb"}, nil, tableInfo11, nil, nil),
+			sqlmodel.NewRowChange(sourceTable11, targetTable1, []any{55, 55, "bbb"}, nil, tableInfo11, nil, nil),
 			ec,
 		),
 		newDMLJob(
-			sqlmodel.NewRowChange(sourceTable12, targetTable1, []interface{}{66, 66, "ccc"}, nil, tableInfo12, nil, nil),
+			sqlmodel.NewRowChange(sourceTable12, targetTable1, []any{66, 66, "ccc"}, nil, tableInfo12, nil, nil),
 			ec,
 		),
 	}
@@ -286,7 +286,7 @@ func TestGenDMLWithSameOp(t *testing.T) {
 		"DELETE FROM `db1`.`tb1` WHERE (`id` = ?) OR (`id` = ?) OR (`id` = ?)",
 	}
 
-	expectArgs := [][]interface{}{
+	expectArgs := [][]any{
 		// table1
 		{1, 1, "a", 2, 2, "b", 3, 3, "c"},
 		{1, 1, "aa"},
@@ -336,8 +336,8 @@ func TestGBKExtractValueFromData(t *testing.T) {
 	ti, err := createTableInfo(p, se, 0, table)
 	require.NoError(t, err)
 
-	row := []interface{}{1, "\xc4\xe3\xba\xc3"}
-	expect := []interface{}{1, []byte("\xc4\xe3\xba\xc3")}
+	row := []any{1, "\xc4\xe3\xba\xc3"}
+	expect := []any{1, []byte("\xc4\xe3\xba\xc3")}
 	got, err := adjustValueFromBinlogData(row, ti)
 	require.NoError(t, err)
 	require.Equal(t, expect, got)

@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -165,7 +166,7 @@ func (st *SubTask) initUnits(relay relay.Process) error {
 		if err != nil {
 			initializeUnitSuccess = false
 			// when init fail, other units initialized before should be closed
-			for j := 0; j < i; j++ {
+			for j := range i {
 				needCloseUnits = append(needCloseUnits, st.units[j])
 			}
 			return terror.Annotatef(err, "fail to initialize unit %s of subtask %s ", u.Type(), st.cfg.Name)
@@ -491,10 +492,8 @@ func (st *SubTask) stageCAS(oldStage, newStage pb.Stage) bool {
 func (st *SubTask) setStageIfNotIn(oldStages []pb.Stage, newStage pb.Stage) bool {
 	st.Lock()
 	defer st.Unlock()
-	for _, s := range oldStages {
-		if st.stage == s {
-			return false
-		}
+	if slices.Contains(oldStages, st.stage) {
+		return false
 	}
 	st.stage = newStage
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, st.stage, st.workerName)
@@ -505,12 +504,10 @@ func (st *SubTask) setStageIfNotIn(oldStages []pb.Stage, newStage pb.Stage) bool
 func (st *SubTask) setStageIfIn(oldStages []pb.Stage, newStage pb.Stage) bool {
 	st.Lock()
 	defer st.Unlock()
-	for _, s := range oldStages {
-		if st.stage == s {
-			st.stage = newStage
-			updateTaskMetric(st.cfg.Name, st.cfg.SourceID, st.stage, st.workerName)
-			return true
-		}
+	if slices.Contains(oldStages, st.stage) {
+		st.stage = newStage
+		updateTaskMetric(st.cfg.Name, st.cfg.SourceID, st.stage, st.workerName)
+		return true
 	}
 	return false
 }

@@ -66,7 +66,7 @@ func (s *Server) JoinMaster(endpoints []string) error {
 
 	var errorStr string
 	// retry to connect master
-	for i := 0; i < retryTimes; i++ {
+	for i := range retryTimes {
 		for _, endpoint := range endpoints {
 			ctx1, cancel1 := context.WithTimeout(ctx, 3*time.Second)
 			//nolint:staticcheck

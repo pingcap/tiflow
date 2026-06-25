@@ -16,6 +16,7 @@ package loader
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -319,8 +320,8 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)
-		taskNames := strings.Split(tasks, ",")
-		for _, taskName := range taskNames {
+		taskNames := strings.SplitSeq(tasks, ",")
+		for taskName := range taskNames {
 			if l.cfg.Name == taskName {
 				l.logger.Info("inject failpoint LoadDataSlowDownByTask in lightning loader", zap.String("task", taskName))
 				<-taskCtx.Done()
@@ -472,9 +473,7 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	cfg.TiDB.Vars = make(map[string]string)
 	cfg.Routes = subtaskCfg.RouteRules
 	if subtaskCfg.To.Session != nil {
-		for k, v := range subtaskCfg.To.Session {
-			cfg.TiDB.Vars[k] = v
-		}
+		maps.Copy(cfg.TiDB.Vars, subtaskCfg.To.Session)
 	}
 
 	if subtaskCfg.RangeConcurrency > 0 {
@@ -736,7 +735,7 @@ func (l *LightningLoader) status() *pb.LoadStatus {
 }
 
 // Status returns the unit's current status.
-func (l *LightningLoader) Status(_ *binlog.SourceStatus) interface{} {
+func (l *LightningLoader) Status(_ *binlog.SourceStatus) any {
 	return l.status()
 }
 

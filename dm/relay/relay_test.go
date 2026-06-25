@@ -380,9 +380,9 @@ func genBinlogEventsWithGTIDs(c *check.C, flavor string, previousGTIDSet, latest
 		schema            = "db"
 		table             = "tbl1"
 	)
-	for i := 0; i < 10; i++ {
-		insertRows := make([][]interface{}, 0, 1)
-		insertRows = append(insertRows, []interface{}{int32(i)})
+	for i := range 10 {
+		insertRows := make([][]any, 0, 1)
+		insertRows = append(insertRows, []any{int32(i)})
 		dmlData := []*event.DMLData{
 			{
 				TableID:    tableID,
@@ -898,7 +898,7 @@ func (t *testRelaySuite) TestRecoverMySQL(c *check.C) {
 	// write an completed transaction
 	f, err = os.OpenFile(fullName, os.O_WRONLY|os.O_APPEND, 0o644)
 	c.Assert(err, check.IsNil)
-	for i := 0; i < len(extraEvents); i++ {
+	for i := range extraEvents {
 		_, err = f.Write(extraEvents[i].RawData)
 		c.Assert(err, check.IsNil)
 	}

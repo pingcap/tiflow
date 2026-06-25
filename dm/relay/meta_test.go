@@ -281,7 +281,7 @@ func (r *testMetaSuite) TestLocalMetaPotentialDataRace(c *check.C) {
 		defer func() {
 			ch2 <- err
 		}()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_, currentGTID := lm.GTID()
 			gtidString = currentGTID.String()
 		}
