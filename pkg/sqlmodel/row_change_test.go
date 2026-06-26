@@ -425,21 +425,21 @@ func TestGenDMLWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
 	hiddenName := expressionIndexColumnName(t, sourceTI, "uk_name")
 	reorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
 
-	insertChange := NewRowChange(source, target, nil, []interface{}{2, "Bob", "p2"}, sourceTI, targetTI, nil)
+	insertChange := NewRowChange(source, target, nil, []any{2, "Bob", "p2"}, sourceTI, targetTI, nil)
 	sql, args := insertChange.GenSQL(DMLReplace)
 	require.Equal(t, "REPLACE INTO `db`.`tb2` (`id`,`name`,`payload`) VALUES (?,?,?)", sql)
-	require.Equal(t, []interface{}{2, "Bob", "p2"}, args)
+	require.Equal(t, []any{2, "Bob", "p2"}, args)
 
 	updateChange := NewRowChange(
 		source,
 		target,
-		[]interface{}{2, "Bob", "p2"},
-		[]interface{}{2, "Bob", "p2-updated"},
+		[]any{2, "Bob", "p2"},
+		[]any{2, "Bob", "p2-updated"},
 		sourceTI,
 		targetTI,
 		nil,
 	)
 	sql, args = updateChange.GenSQL(DMLUpdate)
 	require.Equal(t, "UPDATE `db`.`tb2` SET `id` = ?, `name` = ?, `payload` = ? WHERE `id` = ? LIMIT 1", sql)
-	require.Equal(t, []interface{}{2, "Bob", "p2-updated", 2}, args)
+	require.Equal(t, []any{2, "Bob", "p2-updated", 2}, args)
 }
