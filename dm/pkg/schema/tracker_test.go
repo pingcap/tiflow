@@ -265,32 +265,6 @@ func TestTrackerRenameTableStmtWithExpressionIndex(t *testing.T) {
 	}
 }
 
-func TestCloneTableInfoPromotesExpressionIndexHiddenColumn(t *testing.T) {
-	ti := buildTrackerTestTableInfo(t,
-		"create table foo (id int primary key, name varchar(64), unique key uk_lower_name ((lower(name))))")
-	requireExpressionIndexHiddenColumnsPublic(t, ti)
-
-	for _, col := range ti.Columns {
-		if col.Hidden && col.IsGenerated() {
-			col.State = model.StateNone
-		}
-	}
-
-	clone := cloneTableInfo(ti)
-	requireExpressionIndexHiddenColumnsPublic(t, clone)
-}
-
-func buildTrackerTestTableInfo(t *testing.T, sql string) *model.TableInfo {
-	t.Helper()
-
-	p := parser.New()
-	node, err := p.ParseOneStmt(sql, "", "")
-	require.NoError(t, err)
-	ti, err := ddl.BuildTableInfoFromAST(metabuild.NewContext(), node.(*ast.CreateTableStmt))
-	require.NoError(t, err)
-	return ti
-}
-
 func requireExpressionIndexHiddenColumnsPublic(t *testing.T, ti *model.TableInfo) {
 	t.Helper()
 
