@@ -114,6 +114,10 @@ func (m rowValueMapper) valueOffset(columnOffset int, values []any) int {
 	return m.visibleOffsetByColumnOffset[columnOffset]
 }
 
+func (m rowValueMapper) valueByOffset(columnOffset int, values []any) any {
+	return values[m.valueOffset(columnOffset, values)]
+}
+
 type generatedColumnExprCache struct {
 	sourceTableInfo *model.TableInfo
 	columns         []*model.ColumnInfo

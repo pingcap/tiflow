@@ -335,7 +335,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 		}
 		writtenFirstCol = true
 		fmt.Fprintf(&buf, "%s = ?", quotes.QuoteName(col.Name.O))
-		args = append(args, r.postValues[rowMapper.valueOffset(col.Offset, r.postValues)])
+		args = append(args, rowMapper.valueByOffset(col.Offset, r.postValues))
 	}
 
 	buf.WriteString(" WHERE ")

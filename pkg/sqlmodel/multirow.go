@@ -199,7 +199,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 			argsPerCol[writableColIdx] = append(argsPerCol[writableColIdx], whereValues...)
 			argsPerCol[writableColIdx] = append(
 				argsPerCol[writableColIdx],
-				change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)],
+				rowMapper.valueByOffset(col.Offset, change.postValues),
 			)
 		}
 	}
@@ -272,7 +272,7 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 			continue
 		}
 		for _, col := range writableColumns {
-			args = append(args, change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)])
+			args = append(args, rowMapper.valueByOffset(col.Offset, change.postValues))
 		}
 	}
 	return buf.String(), args
