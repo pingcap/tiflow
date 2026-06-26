@@ -103,6 +103,18 @@ func (dti *DownstreamTableInfo) DefaultWhereHandle() *sqlmodel.WhereHandle {
 	return dti.whereHandleCache.defaultHandle
 }
 
+// WithoutForeignKeyRelations returns a copy with the downstream table info and
+// where handle cache, but without FK causality relations.
+func (dti *DownstreamTableInfo) WithoutForeignKeyRelations() *DownstreamTableInfo {
+	if dti == nil {
+		return nil
+	}
+	return &DownstreamTableInfo{
+		TableInfo:        dti.TableInfo,
+		whereHandleCache: dti.whereHandleCache,
+	}
+}
+
 // WhereHandle returns the downstream where handle for the given source table.
 func (dti *DownstreamTableInfo) WhereHandle(sourceTable *filter.Table, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
 	sourceKey := utils.GenTableID(sourceTable)
