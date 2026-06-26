@@ -21,6 +21,7 @@ import (
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
 	context2 "github.com/pingcap/tidb/pkg/expression/exprctx"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -127,16 +128,83 @@ create table t (
 		ca.skippedRow = util.Must(adjustValueFromBinlogData(ca.skippedRow, ti))
 		ca.passedRow = util.Must(adjustValueFromBinlogData(ca.passedRow, ti))
 
-		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
+		skippedRow, err := rowForExpressionFilter(sessCtx, ca.skippedRow, ti.Columns)
+		require.NoError(t, err)
+		skip, err := SkipDMLByExpression(sessCtx, skippedRow, expr)
 		require.NoError(t, err)
 		require.True(t, skip)
 
-		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
+		passedRow, err := rowForExpressionFilter(sessCtx, ca.passedRow, ti.Columns)
+		require.NoError(t, err)
+		skip, err = SkipDMLByExpression(sessCtx, passedRow, expr)
 		require.NoError(t, err)
 		require.False(t, skip)
 
 		schemaTracker.Close()
 	}
+}
+
+func TestSkipDMLByExpressionWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
+	ctx := context.Background()
+	dbName := "test"
+	tblName := "t"
+	table := &filter.Table{
+		Schema: dbName,
+		Name:   tblName,
+	}
+	require.NoError(t, log.InitLogger(&log.Config{Level: "debug"}))
+
+	schemaTracker, err := schema.NewTestTracker(ctx, "unit-test", nil, log.L())
+	require.NoError(t, err)
+	require.NoError(t, schemaTracker.CreateSchemaIfNotExists(dbName))
+	stmt, err := parseSQL(`
+create table t (
+	id int primary key,
+	a varchar(32),
+	b varchar(32),
+	unique key uk_a ((lower(a)))
+)`)
+	require.NoError(t, err)
+	require.NoError(t, schemaTracker.Exec(ctx, dbName, stmt))
+	defer schemaTracker.Close()
+
+	ti, err := schemaTracker.GetTableInfo(table)
+	require.NoError(t, err)
+
+	columns := make(map[string]*model.ColumnInfo)
+	var hidden *model.ColumnInfo
+	for _, col := range ti.Columns {
+		if col.Hidden {
+			hidden = col
+			continue
+		}
+		columns[col.Name.L] = col
+	}
+	require.NotNil(t, hidden)
+	ti.Columns = []*model.ColumnInfo{columns["id"], columns["a"], hidden, columns["b"]}
+	for offset, col := range ti.Columns {
+		col.Offset = offset
+	}
+
+	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
+	expr, err := getSimpleExprOfTable(sessCtx, "b = 'Bob'", ti, log.L())
+	require.NoError(t, err)
+
+	skippedValue, err := adjustValueFromBinlogData([]interface{}{1, "Alice", "Bob"}, ti)
+	require.NoError(t, err)
+	skippedRow, err := rowForExpressionFilter(sessCtx, skippedValue, ti.Columns)
+	require.NoError(t, err)
+	skip, err := SkipDMLByExpression(sessCtx, skippedRow, expr)
+	require.NoError(t, err)
+	require.True(t, skip)
+
+	passedValue, err := adjustValueFromBinlogData([]interface{}{2, "Alice", "Charlie"}, ti)
+	require.NoError(t, err)
+	passedRow, err := rowForExpressionFilter(sessCtx, passedValue, ti.Columns)
+	require.NoError(t, err)
+	skip, err = SkipDMLByExpression(sessCtx, passedRow, expr)
+	require.NoError(t, err)
+	require.False(t, skip)
 }
 
 func TestAllBinaryProtocolTypes(t *testing.T) {
@@ -391,11 +459,15 @@ create table t (
 		ca.skippedRow = util.Must(adjustValueFromBinlogData(ca.skippedRow, ti))
 		ca.passedRow = util.Must(adjustValueFromBinlogData(ca.passedRow, ti))
 
-		skip, err := SkipDMLByExpression(sessCtx, ca.skippedRow, expr, ti.Columns)
+		skippedRow, err := rowForExpressionFilter(sessCtx, ca.skippedRow, ti.Columns)
+		require.NoError(t, err)
+		skip, err := SkipDMLByExpression(sessCtx, skippedRow, expr)
 		require.NoError(t, err)
 		require.True(t, skip)
 
-		skip, err = SkipDMLByExpression(sessCtx, ca.passedRow, expr, ti.Columns)
+		passedRow, err := rowForExpressionFilter(sessCtx, ca.passedRow, ti.Columns)
+		require.NoError(t, err)
+		skip, err = SkipDMLByExpression(sessCtx, passedRow, expr)
 		require.NoError(t, err)
 		require.False(t, skip)
 
@@ -445,10 +517,14 @@ create table t (
 	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues, errors.RedactLogDisable))
 
 	// skip nothing
-	skip, err := SkipDMLByExpression(sessCtx, []interface{}{0}, expr, ti.Columns)
+	filterRow, err := rowForExpressionFilter(sessCtx, []interface{}{0}, ti.Columns)
+	require.NoError(t, err)
+	skip, err := SkipDMLByExpression(sessCtx, filterRow, expr)
 	require.NoError(t, err)
 	require.False(t, skip)
-	skip, err = SkipDMLByExpression(sessCtx, []interface{}{2}, expr, ti.Columns)
+	filterRow, err = rowForExpressionFilter(sessCtx, []interface{}{2}, ti.Columns)
+	require.NoError(t, err)
+	skip, err = SkipDMLByExpression(sessCtx, filterRow, expr)
 	require.NoError(t, err)
 	require.False(t, skip)
 }

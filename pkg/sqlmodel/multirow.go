@@ -135,11 +135,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 		whenCaseStmts[i] = whereBuf.String()
 	}
 
-	first.lazyInitWhereHandle()
-	writableColumns := writableSourceColumns(
-		first.whereHandle.rowMapper.visibleColumns,
-		first.targetTableInfo.Columns,
-	)
+	_, writableColumns := first.dmlRowMapping()
 
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
 	// Use this value to identify which is the first CaseWhenThen line.
@@ -193,9 +189,8 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 
 		whereValuesAtTheEnd = append(whereValuesAtTheEnd, whereValues...)
 
-		change.lazyInitWhereHandle()
-		rowMapper := change.whereHandle.rowMapper
-		for writableColIdx, col := range writableColumns {
+		rowMapper, changeWritableColumns := change.dmlRowMapping()
+		for writableColIdx, col := range changeWritableColumns {
 			argsPerCol[writableColIdx] = append(argsPerCol[writableColIdx], whereValues...)
 			argsPerCol[writableColIdx] = append(
 				argsPerCol[writableColIdx],
@@ -233,8 +228,7 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(" (")
 	columnNum := 0
 
-	rowMapper := newRowValueMapper(first.sourceTableInfo.Columns)
-	writableColumns := writableSourceColumns(rowMapper.visibleColumns, first.targetTableInfo.Columns)
+	_, writableColumns := first.dmlRowMapping()
 	for _, col := range writableColumns {
 		if columnNum != 0 {
 			buf.WriteByte(',')
@@ -267,11 +261,12 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 
 	args := make([]interface{}, 0, len(changes)*len(writableColumns))
 	for _, change := range changes {
-		if len(writableColumns) == len(change.postValues) {
+		rowMapper, changeWritableColumns := change.dmlRowMapping()
+		if len(changeWritableColumns) == len(change.postValues) {
 			args = append(args, change.postValues...)
 			continue
 		}
-		for _, col := range writableColumns {
+		for _, col := range changeWritableColumns {
 			args = append(args, rowMapper.valueByOffset(col.Offset, change.postValues))
 		}
 	}

@@ -823,7 +823,20 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 			return res, err
 		}
 	}
-	if len(tableInfo.Columns) < columnCount {
+	visibleColumnCount := 0
+	stripColumnCount := len(tableInfo.Columns)
+	for i, col := range tableInfo.Columns {
+		if col.Hidden {
+			continue
+		}
+		if visibleColumnCount == columnCount {
+			stripColumnCount = i
+			visibleColumnCount++
+			break
+		}
+		visibleColumnCount++
+	}
+	if visibleColumnCount < columnCount {
 		res.message = moreColumnInBinlogMsg
 		return res, nil
 	}
@@ -833,10 +846,9 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
 	}
-	// if current TI has more columns, clone and strip columns
-	if len(tableInfo.Columns) > columnCount {
+	if visibleColumnCount > columnCount {
 		tableInfo = tableInfo.Clone()
-		tableInfo.Columns = tableInfo.Columns[:columnCount]
+		tableInfo.Columns = tableInfo.Columns[:stripColumnCount]
 	}
 
 	pk := downstreamTableInfo.WhereHandle(sourceTable, tableInfo).UniqueNotNullIdx

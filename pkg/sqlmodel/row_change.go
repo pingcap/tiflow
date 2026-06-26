@@ -239,6 +239,18 @@ func (r *RowChange) lazyInitWhereHandle() {
 	r.whereHandle = GetWhereHandle(r.sourceTableInfo, r.targetTableInfo)
 }
 
+// dmlRowMapping returns DML column/value mapping without initializing the full
+// where handle. CDC insert/update paths can use this without paying the WHERE
+// handle build cost, while DM paths reuse the injected cached handle.
+func (r *RowChange) dmlRowMapping() (rowValueMapper, []*timodel.ColumnInfo) {
+	if r.whereHandle != nil {
+		return r.whereHandle.rowMapper, r.whereHandle.writableColumns
+	}
+
+	rowMapper := newRowValueMapper(r.sourceTableInfo.Columns)
+	return rowMapper, writableSourceColumns(rowMapper.visibleColumns, r.targetTableInfo.Columns)
+}
+
 // whereColumnsAndValues returns columns and values to identify the row, to form
 // the WHERE clause.
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
@@ -324,9 +336,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	buf.WriteString(r.targetTable.QuoteString())
 	buf.WriteString(" SET ")
 
-	r.lazyInitWhereHandle()
-	rowMapper := r.whereHandle.rowMapper
-	writableColumns := writableSourceColumns(rowMapper.visibleColumns, r.targetTableInfo.Columns)
+	rowMapper, writableColumns := r.dmlRowMapping()
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
 	for _, col := range writableColumns {

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -156,8 +157,15 @@ RowLoop:
 			return nil, err
 		}
 
+		var filterRow chunk.Row
+		if len(filterExprs) > 0 {
+			filterRow, err = rowForExpressionFilter(s.sessCtx, originalValue, ti.Columns)
+			if err != nil {
+				return nil, err
+			}
+		}
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(s.sessCtx, originalValue, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
 			if err != nil {
 				return nil, err
 			}
@@ -229,14 +237,25 @@ RowLoop:
 			return nil, err
 		}
 
-		for j := range oldValueFilters {
-			// AND logic
-			oldExpr, newExpr := oldValueFilters[j], newValueFilters[j]
-			skip1, err := SkipDMLByExpression(s.sessCtx, oriOldValues, oldExpr, ti.Columns)
+		var oldFilterRow, newFilterRow chunk.Row
+		if len(oldValueFilters) > 0 {
+			oldFilterRow, err = rowForExpressionFilter(s.sessCtx, oriOldValues, ti.Columns)
 			if err != nil {
 				return nil, err
 			}
-			skip2, err := SkipDMLByExpression(s.sessCtx, oriChangedValues, newExpr, ti.Columns)
+			newFilterRow, err = rowForExpressionFilter(s.sessCtx, oriChangedValues, ti.Columns)
+			if err != nil {
+				return nil, err
+			}
+		}
+		for j := range oldValueFilters {
+			// AND logic
+			oldExpr, newExpr := oldValueFilters[j], newValueFilters[j]
+			skip1, err := SkipDMLByExpression(s.sessCtx, oldFilterRow, oldExpr)
+			if err != nil {
+				return nil, err
+			}
+			skip2, err := SkipDMLByExpression(s.sessCtx, newFilterRow, newExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -293,8 +312,15 @@ RowLoop:
 			return nil, err
 		}
 
+		var filterRow chunk.Row
+		if len(filterExprs) > 0 {
+			filterRow, err = rowForExpressionFilter(s.sessCtx, value, ti.Columns)
+			if err != nil {
+				return nil, err
+			}
+		}
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(s.sessCtx, value, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
 			if err != nil {
 				return nil, err
 			}

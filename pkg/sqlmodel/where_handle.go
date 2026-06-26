@@ -42,6 +42,7 @@ type WhereHandle struct {
 	causalityIdxs                  []*model.IndexInfo
 	hiddenGeneratedColumnExprCache *generatedColumnExprCache
 	rowMapper                      rowValueMapper
+	writableColumns                []*model.ColumnInfo
 }
 
 type rowValueMapper struct {
@@ -197,6 +198,7 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 	ret := WhereHandle{
 		rowMapper: newRowValueMapper(source.Columns),
 	}
+	ret.writableColumns = writableSourceColumns(ret.rowMapper.visibleColumns, target.Columns)
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {

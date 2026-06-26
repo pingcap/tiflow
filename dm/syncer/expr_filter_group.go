@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
 )
@@ -178,16 +179,40 @@ func (g *ExprFilterGroup) ResetExprs(table *filter.Table) {
 	delete(g.deleteExprs, tableID)
 }
 
-// SkipDMLByExpression returns true when given row matches the expr, which means this row should be skipped.
-func SkipDMLByExpression(ctx sessionctx.Context, row []interface{}, expr expression.Expression, upstreamCols []*model.ColumnInfo) (bool, error) {
-	// TODO: add MetricsProxies
-	data, err := utils.AdjustBinaryProtocolForDatum(ctx, row, upstreamCols)
-	if err != nil {
-		return false, err
+func rowForExpressionFilter(
+	ctx sessionctx.Context,
+	row []interface{},
+	upstreamCols []*model.ColumnInfo,
+) (chunk.Row, error) {
+	values := row
+	if len(row) != len(upstreamCols) {
+		visibleCols := make([]*model.ColumnInfo, 0, len(upstreamCols))
+		for _, col := range upstreamCols {
+			if !col.Hidden {
+				visibleCols = append(visibleCols, col)
+			}
+		}
+		if len(row) != len(visibleCols) {
+			return chunk.Row{}, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(len(visibleCols), len(row))
+		}
+		fullValues := make([]interface{}, len(upstreamCols))
+		for i, col := range visibleCols {
+			fullValues[col.Offset] = row[i]
+		}
+		values = fullValues
 	}
-	r := chunk.MutRowFromDatums(data).ToRow()
 
-	d, err := expr.Eval(ctx.GetExprCtx().GetEvalCtx(), r)
+	data, err := utils.AdjustBinaryProtocolForDatum(ctx, values, upstreamCols)
+	if err != nil {
+		return chunk.Row{}, err
+	}
+	return chunk.MutRowFromDatums(data).ToRow(), nil
+}
+
+// SkipDMLByExpression returns true when given row matches the expr, which means this row should be skipped.
+func SkipDMLByExpression(ctx sessionctx.Context, row chunk.Row, expr expression.Expression) (bool, error) {
+	// TODO: add MetricsProxies
+	d, err := expr.Eval(ctx.GetExprCtx().GetEvalCtx(), row)
 	if err != nil {
 		return false, err
 	}
