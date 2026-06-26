@@ -61,10 +61,9 @@ func writableSourceColumns(
 
 	columns := make([]*timodel.ColumnInfo, 0, len(visibleSourceColumns))
 	for _, col := range visibleSourceColumns {
-		if _, ok := generatedColumns[col.Name.L]; ok {
-			continue
+		if _, ok := generatedColumns[col.Name.L]; !ok {
+			columns = append(columns, col)
 		}
-		columns = append(columns, col)
 	}
 	return columns
 }
