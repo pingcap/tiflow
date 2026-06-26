@@ -324,9 +324,7 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	buf.WriteString(r.targetTable.QuoteString())
 	buf.WriteString(" SET ")
 
-	// Build target generated columns lower names set to accelerate following check
-	generatedColumns := generatedColumnsNameSet(r.targetTableInfo.Columns)
-	writableColumns := r.writableSourceColumns(generatedColumns)
+	writableColumns := r.writableSourceColumns()
 	rowMapper := r.whereHandle.rowMapper
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
@@ -347,17 +345,26 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	return buf.String(), args
 }
 
-func (r *RowChange) writableSourceColumns(generatedColumns map[string]struct{}) []*timodel.ColumnInfo {
+func (r *RowChange) writableSourceColumns() []*timodel.ColumnInfo {
 	r.lazyInitWhereHandle()
-	return writableSourceColumns(r.whereHandle.rowMapper.visibleColumns, generatedColumns)
+	return writableSourceColumns(r.whereHandle.rowMapper.visibleColumns, r.targetTableInfo.Columns)
 }
 
+// writableSourceColumns returns source columns that are present in the row image
+// and writable to the target table.
 func writableSourceColumns(
-	visibleColumns []*timodel.ColumnInfo,
-	generatedColumns map[string]struct{},
+	visibleSourceColumns []*timodel.ColumnInfo,
+	targetColumns []*timodel.ColumnInfo,
 ) []*timodel.ColumnInfo {
-	columns := make([]*timodel.ColumnInfo, 0, len(visibleColumns))
-	for _, col := range visibleColumns {
+	generatedColumns := make(map[string]struct{})
+	for _, col := range targetColumns {
+		if col.IsGenerated() {
+			generatedColumns[col.Name.L] = struct{}{}
+		}
+	}
+
+	columns := make([]*timodel.ColumnInfo, 0, len(visibleSourceColumns))
+	for _, col := range visibleSourceColumns {
 		if _, ok := generatedColumns[col.Name.L]; ok {
 			continue
 		}

@@ -135,9 +135,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 		whenCaseStmts[i] = whereBuf.String()
 	}
 
-	// Build gegerated columns lower name set to accelerate the following check
-	targetGeneratedColSet := generatedColumnsNameSet(first.targetTableInfo.Columns)
-	writableColumns := first.writableSourceColumns(targetGeneratedColSet)
+	writableColumns := first.writableSourceColumns()
 
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
 	// Use this value to identify which is the first CaseWhenThen line.
@@ -230,10 +228,8 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(" (")
 	columnNum := 0
 
-	// build gegerated columns lower name set to accelerate the following check
-	generatedColumns := generatedColumnsNameSet(first.targetTableInfo.Columns)
 	rowMapper := newRowValueMapper(first.sourceTableInfo.Columns)
-	writableColumns := writableSourceColumns(rowMapper.visibleColumns, generatedColumns)
+	writableColumns := writableSourceColumns(rowMapper.visibleColumns, first.targetTableInfo.Columns)
 	for _, col := range writableColumns {
 		if columnNum != 0 {
 			buf.WriteByte(',')

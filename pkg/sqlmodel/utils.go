@@ -16,8 +16,6 @@ package sqlmodel
 import (
 	"fmt"
 	"strings"
-
-	timodel "github.com/pingcap/tidb/pkg/meta/model"
 )
 
 // valuesHolder gens values holder like (?,?,?).
@@ -33,17 +31,6 @@ func valuesHolder(n int) string {
 	}
 	builder.WriteByte(')')
 	return builder.String()
-}
-
-// generatedColumnsNameSet returns a set of generated columns' name.
-func generatedColumnsNameSet(columns []*timodel.ColumnInfo) map[string]struct{} {
-	m := make(map[string]struct{})
-	for _, col := range columns {
-		if col.IsGenerated() {
-			m[col.Name.L] = struct{}{}
-		}
-	}
-	return m
 }
 
 // ColValAsStr convert column value as string
