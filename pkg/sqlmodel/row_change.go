@@ -324,8 +324,9 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	buf.WriteString(r.targetTable.QuoteString())
 	buf.WriteString(" SET ")
 
-	writableColumns := r.writableSourceColumns()
+	r.lazyInitWhereHandle()
 	rowMapper := r.whereHandle.rowMapper
+	writableColumns := writableSourceColumns(rowMapper.visibleColumns, r.targetTableInfo.Columns)
 	args := make([]interface{}, 0, len(r.preValues)+len(r.postValues))
 	writtenFirstCol := false
 	for _, col := range writableColumns {
@@ -343,11 +344,6 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 
 	args = append(args, whereArgs...)
 	return buf.String(), args
-}
-
-func (r *RowChange) writableSourceColumns() []*timodel.ColumnInfo {
-	r.lazyInitWhereHandle()
-	return writableSourceColumns(r.whereHandle.rowMapper.visibleColumns, r.targetTableInfo.Columns)
 }
 
 // writableSourceColumns returns source columns that are present in the row image

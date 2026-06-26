@@ -135,7 +135,10 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 		whenCaseStmts[i] = whereBuf.String()
 	}
 
-	writableColumns := first.writableSourceColumns()
+	writableColumns := writableSourceColumns(
+		first.whereHandle.rowMapper.visibleColumns,
+		first.targetTableInfo.Columns,
+	)
 
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
 	// Use this value to identify which is the first CaseWhenThen line.
