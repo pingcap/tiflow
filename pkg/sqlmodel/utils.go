@@ -16,6 +16,8 @@ package sqlmodel
 import (
 	"fmt"
 	"strings"
+
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 )
 
 // valuesHolder gens values holder like (?,?,?).
@@ -42,4 +44,27 @@ func ColValAsStr(v interface{}) string {
 		return dv
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// writableSourceColumns returns source columns that are present in the row
+// image and writable to the target table.
+func writableSourceColumns(
+	visibleSourceColumns []*timodel.ColumnInfo,
+	targetColumns []*timodel.ColumnInfo,
+) []*timodel.ColumnInfo {
+	generatedColumns := make(map[string]struct{})
+	for _, col := range targetColumns {
+		if col.IsGenerated() {
+			generatedColumns[col.Name.L] = struct{}{}
+		}
+	}
+
+	columns := make([]*timodel.ColumnInfo, 0, len(visibleSourceColumns))
+	for _, col := range visibleSourceColumns {
+		if _, ok := generatedColumns[col.Name.L]; ok {
+			continue
+		}
+		columns = append(columns, col)
+	}
+	return columns
 }

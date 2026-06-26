@@ -346,29 +346,6 @@ func (r *RowChange) genUpdateSQL() (string, []interface{}) {
 	return buf.String(), args
 }
 
-// writableSourceColumns returns source columns that are present in the row image
-// and writable to the target table.
-func writableSourceColumns(
-	visibleSourceColumns []*timodel.ColumnInfo,
-	targetColumns []*timodel.ColumnInfo,
-) []*timodel.ColumnInfo {
-	generatedColumns := make(map[string]struct{})
-	for _, col := range targetColumns {
-		if col.IsGenerated() {
-			generatedColumns[col.Name.L] = struct{}{}
-		}
-	}
-
-	columns := make([]*timodel.ColumnInfo, 0, len(visibleSourceColumns))
-	for _, col := range visibleSourceColumns {
-		if _, ok := generatedColumns[col.Name.L]; ok {
-			continue
-		}
-		columns = append(columns, col)
-	}
-	return columns
-}
-
 func (r *RowChange) genInsertSQL(tp DMLType) (string, []interface{}) {
 	return GenInsertSQL(tp, r)
 }

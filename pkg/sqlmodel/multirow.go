@@ -135,6 +135,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 		whenCaseStmts[i] = whereBuf.String()
 	}
 
+	first.lazyInitWhereHandle()
 	writableColumns := writableSourceColumns(
 		first.whereHandle.rowMapper.visibleColumns,
 		first.targetTableInfo.Columns,
@@ -192,11 +193,12 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 
 		whereValuesAtTheEnd = append(whereValuesAtTheEnd, whereValues...)
 
+		change.lazyInitWhereHandle()
 		rowMapper := change.whereHandle.rowMapper
-		for writeableCol, col := range writableColumns {
-			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], whereValues...)
-			argsPerCol[writeableCol] = append(
-				argsPerCol[writeableCol],
+		for writableColIdx, col := range writableColumns {
+			argsPerCol[writableColIdx] = append(argsPerCol[writableColIdx], whereValues...)
+			argsPerCol[writableColIdx] = append(
+				argsPerCol[writableColIdx],
 				change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)],
 			)
 		}
@@ -265,6 +267,10 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 
 	args := make([]interface{}, 0, len(changes)*len(writableColumns))
 	for _, change := range changes {
+		if len(writableColumns) == len(change.postValues) {
+			args = append(args, change.postValues...)
+			continue
+		}
 		for _, col := range writableColumns {
 			args = append(args, change.postValues[rowMapper.valueOffset(col.Offset, change.postValues)])
 		}

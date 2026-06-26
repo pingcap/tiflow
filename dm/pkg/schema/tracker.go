@@ -82,7 +82,7 @@ type downstreamTracker struct {
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
 }
 
-// DownstreamTableInfo contains tableinfo and index cache.
+// DownstreamTableInfo holds downstream schema and WHERE handle caches.
 type DownstreamTableInfo struct {
 	TableInfo           *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
 	whereHandleCache    *downstreamWhereHandleCache
@@ -91,14 +91,14 @@ type DownstreamTableInfo struct {
 	foreignKeyInitErr   error
 }
 
+// downstreamWhereHandleCache keeps the default handle and per-source handles.
 type downstreamWhereHandleCache struct {
 	defaultHandle *sqlmodel.WhereHandle
 	mu            sync.Mutex
 	bySource      map[string]*sqlmodel.WhereHandle
 }
 
-// DefaultWhereHandle returns the handle built when the downstream table cache is
-// initialized.
+// DefaultWhereHandle returns the handle built with the initial source table.
 func (dti *DownstreamTableInfo) DefaultWhereHandle() *sqlmodel.WhereHandle {
 	return dti.whereHandleCache.defaultHandle
 }
@@ -115,7 +115,7 @@ func (dti *DownstreamTableInfo) WithoutForeignKeyRelations() *DownstreamTableInf
 	}
 }
 
-// WhereHandle returns the downstream where handle for the given source table.
+// WhereHandle gets or builds the handle for the given source table.
 func (dti *DownstreamTableInfo) WhereHandle(sourceTable *filter.Table, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
 	sourceKey := utils.GenTableID(sourceTable)
 	dti.whereHandleCache.mu.Lock()
@@ -492,11 +492,9 @@ func (tr *Tracker) InitDownStreamForeignKeyRelations(
 		if err != nil {
 			return nil, err
 		}
-		return &DownstreamTableInfo{
-			TableInfo:           dti.TableInfo,
-			whereHandleCache:    dti.whereHandleCache,
-			ForeignKeyRelations: relations,
-		}, nil
+		ret := dti.WithoutForeignKeyRelations()
+		ret.ForeignKeyRelations = relations
+		return ret, nil
 	}
 
 	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI, routeResolver, caseSensitive); err != nil {
