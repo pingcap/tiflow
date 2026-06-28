@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -90,7 +91,7 @@ func (l *ormLogger) Trace(ctx context.Context, begin time.Time, resFunc func() (
 		logFunc = l.lg.Debug
 	}
 	var fields []zap.Field
-	fields = append(fields, zap.Duration("elapsed", elapsed), zap.String("sql", sql), zap.Int64("affected-rows", rows))
+	fields = append(fields, zap.Duration("elapsed", elapsed), logutil.ZapRedactString("sql", sql), zap.Int64("affected-rows", rows))
 	if err != nil {
 		fields = append(fields, zap.Error(err))
 	}
