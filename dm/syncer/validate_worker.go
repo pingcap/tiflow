@@ -451,6 +451,8 @@ func (vw *validateWorker) resetErrorRows() {
 	vw.errorRows = make([]*validateFailedRow, 0)
 }
 
+// TODO(joechenrh): Share visible-row/source-column offset mapping with sqlmodel
+// instead of maintaining validator-specific hidden column helpers.
 func visibleColumns(columns []*model.ColumnInfo) []*model.ColumnInfo {
 	ret := make([]*model.ColumnInfo, 0, len(columns))
 	for _, col := range columns {
