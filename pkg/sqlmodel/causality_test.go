@@ -19,6 +19,7 @@ import (
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -293,9 +294,9 @@ func TestCausalityKeysInterleavedHiddenColumn(t *testing.T) {
 		"UNIQUE KEY uk_a ((lower(a))), "+
 		"UNIQUE KEY uk_b ((lower(b))))")
 
-	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
-	hiddenB := expressionIndexColumnName(t, ti, "uk_b")
-	reorderColumnsByName(t, ti, "id", "a", hiddenA, "b", hiddenB)
+	hiddenA := testutil.ExpressionIndexColumnName(t, ti, "uk_a")
+	hiddenB := testutil.ExpressionIndexColumnName(t, ti, "uk_b")
+	testutil.ReorderColumnsByName(t, ti, "id", "a", hiddenA, "b", hiddenB)
 
 	change := NewRowChange(source, nil, nil, []any{1, "Alice", "Bob"}, ti, nil, nil)
 	require.ElementsMatch(t, []string{
@@ -377,7 +378,7 @@ func TestCausalityKeysMaterializeFailureFallback(t *testing.T) {
 			source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 			ti := mockTableInfo(t, tc.createSQL)
 
-			hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+			hiddenA := testutil.ExpressionIndexColumnName(t, ti, "uk_a")
 			columnNames := make([]string, 0, len(tc.columnOrder))
 			for _, name := range tc.columnOrder {
 				if name == "uk_a" {
@@ -385,7 +386,7 @@ func TestCausalityKeysMaterializeFailureFallback(t *testing.T) {
 				}
 				columnNames = append(columnNames, name)
 			}
-			reorderColumnsByName(t, ti, columnNames...)
+			testutil.ReorderColumnsByName(t, ti, columnNames...)
 			corruptHiddenGeneratedExpr(t, ti)
 
 			change := NewRowChange(source, nil, nil, tc.postValues, ti, nil, nil)

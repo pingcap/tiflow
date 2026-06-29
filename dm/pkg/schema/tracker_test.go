@@ -40,6 +40,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1602,36 +1603,6 @@ func TestDownStreamWhereHandleCacheBySourceHiddenColumnLayout(t *testing.T) {
 	p := parser.New()
 	se := timock.NewContext()
 	ctx := context.Background()
-	reorderColumns := func(ti *model.TableInfo, names ...string) {
-		t.Helper()
-		require.Len(t, names, len(ti.Columns))
-
-		colsByName := make(map[string]*model.ColumnInfo, len(ti.Columns))
-		for _, col := range ti.Columns {
-			colsByName[col.Name.L] = col
-		}
-
-		for i, name := range names {
-			col := colsByName[name]
-			require.NotNilf(t, col, "column %q not found", name)
-			ti.Columns[i] = col
-			col.Offset = i
-		}
-		for _, idx := range ti.Indices {
-			for _, idxCol := range idx.Columns {
-				idxCol.Offset = colsByName[idxCol.Name.L].Offset
-			}
-		}
-	}
-	hiddenColumnName := func(ti *model.TableInfo) string {
-		for _, col := range ti.Columns {
-			if col.Hidden {
-				return col.Name.L
-			}
-		}
-		require.FailNow(t, "hidden column not found")
-		return ""
-	}
 
 	createSQL := "create table t(id int primary key, a varchar(32), b varchar(32), unique key uk_a ((lower(a))))"
 	node, err := p.ParseOneStmt(createSQL, "utf8mb4", "utf8mb4_bin")
@@ -1642,10 +1613,10 @@ func TestDownStreamWhereHandleCacheBySourceHiddenColumnLayout(t *testing.T) {
 	require.NoError(t, err)
 	sourceTI2, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 2)
 	require.NoError(t, err)
-	hidden1 := hiddenColumnName(sourceTI1)
-	hidden2 := hiddenColumnName(sourceTI2)
-	reorderColumns(sourceTI1, "id", "a", hidden1, "b")
-	reorderColumns(sourceTI2, "id", "a", "b", hidden2)
+	hidden1 := testutil.HiddenColumnName(t, sourceTI1)
+	hidden2 := testutil.HiddenColumnName(t, sourceTI2)
+	testutil.ReorderColumnsByName(t, sourceTI1, "id", "a", hidden1, "b")
+	testutil.ReorderColumnsByName(t, sourceTI2, "id", "a", "b", hidden2)
 
 	dbConn, mock := mockBaseConn(t)
 	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())

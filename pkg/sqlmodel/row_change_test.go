@@ -26,6 +26,7 @@ import (
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -203,8 +204,8 @@ func (s *dpanicSuite) TestGenDelete() {
 		"b INT UNIQUE, "+
 		"c INT, "+
 		"UNIQUE KEY uk_a ((lower(a))))")
-	hiddenA := expressionIndexColumnName(s.T(), sourceTI, "uk_a")
-	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
+	hiddenA := testutil.ExpressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	testutil.ReorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
 	change = NewRowChange(source, nil, []interface{}{"Alice", 1, 9}, nil, sourceTI, nil, nil)
 	sql, args = change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `b` = ? LIMIT 1", sql)
@@ -214,8 +215,8 @@ func (s *dpanicSuite) TestGenDelete() {
 		"a VARCHAR(32), "+
 		"c INT, "+
 		"UNIQUE KEY uk_a ((lower(a))))")
-	hiddenA = expressionIndexColumnName(s.T(), sourceTI, "uk_a")
-	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "c")
+	hiddenA = testutil.ExpressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	testutil.ReorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "c")
 	change = NewRowChange(source, nil, []interface{}{"Alice", 9}, nil, sourceTI, nil, nil)
 	sql, args = change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `a` = ? AND `c` = ? LIMIT 1", sql)
@@ -422,8 +423,8 @@ func TestGenDMLWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
 		"name VARCHAR(32), "+
 		"payload VARCHAR(32), "+
 		"UNIQUE KEY uk_name ((lower(name))))")
-	hiddenName := expressionIndexColumnName(t, sourceTI, "uk_name")
-	reorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
+	hiddenName := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_name")
+	testutil.ReorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
 
 	insertChange := NewRowChange(source, target, nil, []any{2, "Bob", "p2"}, sourceTI, targetTI, nil)
 	sql, args := insertChange.GenSQL(DMLReplace)

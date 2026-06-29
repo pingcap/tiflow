@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -249,8 +250,8 @@ func TestGenMultiRowsWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
 		"name VARCHAR(32), "+
 		"payload VARCHAR(32), "+
 		"UNIQUE KEY uk_name ((lower(name))))")
-	hiddenName := expressionIndexColumnName(t, sourceTI, "uk_name")
-	reorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
+	hiddenName := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_name")
+	testutil.ReorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
 
 	t.Run("insert", func(t *testing.T) {
 		change1 := NewRowChange(source, target, nil, []interface{}{1, "Alice", "p1"}, sourceTI, targetTI, nil)
