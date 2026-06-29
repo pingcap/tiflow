@@ -185,18 +185,15 @@ func rowForExpressionFilter(
 	upstreamCols []*model.ColumnInfo,
 	filterExprs []expression.Expression,
 ) (chunk.Row, error) {
+	// Callers must not evaluate the returned zero Row when there are no
+	// expressions to evaluate.
 	if len(filterExprs) == 0 {
 		return chunk.Row{}, nil
 	}
 
 	values := row
 	if len(row) != len(upstreamCols) {
-		visibleCols := make([]*model.ColumnInfo, 0, len(upstreamCols))
-		for _, col := range upstreamCols {
-			if !col.Hidden {
-				visibleCols = append(visibleCols, col)
-			}
-		}
+		visibleCols := visibleColumns(upstreamCols)
 		if len(row) != len(visibleCols) {
 			return chunk.Row{}, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(len(visibleCols), len(row))
 		}

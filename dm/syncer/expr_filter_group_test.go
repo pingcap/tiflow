@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,10 +183,7 @@ create table t (
 		columns[col.Name.L] = col
 	}
 	require.NotNil(t, hidden)
-	ti.Columns = []*model.ColumnInfo{columns["id"], columns["a"], hidden, columns["b"]}
-	for offset, col := range ti.Columns {
-		col.Offset = offset
-	}
+	testutil.ReorderColumnsByName(t, ti, "id", "a", hidden.Name.L, "b")
 
 	sessCtx := utils.NewSessionCtx(map[string]string{"time_zone": "UTC"})
 	expr, err := getSimpleExprOfTable(sessCtx, "b = 'Bob'", ti, log.L())

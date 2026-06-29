@@ -247,6 +247,8 @@ func (r *RowChange) dmlRowMapping() (rowValueMapper, []*timodel.ColumnInfo) {
 		return r.whereHandle.rowMapper, r.whereHandle.writableColumns
 	}
 
+	// Keep this fallback mapping consistent with GetWhereHandle until the row
+	// image mapping is centralized.
 	rowMapper := newRowValueMapper(r.sourceTableInfo.Columns)
 	return rowMapper, writableSourceColumns(rowMapper.visibleColumns, r.targetTableInfo.Columns)
 }

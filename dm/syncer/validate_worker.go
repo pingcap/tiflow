@@ -417,6 +417,8 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 	defer rows.Close()
 
 	result := make(map[string][]*sql.NullString)
+	// rowData is scanned from cond.Columns, which only contains visible columns.
+	// PK offsets may come from source TableInfo with hidden columns, so map by name.
 	columnsByName := make(map[string]int, len(cond.Columns))
 	for i, col := range cond.Columns {
 		columnsByName[col.Name.L] = i

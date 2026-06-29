@@ -45,10 +45,9 @@ type WhereHandle struct {
 	writableColumns                []*model.ColumnInfo
 }
 
-// TODO(joechenrh): Consider centralizing visible-row to source-column-offset
-// mapping into an explicit internal row-image representation. This would let
-// DML generation, expression filtering, and causality/reduce paths share one
-// row-value contract.
+// TODO(joechenrh): Centralize visible-row to source-column-offset mapping into
+// an explicit internal row-image representation, then remove the duplicated
+// fallback mapping in RowChange.dmlRowMapping.
 type rowValueMapper struct {
 	columns                     []*model.ColumnInfo
 	visibleColumns              []*model.ColumnInfo
