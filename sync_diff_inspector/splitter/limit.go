@@ -46,7 +46,9 @@ type LimitIterator struct {
 
 	progressID   string
 	columnOffset map[string]int
-	chunkCount   int
+	// estChunkCount is an estimated chunk count derived from table statistics
+	// (never a COUNT(*) scan). It seeds the progress bar; 0 means "unknown".
+	estChunkCount int
 }
 
 // NewLimitIterator return a new iterator
@@ -125,31 +127,32 @@ func NewLimitIteratorWithCheckpoint(
 
 	tagChunk.IndexColumnNames = utils.GetColumnNames(indexColumns)
 
-	remainingRows := int64(0)
-	if undone {
-		where, args := "TRUE", []any(nil)
-		if startRange != nil {
-			where, args = tagChunk.ToString(table.Collation)
-		}
-		remainingRows, err = getRowCount(ctx, dbConn, table.Schema, table.Table, where, args)
-		if err != nil {
-			return nil, errors.Trace(err)
+	// estRows is an estimated row count read from table statistics, never a
+	// COUNT(*) full-table scan. It is only used to seed the progress bar with an
+	// initial chunk total; the real total is corrected as chunks are produced.
+	// For checkpoint resume (startRange != nil) we cannot cheaply estimate the
+	// rows remaining behind the WHERE clause, so we skip the estimate and let the
+	// progress bar grow purely dynamically.
+	estRows := int64(0)
+	if undone && startRange == nil {
+		if v, ok := getEstimatedRowCount(ctx, dbConn, table.Schema, table.Table); ok {
+			estRows = v
 		}
 	}
 
 	chunkSize := table.ChunkSize
 	if chunkSize <= 0 {
-		if len(table.Info.Indices) != 0 {
-			chunkSize = utils.CalculateChunkSize(remainingRows)
-		} else {
-			// no index
-			// will use table scan
-			// so we use one chunk
-			chunkSize = remainingRows
-		}
+		// estRows == 0 falls back to the default chunk size (50000).
+		chunkSize = utils.CalculateChunkSize(estRows)
 	}
 	log.Info("get chunk size for table", zap.Int64("chunk size", chunkSize),
+		zap.Int64("estimated rows", estRows),
 		zap.String("db", table.Schema), zap.String("table", table.Table))
+
+	estChunkCount := 0
+	if estRows > 0 {
+		estChunkCount = int((estRows + chunkSize - 1) / chunkSize)
+	}
 
 	lctx, cancel := context.WithCancel(ctx)
 	queryTmpl := generateLimitQueryTemplate(indexColumns, table, chunkSize)
@@ -169,11 +172,11 @@ func NewLimitIteratorWithCheckpoint(
 
 		progressID,
 		columnOffset,
-		int((remainingRows + chunkSize - 1) / chunkSize),
+		estChunkCount,
 	}
 
 	if progressID != "" {
-		progress.StartTable(progressID, 0, false)
+		progress.StartTable(progressID, estChunkCount, false)
 	}
 	if !undone {
 		// this table is finished.
@@ -222,15 +225,30 @@ func (lmt *LimitIterator) GetIndexID() int64 {
 	return lmt.indexID
 }
 
-// Len returns estimated remaining chunks for this iterator.
+// Len returns an estimated chunk count for this iterator (0 when unknown).
+// The value comes from table statistics, not a COUNT(*) scan, so it is only an
+// estimate; callers use it to seed a progress bar, not for correctness.
 func (lmt *LimitIterator) Len() int {
-	return lmt.chunkCount
+	return lmt.estChunkCount
 }
 
 func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
+	// produced counts chunks actually emitted; curTotal tracks the progress-bar
+	// denominator. We keep curTotal >= produced so the bar never overflows, and
+	// on completion we correct it to the exact produced count and freeze it.
+	produced := 0
+	curTotal := lmt.estChunkCount
+	bumpTotal := func() {
+		produced++
+		if lmt.progressID != "" && produced > curTotal {
+			progress.UpdateTotal(lmt.progressID, produced-curTotal, false)
+			curTotal = produced
+		}
+	}
 	defer func() {
 		if lmt.progressID != "" {
-			progress.UpdateTotal(lmt.progressID, 0, true)
+			// Correct the estimate to the exact count and stop further updates.
+			progress.UpdateTotal(lmt.progressID, produced-curTotal, true)
 		}
 		close(lmt.chunksCh)
 	}()
@@ -267,9 +285,7 @@ func (lmt *LimitIterator) produceChunks(ctx context.Context, bucketID int) {
 
 		chunk.InitChunk(chunkRange, chunk.Limit, bucketID, bucketID, lmt.table.Collation, lmt.table.Range)
 		bucketID++
-		if lmt.progressID != "" {
-			progress.UpdateTotal(lmt.progressID, 1, false)
-		}
+		bumpTotal()
 		select {
 		case <-ctx.Done():
 			return
@@ -301,6 +317,29 @@ func (lmt *LimitIterator) getLimitRow(ctx context.Context, query string, args []
 		return nil, err
 	}
 	return dataMap, nil
+}
+
+// getEstimatedRowCount returns an estimated row count from table statistics
+// (information_schema.tables.TABLE_ROWS) without scanning the table. The boolean
+// is false when no usable estimate is available (query error, missing row, or a
+// NULL/non-positive value), in which case callers fall back to a dynamic total.
+func getEstimatedRowCount(ctx context.Context, db *sql.DB, schemaName, tableName string) (int64, bool) {
+	failpoint.Inject("getEstimatedRowCount", func(val failpoint.Value) {
+		if v, ok := val.(int); ok {
+			failpoint.Return(int64(v), v > 0)
+		}
+	})
+	query := "SELECT TABLE_ROWS FROM information_schema.tables WHERE table_schema = ? AND table_name = ?"
+	var estRows sql.NullInt64
+	if err := db.QueryRowContext(ctx, query, schemaName, tableName).Scan(&estRows); err != nil {
+		log.Warn("failed to get estimated row count, progress bar will grow dynamically",
+			zap.String("db", schemaName), zap.String("table", tableName), zap.Error(err))
+		return 0, false
+	}
+	if !estRows.Valid || estRows.Int64 <= 0 {
+		return 0, false
+	}
+	return estRows.Int64, true
 }
 
 func generateLimitQueryTemplate(indexColumns []*model.ColumnInfo, table *common.TableDiff, chunkSize int64) string {
