@@ -835,12 +835,12 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
 	}
-	currentWhereHandle := sqlmodel.GetWhereHandle(tableInfo, downstreamTableInfo.TableInfo)
-
+	currentTableInfo := tableInfo
 	tableInfo = eventTableInfo
 	whereHandle := sqlmodel.GetWhereHandle(tableInfo, downstreamTableInfo.TableInfo)
 	pk := whereHandle.UniqueNotNullIdx
 	if pk == nil {
+		currentWhereHandle := sqlmodel.GetWhereHandle(currentTableInfo, downstreamTableInfo.TableInfo)
 		if currentWhereHandle.UniqueNotNullIdx != nil {
 			res.message = downstreamPKColumnOutOfBoundsMsg
 			return res, nil
