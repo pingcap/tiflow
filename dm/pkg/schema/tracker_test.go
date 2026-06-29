@@ -1599,7 +1599,7 @@ func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
 	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
 }
 
-func TestDownStreamWhereHandleCacheBySourceHiddenColumnLayout(t *testing.T) {
+func TestWhereHandleCacheBySourceTable(t *testing.T) {
 	p := parser.New()
 	se := timock.NewContext()
 	ctx := context.Background()
