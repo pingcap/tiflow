@@ -53,16 +53,16 @@ import (
 const (
 	validatorStatusInterval = time.Minute
 
-	moreColumnInBinlogMsg            = "binlog has more columns than current table"
-	tableWithoutPrimaryKeyMsg        = "no primary key"
-	tableNotSyncedOrDropped          = "table is not synced or dropped"
-	downstreamPKColumnOutOfBoundsMsg = "primary key column of downstream table out of range of binlog event row"
+	moreColumnInBinlogMsg     = "binlog has more columns than current table"
+	tableWithoutPrimaryKeyMsg = "no primary key"
+	tableNotSyncedOrDropped   = "table is not synced or dropped"
 )
 
 type validateTableInfo struct {
 	targetTable         *filter.Table
 	srcTableInfo        *model.TableInfo
 	downstreamTableInfo *schema.DownstreamTableInfo
+	whereHandle         *sqlmodel.WhereHandle
 
 	message string
 }
@@ -836,21 +836,16 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 	}
 	tableInfo = eventTableInfo
 
-	pk := downstreamTableInfo.WhereHandle(sourceTable, tableInfo).UniqueNotNullIdx
+	whereHandle := sqlmodel.GetWhereHandle(tableInfo, downstreamTableInfo.TableInfo)
+	pk := whereHandle.UniqueNotNullIdx
 	if pk == nil {
 		res.message = tableWithoutPrimaryKeyMsg
 		return res, nil
 	}
-	// offset of pk column is adjusted using source table info, the offsets should stay in range of ev.ColumnCount.
-	for _, col := range pk.Columns {
-		if col.Offset >= columnCount {
-			res.message = downstreamPKColumnOutOfBoundsMsg
-			return res, nil
-		}
-	}
 
 	res.srcTableInfo = tableInfo
 	res.downstreamTableInfo = downstreamTableInfo
+	res.whereHandle = whereHandle
 	return res, nil
 }
 
@@ -931,6 +926,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 
 	tableInfo, downstreamTableInfo := validateTbl.srcTableInfo, validateTbl.downstreamTableInfo
+	whereHandle := validateTbl.whereHandle
 
 	changeType := getRowChangeType(header.EventType)
 
@@ -970,7 +966,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			tableInfo, downstreamTableInfo.TableInfo,
 			nil,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle(sourceTable, tableInfo))
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
@@ -1079,16 +1075,19 @@ func (v *DataValidator) loadPersistedData() error {
 				// rowDeleted
 				beforeImage = row.Data
 			}
+			rowChange := sqlmodel.NewRowChange(
+				&cdcmodel.TableName{Schema: sourceTable.Schema, Table: sourceTable.Name},
+				&cdcmodel.TableName{Schema: validateTbl.targetTable.Schema, Table: validateTbl.targetTable.Name},
+				beforeImage, afterImage,
+				validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
+				nil,
+			)
+			rowChange.SetWhereHandle(validateTbl.whereHandle)
+			rowChange.SetForeignKeyRelations(validateTbl.downstreamTableInfo.ForeignKeyRelations)
 			pendingTblChange.jobs[row.Key] = &rowValidationJob{
-				Key: row.Key,
-				Tp:  row.Tp,
-				row: sqlmodel.NewRowChange(
-					&cdcmodel.TableName{Schema: sourceTable.Schema, Table: sourceTable.Name},
-					&cdcmodel.TableName{Schema: validateTbl.targetTable.Schema, Table: validateTbl.targetTable.Name},
-					beforeImage, afterImage,
-					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
-					nil,
-				),
+				Key:       row.Key,
+				Tp:        row.Tp,
+				row:       rowChange,
 				size:      row.Size,
 				FailedCnt: row.FailedCnt,
 			}
