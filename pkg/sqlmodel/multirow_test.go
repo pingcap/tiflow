@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -232,4 +233,61 @@ func TestGenInsertMultiRows(t *testing.T) {
 	sql, args = GenInsertSQL(DMLInsertOnDuplicateUpdate, change1, change2)
 	require.Equal(t, "INSERT INTO `db`.`tb` (`c`,`c2`) VALUES (?,?),(?,?) ON DUPLICATE KEY UPDATE `c`=VALUES(`c`),`c2`=VALUES(`c2`)", sql)
 	require.Equal(t, []interface{}{1, 2, 3, 4}, args)
+}
+
+func TestGenMultiRowsWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb ("+
+		"id INT PRIMARY KEY, "+
+		"name VARCHAR(32), "+
+		"payload VARCHAR(32), "+
+		"UNIQUE KEY uk_name ((lower(name))))")
+	targetTI := mockTableInfo(t, "CREATE TABLE tb ("+
+		"id INT PRIMARY KEY, "+
+		"name VARCHAR(32), "+
+		"payload VARCHAR(32), "+
+		"UNIQUE KEY uk_name ((lower(name))))")
+	hiddenName := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_name")
+	testutil.ReorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
+
+	t.Run("insert", func(t *testing.T) {
+		change1 := NewRowChange(source, target, nil, []interface{}{1, "Alice", "p1"}, sourceTI, targetTI, nil)
+		change2 := NewRowChange(source, target, nil, []interface{}{2, "Bob", "p2"}, sourceTI, targetTI, nil)
+
+		sql, args := GenInsertSQL(DMLReplace, change1, change2)
+		require.Equal(t, "REPLACE INTO `db`.`tb` (`id`,`name`,`payload`) VALUES (?,?,?),(?,?,?)", sql)
+		require.Equal(t, []interface{}{1, "Alice", "p1", 2, "Bob", "p2"}, args)
+
+		sql, args = GenInsertSQL(DMLInsertOnDuplicateUpdate, change1, change2)
+		require.Equal(t, "INSERT INTO `db`.`tb` (`id`,`name`,`payload`) VALUES (?,?,?),(?,?,?) "+
+			"ON DUPLICATE KEY UPDATE `id`=VALUES(`id`),`name`=VALUES(`name`),`payload`=VALUES(`payload`)", sql)
+		require.Equal(t, []interface{}{1, "Alice", "p1", 2, "Bob", "p2"}, args)
+	})
+
+	t.Run("update", func(t *testing.T) {
+		change1 := NewRowChange(source, target,
+			[]interface{}{1, "Alice", "p1"},
+			[]interface{}{1, "Alice", "p1-updated"},
+			sourceTI, targetTI, nil)
+		change2 := NewRowChange(source, target,
+			[]interface{}{2, "Bob", "p2"},
+			[]interface{}{2, "Bob", "p2-updated"},
+			sourceTI, targetTI, nil)
+
+		sql, args := GenUpdateSQL(change1, change2)
+		require.Equal(t, "UPDATE `db`.`tb` SET "+
+			"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, "+
+			"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, "+
+			"`payload`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END "+
+			"WHERE (`id` = ?) OR (`id` = ?)", sql)
+		require.Equal(t, []interface{}{
+			1, 1, 2, 2,
+			1, "Alice", 2, "Bob",
+			1, "p1-updated", 2, "p2-updated",
+			1, 2,
+		}, args)
+	})
 }

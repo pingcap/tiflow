@@ -63,6 +63,7 @@ type validateTableInfo struct {
 	targetTable         *filter.Table
 	srcTableInfo        *model.TableInfo
 	downstreamTableInfo *schema.DownstreamTableInfo
+	whereHandle         *sqlmodel.WhereHandle
 
 	message string
 }
@@ -825,7 +826,8 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 			return res, err
 		}
 	}
-	if len(tableInfo.Columns) < columnCount {
+	eventTableInfo, ok := tableInfoForVisibleColumnCount(tableInfo, columnCount)
+	if !ok {
 		res.message = moreColumnInBinlogMsg
 		return res, nil
 	}
@@ -835,27 +837,51 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
 	}
-	pk := downstreamTableInfo.WhereHandle.UniqueNotNullIdx
+	currentTableInfo := tableInfo
+	tableInfo = eventTableInfo
+	whereHandle := sqlmodel.GetWhereHandle(tableInfo, downstreamTableInfo.TableInfo)
+	pk := whereHandle.UniqueNotNullIdx
 	if pk == nil {
-		res.message = tableWithoutPrimaryKeyMsg
-		return res, nil
-	}
-	// offset of pk column is adjusted using source table info, the offsets should stay in range of ev.ColumnCount.
-	for _, col := range pk.Columns {
-		if col.Offset >= columnCount {
+		currentWhereHandle := sqlmodel.GetWhereHandle(currentTableInfo, downstreamTableInfo.TableInfo)
+		if currentWhereHandle.UniqueNotNullIdx != nil {
 			res.message = downstreamPKColumnOutOfBoundsMsg
 			return res, nil
 		}
-	}
-	// if current TI has more columns, clone and strip columns
-	if len(tableInfo.Columns) > columnCount {
-		tableInfo = tableInfo.Clone()
-		tableInfo.Columns = tableInfo.Columns[:columnCount]
+		res.message = tableWithoutPrimaryKeyMsg
+		return res, nil
 	}
 
 	res.srcTableInfo = tableInfo
 	res.downstreamTableInfo = downstreamTableInfo
+	res.whereHandle = whereHandle
 	return res, nil
+}
+
+// tableInfoForVisibleColumnCount returns the source TableInfo layout that matches
+// a binlog row image with columnCount visible columns.
+func tableInfoForVisibleColumnCount(tableInfo *model.TableInfo, columnCount int) (*model.TableInfo, bool) {
+	visibleCount := 0
+	stripColumnCount := len(tableInfo.Columns)
+	for i, col := range tableInfo.Columns {
+		if col.Hidden {
+			continue
+		}
+		visibleCount++
+		if visibleCount > columnCount {
+			stripColumnCount = i
+			break
+		}
+	}
+	if visibleCount < columnCount {
+		return nil, false
+	}
+	if visibleCount == columnCount {
+		return tableInfo, true
+	}
+
+	clone := tableInfo.Clone()
+	clone.Columns = clone.Columns[:stripColumnCount]
+	return clone, true
 }
 
 func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
@@ -908,6 +934,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 	}
 
 	tableInfo, downstreamTableInfo := validateTbl.srcTableInfo, validateTbl.downstreamTableInfo
+	whereHandle := validateTbl.whereHandle
 
 	changeType := getRowChangeType(header.EventType)
 
@@ -947,7 +974,7 @@ func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *re
 			tableInfo, downstreamTableInfo.TableInfo,
 			nil,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		size := estimatedRowSize
 		if changeType == rowUpdated && rowChange.IsIdentityUpdated() {
@@ -1056,16 +1083,19 @@ func (v *DataValidator) loadPersistedData() error {
 				// rowDeleted
 				beforeImage = row.Data
 			}
+			rowChange := sqlmodel.NewRowChange(
+				&cdcmodel.TableName{Schema: sourceTable.Schema, Table: sourceTable.Name},
+				&cdcmodel.TableName{Schema: validateTbl.targetTable.Schema, Table: validateTbl.targetTable.Name},
+				beforeImage, afterImage,
+				validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
+				nil,
+			)
+			rowChange.SetWhereHandle(validateTbl.whereHandle)
+			rowChange.SetForeignKeyRelations(validateTbl.downstreamTableInfo.ForeignKeyRelations)
 			pendingTblChange.jobs[row.Key] = &rowValidationJob{
-				Key: row.Key,
-				Tp:  row.Tp,
-				row: sqlmodel.NewRowChange(
-					&cdcmodel.TableName{Schema: sourceTable.Schema, Table: sourceTable.Name},
-					&cdcmodel.TableName{Schema: validateTbl.targetTable.Schema, Table: validateTbl.targetTable.Name},
-					beforeImage, afterImage,
-					validateTbl.srcTableInfo, validateTbl.downstreamTableInfo.TableInfo,
-					nil,
-				),
+				Key:       row.Key,
+				Tp:        row.Tp,
+				row:       rowChange,
 				size:      row.Size,
 				FailedCnt: row.FailedCnt,
 			}
