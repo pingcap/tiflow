@@ -69,7 +69,7 @@ func (t *testServer2) SetUpSuite(c *check.C) {
 }
 
 func (t *testServer2) TearDownSuite(c *check.C) {
-	getMinLocForSubTaskFunc = getMinLocForSubTask
+	getMinLocForSubTaskFunc = GetMinLocForSubTask
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/worker/MockGetSourceCfgFromETCD"), check.IsNil)
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/worker/SkipRefreshFromETCDInUT"), check.IsNil)
 }
@@ -202,7 +202,7 @@ func (t *testWorkerFunctionalities) TearDownSuite(c *check.C) {
 	NewRelayHolder = NewRealRelayHolder
 	NewSubTask = NewRealSubTask
 	createUnits = createRealUnits
-	getMinLocForSubTaskFunc = getMinLocForSubTask
+	getMinLocForSubTaskFunc = GetMinLocForSubTask
 	c.Assert(failpoint.Disable("github.com/pingcap/tiflow/dm/worker/MockGetSourceCfgFromETCD"), check.IsNil)
 }
 
