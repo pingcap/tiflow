@@ -183,7 +183,12 @@ func rowForExpressionFilter(
 	ctx sessionctx.Context,
 	row []interface{},
 	upstreamCols []*model.ColumnInfo,
+	filterExprs []expression.Expression,
 ) (chunk.Row, error) {
+	if len(filterExprs) == 0 {
+		return chunk.Row{}, nil
+	}
+
 	values := row
 	if len(row) != len(upstreamCols) {
 		visibleCols := make([]*model.ColumnInfo, 0, len(upstreamCols))

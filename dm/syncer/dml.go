@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
-	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -157,12 +156,9 @@ RowLoop:
 			return nil, err
 		}
 
-		var filterRow chunk.Row
-		if len(filterExprs) > 0 {
-			filterRow, err = rowForExpressionFilter(s.sessCtx, originalValue, ti.Columns)
-			if err != nil {
-				return nil, err
-			}
+		filterRow, err := rowForExpressionFilter(s.sessCtx, originalValue, ti.Columns, filterExprs)
+		if err != nil {
+			return nil, err
 		}
 		for _, expr := range filterExprs {
 			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
@@ -237,16 +233,13 @@ RowLoop:
 			return nil, err
 		}
 
-		var oldFilterRow, newFilterRow chunk.Row
-		if len(oldValueFilters) > 0 {
-			oldFilterRow, err = rowForExpressionFilter(s.sessCtx, oriOldValues, ti.Columns)
-			if err != nil {
-				return nil, err
-			}
-			newFilterRow, err = rowForExpressionFilter(s.sessCtx, oriChangedValues, ti.Columns)
-			if err != nil {
-				return nil, err
-			}
+		oldFilterRow, err := rowForExpressionFilter(s.sessCtx, oriOldValues, ti.Columns, oldValueFilters)
+		if err != nil {
+			return nil, err
+		}
+		newFilterRow, err := rowForExpressionFilter(s.sessCtx, oriChangedValues, ti.Columns, newValueFilters)
+		if err != nil {
+			return nil, err
 		}
 		for j := range oldValueFilters {
 			// AND logic
@@ -312,12 +305,9 @@ RowLoop:
 			return nil, err
 		}
 
-		var filterRow chunk.Row
-		if len(filterExprs) > 0 {
-			filterRow, err = rowForExpressionFilter(s.sessCtx, value, ti.Columns)
-			if err != nil {
-				return nil, err
-			}
+		filterRow, err := rowForExpressionFilter(s.sessCtx, value, ti.Columns, filterExprs)
+		if err != nil {
+			return nil, err
 		}
 		for _, expr := range filterExprs {
 			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)

@@ -19,6 +19,7 @@ import (
 
 	"github.com/pingcap/errors"
 	ddl2 "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/expression"
 	context2 "github.com/pingcap/tidb/pkg/expression/exprctx"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -128,13 +129,13 @@ create table t (
 		ca.skippedRow = util.Must(adjustValueFromBinlogData(ca.skippedRow, ti))
 		ca.passedRow = util.Must(adjustValueFromBinlogData(ca.passedRow, ti))
 
-		skippedRow, err := rowForExpressionFilter(sessCtx, ca.skippedRow, ti.Columns)
+		skippedRow, err := rowForExpressionFilter(sessCtx, ca.skippedRow, ti.Columns, []expression.Expression{expr})
 		require.NoError(t, err)
 		skip, err := SkipDMLByExpression(sessCtx, skippedRow, expr)
 		require.NoError(t, err)
 		require.True(t, skip)
 
-		passedRow, err := rowForExpressionFilter(sessCtx, ca.passedRow, ti.Columns)
+		passedRow, err := rowForExpressionFilter(sessCtx, ca.passedRow, ti.Columns, []expression.Expression{expr})
 		require.NoError(t, err)
 		skip, err = SkipDMLByExpression(sessCtx, passedRow, expr)
 		require.NoError(t, err)
@@ -192,7 +193,7 @@ create table t (
 
 	skippedValue, err := adjustValueFromBinlogData([]interface{}{1, "Alice", "Bob"}, ti)
 	require.NoError(t, err)
-	skippedRow, err := rowForExpressionFilter(sessCtx, skippedValue, ti.Columns)
+	skippedRow, err := rowForExpressionFilter(sessCtx, skippedValue, ti.Columns, []expression.Expression{expr})
 	require.NoError(t, err)
 	skip, err := SkipDMLByExpression(sessCtx, skippedRow, expr)
 	require.NoError(t, err)
@@ -200,7 +201,7 @@ create table t (
 
 	passedValue, err := adjustValueFromBinlogData([]interface{}{2, "Alice", "Charlie"}, ti)
 	require.NoError(t, err)
-	passedRow, err := rowForExpressionFilter(sessCtx, passedValue, ti.Columns)
+	passedRow, err := rowForExpressionFilter(sessCtx, passedValue, ti.Columns, []expression.Expression{expr})
 	require.NoError(t, err)
 	skip, err = SkipDMLByExpression(sessCtx, passedRow, expr)
 	require.NoError(t, err)
@@ -459,13 +460,13 @@ create table t (
 		ca.skippedRow = util.Must(adjustValueFromBinlogData(ca.skippedRow, ti))
 		ca.passedRow = util.Must(adjustValueFromBinlogData(ca.passedRow, ti))
 
-		skippedRow, err := rowForExpressionFilter(sessCtx, ca.skippedRow, ti.Columns)
+		skippedRow, err := rowForExpressionFilter(sessCtx, ca.skippedRow, ti.Columns, []expression.Expression{expr})
 		require.NoError(t, err)
 		skip, err := SkipDMLByExpression(sessCtx, skippedRow, expr)
 		require.NoError(t, err)
 		require.True(t, skip)
 
-		passedRow, err := rowForExpressionFilter(sessCtx, ca.passedRow, ti.Columns)
+		passedRow, err := rowForExpressionFilter(sessCtx, ca.passedRow, ti.Columns, []expression.Expression{expr})
 		require.NoError(t, err)
 		skip, err = SkipDMLByExpression(sessCtx, passedRow, expr)
 		require.NoError(t, err)
@@ -517,12 +518,12 @@ create table t (
 	require.Equal(t, "0", expr.StringWithCtx(context2.EmptyParamValues, errors.RedactLogDisable))
 
 	// skip nothing
-	filterRow, err := rowForExpressionFilter(sessCtx, []interface{}{0}, ti.Columns)
+	filterRow, err := rowForExpressionFilter(sessCtx, []interface{}{0}, ti.Columns, []expression.Expression{expr})
 	require.NoError(t, err)
 	skip, err := SkipDMLByExpression(sessCtx, filterRow, expr)
 	require.NoError(t, err)
 	require.False(t, skip)
-	filterRow, err = rowForExpressionFilter(sessCtx, []interface{}{2}, ti.Columns)
+	filterRow, err = rowForExpressionFilter(sessCtx, []interface{}{2}, ti.Columns, []expression.Expression{expr})
 	require.NoError(t, err)
 	skip, err = SkipDMLByExpression(sessCtx, filterRow, expr)
 	require.NoError(t, err)
