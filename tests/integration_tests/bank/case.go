@@ -138,7 +138,7 @@ func (s *sequenceTest) prepare(ctx context.Context, db *sql.DB, accounts, tableI
 	)`, tableID)
 	batchInsertSQLF := func(batchSize, offset int) string {
 		args := make([]string, batchSize)
-		for j := 0; j < batchSize; j++ {
+		for j := range batchSize {
 			args[j] = fmt.Sprintf("(%d, 0, 0, 0)", offset+j)
 		}
 		return fmt.Sprintf("INSERT IGNORE INTO accounts_seq%d (id, counter, sequence, startts) VALUES %s", tableID, strings.Join(args, ","))
@@ -254,7 +254,7 @@ func (s *bankTest) prepare(ctx context.Context, db *sql.DB, accounts, tableID, c
 	)`, tableID)
 	batchInsertSQLF := func(batchSize, offset int) string {
 		args := make([]string, batchSize)
-		for j := 0; j < batchSize; j++ {
+		for j := range batchSize {
 			args[j] = fmt.Sprintf("(%d, %d, 0)", offset+j, initBalance)
 		}
 		return fmt.Sprintf("INSERT IGNORE INTO accounts%d (id, balance, startts) VALUES %s", tableID, strings.Join(args, ","))
@@ -345,7 +345,7 @@ func prepareImpl(
 
 	g := new(errgroup.Group)
 	ch := make(chan int, jobCount)
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		g.Go(func() error {
 			for {
 				startIndex, ok := <-ch
@@ -468,7 +468,7 @@ func run(
 	tests := []testcase{&sequenceTest{}, &bankTest{}}
 
 	if cleanupOnly {
-		for tableID := 0; tableID < tables; tableID++ {
+		for tableID := range tables {
 			for i := range tests {
 				tests[i].cleanup(ctx, upstreamDB, accounts, tableID, true)
 				tests[i].cleanup(ctx, downstreamDB, accounts, tableID, true)
@@ -484,7 +484,7 @@ func run(
 
 	// prepare data for upstream db.
 	for _, test := range tests {
-		for tableID := 0; tableID < tables; tableID++ {
+		for tableID := range tables {
 			if err := test.prepare(ctx, upstreamDB, accounts, tableID, concurrency); err != nil {
 				log.Panic("prepare failed", zap.Error(err))
 			}
@@ -510,7 +510,7 @@ func run(
 		valid, tried int64 = 0, 0
 	)
 
-	for id := 0; id < tables; id++ {
+	for id := range tables {
 		tableID := id
 		// Workload
 		g.Go(func() error {

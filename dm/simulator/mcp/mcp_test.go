@@ -33,10 +33,10 @@ func (s *testMCPSuite) SetupSuite() {
 
 func (s *testMCPSuite) SetupTest() {
 	mcp := NewModificationCandidatePool(8192)
-	for i := 0; i < 4096; i++ {
+	for i := range 4096 {
 		mcp.keyPool = append(mcp.keyPool, &UniqueKey{
 			rowID: i,
-			value: map[string]interface{}{
+			value: map[string]any{
 				"id": i,
 			},
 		})
@@ -47,7 +47,7 @@ func (s *testMCPSuite) SetupTest() {
 func (s *testMCPSuite) TestNextUK() {
 	allHitRowIDs := map[int]int{}
 	repeatCnt := 20
-	for i := 0; i < repeatCnt; i++ {
+	for range repeatCnt {
 		theUK := s.mcp.NextUK()
 		s.Require().NotNil(theUK, "the picked UK should not be nil")
 		theRowID := theUK.GetRowID()
@@ -74,10 +74,10 @@ func (s *testMCPSuite) TestParallelNextUK() {
 	rowIDCh := make(chan int, workerCnt)
 	var wg sync.WaitGroup
 	wg.Add(workerCnt)
-	for i := 0; i < workerCnt; i++ {
+	for range workerCnt {
 		go func() {
 			defer wg.Done()
-			for i := 0; i < repeatCnt; i++ {
+			for range repeatCnt {
 				theUK := s.mcp.NextUK()
 				if theUK != nil {
 					rowIDCh <- theUK.GetRowID()
@@ -122,7 +122,7 @@ func (s *testMCPSuite) TestMCPAddDeleteBasic() {
 	startPoolSize := curPoolSize
 	repeatCnt = 5
 	for i := 0; i < repeatCnt; i++ {
-		theUK := NewUniqueKey(-1, map[string]interface{}{
+		theUK := NewUniqueKey(-1, map[string]any{
 			"id": rand.Int(),
 		})
 		err = s.mcp.AddUK(theUK)
@@ -188,8 +188,8 @@ func (s *testMCPSuite) TestMCPAddDeleteInParallel() {
 			defer func() {
 				ch <- err
 			}()
-			for i := 0; i < 5; i++ {
-				theUK := NewUniqueKey(-1, map[string]interface{}{
+			for range 5 {
+				theUK := NewUniqueKey(-1, map[string]any{
 					"id": rand.Int(),
 				})
 				err = s.mcp.AddUK(theUK)
@@ -209,7 +209,7 @@ func (s *testMCPSuite) TestMCPAddDeleteInParallel() {
 			defer func() {
 				ch <- err
 			}()
-			for i := 0; i < 5; i++ {
+			for range 5 {
 				theDelUK := s.mcp.NextUK()
 				deletedRowID := theDelUK.rowID
 				err = s.mcp.DeleteUK(theDelUK)

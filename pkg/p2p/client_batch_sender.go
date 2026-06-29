@@ -46,10 +46,7 @@ type grpcClientBatchSender struct {
 }
 
 func newClientBatchSender(stream MessageClientStream, maxEntryCount, maxSizeBytes int) clientBatchSender[MessageEntry] {
-	sliceCap := maxEntryCount
-	if sliceCap > maxPreallocBatchSize {
-		sliceCap = maxPreallocBatchSize
-	}
+	sliceCap := min(maxEntryCount, maxPreallocBatchSize)
 	return &grpcClientBatchSender{
 		stream:        stream,
 		buffer:        make([]MessageEntry, 0, sliceCap),

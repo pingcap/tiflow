@@ -458,6 +458,3 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
 replace golang.org/x/text => golang.org/x/text v0.28.0
-
-// tls10server=1
-godebug tlsrsakex=1

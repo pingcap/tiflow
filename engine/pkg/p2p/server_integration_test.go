@@ -58,13 +58,11 @@ func TestMessageRPCServiceBasics(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := messageSrvc.Serve(ctx, l)
 		require.Error(t, err)
 		require.Regexp(t, ".*canceled.*", err.Error())
-	}()
+	})
 
 	var called atomic.Bool
 	handlerManager := messageSrvc.MakeHandlerManager()
@@ -78,13 +76,11 @@ func TestMessageRPCServiceBasics(t *testing.T) {
 	require.True(t, ok)
 
 	client := p2pImpl.NewGrpcMessageClient("test-client-1", clientConfigForUnitTesting)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "tcp", addr, "test-node-1", &security.Credential{} /* no TLS */)
 		require.Error(t, err)
 		require.Regexp(t, ".*canceled.*", err.Error())
-	}()
+	})
 
 	_, err = client.SendMessage(ctx, "test-topic-1", &msgContent{})
 	require.NoError(t, err)
