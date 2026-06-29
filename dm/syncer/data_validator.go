@@ -53,9 +53,10 @@ import (
 const (
 	validatorStatusInterval = time.Minute
 
-	moreColumnInBinlogMsg     = "binlog has more columns than current table"
-	tableWithoutPrimaryKeyMsg = "no primary key"
-	tableNotSyncedOrDropped   = "table is not synced or dropped"
+	moreColumnInBinlogMsg            = "binlog has more columns than current table"
+	tableWithoutPrimaryKeyMsg        = "no primary key"
+	tableNotSyncedOrDropped          = "table is not synced or dropped"
+	downstreamPKColumnOutOfBoundsMsg = "primary key column of downstream table out of range of binlog event row"
 )
 
 type validateTableInfo struct {
@@ -834,11 +835,16 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
 	}
-	tableInfo = eventTableInfo
+	currentWhereHandle := sqlmodel.GetWhereHandle(tableInfo, downstreamTableInfo.TableInfo)
 
+	tableInfo = eventTableInfo
 	whereHandle := sqlmodel.GetWhereHandle(tableInfo, downstreamTableInfo.TableInfo)
 	pk := whereHandle.UniqueNotNullIdx
 	if pk == nil {
+		if currentWhereHandle.UniqueNotNullIdx != nil {
+			res.message = downstreamPKColumnOutOfBoundsMsg
+			return res, nil
+		}
 		res.message = tableWithoutPrimaryKeyMsg
 		return res, nil
 	}
