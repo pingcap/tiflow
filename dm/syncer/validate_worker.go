@@ -320,7 +320,7 @@ func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, dele
 	firstRow := rows[0].row
 	cond := &Cond{
 		TargetTbl: firstRow.TargetTableID(),
-		Columns:   firstRow.SourceTableInfo().Columns,
+		Columns:   visibleColumns(firstRow.SourceTableInfo().Columns),
 		PK:        firstRow.UniqueNotNullIdx(),
 		PkValues:  pkValues,
 	}
@@ -364,12 +364,11 @@ func (vw *validateWorker) validateInsertAndUpdateRows(rows []*rowValidationJob, 
 	}
 
 	firstRow := rows[0].row
-	tableInfo := firstRow.SourceTableInfo()
 	validateContext := &validateCompareContext{
 		logger:      vw.L,
 		sourceTable: firstRow.GetSourceTable(),
 		targetTable: firstRow.GetTargetTable(),
-		columns:     tableInfo.Columns,
+		columns:     cond.Columns,
 	}
 	for key, sourceRow := range sourceRows {
 		targetRow, ok := targetRows[key]
@@ -418,6 +417,10 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 	defer rows.Close()
 
 	result := make(map[string][]*sql.NullString)
+	columnsByName := make(map[string]int, len(cond.Columns))
+	for i, col := range cond.Columns {
+		columnsByName[col.Name.L] = i
+	}
 	for rows.Next() {
 		rowData, err := scanRow(rows)
 		if err != nil {
@@ -426,7 +429,11 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 		pkCols := cond.PK.Columns
 		pkValues := make([]string, 0, len(pkCols))
 		for _, col := range pkCols {
-			pkValues = append(pkValues, rowData[col.Offset].String)
+			offset, ok := columnsByName[col.Name.L]
+			if !ok {
+				return nil, errors.Errorf("primary key column %s not found in selected columns", col.Name.O)
+			}
+			pkValues = append(pkValues, rowData[offset].String)
 		}
 		pk := genRowKeyByString(pkValues)
 		result[pk] = rowData
@@ -442,6 +449,16 @@ func (vw *validateWorker) resetErrorRows() {
 	vw.Lock()
 	defer vw.Unlock()
 	vw.errorRows = make([]*validateFailedRow, 0)
+}
+
+func visibleColumns(columns []*model.ColumnInfo) []*model.ColumnInfo {
+	ret := make([]*model.ColumnInfo, 0, len(columns))
+	for _, col := range columns {
+		if !col.Hidden {
+			ret = append(ret, col)
+		}
+	}
+	return ret
 }
 
 func (vw *validateWorker) newJobAdded(job *rowValidationJob) {

@@ -823,20 +823,8 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 			return res, err
 		}
 	}
-	visibleColumnCount := 0
-	stripColumnCount := len(tableInfo.Columns)
-	for i, col := range tableInfo.Columns {
-		if col.Hidden {
-			continue
-		}
-		if visibleColumnCount == columnCount {
-			stripColumnCount = i
-			visibleColumnCount++
-			break
-		}
-		visibleColumnCount++
-	}
-	if visibleColumnCount < columnCount {
+	eventTableInfo, ok := tableInfoForVisibleColumnCount(tableInfo, columnCount)
+	if !ok {
 		res.message = moreColumnInBinlogMsg
 		return res, nil
 	}
@@ -846,10 +834,7 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 		// todo: might be connection error, then return error, or downstream table not exists, then set state to stopped.
 		return res, err
 	}
-	if visibleColumnCount > columnCount {
-		tableInfo = tableInfo.Clone()
-		tableInfo.Columns = tableInfo.Columns[:stripColumnCount]
-	}
+	tableInfo = eventTableInfo
 
 	pk := downstreamTableInfo.WhereHandle(sourceTable, tableInfo).UniqueNotNullIdx
 	if pk == nil {
@@ -867,6 +852,33 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 	res.srcTableInfo = tableInfo
 	res.downstreamTableInfo = downstreamTableInfo
 	return res, nil
+}
+
+// tableInfoForVisibleColumnCount returns the source TableInfo layout that matches
+// a binlog row image with columnCount visible columns.
+func tableInfoForVisibleColumnCount(tableInfo *model.TableInfo, columnCount int) (*model.TableInfo, bool) {
+	visibleCount := 0
+	stripColumnCount := len(tableInfo.Columns)
+	for i, col := range tableInfo.Columns {
+		if col.Hidden {
+			continue
+		}
+		visibleCount++
+		if visibleCount > columnCount {
+			stripColumnCount = i
+			break
+		}
+	}
+	if visibleCount < columnCount {
+		return nil, false
+	}
+	if visibleCount == columnCount {
+		return tableInfo, true
+	}
+
+	clone := tableInfo.Clone()
+	clone.Columns = clone.Columns[:stripColumnCount]
+	return clone, true
 }
 
 func (v *DataValidator) processRowsEvent(header *replication.EventHeader, ev *replication.RowsEvent) error {
