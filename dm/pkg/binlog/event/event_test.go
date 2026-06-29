@@ -663,10 +663,10 @@ func TestGenMariaDBGTIDListEvent(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, gtidListEvBody)
 	require.Len(t, gtidListEvBody.GTIDs, 1)
-	require.Equal(t, *mGSet.Sets[gtidListEvBody.GTIDs[0].DomainID][gtidListEvBody.GTIDs[0].ServerID], gtidListEvBody.GTIDs[0])
+	require.Equal(t, *mGSet.Sets[gtidListEvBody.GTIDs[0].DomainID], gtidListEvBody.GTIDs[0])
 
 	// valid gSet with multi GTIDs
-	gSet, err = gtid.ParserGTID(gmysql.MariaDBFlavor, "1-2-12,2-2-3,3-3-8,3-4-4")
+	gSet, err = gtid.ParserGTID(gmysql.MariaDBFlavor, "1-2-12,2-2-3,3-3-8,4-4-4")
 	require.Nil(t, err)
 	require.NotNil(t, gSet)
 	mGSet, ok = gSet.(*gmysql.MariadbGTIDSet)
@@ -683,9 +683,7 @@ func TestGenMariaDBGTIDListEvent(t *testing.T) {
 	require.NotNil(t, gtidListEvBody)
 	require.Len(t, gtidListEvBody.GTIDs, 4)
 	for _, mGTID := range gtidListEvBody.GTIDs {
-		set, ok := mGSet.Sets[mGTID.DomainID]
-		require.True(t, ok)
-		mGTID2, ok := set[mGTID.ServerID]
+		mGTID2, ok := mGSet.Sets[mGTID.DomainID]
 		require.True(t, ok)
 		require.Equal(t, *mGTID2, mGTID)
 	}
