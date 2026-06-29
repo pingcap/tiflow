@@ -23,7 +23,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -43,17 +43,19 @@ type BatchDecoder struct {
 	nextKey   *internal.MessageKey
 	nextEvent *model.RowChangedEvent
 
-	storage storage.ExternalStorage
+	storage storeapi.Storage
 
 	config *common.Config
 
 	upstreamTiDB *sql.DB
+
+	tableIDAllocator *common.FakeTableIDAllocator
 }
 
 // NewBatchDecoder creates a new BatchDecoder.
 func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (codec.RowEventDecoder, error) {
 	var (
-		externalStorage storage.ExternalStorage
+		externalStorage storeapi.Storage
 		err             error
 	)
 	if config.LargeMessageHandle.EnableClaimCheck() {
@@ -70,9 +72,10 @@ func NewBatchDecoder(ctx context.Context, config *common.Config, db *sql.DB) (co
 	}
 
 	return &BatchDecoder{
-		config:       config,
-		storage:      externalStorage,
-		upstreamTiDB: db,
+		config:           config,
+		storage:          externalStorage,
+		upstreamTiDB:     db,
+		tableIDAllocator: common.NewFakeTableIDAllocator(),
 	}, nil
 }
 
@@ -146,11 +149,10 @@ func (b *BatchDecoder) HasNext() (model.MessageType, bool, error) {
 			return model.MessageTypeUnknown, false, cerror.ErrOpenProtocolCodecInvalidData.
 				GenWithStack("decompress data failed")
 		}
-
-		if err := rowMsg.decode(value); err != nil {
+		if err = rowMsg.decode(value); err != nil {
 			return b.nextKey.Type, false, errors.Trace(err)
 		}
-		b.nextEvent = msgToRowChange(b.nextKey, rowMsg)
+		b.nextEvent = b.msgToRowChange(b.nextKey, rowMsg)
 	}
 
 	return b.nextKey.Type, true, nil
@@ -184,7 +186,7 @@ func (b *BatchDecoder) NextDDLEvent() (*model.DDLEvent, error) {
 	}
 
 	ddlMsg := new(messageDDL)
-	if err := ddlMsg.decode(value); err != nil {
+	if err = ddlMsg.decode(value); err != nil {
 		return nil, errors.Trace(err)
 	}
 	ddlEvent := msgToDDLEvent(b.nextKey, ddlMsg)
@@ -344,7 +346,7 @@ func (b *BatchDecoder) assembleEventFromClaimCheckStorage(ctx context.Context) (
 		return nil, errors.Trace(err)
 	}
 
-	event := msgToRowChange(msgKey, rowMsg)
+	event := b.msgToRowChange(msgKey, rowMsg)
 
 	return event, nil
 }

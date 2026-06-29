@@ -30,7 +30,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/objectio"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -40,16 +42,16 @@ const (
 	defaultTimeout = 5 * time.Minute
 )
 
-// GetExternalStorageFromURI creates a new storage.ExternalStorage from a uri.
+// GetExternalStorageFromURI creates a new storeapi.Storage from a uri.
 func GetExternalStorageFromURI(
 	ctx context.Context, uri string,
-) (storage.ExternalStorage, error) {
+) (storeapi.Storage, error) {
 	return GetExternalStorage(ctx, uri, nil, DefaultS3Retryer())
 }
 
-// GetExternalStorageWithDefaultTimeout creates a new storage.ExternalStorage from a uri
+// GetExternalStorageWithDefaultTimeout creates a new storeapi.Storage from a uri
 // without retry. It is the caller's responsibility to set timeout to the context.
-func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (storage.ExternalStorage, error) {
+func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (storeapi.Storage, error) {
 	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
 	// total retry time is [1<<7, 1<<8] = [128, 256] + 30*6 = [308, 436] seconds
@@ -57,23 +59,23 @@ func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (stor
 	s, err := GetExternalStorage(ctx, uri, nil, r)
 
 	return &extStorageWithTimeout{
-		ExternalStorage: s,
-		timeout:         defaultTimeout,
+		Storage: s,
+		timeout: defaultTimeout,
 	}, err
 }
 
-// GetExternalStorage creates a new storage.ExternalStorage based on the uri and options.
+// GetExternalStorage creates a new storeapi.Storage based on the uri and options.
 func GetExternalStorage(
 	ctx context.Context, uri string,
-	opts *storage.BackendOptions,
+	opts *objstore.BackendOptions,
 	retryer aws.Retryer,
-) (storage.ExternalStorage, error) {
-	backEnd, err := storage.ParseBackend(uri, opts)
+) (storeapi.Storage, error) {
+	backEnd, err := objstore.ParseBackend(uri, opts)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	ret, err := storage.New(ctx, backEnd, &storage.ExternalStorageOptions{
+	ret, err := objstore.New(ctx, backEnd, &storeapi.Options{
 		SendCredentials: false,
 		S3Retryer:       retryer,
 	})
@@ -91,23 +93,23 @@ func GetExternalStorage(
 	return ret, nil
 }
 
-// GetTestExtStorage creates a test storage.ExternalStorage from a uri.
+// GetTestExtStorage creates a test storeapi.Storage from a uri.
 func GetTestExtStorage(
 	ctx context.Context, tmpDir string,
-) (storage.ExternalStorage, *url.URL, error) {
+) (storeapi.Storage, *url.URL, error) {
 	uriStr := fmt.Sprintf("file://%s", tmpDir)
 	ret, err := GetExternalStorageFromURI(ctx, uriStr)
 	if err != nil {
 		return nil, nil, err
 	}
-	uri, err := storage.ParseRawURL(uriStr)
+	uri, err := objstore.ParseRawURL(uriStr)
 	if err != nil {
 		return nil, nil, err
 	}
 	return ret, uri, nil
 }
 
-// retryerWithLog wraps retry.Standard, and logs when retrying.
+// retryerWithLog wraps the client.DefaultRetryer, and logs when retrying.
 type retryerWithLog struct {
 	*retry.Standard
 
@@ -172,7 +174,7 @@ func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration)
 }
 
 type extStorageWithTimeout struct {
-	storage.ExternalStorage
+	storeapi.Storage
 	timeout time.Duration
 }
 
@@ -181,7 +183,7 @@ type extStorageWithTimeout struct {
 func (s *extStorageWithTimeout) WriteFile(ctx context.Context, name string, data []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	err := s.ExternalStorage.WriteFile(ctx, name, data)
+	err := s.Storage.WriteFile(ctx, name, data)
 	if err != nil {
 		err = errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("WriteFile")
 	}
@@ -192,71 +194,71 @@ func (s *extStorageWithTimeout) WriteFile(ctx context.Context, name string, data
 func (s *extStorageWithTimeout) ReadFile(ctx context.Context, name string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.ReadFile(ctx, name)
+	return s.Storage.ReadFile(ctx, name)
 }
 
 // FileExists return true if file exists
 func (s *extStorageWithTimeout) FileExists(ctx context.Context, name string) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.FileExists(ctx, name)
+	return s.Storage.FileExists(ctx, name)
 }
 
 // DeleteFile delete the file in storage
 func (s *extStorageWithTimeout) DeleteFile(ctx context.Context, name string) error {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.DeleteFile(ctx, name)
+	return s.Storage.DeleteFile(ctx, name)
 }
 
 // Open a Reader by file path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Open(
-	ctx context.Context, path string, _ *storage.ReaderOption,
-) (storage.ExternalFileReader, error) {
+	ctx context.Context, path string, _ *storeapi.ReaderOption,
+) (objectio.Reader, error) {
 	// Unlike other methods, Open method cannot call cancel() in defer.
 	// This is because the reader's lifetime is bound to the context provided at Open().
 	// Subsequent Read() calls on reader will observe context cancellation.
 	// Instead, we wrap the reader in a struct and cancel it's context in Close().
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	r, err := s.ExternalStorage.Open(ctx, path, nil)
+	r, err := s.Storage.Open(ctx, path, nil)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
-	return &readerWithCancel{ExternalFileReader: r, cancel: cancel}, nil
+	return &readerWithCancel{Reader: r, cancel: cancel}, nil
 }
 
 type readerWithCancel struct {
-	storage.ExternalFileReader
+	objectio.Reader
 	cancel context.CancelFunc
 }
 
 // Close the reader and cancel the context.
 func (r *readerWithCancel) Close() error {
 	defer r.cancel()
-	return r.ExternalFileReader.Close()
+	return r.Reader.Close()
 }
 
 // WalkDir traverse all the files in a dir.
 func (s *extStorageWithTimeout) WalkDir(
-	ctx context.Context, opt *storage.WalkOption, fn func(path string, size int64) error,
+	ctx context.Context, opt *storeapi.WalkOption, fn func(path string, size int64) error,
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.WalkDir(ctx, opt, fn)
+	return s.Storage.WalkDir(ctx, opt, fn)
 }
 
 // Create opens a file writer by path. path is relative path to storage base path
 func (s *extStorageWithTimeout) Create(
-	ctx context.Context, path string, option *storage.WriterOption,
-) (storage.ExternalFileWriter, error) {
+	ctx context.Context, path string, option *storeapi.WriterOption,
+) (objectio.Writer, error) {
 	if option.Concurrency <= 1 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, s.timeout)
 		defer cancel()
 	}
 	// multipart uploading spawns a background goroutine, can't set timeout
-	return s.ExternalStorage.Create(ctx, path, option)
+	return s.Storage.Create(ctx, path, option)
 }
 
 // Rename file name from oldFileName to newFileName
@@ -265,7 +267,7 @@ func (s *extStorageWithTimeout) Rename(
 ) error {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.Rename(ctx, oldFileName, newFileName)
+	return s.Storage.Rename(ctx, oldFileName, newFileName)
 }
 
 // IsNotExistInExtStorage checks if the error is caused by the file not exist in external storage.
@@ -301,9 +303,9 @@ func IsNotExistInExtStorage(err error) bool {
 // RemoveFilesIf removes files from external storage if the path matches the predicate.
 func RemoveFilesIf(
 	ctx context.Context,
-	extStorage storage.ExternalStorage,
+	extStorage storeapi.Storage,
 	pred func(path string) bool,
-	opt *storage.WalkOption,
+	opt *storeapi.WalkOption,
 ) error {
 	var toRemoveFiles []string
 	err := extStorage.WalkDir(ctx, opt, func(path string, _ int64) error {
@@ -324,7 +326,7 @@ func RemoveFilesIf(
 // DeleteFilesInExtStorage deletes files in external storage concurrently.
 // TODO: Add a test for this function to cover batch delete.
 func DeleteFilesInExtStorage(
-	ctx context.Context, extStorage storage.ExternalStorage, toRemoveFiles []string,
+	ctx context.Context, extStorage storeapi.Storage, toRemoveFiles []string,
 ) error {
 	limit := make(chan struct{}, 32)
 	batch := 3000

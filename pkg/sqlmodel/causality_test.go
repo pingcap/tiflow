@@ -19,6 +19,7 @@ import (
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -293,9 +294,9 @@ func TestCausalityKeysInterleavedHiddenColumn(t *testing.T) {
 		"UNIQUE KEY uk_a ((lower(a))), "+
 		"UNIQUE KEY uk_b ((lower(b))))")
 
-	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
-	hiddenB := expressionIndexColumnName(t, ti, "uk_b")
-	reorderColumnsByName(t, ti, "id", "a", hiddenA, "b", hiddenB)
+	hiddenA := testutil.ExpressionIndexColumnName(t, ti, "uk_a")
+	hiddenB := testutil.ExpressionIndexColumnName(t, ti, "uk_b")
+	testutil.ReorderColumnsByName(t, ti, "id", "a", hiddenA, "b", hiddenB)
 
 	change := NewRowChange(source, nil, nil, []any{1, "Alice", "Bob"}, ti, nil, nil)
 	require.ElementsMatch(t, []string{
@@ -377,7 +378,7 @@ func TestCausalityKeysMaterializeFailureFallback(t *testing.T) {
 			source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
 			ti := mockTableInfo(t, tc.createSQL)
 
-			hiddenA := expressionIndexColumnName(t, ti, "uk_a")
+			hiddenA := testutil.ExpressionIndexColumnName(t, ti, "uk_a")
 			columnNames := make([]string, 0, len(tc.columnOrder))
 			for _, name := range tc.columnOrder {
 				if name == "uk_a" {
@@ -385,7 +386,7 @@ func TestCausalityKeysMaterializeFailureFallback(t *testing.T) {
 				}
 				columnNames = append(columnNames, name)
 			}
-			reorderColumnsByName(t, ti, columnNames...)
+			testutil.ReorderColumnsByName(t, ti, columnNames...)
 			corruptHiddenGeneratedExpr(t, ti)
 
 			change := NewRowChange(source, nil, nil, tc.postValues, ti, nil, nil)
@@ -410,42 +411,4 @@ func corruptHiddenGeneratedExpr(t *testing.T, ti *timodel.TableInfo) {
 		}
 	}
 	require.True(t, found, "expression index should create a hidden generated column")
-}
-
-func expressionIndexColumnName(t *testing.T, ti *timodel.TableInfo, indexName string) string {
-	t.Helper()
-
-	for _, idx := range ti.Indices {
-		if idx.Name.L == indexName {
-			require.Len(t, idx.Columns, 1)
-			return idx.Columns[0].Name.L
-		}
-	}
-	require.FailNowf(t, "index not found", "index %q not found", indexName)
-	return ""
-}
-
-func reorderColumnsByName(t *testing.T, ti *timodel.TableInfo, names ...string) {
-	t.Helper()
-	require.Len(t, names, len(ti.Columns))
-
-	colsByName := make(map[string]*timodel.ColumnInfo, len(ti.Columns))
-	for _, col := range ti.Columns {
-		colsByName[col.Name.L] = col
-	}
-
-	for i, name := range names {
-		col := colsByName[name]
-		require.NotNilf(t, col, "column %q not found", name)
-		ti.Columns[i] = col
-		col.Offset = i
-	}
-
-	for _, idx := range ti.Indices {
-		for _, idxCol := range idx.Columns {
-			col := colsByName[idxCol.Name.L]
-			require.NotNilf(t, col, "index column %q not found", idxCol.Name.L)
-			idxCol.Offset = col.Offset
-		}
-	}
 }

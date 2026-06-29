@@ -35,17 +35,6 @@ func valuesHolder(n int) string {
 	return builder.String()
 }
 
-// generatedColumnsNameSet returns a set of generated columns' name.
-func generatedColumnsNameSet(columns []*timodel.ColumnInfo) map[string]struct{} {
-	m := make(map[string]struct{})
-	for _, col := range columns {
-		if col.IsGenerated() {
-			m[col.Name.L] = struct{}{}
-		}
-	}
-	return m
-}
-
 // ColValAsStr convert column value as string
 func ColValAsStr(v interface{}) string {
 	switch dv := v.(type) {
@@ -55,4 +44,26 @@ func ColValAsStr(v interface{}) string {
 		return dv
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// writableSourceColumns returns source columns that are present in the row
+// image and writable to the target table.
+func writableSourceColumns(
+	visibleSourceColumns []*timodel.ColumnInfo,
+	targetColumns []*timodel.ColumnInfo,
+) []*timodel.ColumnInfo {
+	generatedColumns := make(map[string]struct{})
+	for _, col := range targetColumns {
+		if col.IsGenerated() {
+			generatedColumns[col.Name.L] = struct{}{}
+		}
+	}
+
+	columns := make([]*timodel.ColumnInfo, 0, len(visibleSourceColumns))
+	for _, col := range visibleSourceColumns {
+		if _, ok := generatedColumns[col.Name.L]; !ok {
+			columns = append(columns, col)
+		}
+	}
+	return columns
 }

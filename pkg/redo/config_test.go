@@ -19,7 +19,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/stretchr/testify/require"
 )
 
@@ -181,7 +181,7 @@ func TestInitExternalStorage(t *testing.T) {
 	}
 
 	for _, urlStr := range urls {
-		url, err := storage.ParseRawURL(urlStr)
+		url, err := objstore.ParseRawURL(urlStr)
 		require.NoError(t, err)
 		_, err = InitExternalStorage(context.Background(), *url)
 		require.NoError(t, err)
