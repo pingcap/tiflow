@@ -16,8 +16,11 @@ package sqlmodel
 import (
 	"testing"
 
+<<<<<<< HEAD
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+=======
+>>>>>>> 979ae7086f (syncer, sqlmodel(dm): fix generated index schema tracking (#12731))
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
@@ -41,33 +44,4 @@ func TestValidatorGenColData(t *testing.T) {
 	require.Equal(t, "\x01\x02\x03", res)
 	res = ColValAsStr(decimal.NewFromInt(222123123))
 	require.Equal(t, "222123123", res)
-}
-
-func TestGeneratedColumnsNameSet(t *testing.T) {
-	t.Parallel()
-
-	cols := []*timodel.ColumnInfo{
-		{
-			Name:                pmodel.CIStr{O: "A", L: "a"},
-			GeneratedExprString: "generated_expr",
-		},
-		{
-			Name: pmodel.CIStr{O: "B", L: "b"},
-		},
-		{
-			Name:                pmodel.CIStr{O: "C", L: "c"},
-			GeneratedExprString: "generated_expr",
-		},
-		{
-			Name:                pmodel.CIStr{O: "D", L: "d"},
-			GeneratedExprString: "generated_expr",
-		},
-	}
-
-	m := generatedColumnsNameSet(cols)
-	require.Equal(t, map[string]struct{}{
-		"a": {},
-		"c": {},
-		"d": {},
-	}, m)
 }

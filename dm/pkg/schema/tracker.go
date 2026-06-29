@@ -83,13 +83,50 @@ type downstreamTracker struct {
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
 }
 
-// DownstreamTableInfo contains tableinfo and index cache.
+// DownstreamTableInfo holds downstream schema and WHERE handle caches.
 type DownstreamTableInfo struct {
 	TableInfo           *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
-	WhereHandle         *sqlmodel.WhereHandle
+	whereHandleCache    *downstreamWhereHandleCache
 	ForeignKeyRelations []sqlmodel.ForeignKeyCausalityRelation
 	foreignKeyInitOnce  sync.Once
 	foreignKeyInitErr   error
+}
+
+// downstreamWhereHandleCache keeps the default handle and per-source handles.
+type downstreamWhereHandleCache struct {
+	defaultHandle *sqlmodel.WhereHandle
+	mu            sync.Mutex
+	bySource      map[string]*sqlmodel.WhereHandle
+}
+
+// DefaultWhereHandle returns the handle built with the initial source table.
+func (dti *DownstreamTableInfo) DefaultWhereHandle() *sqlmodel.WhereHandle {
+	return dti.whereHandleCache.defaultHandle
+}
+
+// WithoutForeignKeyRelations returns a copy with the downstream table info and
+// where handle cache, but without FK causality relations.
+func (dti *DownstreamTableInfo) WithoutForeignKeyRelations() *DownstreamTableInfo {
+	if dti == nil {
+		return nil
+	}
+	return &DownstreamTableInfo{
+		TableInfo:        dti.TableInfo,
+		whereHandleCache: dti.whereHandleCache,
+	}
+}
+
+// WhereHandle gets or builds the handle for the given source table.
+func (dti *DownstreamTableInfo) WhereHandle(sourceTable *filter.Table, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
+	sourceKey := utils.GenTableID(sourceTable)
+	dti.whereHandleCache.mu.Lock()
+	defer dti.whereHandleCache.mu.Unlock()
+	if handle, ok := dti.whereHandleCache.bySource[sourceKey]; ok {
+		return handle
+	}
+	handle := sqlmodel.GetWhereHandle(sourceTI, dti.TableInfo)
+	dti.whereHandleCache.bySource[sourceKey] = handle
+	return handle
 }
 
 // TableRouteResolver resolves a source table to its downstream routed table.
@@ -456,11 +493,9 @@ func (tr *Tracker) InitDownStreamForeignKeyRelations(
 		if err != nil {
 			return nil, err
 		}
-		return &DownstreamTableInfo{
-			TableInfo:           dti.TableInfo,
-			WhereHandle:         dti.WhereHandle,
-			ForeignKeyRelations: relations,
-		}, nil
+		ret := dti.WithoutForeignKeyRelations()
+		ret.ForeignKeyRelations = relations
+		return ret, nil
 	}
 
 	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI, routeResolver, caseSensitive); err != nil {
@@ -501,8 +536,11 @@ func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, o
 		}
 
 		dti = &DownstreamTableInfo{
-			TableInfo:   downstreamTI,
-			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+			TableInfo: downstreamTI,
+			whereHandleCache: &downstreamWhereHandleCache{
+				defaultHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
+				bySource:      make(map[string]*sqlmodel.WhereHandle),
+			},
 		}
 		dt.tableInfos[tableID] = dti
 	}

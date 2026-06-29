@@ -865,8 +865,13 @@ github.com/pingcap/fn v1.0.0/go.mod h1:u9WZ1ZiOD1RpNhcI42RucFh/lBuzTu6rw88a+oF2Z
 github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 h1:surzm05a8C9dN8dIUmo4Be2+pMRb6f55i+UIYrluu2E=
 github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989/go.mod h1:O17XtbryoCJhkKGbT62+L2OlrniwqiGLSqrmdHCMzZw=
 github.com/pingcap/kvproto v0.0.0-20191211054548-3c6b38ea5107/go.mod h1:WWLmULLO7l8IOcQG+t+ItJ3fEcrL5FxF0Wu+HrMy26w=
+<<<<<<< HEAD
 github.com/pingcap/kvproto v0.0.0-20260608025309-50b863799195 h1:JuajF3N4+xYrvBFtQsGtNeYylzrll1Mw5+QyDSR7V1M=
 github.com/pingcap/kvproto v0.0.0-20260608025309-50b863799195/go.mod h1:rXxWk2UnwfUhLXha1jxRWPADw9eMZGWEWCg92Tgmb/8=
+=======
+github.com/pingcap/kvproto v0.0.0-20260609033303-412e01458771 h1:80mqCTW7BsZ6RIhLWQ1Z5dB0yjZ4WSVWQle33LKTOgI=
+github.com/pingcap/kvproto v0.0.0-20260609033303-412e01458771/go.mod h1:z6+aAHB7dBkA+LyinEX+48/ImRJ3jag0Hg0c7wkhEvE=
+>>>>>>> 979ae7086f (syncer, sqlmodel(dm): fix generated index schema tracking (#12731))
 github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9/go.mod h1:4rbK1p9ILyIfb6hU7OG2CiWSqMXnp3JMbiaVJ6mvoY8=
 github.com/pingcap/log v0.0.0-20210625125904-98ed8e2eb1c7/go.mod h1:8AanEdAHATuRurdGxZXBz0At+9avep+ub7U1AGYLIMM=
 github.com/pingcap/log v1.1.0/go.mod h1:DWQW5jICDR7UJh4HtxXSM20Churx4CQL0fwL/SoOSA4=
@@ -876,6 +881,7 @@ github.com/pingcap/sarama v1.41.2-pingcap-20260508 h1:3ZFtYLUGMMZeA6U0iz3EyFnNGP
 github.com/pingcap/sarama v1.41.2-pingcap-20260508/go.mod h1:PIL6ZKKKhm19IbQpmpJcFnybAi1yXtgLAitDAeBdNCw=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
+<<<<<<< HEAD
 github.com/pingcap/tidb v1.1.0-beta.0.20260611081847-e7463a21c08f h1:7elbZEXrLr23AYzie0Pzp8djmTGS4cUlkAg/Of2MIF8=
 github.com/pingcap/tidb v1.1.0-beta.0.20260611081847-e7463a21c08f/go.mod h1:MIyIZIYkaG4NCwkrL3fb8RmW3R3GpCyaBORc252RDk0=
 github.com/pingcap/tidb-dashboard v0.0.0-20260603054940-9e92195886c3 h1:q7K62HENlnMTFi6ZfP1Xs3YD697J6agNGXYh42mMGlI=
@@ -884,6 +890,16 @@ github.com/pingcap/tidb/pkg/parser v0.0.0-20260611093756-46989375079c h1:fZ3Hv66
 github.com/pingcap/tidb/pkg/parser v0.0.0-20260611093756-46989375079c/go.mod h1:49aXiDQhHi2UF15fq7zqtJZlKm+y+oIu9BVgWh9++Lk=
 github.com/pingcap/tipb v0.0.0-20260605083900-f9f651ef5fbc h1:wxolKysltFSu8gxWJBdUdWuTBoSuY3MjNIIZI5S9JLY=
 github.com/pingcap/tipb v0.0.0-20260605083900-f9f651ef5fbc/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
+=======
+github.com/pingcap/tidb v1.1.0-beta.0.20260625145450-3e4ee9fc99e7 h1:xhPN8ZqzLT1A0ke34Pi1uFsIN7vABs4mVAXous84/W8=
+github.com/pingcap/tidb v1.1.0-beta.0.20260625145450-3e4ee9fc99e7/go.mod h1:BcXJZ9gPRlZrFJJ9OGNap9rMuXvZpHsEGxz8NS7pYWY=
+github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
+github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20260616034257-3adc8ec71ef3 h1:Bk3QuNvNLAt9EtTWGw6JfsUSvn1mC9rALpnRU/vDtz0=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20260616034257-3adc8ec71ef3/go.mod h1:zDLDsfNBU5+L6T4J9/OgWAHc/WZvMUjbpgHqQ/t3yKo=
+github.com/pingcap/tipb v0.0.0-20260617071407-7c071244534b h1:10OHx2/2noFfPU1K3c3QXZshsw3XvKssk/mjbLdw8DI=
+github.com/pingcap/tipb v0.0.0-20260617071407-7c071244534b/go.mod h1:RM8iRcMalzOthG2XJxnNBniM4xFGb/lDwHUwqkaVzt4=
+>>>>>>> 979ae7086f (syncer, sqlmodel(dm): fix generated index schema tracking (#12731))
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c/go.mod h1:7rwL4CYBLnjLxUqIJNnCWiEdr3bn6IUYi15bNlnbCCU=
 github.com/pkg/diff v0.0.0-20210226163009-20ebb0f2a09e/go.mod h1:pJLUxLENpZxwdsKMEsNbx1VGcRFpLqf3715MtcvvzbA=
@@ -966,8 +982,8 @@ github.com/shabbyrobe/gocovmerge v0.0.0-20190829150210-3e036491d500/go.mod h1:+n
 github.com/shirou/gopsutil/v3 v3.21.12/go.mod h1:BToYZVTlSVlfazpDDYFnsVZLaoRG+g8ufT6fPQLdJzA=
 github.com/shirou/gopsutil/v3 v3.24.5 h1:i0t8kL+kQTvpAYToeuiVk3TgDeKOFioZO3Ztz/iZ9pI=
 github.com/shirou/gopsutil/v3 v3.24.5/go.mod h1:bsoOS1aStSs9ErQ1WWfxllSeS1K5D+U30r2NfcubMVk=
-github.com/shoenig/go-m1cpu v0.1.7 h1:C76Yd0ObKR82W4vhfjZiCp0HxcSZ8Nqd84v+HZ0qyI0=
-github.com/shoenig/go-m1cpu v0.1.7/go.mod h1:KkDOw6m3ZJQAPHbrzkZki4hnx+pDRR1Lo+ldA56wD5w=
+github.com/shoenig/go-m1cpu v0.2.1 h1:yqRB4fvOge2+FyRXFkXqsyMoqPazv14Yyy+iyccT2E4=
+github.com/shoenig/go-m1cpu v0.2.1/go.mod h1:KkDOw6m3ZJQAPHbrzkZki4hnx+pDRR1Lo+ldA56wD5w=
 github.com/shoenig/test v1.7.0 h1:eWcHtTXa6QLnBvm0jgEabMRN/uJ4DMV3M8xUGgRkZmk=
 github.com/shoenig/test v1.7.0/go.mod h1:UxJ6u/x2v/TNs/LoLxBNJRV9DiwBBKYxXSyczsBHFoI=
 github.com/shopspring/decimal v1.3.0 h1:KK3gWIXskZ2O1U/JNTisNcvH+jveJxZYrjbTsrbbnh8=
@@ -1066,6 +1082,7 @@ github.com/tidwall/rtred v0.1.2 h1:exmoQtOLvDoO8ud++6LwVsAMTu0KPzLTUrMln8u1yu8=
 github.com/tidwall/rtred v0.1.2/go.mod h1:hd69WNXQ5RP9vHd7dqekAz+RIdtfBogmglkZSRxCHFQ=
 github.com/tidwall/tinyqueue v0.1.1 h1:SpNEvEggbpyN5DIReaJ2/1ndroY8iyEGxPYxoSaymYE=
 github.com/tidwall/tinyqueue v0.1.1/go.mod h1:O/QNHwrnjqr6IHItYrzoHAKYhBkLI67Q096fQP5zMYw=
+<<<<<<< HEAD
 github.com/tikv/client-go/v2 v2.0.8-0.20260610031342-e999c1f9c7c3 h1:NRSdcA2eUgZpxMkjl38+QCKfTPObyHd01mJfC0BtGdw=
 github.com/tikv/client-go/v2 v2.0.8-0.20260610031342-e999c1f9c7c3/go.mod h1:YPzsPK+ddC0f0f2WHNfLJb5qM/glF1XSR/HUQvuS4yA=
 github.com/tikv/pd v1.1.0-beta.0.20260611085009-4ae8cc5777be h1:3nI9JZ7q0lLpK4mgiVq/txhckAa7lof/qjVPxei/EeA=
@@ -1074,6 +1091,19 @@ github.com/tikv/pd/client v0.0.0-20260611085009-4ae8cc5777be h1:y/UnqHxgeWiMAtDE
 github.com/tikv/pd/client v0.0.0-20260611085009-4ae8cc5777be/go.mod h1:UjRkYhxP4DGjcdZwVYKcpus2dwapY9S0KoL15gf9k8c=
 github.com/tinylib/msgp v1.1.6 h1:i+SbKraHhnrf9M5MYmvQhFnbLhAXSDWF8WWsuyRdocw=
 github.com/tinylib/msgp v1.1.6/go.mod h1:75BAfg2hauQhs3qedfdDZmWAPcFMAvJE5b9rGOMufyw=
+=======
+github.com/tikv/client-go/v2 v2.0.8-0.20260617030124-661db4f5f4e8 h1:H1rPF/i0xDQ+vEILeV3fD5QmuvvpaSw0fqK8svd8b/E=
+github.com/tikv/client-go/v2 v2.0.8-0.20260617030124-661db4f5f4e8/go.mod h1:ifrCFaHJeZDcz6kded2eVwn+t3Auvqve8hI9vLIoVBg=
+github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b h1:t2XoZp4UHrkPpYPsxbRTRVExJnriWlh+ZsDIfpYyd98=
+github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b/go.mod h1:7HJMdb0O5umNpZIFt8e/wKAcEmH99n2HsYgXX+vZj3k=
+github.com/tikv/pd/client v0.0.0-20260601035915-3ef6a3b10c84 h1:8gvjP484Hv4CNf4jKzdmQOm48hGP5wnEd86nrbVvn5o=
+github.com/tikv/pd/client v0.0.0-20260601035915-3ef6a3b10c84/go.mod h1:GP9u8OBXqYQ6e43htjprZILrzn3tuogzkEEmmiNlzc4=
+github.com/tinylib/msgp v1.5.0 h1:GWnqAE54wmnlFazjq2+vgr736Akg58iiHImh+kPY2pc=
+github.com/tinylib/msgp v1.5.0/go.mod h1:cvjFkb4RiC8qSBOPMGPSzSAx47nAsfhLVTCZZNuHv5o=
+github.com/tjfoc/gmsm v1.3.2/go.mod h1:HaUcFuY0auTiaHB9MHFGCPx5IaLhTUd2atbCFBQXn9w=
+github.com/tjfoc/gmsm v1.4.1 h1:aMe1GlZb+0bLjn+cKTPEvvn9oUEBlJitaZiiBwsbgho=
+github.com/tjfoc/gmsm v1.4.1/go.mod h1:j4INPkHWMrhJb38G+J6W4Tw0AbuN8Thu3PbdVYhVcTE=
+>>>>>>> 979ae7086f (syncer, sqlmodel(dm): fix generated index schema tracking (#12731))
 github.com/tklauser/go-sysconf v0.3.9/go.mod h1:11DU/5sG7UexIrp/O6g35hrWzu0JxlwQ3LSFUzyeuhs=
 github.com/tklauser/go-sysconf v0.3.15 h1:VE89k0criAymJ/Os65CSn1IXaol+1wrsFHEB8Ol49K4=
 github.com/tklauser/go-sysconf v0.3.15/go.mod h1:Dmjwr6tYFIseJw7a3dRLJfsHAMXZ3nEnL/aZY+0IuI4=
