@@ -16,6 +16,7 @@ package sqlmodel
 import (
 	"testing"
 
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/require"
 )
@@ -39,4 +40,42 @@ func TestValidatorGenColData(t *testing.T) {
 	require.Equal(t, "\x01\x02\x03", res)
 	res = ColValAsStr(decimal.NewFromInt(222123123))
 	require.Equal(t, "222123123", res)
+}
+
+func expressionIndexColumnName(t *testing.T, ti *timodel.TableInfo, indexName string) string {
+	t.Helper()
+
+	for _, idx := range ti.Indices {
+		if idx.Name.L == indexName {
+			require.Len(t, idx.Columns, 1)
+			return idx.Columns[0].Name.L
+		}
+	}
+	require.FailNowf(t, "index not found", "index %q not found", indexName)
+	return ""
+}
+
+func reorderColumnsByName(t *testing.T, ti *timodel.TableInfo, names ...string) {
+	t.Helper()
+	require.Len(t, names, len(ti.Columns))
+
+	colsByName := make(map[string]*timodel.ColumnInfo, len(ti.Columns))
+	for _, col := range ti.Columns {
+		colsByName[col.Name.L] = col
+	}
+
+	for i, name := range names {
+		col := colsByName[name]
+		require.NotNilf(t, col, "column %q not found", name)
+		ti.Columns[i] = col
+		col.Offset = i
+	}
+
+	for _, idx := range ti.Indices {
+		for _, idxCol := range idx.Columns {
+			col := colsByName[idxCol.Name.L]
+			require.NotNilf(t, col, "index column %q not found", idxCol.Name.L)
+			idxCol.Offset = col.Offset
+		}
+	}
 }
