@@ -41,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -721,7 +722,7 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 			AddRow("test", "create table t(a int, b int, c varchar(20000), primary key(a, b), key(c(20000)))/*!90000 SHARD_ROW_ID_BITS=6 */"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
-	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
 }
 
 func TestForeignKeyRelationBuildsRootParents(t *testing.T) {
@@ -1584,7 +1585,90 @@ func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
 			AddRow("test", "create table t(a bigint(20), b varbinary(767), c varbinary(767), d varbinary(767), e varbinary(767), primary key(a), key(b, c, d, e, a))"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
-	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
+}
+
+func TestWhereHandleCacheBySourceTable(t *testing.T) {
+	p := parser.New()
+	se := timock.NewContext()
+	ctx := context.Background()
+
+	createSQL := "create table t(id int primary key, a varchar(32), b varchar(32), unique key uk_a ((lower(a))))"
+	node, err := p.ParseOneStmt(createSQL, "utf8mb4", "utf8mb4_bin")
+	require.NoError(t, err)
+	sourceTI1, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	require.NoError(t, err)
+	node, err = p.ParseOneStmt(createSQL, "utf8mb4", "utf8mb4_bin")
+	require.NoError(t, err)
+	sourceTI2, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 2)
+	require.NoError(t, err)
+	hidden1 := testutil.HiddenColumnName(t, sourceTI1)
+	hidden2 := testutil.HiddenColumnName(t, sourceTI2)
+	testutil.ReorderColumnsByName(t, sourceTI1, "id", "a", hidden1, "b")
+	testutil.ReorderColumnsByName(t, sourceTI2, "id", "a", "b", hidden2)
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	targetTable := &filter.Table{Schema: "db", Name: "target"}
+	tableID := utils.GenTableID(targetTable)
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("target", createSQL))
+
+	dti, err := tracker.GetDownStreamTableInfoWithoutForeignKey(tcontext.Background(), tableID, sourceTI1)
+	require.NoError(t, err)
+
+	sourceTable1 := &filter.Table{Schema: "db", Name: "source1"}
+	sourceTable2 := &filter.Table{Schema: "db", Name: "source2"}
+	handle1 := dti.WhereHandle(sourceTable1, sourceTI1)
+	handle2 := dti.WhereHandle(sourceTable2, sourceTI2)
+	require.NotSame(t, handle1, handle2)
+	require.Same(t, handle1, dti.WhereHandle(sourceTable1, sourceTI1))
+	require.Same(t, handle2, dti.WhereHandle(sourceTable2, sourceTI2))
+
+	target := &cdcmodel.TableName{Schema: "db", Table: "target"}
+	change1 := sqlmodel.NewRowChange(
+		&cdcmodel.TableName{Schema: "db", Table: "source1"},
+		target,
+		[]any{1, "Alice", "p1"},
+		[]any{1, "Alice", "p1-updated"},
+		sourceTI1,
+		dti.TableInfo,
+		nil,
+	)
+	change1.SetWhereHandle(handle1)
+	change2 := sqlmodel.NewRowChange(
+		&cdcmodel.TableName{Schema: "db", Table: "source2"},
+		target,
+		[]any{2, "Bob", "p2"},
+		[]any{2, "Bob", "p2-updated"},
+		sourceTI2,
+		dti.TableInfo,
+		nil,
+	)
+	change2.SetWhereHandle(handle2)
+
+	sql, args := sqlmodel.GenUpdateSQL(change1, change2)
+	require.Equal(t, "UPDATE `db`.`target` SET "+
+		"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, "+
+		"`a`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, "+
+		"`b`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END "+
+		"WHERE (`id` = ?) OR (`id` = ?)", sql)
+	require.Equal(t, []any{
+		1, 1, 2, 2,
+		1, "Alice", 2, "Bob",
+		1, "p1-updated", 2, "p2-updated",
+		1, 2,
+	}, args)
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestReTrackDownStreamIndex(t *testing.T) {

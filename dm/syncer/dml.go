@@ -142,6 +142,7 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		originalDataSeq = extendData
@@ -155,8 +156,12 @@ RowLoop:
 			return nil, err
 		}
 
+		filterRow, err := rowForExpressionFilter(s.sessCtx, originalValue, ti.Columns, filterExprs)
+		if err != nil {
+			return nil, err
+		}
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(s.sessCtx, originalValue, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
 			if err != nil {
 				return nil, err
 			}
@@ -175,7 +180,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
@@ -203,6 +208,7 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		originalData = extendData
@@ -227,14 +233,22 @@ RowLoop:
 			return nil, err
 		}
 
+		oldFilterRow, err := rowForExpressionFilter(s.sessCtx, oriOldValues, ti.Columns, oldValueFilters)
+		if err != nil {
+			return nil, err
+		}
+		newFilterRow, err := rowForExpressionFilter(s.sessCtx, oriChangedValues, ti.Columns, newValueFilters)
+		if err != nil {
+			return nil, err
+		}
 		for j := range oldValueFilters {
 			// AND logic
 			oldExpr, newExpr := oldValueFilters[j], newValueFilters[j]
-			skip1, err := SkipDMLByExpression(s.sessCtx, oriOldValues, oldExpr, ti.Columns)
+			skip1, err := SkipDMLByExpression(s.sessCtx, oldFilterRow, oldExpr)
 			if err != nil {
 				return nil, err
 			}
-			skip2, err := SkipDMLByExpression(s.sessCtx, oriChangedValues, newExpr, ti.Columns)
+			skip2, err := SkipDMLByExpression(s.sessCtx, newFilterRow, newExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -254,7 +268,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
@@ -277,6 +291,7 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		dataSeq = extendData
@@ -290,8 +305,12 @@ RowLoop:
 			return nil, err
 		}
 
+		filterRow, err := rowForExpressionFilter(s.sessCtx, value, ti.Columns, filterExprs)
+		if err != nil {
+			return nil, err
+		}
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(s.sessCtx, value, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
 			if err != nil {
 				return nil, err
 			}
@@ -310,7 +329,7 @@ RowLoop:
 			downstreamTableInfo.TableInfo,
 			s.sessCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
 		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)

@@ -3872,16 +3872,6 @@ func (s *Syncer) precheckForeignKeyReferencedTables(
 	return nil
 }
 
-func basicDownStreamTableInfo(dti *schema.DownstreamTableInfo) *schema.DownstreamTableInfo {
-	if dti == nil {
-		return nil
-	}
-	return &schema.DownstreamTableInfo{
-		TableInfo:   dti.TableInfo,
-		WhereHandle: dti.WhereHandle,
-	}
-}
-
 func (s *Syncer) prepareDownStreamTableInfo(
 	tctx *tcontext.Context,
 	sourceTable *filter.Table,
@@ -3898,7 +3888,7 @@ func (s *Syncer) prepareDownStreamTableInfo(
 	}
 
 	if !s.needForeignKeyCausality() {
-		return basicDownStreamTableInfo(dti), nil
+		return dti.WithoutForeignKeyRelations(), nil
 	}
 	if err := s.precheckForeignKeyRouteTopology(tctx.Ctx); err != nil {
 		return nil, err
