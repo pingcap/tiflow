@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	_ "github.com/pingcap/tidb/pkg/planner/core" // to setup expression.EvalSimpleAst for in core_init
 	"github.com/pingcap/tidb/pkg/types"
@@ -92,11 +93,11 @@ func getTableInfoBySQL(ctx *metabuild.Context, createTableSQL string, parser2 *p
 		// put primary key in indices
 		if table.PKIsHandle {
 			pkIndex := &model.IndexInfo{
-				Name:    ast.NewCIStr("PRIMARY"),
+				Name:    pmodel.NewCIStr("PRIMARY"),
 				Primary: true,
 				State:   model.StatePublic,
 				Unique:  true,
-				Tp:      ast.IndexTypeBtree,
+				Tp:      pmodel.IndexTypeBtree,
 				Columns: []*model.IndexColumn{
 					{
 						Name:   table.GetPkName(),
@@ -208,11 +209,11 @@ func GetTableInfoBySQL(createTableSQL string, parser2 *parser.Parser) (table *mo
 		// put primary key in indices
 		if table.PKIsHandle {
 			pkIndex := &model.IndexInfo{
-				Name:    ast.NewCIStr("PRIMARY"),
+				Name:    pmodel.NewCIStr("PRIMARY"),
 				Primary: true,
 				State:   model.StatePublic,
 				Unique:  true,
-				Tp:      ast.IndexTypeBtree,
+				Tp:      pmodel.IndexTypeBtree,
 				Columns: []*model.IndexColumn{
 					{
 						Name:   table.GetPkName(),

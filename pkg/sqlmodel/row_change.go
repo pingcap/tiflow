@@ -258,14 +258,11 @@ func (r *RowChange) dmlRowMapping() (rowValueMapper, []*timodel.ColumnInfo) {
 func (r *RowChange) whereColumnsAndValues() ([]string, []interface{}) {
 	r.lazyInitWhereHandle()
 
-	columns := r.whereHandle.rowMapper.visibleColumns
-	values := r.preValues
+	columns, values := r.sourceTableInfo.Columns, r.preValues
+
 	uniqueIndex := r.whereHandle.getWhereIdxByData(r.preValues)
 	if uniqueIndex != nil {
-		columns, values = r.whereHandle.rowMapper.columnsAndValuesByIndex(
-			uniqueIndex,
-			values,
-		)
+		columns, values = getColsAndValuesOfIdx(r.sourceTableInfo.Columns, uniqueIndex, values)
 	}
 
 	columnNames := make([]string, 0, len(columns))

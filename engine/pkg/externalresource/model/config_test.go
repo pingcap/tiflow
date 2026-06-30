@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/objstore"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,14 +47,14 @@ func TestToBrBackendOptions(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		config         *Config
-		expectedOpts   *objstore.BackendOptions
+		expectedOpts   *brStorage.BackendOptions
 		expectedBucket string
 		expectedPrefix string
 		expectedType   ResourceType
 	}{
 		{
 			config:         &Config{},
-			expectedOpts:   &objstore.BackendOptions{},
+			expectedOpts:   &brStorage.BackendOptions{},
 			expectedBucket: "",
 			expectedPrefix: "",
 			expectedType:   ResourceTypeNone,
@@ -69,7 +69,7 @@ func TestToBrBackendOptions(t *testing.T) {
 					Prefix: "pe1",
 				},
 			},
-			expectedOpts:   &objstore.BackendOptions{},
+			expectedOpts:   &brStorage.BackendOptions{},
 			expectedBucket: "s3-bucket",
 			expectedPrefix: "pe",
 			expectedType:   ResourceTypeS3,
@@ -81,7 +81,7 @@ func TestToBrBackendOptions(t *testing.T) {
 					Prefix: "pe1",
 				},
 			},
-			expectedOpts:   &objstore.BackendOptions{},
+			expectedOpts:   &brStorage.BackendOptions{},
 			expectedBucket: "gcs-bucket",
 			expectedPrefix: "pe1",
 			expectedType:   ResourceTypeGCS,

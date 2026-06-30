@@ -16,8 +16,7 @@ package model
 import (
 	"path/filepath"
 
-	"github.com/pingcap/tidb/pkg/objstore"
-	"github.com/pingcap/tidb/pkg/objstore/s3like"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -27,7 +26,7 @@ const defaultLocalStorageDirPrefix = "/tmp/dfe-storage"
 var DefaultConfig = Config{
 	Local: LocalFileConfig{BaseDir: ""},
 	S3: S3Config{
-		S3BackendOptions: s3like.S3BackendOptions{
+		S3BackendOptions: brStorage.S3BackendOptions{
 			ForcePathStyle: true,
 		},
 		Bucket: "",
@@ -75,22 +74,22 @@ func (c Config) Validate() error {
 	return nil
 }
 
-// ToBrBackendOptions return BackendOptions for objstore.
+// ToBrBackendOptions return BackendOptions for brStorage
 // Make sure the Config is a valid config
-func (c Config) ToBrBackendOptions() (opts *objstore.BackendOptions, bucket, prefix string, tp ResourceType) {
+func (c Config) ToBrBackendOptions() (opts *brStorage.BackendOptions, bucket, prefix string, tp ResourceType) {
 	if c.S3Enabled() {
-		return &objstore.BackendOptions{
+		return &brStorage.BackendOptions{
 			S3: c.S3.S3BackendOptions,
 		}, c.S3.Bucket, c.S3.Prefix, ResourceTypeS3
 	}
 
 	if c.GCSEnabled() {
-		return &objstore.BackendOptions{
+		return &brStorage.BackendOptions{
 			GCS: c.GCS.GCSBackendOptions,
 		}, c.GCS.Bucket, c.GCS.Prefix, ResourceTypeGCS
 	}
 
-	return &objstore.BackendOptions{}, "", "", ResourceTypeNone
+	return &brStorage.BackendOptions{}, "", "", ResourceTypeNone
 }
 
 // LocalFileConfig defines configurations for a local file based resource
@@ -108,14 +107,14 @@ func (c *LocalFileConfig) Adjust(executorID ExecutorID) {
 
 // S3Config defines configurations for s3 based resources
 type S3Config struct {
-	s3like.S3BackendOptions
+	brStorage.S3BackendOptions
 	Bucket string `json:"bucket" toml:"bucket"`
 	Prefix string `json:"prefix" toml:"prefix"`
 }
 
 // GCSConfig defines configurations for gcs based resources
 type GCSConfig struct {
-	objstore.GCSBackendOptions
+	brStorage.GCSBackendOptions
 	Bucket string `json:"bucket" toml:"bucket"`
 	Prefix string `json:"prefix" toml:"prefix"`
 }

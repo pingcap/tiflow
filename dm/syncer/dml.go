@@ -178,7 +178,7 @@ RowLoop:
 			originalValue,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.causalityCtx,
+			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
@@ -266,7 +266,7 @@ RowLoop:
 			oriChangedValues,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.causalityCtx,
+			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
@@ -327,7 +327,7 @@ RowLoop:
 			nil,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.causalityCtx,
+			s.sessCtx,
 		)
 		rowChange.SetWhereHandle(whereHandle)
 		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)

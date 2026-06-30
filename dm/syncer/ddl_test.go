@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	fieldtypes "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table"
@@ -860,7 +861,7 @@ func TestNormalizeModifyColumnEventPrefersDropUniqueOverDefault(t *testing.T) {
 
 	oldCol := table.ToColumn(&model.ColumnInfo{
 		ID:                 1,
-		Name:               ast.NewCIStr("c_int"),
+		Name:               pmodel.NewCIStr("c_int"),
 		Offset:             0,
 		DefaultValue:       int64(1),
 		OriginDefaultValue: int64(1),
@@ -896,14 +897,14 @@ func TestClassifyUnsupportedModifyColumnEventAsModifyCharset(t *testing.T) {
 
 	tableInfo := &model.TableInfo{
 		ID:      1,
-		Name:    ast.NewCIStr("t"),
+		Name:    pmodel.NewCIStr("t"),
 		Charset: "utf8mb4",
 		Collate: "utf8mb4_bin",
 		State:   model.StatePublic,
 		Columns: []*model.ColumnInfo{
 			{
 				ID:        1,
-				Name:      ast.NewCIStr("c_char"),
+				Name:      pmodel.NewCIStr("c_char"),
 				Offset:    0,
 				State:     model.StatePublic,
 				FieldType: *fieldtypes.NewFieldType(tmysql.TypeString),
@@ -914,7 +915,7 @@ func TestClassifyUnsupportedModifyColumnEventAsModifyCharset(t *testing.T) {
 	tableInfo.Columns[0].SetCollate("utf8mb4_bin")
 
 	dbInfo := &model.DBInfo{
-		Name:    ast.NewCIStr("test"),
+		Name:    pmodel.NewCIStr("test"),
 		Charset: "utf8mb4",
 		Collate: "utf8mb4_bin",
 	}

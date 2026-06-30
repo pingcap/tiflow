@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // for import parser driver
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
@@ -127,8 +128,8 @@ func (v *tableRenameVisitor) Enter(in ast.Node) (ast.Node, bool) {
 			v.hasErr = true
 			return in, true
 		}
-		t.Schema = ast.NewCIStr(v.targetNames[v.i].Schema)
-		t.Name = ast.NewCIStr(v.targetNames[v.i].Name)
+		t.Schema = pmodel.NewCIStr(v.targetNames[v.i].Schema)
+		t.Name = pmodel.NewCIStr(v.targetNames[v.i].Name)
 		v.i++
 		return in, true
 	}
@@ -154,11 +155,11 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 
 	switch v := stmt.(type) {
 	case *ast.AlterDatabaseStmt:
-		v.Name = ast.NewCIStr(targetTables[0].Schema)
+		v.Name = pmodel.NewCIStr(targetTables[0].Schema)
 	case *ast.CreateDatabaseStmt:
-		v.Name = ast.NewCIStr(targetTables[0].Schema)
+		v.Name = pmodel.NewCIStr(targetTables[0].Schema)
 	case *ast.DropDatabaseStmt:
-		v.Name = ast.NewCIStr(targetTables[0].Schema)
+		v.Name = pmodel.NewCIStr(targetTables[0].Schema)
 	default:
 		visitor := &tableRenameVisitor{
 			targetNames: targetTables,
@@ -187,7 +188,7 @@ func RenameDDLTable(stmt ast.StmtNode, targetTables []*filter.Table) (string, er
 // if fail to restore, it would not restore the value of `stmt` (it changes it's values if `stmt` is one of  DropTableStmt, RenameTableStmt, AlterTableStmt).
 func SplitDDL(stmt ast.StmtNode, schema string) (sqls []string, err error) {
 	var (
-		schemaName = ast.NewCIStr(schema) // fill schema name
+		schemaName = pmodel.NewCIStr(schema) // fill schema name
 		bf         = new(bytes.Buffer)
 		ctx        = &format.RestoreCtx{
 			Flags: format.DefaultRestoreFlags | format.RestoreTiDBSpecialComment | format.RestoreStringWithoutDefaultCharset,

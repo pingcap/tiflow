@@ -16,7 +16,7 @@ package chunk
 import (
 	"testing"
 
-	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/stretchr/testify/require"
 )
 

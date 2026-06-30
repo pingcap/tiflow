@@ -30,7 +30,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/objstore/storeapi"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	ddlfactory "github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -119,7 +119,7 @@ type consumer struct {
 	ddlSink         ddlsink.Sink
 	replicationCfg  *config.ReplicaConfig
 	codecCfg        *common.Config
-	externalStorage storeapi.Storage
+	externalStorage storage.ExternalStorage
 	fileExtension   string
 	// tableDMLIdxMap maintains a map of <dmlPathKey, max file index>
 	tableDMLIdxMap map[cloudstorage.DmlPathKey]uint64
@@ -252,7 +252,7 @@ func (c *consumer) getNewFiles(
 	ctx context.Context,
 ) (map[cloudstorage.DmlPathKey]fileIndexRange, error) {
 	tableDMLMap := make(map[cloudstorage.DmlPathKey]fileIndexRange)
-	opt := &storeapi.WalkOption{SubDir: ""}
+	opt := &storage.WalkOption{SubDir: ""}
 
 	origDMLIdxMap := make(map[cloudstorage.DmlPathKey]uint64, len(c.tableDMLIdxMap))
 	for k, v := range c.tableDMLIdxMap {
@@ -314,8 +314,11 @@ func (c *consumer) emitDMLEvents(
 		// Always enable tidb extension for canal-json protocol
 		// because we need to get the commit ts from the extension field.
 		c.codecCfg.EnableTiDBExtension = true
-		decoder = canal.NewCanalJSONTxnEventDecoder(c.codecCfg)
-		err = decoder.AddKeyValue(nil, content)
+		decoder, err = canal.NewBatchDecoder(ctx, c.codecCfg, nil)
+		if err != nil {
+			return errors.Trace(err)
+		}
+		err := decoder.AddKeyValue(nil, content)
 		if err != nil {
 			return errors.Trace(err)
 		}

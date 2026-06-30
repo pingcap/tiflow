@@ -20,6 +20,21 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 )
 
+func getColsAndValuesOfIdx(
+	columns []*timodel.ColumnInfo,
+	indexColumns *timodel.IndexInfo,
+	data []interface{},
+) ([]*timodel.ColumnInfo, []interface{}) {
+	cols := make([]*timodel.ColumnInfo, 0, len(indexColumns.Columns))
+	values := make([]interface{}, 0, len(indexColumns.Columns))
+	for _, col := range indexColumns.Columns {
+		cols = append(cols, columns[col.Offset])
+		values = append(values, data[col.Offset])
+	}
+
+	return cols, values
+}
+
 // valuesHolder gens values holder like (?,?,?).
 func valuesHolder(n int) string {
 	var builder strings.Builder
