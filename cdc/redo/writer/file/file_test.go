@@ -21,8 +21,9 @@ import (
 	"testing"
 
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
+	mockobjstore "github.com/pingcap/tidb/pkg/objstore/mockobjstore"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -221,7 +222,7 @@ func TestNewFileWriter(t *testing.T) {
 	backend := &backuppb.StorageBackend{
 		Backend: &backuppb.StorageBackend_Local{Local: &backuppb.Local{Path: storageDir}},
 	}
-	localStorage, err := storage.New(context.Background(), backend, &storage.ExternalStorageOptions{
+	localStorage, err := objstore.New(context.Background(), backend, &storeapi.Options{
 		SendCredentials: false,
 		HTTPClient:      nil,
 	})
@@ -232,7 +233,7 @@ func TestNewFileWriter(t *testing.T) {
 	require.False(t, w.IsRunning())
 
 	controller := gomock.NewController(t)
-	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	mockStorage := mockobjstore.NewMockStorage(controller)
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_const-uuid.log",
 		gomock.Any()).Return(nil).Times(1)
 
@@ -280,7 +281,7 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 	require.NotNil(t, err)
 
 	controller := gomock.NewController(t)
-	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	mockStorage := mockobjstore.NewMockStorage(controller)
 
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_row_0_uuid-1.log",
 		gomock.Any()).Return(nil).Times(1)
@@ -346,7 +347,7 @@ func TestRotateFileWithoutFileAllocator(t *testing.T) {
 	require.NotNil(t, err)
 
 	controller := gomock.NewController(t)
-	mockStorage := mockstorage.NewMockExternalStorage(controller)
+	mockStorage := mockobjstore.NewMockStorage(controller)
 
 	mockStorage.EXPECT().WriteFile(gomock.Any(), "cp_abcd_test_ddl_0_uuid-2.log",
 		gomock.Any()).Return(nil).Times(1)

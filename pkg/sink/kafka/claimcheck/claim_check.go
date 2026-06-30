@@ -21,7 +21,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
@@ -33,7 +33,7 @@ import (
 
 // ClaimCheck manage send message to the claim-check external storage.
 type ClaimCheck struct {
-	storage  storage.ExternalStorage
+	storage  storeapi.Storage
 	rawValue bool
 
 	changefeedID model.ChangeFeedID

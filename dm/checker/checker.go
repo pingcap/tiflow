@@ -25,11 +25,12 @@ import (
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/lightning/pkg/checkpoints"
 	"github.com/pingcap/tidb/lightning/pkg/importer"
 	"github.com/pingcap/tidb/lightning/pkg/importer/opts"
 	"github.com/pingcap/tidb/lightning/pkg/precheck"
-	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
+	"github.com/pingcap/tidb/pkg/lightning/importdef"
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
@@ -304,6 +305,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		c.checkList = append(c.checkList, checker.NewTargetPrivilegeChecker(
 			c.instances[0].targetDB.DB,
 			c.instances[0].targetDBInfo,
+			c.instances[0].targetDB.Version,
 		))
 	}
 	// sourceID -> DB
@@ -334,6 +336,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
 					instance.sourceDB.DB,
 					instance.sourceDBinfo,
+					instance.sourceDB.Version,
 					info.sourceID2SourceTables[sourceID],
 					exportCfg.Consistency,
 					c.dumpWholeInstance,
@@ -364,7 +367,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, instance.sourceDB.Version))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, info.sourceID2InterestedDB[i], c.onlineDDL, instance.baList))
@@ -382,6 +385,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.instances[0].targetDB,
 			info.sourceID2TableMap,
 			info.targetTable2ExtendedColumns,
+			dumpThreads,
+		))
+	}
+	if _, ok := c.checkingItems[config.PrimaryKeyChecking]; ok {
+		c.checkList = append(c.checkList, checker.NewPrimaryKeyChecker(
+			upstreamDBs,
+			info.sourceID2TableMap,
 			dumpThreads,
 		))
 	}
@@ -438,9 +448,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		}
 		// Adjust will raise error when this field is empty, so we set any non empty value here.
 		lCfg.Mydumper.SourceDir = "noop://"
-		if lightningCheckGroupOnlyTableEmpty(c.checkingItems) {
-			lCfg.TiDB.PdAddr = "noop:2379"
-		}
 		err = lCfg.Adjust(ctx)
 		if err != nil {
 			return err
@@ -502,6 +509,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			newLightningPrecheckAdaptor(targetInfoGetter, info),
 			cpdb,
 			pdClient,
+			targetDB,
 		)
 
 		if _, ok := c.checkingItems[config.LightningFreeSpaceChecking]; ok {
@@ -547,16 +555,6 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 
 	c.tctx.Logger.Info(c.displayCheckingItems())
 	return nil
-}
-
-func lightningCheckGroupOnlyTableEmpty(checkingItems map[string]string) bool {
-	for _, item := range config.LightningPrechecks {
-		if _, ok := checkingItems[item]; ok && item != config.LightningTableEmptyChecking {
-			return false
-		}
-	}
-	_, ok := checkingItems[config.LightningTableEmptyChecking]
-	return ok
 }
 
 func (c *Checker) fetchSourceTargetDB(
@@ -881,7 +879,7 @@ func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 // lightningPrecheckAdaptor implements the importer.PreRestoreInfoGetter interface.
 type lightningPrecheckAdaptor struct {
 	importer.TargetInfoGetter
-	allTables        map[string]*checkpoints.TidbDBInfo
+	allTables        map[string]*importdef.DBInfo
 	sourceDataResult importer.EstimateSourceDataSizeResult
 }
 
@@ -891,18 +889,18 @@ func newLightningPrecheckAdaptor(
 ) *lightningPrecheckAdaptor {
 	var (
 		sourceDataResult importer.EstimateSourceDataSizeResult
-		allTables        = make(map[string]*checkpoints.TidbDBInfo)
+		allTables        = make(map[string]*importdef.DBInfo)
 	)
 	if info != nil {
 		sourceDataResult.SizeWithIndex = info.totalDataSize.Load()
 	}
 	for db, tables := range info.db2TargetTables {
-		allTables[db] = &checkpoints.TidbDBInfo{
+		allTables[db] = &importdef.DBInfo{
 			Name:   db,
-			Tables: make(map[string]*checkpoints.TidbTableInfo),
+			Tables: make(map[string]*importdef.TableInfo),
 		}
 		for _, table := range tables {
-			allTables[db].Tables[table.Name] = &checkpoints.TidbTableInfo{
+			allTables[db].Tables[table.Name] = &importdef.TableInfo{
 				DB:   db,
 				Name: table.Name,
 			}
@@ -915,7 +913,7 @@ func newLightningPrecheckAdaptor(
 	}
 }
 
-func (l *lightningPrecheckAdaptor) GetAllTableStructures(ctx context.Context, opts ...opts.GetPreInfoOption) (map[string]*checkpoints.TidbDBInfo, error) {
+func (l *lightningPrecheckAdaptor) GetAllTableStructures(ctx context.Context, opts ...opts.GetPreInfoOption) (map[string]*importdef.DBInfo, error) {
 	// re-use with other checker? or in fact we only use other information than structure?
 	return l.allTables, nil
 }

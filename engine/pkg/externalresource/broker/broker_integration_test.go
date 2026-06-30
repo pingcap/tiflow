@@ -23,7 +23,8 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	brStorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/bucket"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal/local"
@@ -52,7 +53,7 @@ var (
 
 func newBrokerForS3(
 	t *testing.T, executorID resModel.ExecutorID,
-) (*DefaultBroker, *manager.MockClient, string, brStorage.ExternalStorage, string) {
+) (*DefaultBroker, *manager.MockClient, string, storeapi.Storage, string) {
 	s3Prefix := fmt.Sprintf("%s-%s-%d", t.Name(),
 		time.Now().Format("20060102-150405"), rand.Int())
 	return newBrokerForS3WithPrefix(t, executorID, s3Prefix)
@@ -60,7 +61,7 @@ func newBrokerForS3(
 
 func newBrokerForS3WithPrefix(
 	t *testing.T, executorID resModel.ExecutorID, s3Prefix string,
-) (*DefaultBroker, *manager.MockClient, string, brStorage.ExternalStorage, string) {
+) (*DefaultBroker, *manager.MockClient, string, storeapi.Storage, string) {
 	// Remove the following comments if running tests locally.
 	// os.Setenv("ENGINE_S3_ENDPOINT", "http://127.0.0.1:9000/")
 	// os.Setenv("ENGINE_S3_ACCESS_KEY", "engine")
@@ -99,7 +100,7 @@ func newBrokerForS3WithPrefix(
 
 	rootURI := fmt.Sprintf("s3://%s/%s/%s", url.QueryEscape(bucket.UtBucketName),
 		s3Prefix, url.QueryEscape(string(executorID)))
-	rootStrorage, err := bucket.GetExternalStorageFromURI(context.Background(), rootURI, &brStorage.BackendOptions{S3: *s3Cfg})
+	rootStrorage, err := bucket.GetExternalStorageFromURI(context.Background(), rootURI, &objstore.BackendOptions{S3: *s3Cfg})
 	require.NoError(t, err)
 
 	// check dummy resource exists
@@ -109,7 +110,7 @@ func newBrokerForS3WithPrefix(
 
 func closeBrokerForS3(
 	t *testing.T, broker *DefaultBroker,
-	cli *manager.MockClient, rootStrorage brStorage.ExternalStorage,
+	cli *manager.MockClient, rootStrorage storeapi.Storage,
 ) {
 	// request during remove dummy resource
 	cli.On("RemoveResource", mock.Anything,
@@ -127,7 +128,7 @@ func closeBrokerForS3(
 	checkFile(t, rootStrorage, "keep-alive-worker/dummy/.keep", fileNotExists)
 }
 
-func checkFile(t *testing.T, storage brStorage.ExternalStorage, path string, expected bool) {
+func checkFile(t *testing.T, storage storeapi.Storage, path string, expected bool) {
 	exist, err := storage.FileExists(context.Background(), path)
 	require.NoError(t, err, "check file %s error", path)
 	require.Equal(t, expected, exist, "file %s should %s", path, func() string {
@@ -139,7 +140,7 @@ func checkFile(t *testing.T, storage brStorage.ExternalStorage, path string, exp
 }
 
 func checkS3ResourceForWorker(
-	t *testing.T, storage brStorage.ExternalStorage,
+	t *testing.T, storage storeapi.Storage,
 	creator resModel.WorkerID, resID resModel.ResourceID,
 	expected bool, testFiles ...string,
 ) {
@@ -157,7 +158,7 @@ func checkS3ResourceForWorker(
 
 func createS3ResourceForWorker(
 	t *testing.T, brk *DefaultBroker, cli *manager.MockClient,
-	rootStrorage brStorage.ExternalStorage, creator resModel.WorkerID, resID resModel.ResourceID,
+	rootStrorage storeapi.Storage, creator resModel.WorkerID, resID resModel.ResourceID,
 	isPersisted bool, newTestFiles ...string,
 ) {
 	tp, resName, err := resModel.ParseResourceID(resID)

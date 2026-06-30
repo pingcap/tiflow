@@ -26,6 +26,7 @@ import (
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -203,8 +204,8 @@ func (s *dpanicSuite) TestGenDelete() {
 		"b INT UNIQUE, "+
 		"c INT, "+
 		"UNIQUE KEY uk_a ((lower(a))))")
-	hiddenA := expressionIndexColumnName(s.T(), sourceTI, "uk_a")
-	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
+	hiddenA := testutil.ExpressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	testutil.ReorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "b", "c")
 	change = NewRowChange(source, nil, []interface{}{"Alice", 1, 9}, nil, sourceTI, nil, nil)
 	sql, args = change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `b` = ? LIMIT 1", sql)
@@ -214,8 +215,8 @@ func (s *dpanicSuite) TestGenDelete() {
 		"a VARCHAR(32), "+
 		"c INT, "+
 		"UNIQUE KEY uk_a ((lower(a))))")
-	hiddenA = expressionIndexColumnName(s.T(), sourceTI, "uk_a")
-	reorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "c")
+	hiddenA = testutil.ExpressionIndexColumnName(s.T(), sourceTI, "uk_a")
+	testutil.ReorderColumnsByName(s.T(), sourceTI, "a", hiddenA, "c")
 	change = NewRowChange(source, nil, []interface{}{"Alice", 9}, nil, sourceTI, nil, nil)
 	sql, args = change.GenSQL(DMLDelete)
 	s.Equal("DELETE FROM `db`.`tb1` WHERE `a` = ? AND `c` = ? LIMIT 1", sql)
@@ -405,4 +406,41 @@ func TestGenInsert(t *testing.T) {
 		require.Equal(t, c.expectedInsertOnDupSQL, sql)
 		require.Equal(t, c.expectedArgs, args)
 	}
+}
+
+func TestGenDMLWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+	target := &cdcmodel.TableName{Schema: "db", Table: "tb2"}
+	sourceTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, "+
+		"name VARCHAR(32), "+
+		"payload VARCHAR(32), "+
+		"UNIQUE KEY uk_name ((lower(name))))")
+	targetTI := mockTableInfo(t, "CREATE TABLE tb2 ("+
+		"id INT PRIMARY KEY, "+
+		"name VARCHAR(32), "+
+		"payload VARCHAR(32), "+
+		"UNIQUE KEY uk_name ((lower(name))))")
+	hiddenName := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_name")
+	testutil.ReorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
+
+	insertChange := NewRowChange(source, target, nil, []any{2, "Bob", "p2"}, sourceTI, targetTI, nil)
+	sql, args := insertChange.GenSQL(DMLReplace)
+	require.Equal(t, "REPLACE INTO `db`.`tb2` (`id`,`name`,`payload`) VALUES (?,?,?)", sql)
+	require.Equal(t, []any{2, "Bob", "p2"}, args)
+
+	updateChange := NewRowChange(
+		source,
+		target,
+		[]any{2, "Bob", "p2"},
+		[]any{2, "Bob", "p2-updated"},
+		sourceTI,
+		targetTI,
+		nil,
+	)
+	sql, args = updateChange.GenSQL(DMLUpdate)
+	require.Equal(t, "UPDATE `db`.`tb2` SET `id` = ?, `name` = ?, `payload` = ? WHERE `id` = ? LIMIT 1", sql)
+	require.Equal(t, []any{2, "Bob", "p2-updated", 2}, args)
 }

@@ -22,6 +22,7 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -227,8 +228,8 @@ func TestGetWhereIdxByDataUniqueAfterHiddenColumn(t *testing.T) {
 		"c INT, "+
 		"UNIQUE KEY uk_a ((lower(a))))")
 
-	hiddenA := expressionIndexColumnName(t, ti, "uk_a")
-	reorderColumnsByName(t, ti, "a", hiddenA, "b", "c")
+	hiddenA := testutil.ExpressionIndexColumnName(t, ti, "uk_a")
+	testutil.ReorderColumnsByName(t, ti, "a", hiddenA, "b", "c")
 
 	handle := GetWhereHandle(ti, ti)
 	idx := handle.getWhereIdxByData([]interface{}{"Alice", 1, nil})
