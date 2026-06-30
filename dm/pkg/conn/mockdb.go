@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/server"
 	"github.com/pingcap/tidb/pkg/session"
-	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/tikv/client-go/v2/testutils"
 )
@@ -148,7 +147,7 @@ func NewCluster() (*Cluster, error) {
 	}
 	cluster.Storage = storage
 
-	vardef.SetSchemaLease(time.Second)
+	session.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	dom, err := session.BootstrapSession(storage)
 	if err != nil {

@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/stretchr/testify/require"
 )

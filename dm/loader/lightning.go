@@ -25,12 +25,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/lightning/pkg/checkpoints"
-	"github.com/pingcap/tidb/lightning/pkg/errormanager"
-	"github.com/pingcap/tidb/lightning/pkg/importinto"
 	lserver "github.com/pingcap/tidb/lightning/pkg/server"
+	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
+	"github.com/pingcap/tidb/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -70,7 +69,7 @@ type LightningLoader struct {
 	logger log.Logger
 	cli    *clientv3.Client
 	core   *lserver.Lightning
-	cancel context.CancelCauseFunc // for per task context, which maybe different from lightning context
+	cancel context.CancelFunc // for per task context, which maybe different from lightning context
 
 	toDB *conn.BaseDB
 
@@ -119,16 +118,14 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	if len(cfg.LoaderConfig.PDAddr) > 0 {
 		lightningCfg.TiDB.PdAddr = cfg.LoaderConfig.PDAddr
 	}
-	switch cfg.LoaderConfig.ImportMode {
-	case config.LoadModePhysical:
+	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
+	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
-		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
-	case config.LoadModeImportInto:
-		lightningCfg.TikvImporter.Backend = lcfg.BackendImportInto
-	default:
-		lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
+	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
+	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
 	return lightningCfg
@@ -212,24 +209,6 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	if status != lightningStatusRunning {
 		return nil
 	}
-
-	// import-into uses a different checkpoint mechanism
-	if cfg.TikvImporter.Backend == lcfg.BackendImportInto {
-		cpMgr, err := importinto.NewCheckpointManager(cfg)
-		if err != nil {
-			return err
-		}
-		if err := cpMgr.Initialize(ctx); err != nil {
-			_ = cpMgr.Close()
-			return err
-		}
-		defer func() {
-			_ = cpMgr.Close()
-		}()
-		return cpMgr.IgnoreError(ctx, common.AllTables)
-	}
-
-	// physical/logical mode uses the original checkpoint mechanism
 	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
 	if err != nil {
 		return err
@@ -240,23 +219,11 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
 }
 
-func enableImportIntoCompatibilityConfig(cfg *lcfg.Config) {
-	if cfg.TikvImporter.Backend == lcfg.BackendImportInto {
-		// DM import-into mode shares the same S3 URI with Dumpling and Lightning.
-		// Keep the URI unchanged for storage access, and only ask TiDB Lightning
-		// to strip external-id from IMPORT INTO SQL for compatibility with old
-		// IMPORT INTO planners. This compatibility flag should be deprecated once
-		// those old planners no longer need to be supported.
-		cfg.TikvImporter.StripS3ExternalIDForImportSQL = true
-	}
-}
-
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
-	taskCtx, cancel := context.WithCancelCause(ctx)
+	taskCtx, cancel := context.WithCancel(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
-	enableImportIntoCompatibilityConfig(cfg)
 
 	// always try to skill all checkpoint errors so we can resume this phase.
 	err = l.ignoreCheckpointError(ctx, cfg)
@@ -266,9 +233,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if err = l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
-	defer func() {
-		l.lastErr = err
-	}()
 
 	var opts []lserver.Option
 	if l.cfg.MetricsFactory != nil {
@@ -315,6 +279,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lserver.WithDupIndicator(&hasDup))
 	}
+
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -327,6 +292,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 			}
 		}
 	})
+	defer func() {
+		l.lastErr = err
+	}()
 	if err != nil {
 		return convertLightningError(err)
 	}
@@ -361,41 +329,6 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if err := cfg.LoadFromGlobal(globalCfg); err != nil {
 		return nil, err
 	}
-	cfg.TiDB.Security = &globalCfg.Security
-	// TODO: avoid writing to local file. right now we don't know how to verify certificates correctly using TLS content in a short time, but we have a time schedule to keep.
-	// Workround is also need to set TLS path instead of only set TLS content.
-	// Write TLS content to file when loader using TLS content or set db security only.
-	if subtaskCfg.LoaderConfig.Security != nil {
-		// Only when ssl content is set and ssl file path is not set, the file will be written
-		if len(subtaskCfg.LoaderConfig.Security.SSLCABytes) != 0 && len(subtaskCfg.LoaderConfig.Security.SSLCertBytes) != 0 &&
-			len(subtaskCfg.LoaderConfig.Security.SSLKeyBytes) != 0 && subtaskCfg.LoaderConfig.Security.SSLCA == "" &&
-			subtaskCfg.LoaderConfig.Security.SSLCert == "" && subtaskCfg.LoaderConfig.Security.SSLKey == "" {
-			if err := subtaskCfg.LoaderConfig.Security.WriteTLSContentToFiles(subtaskCfg.Name); err != nil {
-				return nil, err
-			}
-		}
-		cfg.Security.CABytes = subtaskCfg.LoaderConfig.Security.SSLCABytes
-		cfg.Security.CertBytes = subtaskCfg.LoaderConfig.Security.SSLCertBytes
-		cfg.Security.KeyBytes = subtaskCfg.LoaderConfig.Security.SSLKeyBytes
-		cfg.Security.CAPath = subtaskCfg.LoaderConfig.Security.SSLCA
-		cfg.Security.CertPath = subtaskCfg.LoaderConfig.Security.SSLCert
-		cfg.Security.KeyPath = subtaskCfg.LoaderConfig.Security.SSLKey
-	} else if subtaskCfg.To.Security != nil {
-		// Only when ssl content is set and ssl file path is not set, the file will be written.
-		// Using db security as lightning default security config.
-		if len(subtaskCfg.To.Security.SSLCABytes) != 0 && len(subtaskCfg.To.Security.SSLCertBytes) != 0 && len(subtaskCfg.To.Security.SSLKeyBytes) != 0 &&
-			subtaskCfg.To.Security.SSLCA == "" && subtaskCfg.To.Security.SSLCert == "" && subtaskCfg.To.Security.SSLKey == "" {
-			if err := subtaskCfg.To.Security.WriteTLSContentToFiles(subtaskCfg.Name); err != nil {
-				return nil, err
-			}
-		}
-		cfg.Security.CABytes = subtaskCfg.To.Security.SSLCABytes
-		cfg.Security.CertBytes = subtaskCfg.To.Security.SSLCertBytes
-		cfg.Security.KeyBytes = subtaskCfg.To.Security.SSLKeyBytes
-		cfg.Security.CAPath = subtaskCfg.To.Security.SSLCA
-		cfg.Security.CertPath = subtaskCfg.To.Security.SSLCert
-		cfg.Security.KeyPath = subtaskCfg.To.Security.SSLKey
-	}
 	// TableConcurrency is adjusted to the value of RegionConcurrency
 	// when using TiDB backend.
 	// TODO: should we set the TableConcurrency separately.
@@ -407,9 +340,6 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 		// NOTE: If we use bucket as dumper storage, write lightning checkpoint to downstream DB to avoid bucket ratelimit
 		// since we will use check Checkpoint in 'ignoreCheckpointError', MAKE SURE we have assigned the Checkpoint config properly here
 		if err := cfg.Security.BuildTLSConfig(); err != nil {
-			return nil, err
-		}
-		if err := cfg.TiDB.Security.BuildTLSConfig(); err != nil {
 			return nil, err
 		}
 		// To enable the loader worker failover, we need to use jobID+sourceID to isolate the checkpoint schema
@@ -434,17 +364,10 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
-	switch cfg.TikvImporter.Backend {
-	case lcfg.BackendLocal:
+	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
 		cfg.TikvImporter.IncrementalImport = true
-	case lcfg.BackendImportInto:
-		// import-into mode reads configuration from config.Config directly,
-		// no additional setup required here
-	default:
-		// TiDB backend
-		if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
-			return nil, err
-		}
+	} else if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
+		return nil, err
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
@@ -655,25 +578,13 @@ func (l *LightningLoader) Close() {
 
 // Kill does ungraceful shutdown.
 func (l *LightningLoader) Kill() {
-	l.KillWithCause(context.Canceled)
-}
-
-// KillWithCause does ungraceful shutdown with a cancel cause.
-// This is used by DM-worker failover so IMPORT INTO jobs can be preserved for takeover.
-func (l *LightningLoader) KillWithCause(cause error) {
-	l.pauseWithCause(cause)
-	l.removeLabelValuesWithTaskInMetrics(l.cfg.Name, l.cfg.SourceID)
-	l.checkPointList.Close()
-	l.closed.Store(true)
+	// TODO: implement kill
+	l.Close()
 }
 
 // Pause pauses the process, and it can be resumed later
 // should cancel context from external.
 func (l *LightningLoader) Pause() {
-	l.pauseWithCause(context.Canceled)
-}
-
-func (l *LightningLoader) pauseWithCause(cause error) {
 	l.Lock()
 	defer l.Unlock()
 	if l.isClosed() {
@@ -681,10 +592,7 @@ func (l *LightningLoader) pauseWithCause(cause error) {
 		return
 	}
 	if l.cancel != nil {
-		if cause == nil {
-			cause = context.Canceled
-		}
-		l.cancel(cause)
+		l.cancel()
 	}
 	l.core.Stop()
 }
@@ -749,7 +657,7 @@ func connParamFromConfig(config *lcfg.Config) *common.MySQLConnectParam {
 		SQLMode:  mysql.DefaultSQLMode,
 		// TODO: keep same as Lightning defaultMaxAllowedPacket later
 		MaxAllowedPacket:         64 * 1024 * 1024,
-		TLSConfig:                config.TiDB.Security.TLSConfig,
-		AllowFallbackToPlaintext: config.TiDB.Security.AllowFallbackToPlaintext,
+		TLSConfig:                config.Security.TLSConfig,
+		AllowFallbackToPlaintext: config.Security.AllowFallbackToPlaintext,
 	}
 }

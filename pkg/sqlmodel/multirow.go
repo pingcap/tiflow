@@ -135,12 +135,18 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 		whenCaseStmts[i] = whereBuf.String()
 	}
 
-	_, writableColumns := first.dmlRowMapping()
+	// Build gegerated columns lower name set to accelerate the following check
+	targetGeneratedColSet := generatedColumnsNameSet(first.targetTableInfo.Columns)
 
 	// Generate `ColumnName`=CASE WHEN .. THEN .. END
-	// Use this value to identify which is the first CaseWhenThen line.
+	// Use this value in order to identify which is the first CaseWhenThen line,
+	// because generated column can happen any where and it will be skipped.
 	isFirstCaseWhenThenLine := true
-	for _, column := range writableColumns {
+	for _, column := range first.targetTableInfo.Columns {
+		// skip generated columns
+		if _, ok := targetGeneratedColSet[column.Name.L]; ok {
+			continue
+		}
 		if !isFirstCaseWhenThenLine {
 			// insert ", " after END of each lines except for the first line.
 			buf.WriteString(", ")
@@ -167,7 +173,15 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 	buf.WriteString(")")
 
 	// Build args of the UPDATE SQL
-	assignValueColumnCount := len(writableColumns)
+	var assignValueColumnCount int
+	var skipColIdx []int
+	for i, col := range first.sourceTableInfo.Columns {
+		if _, ok := targetGeneratedColSet[col.Name.L]; ok {
+			skipColIdx = append(skipColIdx, i)
+			continue
+		}
+		assignValueColumnCount++
+	}
 	whereValuesAtTheEnd := make([]any, 0, len(changes)*len(whereColumns))
 	args := make([]any, 0,
 		assignValueColumnCount*len(changes)*(len(whereColumns)+1)+len(whereValuesAtTheEnd))
@@ -189,13 +203,16 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 
 		whereValuesAtTheEnd = append(whereValuesAtTheEnd, whereValues...)
 
-		rowMapper, changeWritableColumns := change.dmlRowMapping()
-		for writableColIdx, col := range changeWritableColumns {
-			argsPerCol[writableColIdx] = append(argsPerCol[writableColIdx], whereValues...)
-			argsPerCol[writableColIdx] = append(
-				argsPerCol[writableColIdx],
-				rowMapper.valueByOffset(col.Offset, change.postValues),
-			)
+		i := 0 // used as index of skipColIdx
+		writeableCol := 0
+		for j, val := range change.postValues {
+			if i < len(skipColIdx) && skipColIdx[i] == j {
+				i++
+				continue
+			}
+			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], whereValues...)
+			argsPerCol[writeableCol] = append(argsPerCol[writeableCol], val)
+			writeableCol++
 		}
 	}
 	for _, a := range argsPerCol {
@@ -227,9 +244,16 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	buf.WriteString(first.targetTable.QuoteString())
 	buf.WriteString(" (")
 	columnNum := 0
+	var skipColIdx []int
 
-	_, writableColumns := first.dmlRowMapping()
-	for _, col := range writableColumns {
+	// build gegerated columns lower name set to accelerate the following check
+	generatedColumns := generatedColumnsNameSet(first.targetTableInfo.Columns)
+	for i, col := range first.sourceTableInfo.Columns {
+		if _, ok := generatedColumns[col.Name.L]; ok {
+			skipColIdx = append(skipColIdx, i)
+			continue
+		}
+
 		if columnNum != 0 {
 			buf.WriteByte(',')
 		}
@@ -246,9 +270,15 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 	}
 	if tp == DMLInsertOnDuplicateUpdate {
 		buf.WriteString(" ON DUPLICATE KEY UPDATE ")
+		i := 0 // used as index of skipColIdx
 		writtenFirstCol := false
 
-		for _, col := range writableColumns {
+		for j, col := range first.sourceTableInfo.Columns {
+			if i < len(skipColIdx) && skipColIdx[i] == j {
+				i++
+				continue
+			}
+
 			if writtenFirstCol {
 				buf.WriteByte(',')
 			}
@@ -259,15 +289,19 @@ func GenInsertSQL(tp DMLType, changes ...*RowChange) (string, []interface{}) {
 		}
 	}
 
-	args := make([]interface{}, 0, len(changes)*len(writableColumns))
+	args := make([]interface{}, 0, len(changes)*(len(first.sourceTableInfo.Columns)-len(skipColIdx)))
 	for _, change := range changes {
-		rowMapper, changeWritableColumns := change.dmlRowMapping()
-		if len(changeWritableColumns) == len(change.postValues) {
-			args = append(args, change.postValues...)
-			continue
-		}
-		for _, col := range changeWritableColumns {
-			args = append(args, rowMapper.valueByOffset(col.Offset, change.postValues))
+		i := 0 // used as index of skipColIdx
+		for j, val := range change.postValues {
+			if i >= len(skipColIdx) {
+				args = append(args, change.postValues[j:]...)
+				break
+			}
+			if skipColIdx[i] == j {
+				i++
+				continue
+			}
+			args = append(args, val)
 		}
 	}
 	return buf.String(), args

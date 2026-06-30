@@ -32,10 +32,11 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/planner/core/resolve"
 	"github.com/pingcap/tidb/pkg/sessionctx"
-	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/mock"
@@ -82,50 +83,13 @@ type downstreamTracker struct {
 	tableInfos     map[string]*DownstreamTableInfo // downstream table infos
 }
 
-// DownstreamTableInfo holds downstream schema and WHERE handle caches.
+// DownstreamTableInfo contains tableinfo and index cache.
 type DownstreamTableInfo struct {
 	TableInfo           *model.TableInfo // tableInfo which comes from parse create statement syntaxtree
-	whereHandleCache    *downstreamWhereHandleCache
+	WhereHandle         *sqlmodel.WhereHandle
 	ForeignKeyRelations []sqlmodel.ForeignKeyCausalityRelation
 	foreignKeyInitOnce  sync.Once
 	foreignKeyInitErr   error
-}
-
-// downstreamWhereHandleCache keeps the default handle and per-source handles.
-type downstreamWhereHandleCache struct {
-	defaultHandle *sqlmodel.WhereHandle
-	mu            sync.Mutex
-	bySource      map[string]*sqlmodel.WhereHandle
-}
-
-// DefaultWhereHandle returns the handle built with the initial source table.
-func (dti *DownstreamTableInfo) DefaultWhereHandle() *sqlmodel.WhereHandle {
-	return dti.whereHandleCache.defaultHandle
-}
-
-// WithoutForeignKeyRelations returns a copy with the downstream table info and
-// where handle cache, but without FK causality relations.
-func (dti *DownstreamTableInfo) WithoutForeignKeyRelations() *DownstreamTableInfo {
-	if dti == nil {
-		return nil
-	}
-	return &DownstreamTableInfo{
-		TableInfo:        dti.TableInfo,
-		whereHandleCache: dti.whereHandleCache,
-	}
-}
-
-// WhereHandle gets or builds the handle for the given source table.
-func (dti *DownstreamTableInfo) WhereHandle(sourceTable *filter.Table, sourceTI *model.TableInfo) *sqlmodel.WhereHandle {
-	sourceKey := utils.GenTableID(sourceTable)
-	dti.whereHandleCache.mu.Lock()
-	defer dti.whereHandleCache.mu.Unlock()
-	if handle, ok := dti.whereHandleCache.bySource[sourceKey]; ok {
-		return handle
-	}
-	handle := sqlmodel.GetWhereHandle(sourceTI, dti.TableInfo)
-	dti.whereHandleCache.bySource[sourceKey] = handle
-	return handle
 }
 
 // TableRouteResolver resolves a source table to its downstream routed table.
@@ -273,12 +237,12 @@ func (tr *Tracker) GetTableInfo(table *filter.Table) (*model.TableInfo, error) {
 	if tr.closed.Load() {
 		return nil, dmterror.ErrSchemaTrackerIsClosed.New("fail to get table info")
 	}
-	return tr.upstreamTracker.TableByName(context.Background(), ast.NewCIStr(table.Schema), ast.NewCIStr(table.Name))
+	return tr.upstreamTracker.TableByName(context.Background(), pmodel.NewCIStr(table.Schema), pmodel.NewCIStr(table.Name))
 }
 
 // GetCreateTable returns the `CREATE TABLE` statement of the table.
 func (tr *Tracker) GetCreateTable(ctx context.Context, table *filter.Table) (string, error) {
-	tableInfo, err := tr.upstreamTracker.TableByName(ctx, ast.NewCIStr(table.Schema), ast.NewCIStr(table.Name))
+	tableInfo, err := tr.upstreamTracker.TableByName(ctx, pmodel.NewCIStr(table.Schema), pmodel.NewCIStr(table.Name))
 	if err != nil {
 		return "", err
 	}
@@ -297,7 +261,7 @@ func (tr *Tracker) AllSchemas() []string {
 
 // ListSchemaTables lists all tables in the schema.
 func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
-	ret, err := tr.upstreamTracker.AllTableNamesOfSchema(ast.NewCIStr(schema))
+	ret, err := tr.upstreamTracker.AllTableNamesOfSchema(pmodel.NewCIStr(schema))
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerUnSchemaNotExist.Generate(schema)
 	}
@@ -309,7 +273,7 @@ func (tr *Tracker) ListSchemaTables(schema string) ([]string, error) {
 // TODO: move out of this package!
 func (tr *Tracker) GetSingleColumnIndices(db, tbl, col string) ([]*model.IndexInfo, error) {
 	col = strings.ToLower(col)
-	t, err := tr.upstreamTracker.TableByName(context.Background(), ast.NewCIStr(db), ast.NewCIStr(tbl))
+	t, err := tr.upstreamTracker.TableByName(context.Background(), pmodel.NewCIStr(db), pmodel.NewCIStr(tbl))
 	if err != nil {
 		return nil, err
 	}
@@ -356,12 +320,12 @@ func (tr *Tracker) Close() {
 
 // DropTable drops a table from this tracker.
 func (tr *Tracker) DropTable(table *filter.Table) error {
-	return tr.upstreamTracker.DeleteTable(ast.NewCIStr(table.Schema), ast.NewCIStr(table.Name))
+	return tr.upstreamTracker.DeleteTable(pmodel.NewCIStr(table.Schema), pmodel.NewCIStr(table.Name))
 }
 
 // CreateSchemaIfNotExists creates a SCHEMA of the given name if it did not exist.
 func (tr *Tracker) CreateSchemaIfNotExists(db string) error {
-	dbName := ast.NewCIStr(db)
+	dbName := pmodel.NewCIStr(db)
 	if tr.upstreamTracker.SchemaByName(dbName) != nil {
 		return nil
 	}
@@ -387,15 +351,15 @@ func cloneTableInfo(ti *model.TableInfo) *model.TableInfo {
 
 // CreateTableIfNotExists creates a TABLE of the given name if it did not exist.
 func (tr *Tracker) CreateTableIfNotExists(table *filter.Table, ti *model.TableInfo) error {
-	schemaName := ast.NewCIStr(table.Schema)
-	tableName := ast.NewCIStr(table.Name)
+	schemaName := pmodel.NewCIStr(table.Schema)
+	tableName := pmodel.NewCIStr(table.Name)
 	ti = cloneTableInfo(ti)
 	ti.Name = tableName
 	return tr.upstreamTracker.CreateTableWithInfo(tr.se, schemaName, ti, nil, ddl.WithOnExist(ddl.OnExistIgnore))
 }
 
 // SplitBatchCreateTableAndHandle will split the batch if it exceeds the kv entry size limit.
-func (tr *Tracker) SplitBatchCreateTableAndHandle(schema ast.CIStr, info []*model.TableInfo, l int, r int) error {
+func (tr *Tracker) SplitBatchCreateTableAndHandle(schema pmodel.CIStr, info []*model.TableInfo, l int, r int) error {
 	var err error
 	if err = tr.upstreamTracker.BatchCreateTableWithInfo(
 		tr.se, schema, info[l:r], ddl.WithOnExist(ddl.OnExistIgnore),
@@ -426,11 +390,11 @@ func (tr *Tracker) BatchCreateTableIfNotExist(tablesToCreate map[string]map[stri
 
 		var cloneTis []*model.TableInfo
 		for table, ti := range tableNameInfo {
-			cloneTi := cloneTableInfo(ti)      // clone TableInfo w.r.t the warning of the CreateTable function
-			cloneTi.Name = ast.NewCIStr(table) // TableInfo has no `TableName`
+			cloneTi := cloneTableInfo(ti)         // clone TableInfo w.r.t the warning of the CreateTable function
+			cloneTi.Name = pmodel.NewCIStr(table) // TableInfo has no `TableName`
 			cloneTis = append(cloneTis, cloneTi)
 		}
-		schemaName := ast.NewCIStr(schema)
+		schemaName := pmodel.NewCIStr(schema)
 		if err := tr.SplitBatchCreateTableAndHandle(schemaName, cloneTis, 0, len(cloneTis)); err != nil {
 			return err
 		}
@@ -492,9 +456,11 @@ func (tr *Tracker) InitDownStreamForeignKeyRelations(
 		if err != nil {
 			return nil, err
 		}
-		ret := dti.WithoutForeignKeyRelations()
-		ret.ForeignKeyRelations = relations
-		return ret, nil
+		return &DownstreamTableInfo{
+			TableInfo:           dti.TableInfo,
+			WhereHandle:         dti.WhereHandle,
+			ForeignKeyRelations: relations,
+		}, nil
 	}
 
 	if err := dti.initForeignKeyRelations(tr, tctx, tableID, sourceTable, targetTable, originTI, routeResolver, caseSensitive); err != nil {
@@ -535,11 +501,8 @@ func (dt *downstreamTracker) getOrInit(tctx *tcontext.Context, tableID string, o
 		}
 
 		dti = &DownstreamTableInfo{
-			TableInfo: downstreamTI,
-			whereHandleCache: &downstreamWhereHandleCache{
-				defaultHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
-				bySource:      make(map[string]*sqlmodel.WhereHandle),
-			},
+			TableInfo:   downstreamTI,
+			WhereHandle: sqlmodel.GetWhereHandle(originTI, downstreamTI),
 		}
 		dt.tableInfos[tableID] = dti
 	}
@@ -622,7 +585,7 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 
 	// support drop PK
 	enableClusteredIndexBackup := dt.se.GetSessionVars().EnableClusteredIndex
-	dt.se.GetSessionVars().EnableClusteredIndex = vardef.ClusteredIndexDefModeOff
+	dt.se.GetSessionVars().EnableClusteredIndex = variable.ClusteredIndexDefModeOff
 	defer func() {
 		dt.se.GetSessionVars().EnableClusteredIndex = enableClusteredIndexBackup
 	}()
@@ -954,7 +917,7 @@ func foreignKeyRefTable(childTable *filter.Table, fk *model.FKInfo) *filter.Tabl
 	return &filter.Table{Schema: schema, Name: fk.RefTable.O}
 }
 
-func sameColumns(a []ast.CIStr, b []ast.CIStr) bool {
+func sameColumns(a []pmodel.CIStr, b []pmodel.CIStr) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -1020,7 +983,7 @@ func buildColumnIndexMap(ti *model.TableInfo) map[string]int {
 	return nameToIdx
 }
 
-func getColumnsByNames(ti *model.TableInfo, names []ast.CIStr) ([]*model.ColumnInfo, error) {
+func getColumnsByNames(ti *model.TableInfo, names []pmodel.CIStr) ([]*model.ColumnInfo, error) {
 	columns := make([]*model.ColumnInfo, 0, len(names))
 	for _, name := range names {
 		found := false

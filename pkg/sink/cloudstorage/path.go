@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/objstore/storeapi"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/engine/pkg/clock"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -138,7 +138,7 @@ type FilePathGenerator struct {
 	extension    string
 	config       *Config
 	pdClock      pdutil.Clock
-	storage      storeapi.Storage
+	storage      storage.ExternalStorage
 	fileIndex    map[VersionedTableName]*indexWithDate
 
 	hasher     *hash.PositionInertia
@@ -149,7 +149,7 @@ type FilePathGenerator struct {
 func NewFilePathGenerator(
 	changefeedID model.ChangeFeedID,
 	config *Config,
-	storage storeapi.Storage,
+	storage storage.ExternalStorage,
 	extension string,
 	pdclock pdutil.Clock,
 ) *FilePathGenerator {
@@ -214,7 +214,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	lastVersion := uint64(0)
 	subDir := fmt.Sprintf(tableSchemaPrefix, def.Schema, def.Table)
 	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
-	err = f.storage.WalkDir(ctx, &storeapi.WalkOption{
+	err = f.storage.WalkDir(ctx, &storage.WalkOption{
 		SubDir:    subDir, /* use subDir to prevent walk the whole storage */
 		ObjPrefix: "schema_",
 	}, func(path string, _ int64) error {
@@ -436,7 +436,7 @@ var dateSeparatorDayRegexp *regexp.Regexp
 func RemoveExpiredFiles(
 	ctx context.Context,
 	_ model.ChangeFeedID,
-	storage storeapi.Storage,
+	storage storage.ExternalStorage,
 	cfg *Config,
 	checkpointTs model.Ts,
 ) (uint64, error) {

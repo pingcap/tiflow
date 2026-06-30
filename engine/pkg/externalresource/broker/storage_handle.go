@@ -17,7 +17,7 @@ import (
 	"context"
 
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/objstore/storeapi"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	pb "github.com/pingcap/tiflow/engine/enginepb"
 	"github.com/pingcap/tiflow/engine/pkg/client"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
@@ -30,14 +30,14 @@ import (
 // Handle defines an interface for interact with framework
 type Handle interface {
 	ID() resModel.ResourceID
-	BrExternalStorage() storeapi.Storage
+	BrExternalStorage() brStorage.ExternalStorage
 	Persist(ctx context.Context) error
 	Discard(ctx context.Context) error
 }
 
-// ResourceHandle contains an external storage handle.
+// ResourceHandle contains a brStorage.ExternalStorage.
 // It helps Dataflow Engine reuse the external storage facilities
-// implemented in TiDB.
+// implemented in Br.
 type ResourceHandle struct {
 	executorID resModel.ExecutorID
 	jobID      resModel.JobID
@@ -45,7 +45,7 @@ type ResourceHandle struct {
 
 	fileManager internal.FileManager
 	desc        internal.ResourceDescriptor
-	inner       storeapi.Storage
+	inner       brStorage.ExternalStorage
 
 	// isPersisted should be set to true if the
 	// resource has been registered with the servermaster.
@@ -89,7 +89,7 @@ func (h *ResourceHandle) ID() resModel.ResourceID {
 }
 
 // BrExternalStorage implements Handle.BrExternalStorage
-func (h *ResourceHandle) BrExternalStorage() storeapi.Storage {
+func (h *ResourceHandle) BrExternalStorage() brStorage.ExternalStorage {
 	return h.inner
 }
 

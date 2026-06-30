@@ -17,7 +17,6 @@ import (
 	"testing"
 
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
-	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -175,9 +174,9 @@ func TestPrimaryOrUniqueKeyUpdatedInterleavedHiddenColumn(t *testing.T) {
 		"UNIQUE KEY uk_a ((lower(a))), "+
 		"UNIQUE KEY uk_b ((lower(b))))")
 
-	hiddenA := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_a")
-	hiddenB := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_b")
-	testutil.ReorderColumnsByName(t, sourceTI, "id", "a", hiddenA, "b", hiddenB)
+	hiddenA := expressionIndexColumnName(t, sourceTI, "uk_a")
+	hiddenB := expressionIndexColumnName(t, sourceTI, "uk_b")
+	reorderColumnsByName(t, sourceTI, "id", "a", hiddenA, "b", hiddenB)
 
 	change := NewRowChange(source, nil,
 		[]any{1, "Alice", "Bob"},
@@ -197,8 +196,8 @@ func TestPrimaryOrUniqueKeyUpdatedUniqueAfterHiddenColumn(t *testing.T) {
 		"c VARCHAR(32), "+
 		"UNIQUE KEY uk_a ((lower(a))))")
 
-	hiddenA := testutil.ExpressionIndexColumnName(t, sourceTI, "uk_a")
-	testutil.ReorderColumnsByName(t, sourceTI, "a", hiddenA, "b", "c")
+	hiddenA := expressionIndexColumnName(t, sourceTI, "uk_a")
+	reorderColumnsByName(t, sourceTI, "a", hiddenA, "b", "c")
 
 	change := NewRowChange(source, nil,
 		[]any{"Alice", 1, "old"},

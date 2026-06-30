@@ -20,9 +20,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pingcap/tidb/pkg/objstore"
-	"github.com/pingcap/tidb/pkg/objstore/s3like"
-	"github.com/pingcap/tidb/pkg/objstore/storeapi"
+	brStorage "github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/externalresource/internal"
 	resModel "github.com/pingcap/tiflow/engine/pkg/externalresource/model"
@@ -42,7 +40,7 @@ const (
 )
 
 // GetS3OptionsForUT returns the s3 options for unit test.
-func GetS3OptionsForUT() (*s3like.S3BackendOptions, error) {
+func GetS3OptionsForUT() (*brStorage.S3BackendOptions, error) {
 	endpoint := os.Getenv(envS3Endpoint)
 	if len(endpoint) == 0 {
 		return nil, errors.Errorf("empty endpoint in env %s", envS3Endpoint)
@@ -58,7 +56,7 @@ func GetS3OptionsForUT() (*s3like.S3BackendOptions, error) {
 		return nil, errors.Errorf("empty secret access key in env %s", envS3SecretAccessKey)
 	}
 
-	return &s3like.S3BackendOptions{
+	return &brStorage.S3BackendOptions{
 		Endpoint:        endpoint,
 		AccessKey:       accessKeyID,
 		SecretAccessKey: secretAccessKey,
@@ -81,7 +79,7 @@ func newMockBucketCreator(tempDir string, bucket string) *mockBucketCreator {
 
 func (f *mockBucketCreator) newBucketForScope(
 	ctx context.Context, scope internal.ResourceScope,
-) (storeapi.Storage, error) {
+) (brStorage.ExternalStorage, error) {
 	uri := fmt.Sprintf("%s/%s", f.baseURI(), scope.BuildResPath())
 	return f.newBucketFromURI(ctx, uri)
 }
@@ -89,8 +87,8 @@ func (f *mockBucketCreator) newBucketForScope(
 func (f *mockBucketCreator) newBucketFromURI(
 	ctx context.Context,
 	uri string,
-) (storeapi.Storage, error) {
-	return objstore.NewLocalStorage(uri)
+) (brStorage.ExternalStorage, error) {
+	return brStorage.NewLocalStorage(uri)
 }
 
 func (f *mockBucketCreator) baseURI() string {

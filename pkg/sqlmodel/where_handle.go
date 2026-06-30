@@ -21,7 +21,7 @@ import (
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/expression/exprstatic"
 	"github.com/pingcap/tidb/pkg/meta/model"
-	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/types"
@@ -42,12 +42,8 @@ type WhereHandle struct {
 	causalityIdxs                  []*model.IndexInfo
 	hiddenGeneratedColumnExprCache *generatedColumnExprCache
 	rowMapper                      rowValueMapper
-	writableColumns                []*model.ColumnInfo
 }
 
-// TODO(joechenrh): Centralize visible-row to source-column-offset mapping into
-// an explicit internal row-image representation, then remove the duplicated
-// fallback mapping in RowChange.dmlRowMapping.
 type rowValueMapper struct {
 	columns                     []*model.ColumnInfo
 	visibleColumns              []*model.ColumnInfo
@@ -116,10 +112,6 @@ func (m rowValueMapper) valueOffset(columnOffset int, values []any) int {
 		return columnOffset
 	}
 	return m.visibleOffsetByColumnOffset[columnOffset]
-}
-
-func (m rowValueMapper) valueByOffset(columnOffset int, values []any) any {
-	return values[m.valueOffset(columnOffset, values)]
 }
 
 type generatedColumnExprCache struct {
@@ -201,7 +193,6 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 	ret := WhereHandle{
 		rowMapper: newRowValueMapper(source.Columns),
 	}
-	ret.writableColumns = writableSourceColumns(ret.rowMapper.visibleColumns, target.Columns)
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
