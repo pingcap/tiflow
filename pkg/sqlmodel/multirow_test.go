@@ -254,6 +254,8 @@ func TestGenMultiRowsWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
 	testutil.ReorderColumnsByName(t, sourceTI, "id", "name", hiddenName, "payload")
 
 	t.Run("insert", func(t *testing.T) {
+		t.Parallel()
+
 		change1 := NewRowChange(source, target, nil, []interface{}{1, "Alice", "p1"}, sourceTI, targetTI, nil)
 		change2 := NewRowChange(source, target, nil, []interface{}{2, "Bob", "p2"}, sourceTI, targetTI, nil)
 
@@ -268,6 +270,8 @@ func TestGenMultiRowsWithHiddenColumnBeforeVisibleColumn(t *testing.T) {
 	})
 
 	t.Run("update", func(t *testing.T) {
+		t.Parallel()
+
 		change1 := NewRowChange(source, target,
 			[]interface{}{1, "Alice", "p1"},
 			[]interface{}{1, "Alice", "p1-updated"},

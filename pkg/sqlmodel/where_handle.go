@@ -248,7 +248,7 @@ func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 
 func indexHasHiddenColumn(index *model.IndexInfo, source *model.TableInfo) bool {
 	return slices.ContainsFunc(
-		[]*model.IndexColumn(index.Columns),
+		index.Columns,
 		func(key *model.IndexColumn) bool {
 			return key.Offset < len(source.Columns) && source.Columns[key.Offset].Hidden
 		},

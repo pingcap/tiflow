@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// HiddenColumnName returns the first hidden column name in the table info.
 func HiddenColumnName(t testing.TB, ti *model.TableInfo) string {
 	t.Helper()
 
@@ -32,6 +33,7 @@ func HiddenColumnName(t testing.TB, ti *model.TableInfo) string {
 	return ""
 }
 
+// ExpressionIndexColumnName returns the generated column name for the single-column expression index.
 func ExpressionIndexColumnName(t testing.TB, ti *model.TableInfo, indexName string) string {
 	t.Helper()
 
@@ -45,6 +47,7 @@ func ExpressionIndexColumnName(t testing.TB, ti *model.TableInfo, indexName stri
 	return ""
 }
 
+// ReorderColumnsByName reorders table info columns by name and refreshes offsets.
 func ReorderColumnsByName(t testing.TB, ti *model.TableInfo, names ...string) {
 	t.Helper()
 	require.Len(t, names, len(ti.Columns))

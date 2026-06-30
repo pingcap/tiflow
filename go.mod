@@ -14,7 +14,7 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.41.5
 	github.com/aws/aws-sdk-go-v2/config v1.32.2
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.2
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.87.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.97.3
 	github.com/aws/smithy-go v1.24.2
 	github.com/benbjohnson/clock v1.3.5
 	github.com/bradleyjkemp/grpc-tools v0.2.5
@@ -73,9 +73,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20260608025309-50b863799195
 	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
-	github.com/pingcap/tidb v1.1.0-beta.0.20260611081847-e7463a21c08f
+	github.com/pingcap/tidb v1.1.0-beta.0.20260630134030-9a2b003a90fd
 	github.com/pingcap/tidb-dashboard v0.0.0-20260603054940-9e92195886c3
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20260611093756-46989375079c
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20260630134030-9a2b003a90fd
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
@@ -93,7 +93,7 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20260610031342-e999c1f9c7c3
+	github.com/tikv/client-go/v2 v2.0.8-0.20260615130046-a2b634d170d9
 	github.com/tikv/pd v1.1.0-beta.0.20260611085009-4ae8cc5777be
 	github.com/tikv/pd/client v0.0.0-20260611085009-4ae8cc5777be
 	github.com/tinylib/msgp v1.1.6
@@ -115,10 +115,10 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
-	golang.org/x/net v0.54.0
+	golang.org/x/net v0.55.0
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/sync v0.20.0
-	golang.org/x/sys v0.44.0
+	golang.org/x/sys v0.45.0
 	golang.org/x/text v0.37.0
 	golang.org/x/time v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217
@@ -148,19 +148,19 @@ require (
 	github.com/andybalholm/brotli v1.2.0 // indirect
 	github.com/apache/arrow-go/v18 v18.5.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.0 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.8 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.14 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.19.0 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.21 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.21 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.4 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.22 // indirect
 	github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.45.3 // indirect
 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.232.0 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.7 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.8.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.13 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.21 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.4 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.21 // indirect
 	github.com/aws/aws-sdk-go-v2/service/kms v1.41.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/signin v1.0.2 // indirect
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.5 // indirect
@@ -419,7 +419,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
 	go.opentelemetry.io/otel/trace v1.43.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.7.1 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/mod v0.35.0 // indirect
 	golang.org/x/term v0.43.0
 	golang.org/x/tools v0.44.0 // indirect
