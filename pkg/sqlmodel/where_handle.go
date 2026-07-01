@@ -41,85 +41,7 @@ type WhereHandle struct {
 	// causalityIdxs is a superset of UniqueIdxs and also includes expression indexes.
 	causalityIdxs                  []*model.IndexInfo
 	hiddenGeneratedColumnExprCache *generatedColumnExprCache
-	rowMapper                      rowValueMapper
-	writableColumns                []*model.ColumnInfo
-}
-
-// TODO(joechenrh): Centralize visible-row to source-column-offset mapping into
-// an explicit internal row-image representation, then remove the duplicated
-// fallback mapping in RowChange.dmlRowMapping.
-type rowValueMapper struct {
-	columns                     []*model.ColumnInfo
-	visibleColumns              []*model.ColumnInfo
-	visibleOffsetByColumnOffset []int
-}
-
-func newRowValueMapper(columns []*model.ColumnInfo) rowValueMapper {
-	visibleColumns := make([]*model.ColumnInfo, 0, len(columns))
-	visibleOffsetByColumnOffset := make([]int, len(columns))
-	for i := range visibleOffsetByColumnOffset {
-		visibleOffsetByColumnOffset[i] = -1
-	}
-	for _, column := range columns {
-		if column.Hidden {
-			continue
-		}
-		visibleOffsetByColumnOffset[column.Offset] = len(visibleColumns)
-		visibleColumns = append(visibleColumns, column)
-	}
-	return rowValueMapper{
-		columns:                     columns,
-		visibleColumns:              visibleColumns,
-		visibleOffsetByColumnOffset: visibleOffsetByColumnOffset,
-	}
-}
-
-func (m rowValueMapper) isFullValues(values []any) bool {
-	return len(values) == len(m.visibleOffsetByColumnOffset)
-}
-
-func (m rowValueMapper) columnsForValues(values []any) []*model.ColumnInfo {
-	if m.isFullValues(values) {
-		return m.columns
-	}
-	return m.visibleColumns
-}
-
-func (m rowValueMapper) columnsAndValuesByIndex(
-	indexInfo *model.IndexInfo,
-	values []any,
-) ([]*model.ColumnInfo, []any) {
-	cols := make([]*model.ColumnInfo, 0, len(indexInfo.Columns))
-	vals := make([]any, 0, len(indexInfo.Columns))
-	for _, column := range indexInfo.Columns {
-		offset := m.valueOffset(column.Offset, values)
-		cols = append(cols, m.columns[column.Offset])
-		vals = append(vals, values[offset])
-	}
-	return cols, vals
-}
-
-func (m rowValueMapper) valuesByIndex(indexInfo *model.IndexInfo, values []any) []any {
-	ret := make([]any, 0, len(indexInfo.Columns))
-	if values == nil {
-		return ret
-	}
-	for _, column := range indexInfo.Columns {
-		offset := m.valueOffset(column.Offset, values)
-		ret = append(ret, values[offset])
-	}
-	return ret
-}
-
-func (m rowValueMapper) valueOffset(columnOffset int, values []any) int {
-	if m.isFullValues(values) {
-		return columnOffset
-	}
-	return m.visibleOffsetByColumnOffset[columnOffset]
-}
-
-func (m rowValueMapper) valueByOffset(columnOffset int, values []any) any {
-	return values[m.valueOffset(columnOffset, values)]
+	rowMapper                      RowImageLayout
 }
 
 type generatedColumnExprCache struct {
@@ -199,9 +121,8 @@ func generatedColumnExprContext(tiSessionCtx sessionctx.Context) *exprstatic.Exp
 // columns and state. Other component can cache the result.
 func GetWhereHandle(source, target *model.TableInfo) *WhereHandle {
 	ret := WhereHandle{
-		rowMapper: newRowValueMapper(source.Columns),
+		rowMapper: NewRowImageLayout(source, target),
 	}
-	ret.writableColumns = writableSourceColumns(ret.rowMapper.visibleColumns, target.Columns)
 	indices := make([]*model.IndexInfo, 0, len(target.Indices)+1)
 	indices = append(indices, target.Indices...)
 	if idx := getPKIsHandleIdx(target); target.PKIsHandle && idx != nil {
