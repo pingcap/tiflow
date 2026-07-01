@@ -368,6 +368,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 	if c.SyncerConfig.QueueSize == 0 {
 		c.SyncerConfig.QueueSize = defaultQueueSize
 	}
+	if c.SyncerConfig.EventCacheCount == 0 {
+		c.SyncerConfig.EventCacheCount = defaultEventCacheCount
+	}
 	if c.SyncerConfig.CheckpointFlushInterval == 0 {
 		c.SyncerConfig.CheckpointFlushInterval = defaultCheckpointFlushInterval
 	}
