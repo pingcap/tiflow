@@ -18,7 +18,6 @@ import (
 	"database/sql"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -89,7 +88,7 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 	}
 	// check super privilege for SHOW PROCESSLIST
 	usedConn := 0
-	grants, err := dbutil.ShowGrants(ctx, c.toCheckDB.DB, "", "")
+	grants, err := showGrants(ctx, c.toCheckDB.DB, "", "")
 	if err != nil {
 		markCheckError(result, err)
 		return result

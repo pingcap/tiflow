@@ -14,8 +14,11 @@
 package checker
 
 import (
+	"context"
+	"regexp"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	tc "github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -197,6 +200,42 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			},
 			dumpState: StateSuccess,
 		},
+		{
+			grants: []string{
+				"GRANT SELECT ON *.* TO `root`@`localhost`",
+				"GRANT FLUSH_TABLES ON *.* TO `root`@`localhost`",
+			},
+			dumpState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT SELECT ON *.* TO `root`@`localhost`",
+				"GRANT FLUSH_STATUS ON *.* TO `root`@`localhost`",
+			},
+			dumpState: StateFailure,
+			errStr:    "lack of RELOAD global (*.*) privilege; ",
+		},
+		{
+			grants: []string{
+				"GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, PROCESS, REFERENCES, INDEX, ALTER, SHOW DATABASES, CREATE TEMPORARY TABLES, LOCK TABLES, EXECUTE, REPLICATION SLAVE, REPLICATION CLIENT, CREATE VIEW, SHOW VIEW, CREATE ROUTINE, ALTER ROUTINE, CREATE USER, EVENT, TRIGGER, CREATE ROLE, DROP ROLE ON *.* TO `dmtest`@`%` WITH GRANT OPTION",
+				"GRANT APPLICATION_PASSWORD_ADMIN,AUDIT_ADMIN,BACKUP_ADMIN,CONNECTION_ADMIN,EXPORT_QUERY_RESULTS,FIREWALL_ADMIN,FIREWALL_USER,FLUSH_OPTIMIZER_COSTS,FLUSH_STATUS,FLUSH_TABLES,FLUSH_USER_RESOURCES,LOAD_FROM_S3,REPLICATION_APPLIER,ROLE_ADMIN,SET_ANY_DEFINER,SHOW_ROUTINE,XA_RECOVER_ADMIN ON *.* TO `dmtest`@`%` WITH GRANT OPTION",
+				"REVOKE CREATE, DROP, REFERENCES, INDEX, ALTER, CREATE TEMPORARY TABLES, LOCK TABLES, CREATE VIEW, CREATE ROUTINE, ALTER ROUTINE, EVENT, TRIGGER ON `sys`.* FROM `dmtest`@`%`",
+				"GRANT PROXY ON ``@`` TO `dmtest`@`%` WITH GRANT OPTION",
+				"GRANT `administrator`@`%` TO `dmtest`@`%` WITH ADMIN OPTION",
+			},
+			dumpState: StateSuccess,
+		},
+		{
+			grants: []string{
+				"GRANT RELOAD, SELECT ON *.* TO `dmtest`@`%`",
+				"REVOKE SELECT ON `db1`.* FROM `dmtest`@`%`",
+			},
+			checkTables: []filter.Table{
+				{Schema: "db1", Name: "tb1"},
+			},
+			dumpState: StateFailure,
+			errStr:    "lack of Select privilege: {`db1`.`tb1`}; ",
+		},
 	}
 
 	for _, cs := range cases {
@@ -221,6 +260,59 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 			require.Equal(t, cs.errStr, err.ShortErr, "grants: %v", cs.grants)
 		}
 	}
+}
+
+func TestShowGrantsWithHeatWaveRoleAdminOption(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SHOW GRANTS FOR CURRENT_USER")).WillReturnRows(
+		sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT SELECT ON *.* TO `dmtest`@`%`").
+			AddRow("GRANT `administrator`@`%` TO `dmtest`@`%` WITH ADMIN OPTION"),
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("SHOW GRANTS FOR CURRENT_USER USING `administrator`@`%`")).WillReturnRows(
+		sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT SELECT ON *.* TO `dmtest`@`%`").
+			AddRow("GRANT FLUSH_TABLES ON *.* TO `dmtest`@`%`").
+			AddRow("GRANT `administrator`@`%` TO `dmtest`@`%` WITH ADMIN OPTION"),
+	)
+
+	grants, err := showGrants(context.Background(), db, "", "")
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"GRANT SELECT ON *.* TO `dmtest`@`%`",
+		"GRANT FLUSH_TABLES ON *.* TO `dmtest`@`%`",
+		"GRANT `administrator`@`%` TO `dmtest`@`%` WITH ADMIN OPTION",
+	}, grants)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestShowGrantsIgnoresUnparseableGrantForRoleDiscovery(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SHOW GRANTS FOR CURRENT_USER")).WillReturnRows(
+		sqlmock.NewRows([]string{"Grants for User"}).
+			AddRow("GRANT BINLOG MONITOR ON *.* TO `dmtest`@`%`").
+			AddRow("GRANT SELECT ON *.* TO `dmtest`@`%`"),
+	)
+
+	grants, err := showGrants(context.Background(), db, "", "")
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		"GRANT BINLOG MONITOR ON *.* TO `dmtest`@`%`",
+		"GRANT SELECT ON *.* TO `dmtest`@`%`",
+	}, grants)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTrimAdminOptionWithNonASCIIGrant(t *testing.T) {
+	grant := "GRANT `admİN`@`%` TO `dmtest`@`%` WITH ADMIN OPTION"
+	require.True(t, isRoleGrantWithAdminOption(grant))
+	require.Equal(t, "GRANT `admİN`@`%` TO `dmtest`@`%`", trimAdminOption(grant))
 }
 
 func TestVerifyReplicationPrivileges(t *testing.T) {
