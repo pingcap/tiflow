@@ -86,7 +86,7 @@ func (pc *SourceDumpPrivilegeChecker) Check(ctx context.Context) *Result {
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
-	grants, err := dbutil.ShowGrants(ctx, pc.db, "", "")
+	grants, err := showGrants(ctx, pc.db, "", "")
 	if err != nil {
 		markCheckError(result, err)
 		return result
@@ -149,7 +149,7 @@ func (pc *SourceReplicatePrivilegeChecker) Check(ctx context.Context) *Result {
 		Extra: fmt.Sprintf("address of db instance - %s:%d", pc.dbinfo.Host, pc.dbinfo.Port),
 	}
 
-	grants, err := dbutil.ShowGrants(ctx, pc.db, "", "")
+	grants, err := showGrants(ctx, pc.db, "", "")
 	if err != nil {
 		markCheckError(result, err)
 		return result
@@ -193,7 +193,7 @@ func (t *TargetPrivilegeChecker) Check(ctx context.Context) *Result {
 		State: StateSuccess,
 		Extra: fmt.Sprintf("address of db instance - %s:%d", t.dbinfo.Host, t.dbinfo.Port),
 	}
-	grants, err := dbutil.ShowGrants(ctx, t.db, "", "")
+	grants, err := showGrants(ctx, t.db, "", "")
 	if err != nil {
 		markCheckError(result, err)
 		return result
@@ -307,6 +307,9 @@ func VerifyPrivileges(
 		if len(lackPrivs) == 0 {
 			break
 		}
+		if shouldIgnoreGrant(grant) {
+			continue
+		}
 		node, err := p.ParseOneStmt(grant, "", "")
 		if err != nil {
 			return nil, errors.New(err.Error())
@@ -314,7 +317,7 @@ func VerifyPrivileges(
 		grantStmt, ok := node.(*ast.GrantStmt)
 		if !ok {
 			switch node.(type) {
-			case *ast.GrantProxyStmt, *ast.GrantRoleStmt:
+			case *ast.GrantProxyStmt, *ast.GrantRoleStmt, *ast.RevokeStmt:
 				continue
 			default:
 				return nil, errors.Errorf("%s is not grant statement", grant)
@@ -330,6 +333,12 @@ func VerifyPrivileges(
 		switch grantStmt.Level.Level {
 		case ast.GrantLevelGlobal:
 			for _, privElem := range grantStmt.Privs {
+				if privElem.Priv == mysql.ExtendedPriv {
+					if strings.EqualFold(privElem.Name, "FLUSH_TABLES") {
+						delete(lackPrivs, mysql.ReloadPriv)
+					}
+					continue
+				}
 				// all privileges available at a given privilege level (except GRANT OPTION)
 				// from https://dev.mysql.com/doc/refman/5.7/en/privileges-provided.html#priv_all
 				if privElem.Priv == mysql.AllPriv {
@@ -434,6 +443,114 @@ func VerifyPrivileges(
 	}
 
 	return lackPrivs, nil
+}
+
+func showGrants(ctx context.Context, db dbutil.QueryExecutor, user, host string) ([]string, error) {
+	if host == "" {
+		host = "%"
+	}
+
+	query := "SHOW GRANTS FOR CURRENT_USER"
+	if user != "" {
+		query = fmt.Sprintf("SHOW GRANTS FOR '%s'@'%s'", user, host)
+	}
+
+	readGrants := func(query string) ([]string, error) {
+		rows, err := db.QueryContext(ctx, query)
+		if err != nil {
+			return nil, errors.Trace(err)
+		}
+		defer rows.Close()
+
+		grants := make([]string, 0, 8)
+		for rows.Next() {
+			var grant string
+			if err := rows.Scan(&grant); err != nil {
+				return nil, errors.Trace(err)
+			}
+
+			// TiDB parser does not support parse `IDENTIFIED BY PASSWORD <secret>`,
+			// but it may appear in some cases, ref: https://dev.mysql.com/doc/refman/5.6/en/show-grants.html.
+			// We do not need the password in grant statement, so we can replace it.
+			grant = strings.Replace(grant, "IDENTIFIED BY PASSWORD <secret>", "IDENTIFIED BY PASSWORD 'secret'", 1)
+
+			// support parse `IDENTIFIED BY PASSWORD WITH {GRANT OPTION | resource_option} ...`
+			grant = strings.Replace(grant, "IDENTIFIED BY PASSWORD WITH", "IDENTIFIED BY PASSWORD 'secret' WITH", 1)
+
+			// support parse `IDENTIFIED BY PASSWORD`
+			if strings.HasSuffix(grant, "IDENTIFIED BY PASSWORD") {
+				grant = grant + " 'secret'"
+			}
+
+			grants = append(grants, grant)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, errors.Trace(err)
+		}
+		return grants, nil
+	}
+
+	grants, err := readGrants(query)
+	if err != nil {
+		return nil, err
+	}
+
+	// For MySQL 8.0, collect granted roles and read grants using those roles.
+	// HeatWave SHOW GRANTS may append `WITH ADMIN OPTION` to role grants, which
+	// TiDB parser cannot parse yet. Strip the suffix for role discovery only.
+	var roles []string
+	p := parser.New()
+	for _, grant := range grants {
+		grantForParse := grant
+		if shouldIgnoreGrant(grant) {
+			grantForParse = trimAdminOption(grant)
+		}
+		node, err := p.ParseOneStmt(grantForParse, "", "")
+		if err != nil {
+			return nil, errors.New(err.Error())
+		}
+		if grantRoleStmt, ok := node.(*ast.GrantRoleStmt); ok {
+			for _, role := range grantRoleStmt.Roles {
+				roles = append(roles, role.String())
+			}
+		}
+	}
+	if len(roles) == 0 {
+		return grants, nil
+	}
+
+	var builder strings.Builder
+	builder.WriteString(query)
+	builder.WriteString(" USING ")
+	for i, role := range roles {
+		if i > 0 {
+			builder.WriteString(", ")
+		}
+		builder.WriteString(role)
+	}
+	return readGrants(builder.String())
+}
+
+func shouldIgnoreGrant(grant string) bool {
+	normalized := strings.ToUpper(strings.Join(strings.Fields(grant), " "))
+
+	// MySQL 8.0 and HeatWave SHOW GRANTS may return role grants with
+	// `WITH ADMIN OPTION`, while TiDB parser currently accepts GrantRoleStmt
+	// without this suffix only. Role grants do not directly grant the source
+	// privileges checked here, so ignore them just like parsed GrantRoleStmt.
+	return strings.HasPrefix(normalized, "GRANT ") &&
+		strings.Contains(normalized, " TO ") &&
+		strings.Contains(normalized, " WITH ADMIN OPTION") &&
+		!strings.Contains(normalized, " ON ")
+}
+
+func trimAdminOption(grant string) string {
+	upperGrant := strings.ToUpper(grant)
+	idx := strings.LastIndex(upperGrant, " WITH ADMIN OPTION")
+	if idx < 0 {
+		return grant
+	}
+	return strings.TrimSpace(grant[:idx])
 }
 
 func genTableLevelPrivs(tables []filter.Table) map[string]dbPriv {
