@@ -6,20 +6,20 @@ on:
       - master
       - "release-[0-9].[0-9]*"
     paths-ignore:
-      - '**/*.md'
-      - '**/OWNERS'
-      - 'OWNERS'
-      - 'OWNERS_ALIASES'
+      - "**/*.md"
+      - "**/OWNERS"
+      - "OWNERS"
+      - "OWNERS_ALIASES"
 
   pull_request:
     branches:
       - master
       - "release-[0-9].[0-9]*"
     paths-ignore:
-      - '**/*.md'
-      - '**/OWNERS'
-      - 'OWNERS'
-      - 'OWNERS_ALIASES'
+      - "**/*.md"
+      - "**/OWNERS"
+      - "OWNERS"
+      - "OWNERS_ALIASES"
 
 # See: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#concurrency.
 concurrency:
@@ -53,33 +53,14 @@ jobs:
       - name: Setup Go environment
         uses: actions/setup-go@v3
         with:
-          go-version: '1.21'
+          go-version: "1.21"
 
       - name: Cache Tools
         id: cache-tools
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         with:
           path: tools/bin
           key: macos-latest-ticdc-tools-${{ hashFiles('tools/check/go.sum') }}
-
-      - name: Build
-        run: make build
-
-  arm_build:
-    runs-on: [ARM64]
-    name: Arm Build
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [ARM64]
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-
-      - name: Setup Go environment
-        uses: actions/setup-go@v3
-        with:
-          go-version: '1.21'
 
       - name: Build
         run: make build
