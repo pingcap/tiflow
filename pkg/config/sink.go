@@ -81,6 +81,23 @@ const (
 
 	// DefaultEncoderGroupConcurrency is the default concurrency of encoder group.
 	DefaultEncoderGroupConcurrency = 32
+
+	// DefaultSendBootstrapIntervalInSec is the default interval to send bootstrap message.
+	DefaultSendBootstrapIntervalInSec = int64(120)
+	// DefaultSendBootstrapInMsgCount is the default number of messages to send bootstrap message.
+	DefaultSendBootstrapInMsgCount = int32(10000)
+	// DefaultSendBootstrapToAllPartition is the default value of
+	// whether to send bootstrap message to all partitions.
+	DefaultSendBootstrapToAllPartition = true
+	// DefaultSendAllBootstrapAtStart is the default value of whether
+	// to send all tables bootstrap message at changefeed start.
+	DefaultSendAllBootstrapAtStart = false
+
+	// DefaultMaxReconnectToPulsarBroker is the default max reconnect times to pulsar broker.
+	// The pulsar client uses an exponential backoff with jitter to reconnect to the broker.
+	// Based on test, when the max reconnect times is 3,
+	// the total time of reconnecting to brokers is about 30 seconds.
+	DefaultMaxReconnectToPulsarBroker = 3
 )
 
 // AtomicityLevel represents the atomicity level of a changefeed.
@@ -121,8 +138,7 @@ type SinkConfig struct {
 	// DispatchRules is only available when the downstream is MQ.
 	DispatchRules []*DispatchRule `toml:"dispatchers" json:"dispatchers,omitempty"`
 	// CSVConfig is only available when the downstream is Storage.
-	CSVConfig *CSVConfig `toml:"csv" json:"csv,omitempty"`
-
+	CSVConfig       *CSVConfig        `toml:"csv" json:"csv,omitempty"`
 	ColumnSelectors []*ColumnSelector `toml:"column-selectors" json:"column-selectors,omitempty"`
 	// SchemaRegistry is only available when the downstream is MQ using avro protocol.
 	SchemaRegistry *string `toml:"schema-registry" json:"schema-registry,omitempty"`
@@ -147,6 +163,9 @@ type SinkConfig struct {
 	// DeleteOnlyOutputHandleKeyColumns is only available when the downstream is MQ.
 	DeleteOnlyOutputHandleKeyColumns *bool `toml:"delete-only-output-handle-key-columns" json:"delete-only-output-handle-key-columns,omitempty"`
 
+	// ContentCompatible is only available when the downstream is MQ.
+	ContentCompatible *bool `toml:"content-compatible" json:"content-compatible,omitempty"`
+
 	// TiDBSourceID is the source ID of the upstream TiDB,
 	// which is used to set the `tidb_cdc_write_source` session variable.
 	// Note: This field is only used internally and only used in the MySQL sink.
@@ -161,7 +180,23 @@ type SinkConfig struct {
 
 	// AdvanceTimeoutInSec is a duration in second. If a table sink progress hasn't been
 	// advanced for this given duration, the sink will be canceled and re-established.
+	// Deprecated since v8.1.1
 	AdvanceTimeoutInSec *uint `toml:"advance-timeout-in-sec" json:"advance-timeout-in-sec,omitempty"`
+
+	// Simple Protocol only config, use to control the behavior of sending bootstrap message.
+	// Note: When one of the following conditions is set to negative value,
+	// bootstrap sending function will be disabled.
+	// SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+	SendBootstrapIntervalInSec *int64 `toml:"send-bootstrap-interval-in-sec" json:"send-bootstrap-interval-in-sec,omitempty"`
+	// SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.
+	SendBootstrapInMsgCount *int32 `toml:"send-bootstrap-in-msg-count" json:"send-bootstrap-in-msg-count,omitempty"`
+	// SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+	// If set to false, bootstrap message will only be sent to the first partition of each topic.
+	// Default value is true.
+	SendBootstrapToAllPartition *bool `toml:"send-bootstrap-to-all-partition" json:"send-bootstrap-to-all-partition,omitempty"`
+	SendAllBootstrapAtStart     *bool `toml:"send-all-bootstrap-at-start" json:"send-all-bootstrap-at-start,omitempty"`
+	// OpenProtocol related configurations
+	OpenProtocol *OpenProtocolConfig `toml:"open" json:"open,omitempty"`
 }
 
 // MaskSensitiveData masks sensitive data in SinkConfig
@@ -175,6 +210,30 @@ func (s *SinkConfig) MaskSensitiveData() {
 	if s.PulsarConfig != nil {
 		s.PulsarConfig.MaskSensitiveData()
 	}
+}
+
+// ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
+// Only enable bootstrap sending function for simple protocol
+// and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
+func (s *SinkConfig) ShouldSendBootstrapMsg() bool {
+	if s == nil {
+		return false
+	}
+	protocol := util.GetOrZero(s.Protocol)
+
+	return protocol == ProtocolSimple.String() &&
+		util.GetOrZero(s.SendBootstrapIntervalInSec) > 0 &&
+		util.GetOrZero(s.SendBootstrapInMsgCount) > 0
+}
+
+// ShouldSendAllBootstrapAtStart returns whether the should send all bootstrap message at changefeed start.
+func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
+	if s == nil {
+		return false
+	}
+	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
+	log.Info("should send all bootstrap at start", zap.Bool("should", should))
+	return should
 }
 
 // CSVConfig defines a series of configuration items for csv codec.
@@ -331,6 +390,7 @@ type CodecConfig struct {
 	AvroEnableWatermark            *bool   `toml:"avro-enable-watermark" json:"avro-enable-watermark"`
 	AvroDecimalHandlingMode        *string `toml:"avro-decimal-handling-mode" json:"avro-decimal-handling-mode,omitempty"`
 	AvroBigintUnsignedHandlingMode *string `toml:"avro-bigint-unsigned-handling-mode" json:"avro-bigint-unsigned-handling-mode,omitempty"`
+	EncodingFormat                 *string `toml:"encoding-format" json:"encoding-format,omitempty"`
 }
 
 // KafkaConfig represents a kafka sink configuration
@@ -371,6 +431,17 @@ type KafkaConfig struct {
 	CodecConfig                  *CodecConfig              `toml:"codec-config" json:"codec-config,omitempty"`
 	LargeMessageHandle           *LargeMessageHandleConfig `toml:"large-message-handle" json:"large-message-handle,omitempty"`
 	GlueSchemaRegistryConfig     *GlueSchemaRegistryConfig `toml:"glue-schema-registry-config" json:"glue-schema-registry-config"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
+	if k == nil || k.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *k.OutputRawChangeEvent
 }
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
@@ -525,11 +596,22 @@ type PulsarConfig struct {
 	// and 'type' always use 'client_credentials'
 	OAuth2 *OAuth2 `toml:"oauth2" json:"oauth2,omitempty"`
 
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+
 	// BrokerURL is used to configure service brokerUrl for the Pulsar service.
 	// This parameter is a part of the `sink-uri`. Internal use only.
 	BrokerURL string `toml:"-" json:"-"`
 	// SinkURI is the parsed sinkURI. Internal use only.
 	SinkURI *url.URL `toml:"-" json:"-"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
 }
 
 // MaskSensitiveData masks sensitive data in PulsarConfig
@@ -590,6 +672,17 @@ type CloudStorageConfig struct {
 	FileExpirationDays  *int    `toml:"file-expiration-days" json:"file-expiration-days,omitempty"`
 	FileCleanupCronSpec *string `toml:"file-cleanup-cron-spec" json:"file-cleanup-cron-spec,omitempty"`
 	FlushConcurrency    *int    `toml:"flush-concurrency" json:"flush-concurrency,omitempty"`
+
+	// OutputRawChangeEvent controls whether to split the update pk/uk events.
+	OutputRawChangeEvent *bool `toml:"output-raw-change-event" json:"output-raw-change-event,omitempty"`
+}
+
+// GetOutputRawChangeEvent returns the value of OutputRawChangeEvent
+func (c *CloudStorageConfig) GetOutputRawChangeEvent() bool {
+	if c == nil || c.OutputRawChangeEvent == nil {
+		return false
+	}
+	return *c.OutputRawChangeEvent
 }
 
 func (s *SinkConfig) validateAndAdjust(sinkURI *url.URL) error {
@@ -733,21 +826,56 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	// Adjust that protocol is compatible with the scheme. For testing purposes,
-	// any protocol should be legal for blackhole.
-	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
-		_, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
-		if err != nil {
-			return err
-		}
-	} else if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
-		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
-			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
-	}
-
 	log.Info("succeed to parse parameter from sink uri",
 		zap.String("protocol", util.GetOrZero(s.Protocol)),
 		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
+
+	// Check that protocol config is compatible with the scheme.
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
+		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
+			"is incompatible with %s scheme", util.GetOrZero(s.Protocol), sinkURI.Scheme))
+	}
+	// For testing purposes, any protocol should be legal for blackhole.
+	if sink.IsMQScheme(sinkURI.Scheme) || sink.IsStorageScheme(sinkURI.Scheme) {
+		return s.ValidateProtocol(sinkURI.Scheme)
+	}
+	return nil
+}
+
+// ValidateProtocol validates the protocol configuration.
+func (s *SinkConfig) ValidateProtocol(scheme string) error {
+	protocol, err := ParseSinkProtocolFromString(util.GetOrZero(s.Protocol))
+	if err != nil {
+		return err
+	}
+	outputOldValue := false
+	switch protocol {
+	case ProtocolOpen:
+		if s.OpenProtocol != nil {
+			outputOldValue = s.OpenProtocol.OutputOldValue
+		}
+	case ProtocolAvro:
+		outputOldValue = false
+	default:
+		return nil
+	}
+
+	outputRawChangeEvent := false
+	switch scheme {
+	case sink.KafkaScheme, sink.KafkaSSLScheme:
+		outputRawChangeEvent = s.KafkaConfig.GetOutputRawChangeEvent()
+	case sink.PulsarScheme, sink.PulsarSSLScheme:
+		outputRawChangeEvent = s.PulsarConfig.GetOutputRawChangeEvent()
+	default:
+		outputRawChangeEvent = s.CloudStorageConfig.GetOutputRawChangeEvent()
+	}
+
+	if outputRawChangeEvent && !outputOldValue {
+		// TODO: return error if we do not need to keep backward compatibility.
+		log.Warn(fmt.Sprintf("TiCDC will not split the update pk/uk events if output-raw-change-event is true(scheme: %s).", scheme) +
+			fmt.Sprintf("It is not recommended to set output-old-value to false(protocol: %s) in this case.", protocol) +
+			"Otherwise, there may be data consistency issues in update pk/uk scenarios due to lack of old value information.")
+	}
 	return nil
 }
 
@@ -865,4 +993,9 @@ func (g *GlueSchemaRegistryConfig) Validate() error {
 // NoCredentials returns true if no credentials are set.
 func (g *GlueSchemaRegistryConfig) NoCredentials() bool {
 	return g.AccessKey == "" && g.SecretAccessKey == "" && g.Token == ""
+}
+
+// OpenProtocolConfig represents the configurations for open protocol encoding
+type OpenProtocolConfig struct {
+	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 }

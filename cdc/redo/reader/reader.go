@@ -37,7 +37,7 @@ import (
 const (
 	emitBatch             = mysql.DefaultMaxTxnRow
 	defaultReaderChanSize = mysql.DefaultWorkerCount * emitBatch
-	maxTotalMemoryUsage   = 90.0
+	maxTotalMemoryUsage   = 80.0
 	maxWaitDuration       = time.Minute * 2
 )
 
@@ -221,11 +221,6 @@ func (l *LogReader) runReader(egCtx context.Context, cfg *readerConfig) error {
 				case l.rowCh <- row:
 				}
 			}
-			err := util.WaitMemoryAvailable(maxTotalMemoryUsage, maxWaitDuration)
-			if err != nil {
-				return errors.Trace(err)
-			}
-
 		case redo.RedoDDLLogFileType:
 			ddl := item.data.RedoDDL.DDL
 			if ddl != nil && ddl.CommitTs > cfg.startTs && ddl.CommitTs <= cfg.endTs {
@@ -364,6 +359,7 @@ func (h logHeap) Len() int {
 }
 
 func (h logHeap) Less(i, j int) bool {
+	// we separate ddl and dml, so we only need to compare dml with dml, and ddl with ddl.
 	if h[i].data.Type == model.RedoLogTypeDDL {
 		if h[i].data.RedoDDL.DDL == nil {
 			return true
@@ -381,10 +377,19 @@ func (h logHeap) Less(i, j int) bool {
 		return false
 	}
 
-	if h[i].data.RedoRow.Row.CommitTs == h[j].data.RedoRow.Row.CommitTs &&
-		h[i].data.RedoRow.Row.StartTs < h[j].data.RedoRow.Row.StartTs {
-		return true
+	if h[i].data.RedoRow.Row.CommitTs == h[j].data.RedoRow.Row.CommitTs {
+		if h[i].data.RedoRow.Row.StartTs != h[j].data.RedoRow.Row.StartTs {
+			return h[i].data.RedoRow.Row.StartTs < h[j].data.RedoRow.Row.StartTs
+		}
+		// in the same txn, we need to sort by delete/update/insert order
+		if h[i].data.RedoRow.Row.IsDelete() {
+			return true
+		} else if h[i].data.RedoRow.Row.IsUpdate() {
+			return !h[j].data.RedoRow.Row.IsDelete()
+		}
+		return false
 	}
+
 	return h[i].data.RedoRow.Row.CommitTs < h[j].data.RedoRow.Row.CommitTs
 }
 

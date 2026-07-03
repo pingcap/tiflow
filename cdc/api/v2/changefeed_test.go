@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
-	tidbkv "github.com/pingcap/tidb/kv"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/controller"
 	mock_controller "github.com/pingcap/tiflow/cdc/controller/mock"
@@ -109,7 +109,7 @@ func TestCreateChangefeed(t *testing.T) {
 		ID:        changeFeedID.ID,
 		Namespace: changeFeedID.Namespace,
 		SinkURI:   blackholeSink,
-		PDAddrs:   []string{},
+		PDAddrs:   []string{"http://127.0.0.1:2379"}, // arbitrary pd address to trigger create new pd client
 	}
 	body, err := json.Marshal(&cfConfig)
 	require.Nil(t, err)
@@ -134,7 +134,7 @@ func TestCreateChangefeed(t *testing.T) {
 		getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(pdClient, nil).AnyTimes()
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 	cfConfig.PDAddrs = []string{"http://127.0.0.1:2379", "http://127.0.0.1:2382"}
@@ -152,7 +152,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 4: failed to verify tables
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	helpers.EXPECT().
@@ -176,9 +176,9 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 5:
 	helpers.EXPECT().
-		getEtcdClient(gomock.Any(), gomock.Any()).
+		getEtcdClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
-	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, nil).
 		AnyTimes()
@@ -221,7 +221,7 @@ func TestCreateChangefeed(t *testing.T) {
 
 	// case 6: success
 	helpers.EXPECT().
-		getEtcdClient(gomock.Any(), gomock.Any()).
+		getEtcdClient(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(testEtcdCluster.RandClient(), nil)
 	ctrl.EXPECT().
 		CreateChangefeed(gomock.Any(), gomock.Any(), gomock.Any()).
@@ -446,7 +446,7 @@ func TestUpdateChangefeed(t *testing.T) {
 		verifyUpstream(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil).AnyTimes()
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
 	mockCapture.EXPECT().GetUpstreamManager().Return(nil, nil).AnyTimes()
@@ -647,10 +647,12 @@ func TestVerifyTable(t *testing.T) {
 
 	// case 2: kv create failed
 	updateCfg := getDefaultVerifyTableConfig()
+	// arbitrary pd address to trigger create new pd client
+	updateCfg.PDAddrs = []string{"http://127.0.0.1:2379"}
 	body, err := json.Marshal(&updateCfg)
 	require.Nil(t, err)
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, cerrors.ErrNewStore).
 		Times(1)
 
@@ -665,10 +667,10 @@ func TestVerifyTable(t *testing.T) {
 
 	// case 3: getVerifiedTables failed
 	helpers.EXPECT().
-		createTiStore(gomock.Any(), gomock.Any()).
+		createTiStore(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil).
 		AnyTimes()
-	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(nil, nil, cerrors.ErrFilterRuleInvalid).
 		Times(1)
@@ -690,7 +692,7 @@ func TestVerifyTable(t *testing.T) {
 	ineligible := []model.TableName{
 		{Schema: "test", Table: "invalidTable"},
 	}
-	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(),
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
 		gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(eligible, ineligible, nil)
 
@@ -702,6 +704,21 @@ func TestVerifyTable(t *testing.T) {
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, http.StatusOK, w.Code)
+
+	// case 5: context canceled
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	helpers.EXPECT().getVerifiedTables(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, nil, ctx.Err()).
+		Times(1)
+	w = httptest.NewRecorder()
+	req, _ = http.NewRequestWithContext(ctx, verify.method, verify.url, bytes.NewReader(body))
+	router.ServeHTTP(w, req)
+	respErr = model.HTTPError{}
+	err = json.NewDecoder(w.Body).Decode(&respErr)
+	require.Nil(t, err)
+	require.Contains(t, respErr.Error, "context canceled")
 }
 
 func TestResumeChangefeed(t *testing.T) {
@@ -1018,6 +1035,10 @@ func TestChangefeedSynced(t *testing.T) {
 	statusProvider.err = nil
 	statusProvider.changefeedInfo = cfInfo
 	{
+		cfg := getDefaultVerifyTableConfig()
+		// arbitrary pd address to trigger create new pd client
+		cfg.PDAddrs = []string{"http://127.0.0.1:2379"}
+		body, _ := json.Marshal(&cfg)
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
 		// case3: pd is offline，resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
@@ -1030,7 +1051,7 @@ func TestChangefeedSynced(t *testing.T) {
 			context.Background(),
 			syncedInfo.method,
 			fmt.Sprintf(syncedInfo.url, validID),
-			nil,
+			bytes.NewReader(body),
 		)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1043,6 +1064,10 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
+		cfg := getDefaultVerifyTableConfig()
+		// arbitrary pd address to trigger create new pd client
+		cfg.PDAddrs = []string{"http://127.0.0.1:2379"}
+		body, _ := json.Marshal(&cfg)
 		helpers.EXPECT().getPDClient(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil, cerrors.ErrAPIGetPDClientFailed).Times(1)
 		// case4: pd is offline，resolvedTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
@@ -1055,7 +1080,7 @@ func TestChangefeedSynced(t *testing.T) {
 			context.Background(),
 			syncedInfo.method,
 			fmt.Sprintf(syncedInfo.url, validID),
-			nil,
+			bytes.NewReader(body),
 		)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1074,6 +1099,10 @@ func TestChangefeedSynced(t *testing.T) {
 	pdClient.logicTime = 1000
 	pdClient.timestamp = 1701153217279
 	{
+		cfg := getDefaultVerifyTableConfig()
+		// arbitrary pd address to trigger create new pd client
+		cfg.PDAddrs = []string{"http://127.0.0.1:2379"}
+		body, _ := json.Marshal(&cfg)
 		// case5: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217209 << 18,
@@ -1085,7 +1114,7 @@ func TestChangefeedSynced(t *testing.T) {
 			context.Background(),
 			syncedInfo.method,
 			fmt.Sprintf(syncedInfo.url, validID),
-			nil,
+			bytes.NewReader(body),
 		)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1097,6 +1126,10 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
+		cfg := getDefaultVerifyTableConfig()
+		// arbitrary pd address to trigger create new pd client
+		cfg.PDAddrs = []string{"http://127.0.0.1:2379"}
+		body, _ := json.Marshal(&cfg)
 		// case6: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs < 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153201279 << 18,
@@ -1108,7 +1141,7 @@ func TestChangefeedSynced(t *testing.T) {
 			context.Background(),
 			syncedInfo.method,
 			fmt.Sprintf(syncedInfo.url, validID),
-			nil,
+			bytes.NewReader(body),
 		)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1125,6 +1158,10 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
+		cfg := getDefaultVerifyTableConfig()
+		// arbitrary pd address to trigger create new pd client
+		cfg.PDAddrs = []string{"http://127.0.0.1:2379"}
+		body, _ := json.Marshal(&cfg)
 		// case7: pdTs - lastSyncedTs > 5min, pdTs - checkpointTs > 15s, resolvedTs - checkpointTs > 15s
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153201279 << 18,
@@ -1136,7 +1173,7 @@ func TestChangefeedSynced(t *testing.T) {
 			context.Background(),
 			syncedInfo.method,
 			fmt.Sprintf(syncedInfo.url, validID),
-			nil,
+			bytes.NewReader(body),
 		)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -1148,6 +1185,10 @@ func TestChangefeedSynced(t *testing.T) {
 	}
 
 	{
+		cfg := getDefaultVerifyTableConfig()
+		// arbitrary pd address to trigger create new pd client
+		cfg.PDAddrs = []string{"http://127.0.0.1:2379"}
+		body, _ := json.Marshal(&cfg)
 		// case8: pdTs - lastSyncedTs < 5min
 		statusProvider.changeFeedSyncedStatus = &model.ChangeFeedSyncedStatusForAPI{
 			CheckpointTs:     1701153217279 << 18,
@@ -1159,7 +1200,7 @@ func TestChangefeedSynced(t *testing.T) {
 			context.Background(),
 			syncedInfo.method,
 			fmt.Sprintf(syncedInfo.url, validID),
-			nil,
+			bytes.NewReader(body),
 		)
 		router.ServeHTTP(w, req)
 		require.Equal(t, http.StatusOK, w.Code)

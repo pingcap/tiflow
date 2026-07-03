@@ -103,6 +103,7 @@ function test_worker_handle_multi_tls_tasks() {
 	cp $cur/conf/dm-worker2.toml $WORK_DIR/
 	cp $cur/conf/dm-task.yaml $WORK_DIR/
 	cp $cur/conf/dm-task-2.yaml $WORK_DIR/
+	cp $cur/conf/dm-task-3.yaml $WORK_DIR/
 
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master1.toml
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-master2.toml
@@ -111,6 +112,7 @@ function test_worker_handle_multi_tls_tasks() {
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-worker2.toml
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task.yaml
 	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task-2.yaml
+	sed -i "s%dir-placeholer%$cur\/conf%g" $WORK_DIR/dm-task-3.yaml
 
 	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $WORK_DIR/dm-master1.toml
 	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $WORK_DIR/dm-master2.toml
@@ -133,6 +135,8 @@ function test_worker_handle_multi_tls_tasks() {
 		"start-task $WORK_DIR/dm-task.yaml --remove-meta=true"
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"start-task $WORK_DIR/dm-task-2.yaml --remove-meta=true"
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"start-task $WORK_DIR/dm-task-3.yaml --remove-meta=true"
 
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test" \
@@ -140,6 +144,10 @@ function test_worker_handle_multi_tls_tasks() {
 		"\"unit\": \"Sync\"" 1
 	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
 		"query-status test2" \
+		"\"result\": true" 2 \
+		"\"unit\": \"Sync\"" 1
+	run_dm_ctl_with_tls_and_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" $cur/conf/ca.pem $cur/conf/dm.pem $cur/conf/dm.key \
+		"query-status test3" \
 		"\"result\": true" 2 \
 		"\"unit\": \"Sync\"" 1
 
@@ -292,6 +300,11 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 	check_rpc_alive $cur/../bin/check_master_online_http 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 	check_rpc_alive $cur/../bin/check_master_http_apis 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
 
+	# https://github.com/pingcap/dm/issues/1458
+	# check the log is not repeatedly printed
+	check_log_not_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate"
+	check_log_not_contains $WORK_DIR/master1/log/dm-master.log "client certificate authentication failed"
+
 	echo "use common name not in 'cert-allowed-cn' should not request success"
 	check_rpc_alive $cur/../bin/check_master_online_http 127.0.0.1:$MASTER_PORT1 "$cur/conf/ca.pem" "$cur/conf/other.pem" "$cur/conf/other.key" && exit 1 || true
 
@@ -306,10 +319,6 @@ function test_master_ha_when_enable_tidb_and_only_ca_source_tls() {
 
 	echo "check data"
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
-
-	# https://github.com/pingcap/dm/issues/1458
-	# check the log is not repeatedly printed
-	check_log_contains $WORK_DIR/master1/log/dm-master.log "remote error: tls: bad certificate" 1
 
 	echo "============================== test_master_ha_when_enable_tidb_and_only_ca_source_tls success =================================="
 }

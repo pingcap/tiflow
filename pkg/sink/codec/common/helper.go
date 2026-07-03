@@ -56,22 +56,40 @@ func (h *ColumnsHolder) Length() int {
 	return len(h.Values)
 }
 
-// SnapshotQuery query the db by the snapshot read with the given commitTs
-func SnapshotQuery(
-	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
-) (*ColumnsHolder, error) {
-	// 1. set snapshot read
-	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
+// MustQueryTimezone query the timezone from the upstream database
+func MustQueryTimezone(ctx context.Context, db *sql.DB) string {
 	conn, err := db.Conn(ctx)
 	if err != nil {
-		log.Error("establish connection to the upstream tidb failed",
-			zap.String("query", query),
-			zap.String("schema", schema), zap.String("table", table),
-			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
+		log.Panic("establish connection to the upstream tidb failed", zap.Error(err))
 	}
 	defer conn.Close()
 
+	var timezone string
+	query := "SELECT @@global.time_zone"
+	err = conn.QueryRowContext(ctx, query).Scan(&timezone)
+	if err != nil {
+		log.Panic("query timezone failed", zap.Error(err))
+	}
+
+	log.Info("query global timezone from the upstream tidb",
+		zap.Any("timezone", timezone))
+	return timezone
+}
+
+// MustSnapshotQuery query the db by the snapshot read with the given commitTs
+func MustSnapshotQuery(
+	ctx context.Context, db *sql.DB, commitTs uint64, schema, table string, conditions map[string]interface{},
+) *ColumnsHolder {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		log.Panic("establish connection to the upstream tidb failed",
+			zap.String("schema", schema), zap.String("table", table),
+			zap.Uint64("commitTs", commitTs), zap.Error(err))
+	}
+	defer conn.Close()
+
+	// 1. set snapshot read
+	query := fmt.Sprintf("set @@tidb_snapshot=%d", commitTs)
 	_, err = conn.ExecContext(ctx, query)
 	if err != nil {
 		mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
@@ -82,69 +100,64 @@ func SnapshotQuery(
 			}
 		}
 
-		log.Error("set snapshot read failed",
+		log.Panic("set snapshot read failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
 	}
 
 	// 2. query the whole row
-	query = fmt.Sprintf("select * from `%s`.`%s` where ", schema, table)
+	query = fmt.Sprintf("select * from %s.%s where ", schema, table)
 	var whereClause string
 	for name, value := range conditions {
 		if whereClause != "" {
 			whereClause += " and "
 		}
-		whereClause += fmt.Sprintf("`%s` = '%v'", name, value)
+		whereClause += fmt.Sprintf("%s = %v", name, value)
 	}
 	query += whereClause
 
 	rows, err := conn.QueryContext(ctx, query)
 	if err != nil {
-		log.Error("query row failed",
+		log.Panic("query row failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, errors.Trace(err)
 	}
 	defer rows.Close()
 
 	holder, err := newColumnHolder(rows)
 	if err != nil {
-		log.Error("obtain the columns holder failed",
+		log.Panic("obtain the columns holder failed",
 			zap.String("query", query),
 			zap.String("schema", schema), zap.String("table", table),
 			zap.Uint64("commitTs", commitTs), zap.Error(err))
-		return nil, err
 	}
 	for rows.Next() {
 		err = rows.Scan(holder.ValuePointers...)
 		if err != nil {
-			log.Error("scan row failed",
+			log.Panic("scan row failed",
 				zap.String("query", query),
 				zap.String("schema", schema), zap.String("table", table),
 				zap.Uint64("commitTs", commitTs), zap.Error(err))
-			return nil, errors.Trace(err)
 		}
 	}
-
-	return holder, nil
+	return holder
 }
 
-// BinaryLiteralToInt convert bytes into uint64,
+// MustBinaryLiteralToInt convert bytes into uint64,
 // by follow https://github.com/pingcap/tidb/blob/e3417913f58cdd5a136259b902bf177eaf3aa637/types/binary_literal.go#L105
-func BinaryLiteralToInt(bytes []byte) (uint64, error) {
+func MustBinaryLiteralToInt(bytes []byte) uint64 {
 	bytes = trimLeadingZeroBytes(bytes)
 	length := len(bytes)
 
 	if length > 8 {
-		log.Error("invalid bit value found", zap.ByteString("value", bytes))
-		return math.MaxUint64, errors.New("invalid bit value")
+		log.Panic("invalid bit value found", zap.ByteString("value", bytes))
+		return math.MaxUint64
 	}
 
 	if length == 0 {
-		return 0, nil
+		return 0
 	}
 
 	// Note: the byte-order is BigEndian.
@@ -152,7 +165,7 @@ func BinaryLiteralToInt(bytes []byte) (uint64, error) {
 	for i := 1; i < length; i++ {
 		val = (val << 8) | uint64(bytes[i])
 	}
-	return val, nil
+	return val
 }
 
 func trimLeadingZeroBytes(bytes []byte) []byte {

@@ -25,8 +25,8 @@ import (
 	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser/charset"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	dmutils "github.com/pingcap/tiflow/dm/pkg/conn"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
@@ -318,12 +318,7 @@ func CheckIsTiDB(ctx context.Context, db *sql.DB) (bool, error) {
 	err := row.Scan(&tidbVer)
 	if err != nil {
 		log.Error("check tidb version error", zap.Error(err))
-		// downstream is not TiDB, do nothing
-		if mysqlErr, ok := errors.Cause(err).(*dmysql.MySQLError); ok && (mysqlErr.Number == tmysql.ErrNoDB ||
-			mysqlErr.Number == tmysql.ErrSpDoesNotExist) {
-			return false, nil
-		}
-		return false, errors.Trace(err)
+		return false, nil
 	}
 	return true, nil
 }

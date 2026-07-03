@@ -17,7 +17,7 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/pingcap/tidb/util/schemacmp"
+	"github.com/pingcap/tidb/pkg/util/schemacmp"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"

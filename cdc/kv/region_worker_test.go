@@ -320,7 +320,7 @@ func TestRegionWorkerHandleEventsBeforeStartTs(t *testing.T) {
 		&tikv.RPCContext{}),
 		0)
 	s1.sri.lockedRange = &regionlock.LockedRange{}
-	s1.sri.lockedRange.CheckpointTs.Store(9)
+	s1.sri.lockedRange.ResolvedTs.Store(9)
 	s1.start()
 	w := newRegionWorker(ctx, model.ChangeFeedID{}, s, "", newSyncRegionFeedStateMap())
 

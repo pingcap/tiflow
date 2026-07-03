@@ -65,7 +65,7 @@ message Stats {
     // Number of captured regions.
     uint64 region_count = 1;
     // The current timestamp from the table's point of view.
-    uint64 current_ts = 2 [(gogoproto.casttype) = "Ts"];
+    uint64 current_ts = 2 [(gogoproto.casttype) = "Ts", deprecated = true]; // Deprecated: Do not use this field.
     // Checkponits at each stage.
     map<string, Checkpoint> stage_checkpoints = 3 [(gogoproto.nullable) = false];
     // The barrier timestamp of the table.

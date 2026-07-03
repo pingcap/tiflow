@@ -271,8 +271,8 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 			zap.Uint64("checkpointTs", checkpointTs),
 			zap.Uint64("resolvedTs", resolvedTs))
 	}
-	m.metaResolvedTs.unflushed = resolvedTs
-	m.metaCheckpointTs.unflushed = checkpointTs
+	m.metaResolvedTs.unflushed.Store(resolvedTs)
+	m.metaCheckpointTs.unflushed.Store(checkpointTs)
 	if err := m.maybeFlushMeta(ctx); err != nil {
 		return errors.WrapError(errors.ErrRedoMetaInitialize, err)
 	}

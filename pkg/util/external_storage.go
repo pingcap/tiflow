@@ -35,6 +35,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	defaultTimeout = 5 * time.Minute
+)
+
 // GetExternalStorageFromURI creates a new storage.ExternalStorage from a uri.
 func GetExternalStorageFromURI(
 	ctx context.Context, uri string,
@@ -42,18 +46,18 @@ func GetExternalStorageFromURI(
 	return GetExternalStorage(ctx, uri, nil, DefaultS3Retryer())
 }
 
-// GetExternalStorageWithTimeout creates a new storage.ExternalStorage from a uri
+// GetExternalStorageWithDefaultTimeout creates a new storage.ExternalStorage from a uri
 // without retry. It is the caller's responsibility to set timeout to the context.
-func GetExternalStorageWithTimeout(
-	ctx context.Context, uri string, timeout time.Duration,
-) (storage.ExternalStorage, error) {
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+func GetExternalStorageWithDefaultTimeout(ctx context.Context, uri string) (storage.ExternalStorage, error) {
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
-	s, err := GetExternalStorage(ctx, uri, nil, nil)
+	// total retry time is [1<<7, 1<<8] = [128, 256] + 30*6 = [308, 436] seconds
+	r := NewS3Retryer(7, 1*time.Second, 2*time.Second)
+	s, err := GetExternalStorage(ctx, uri, nil, r)
 
 	return &extStorageWithTimeout{
 		ExternalStorage: s,
-		timeout:         timeout,
+		timeout:         defaultTimeout,
 	}, err
 }
 
@@ -140,6 +144,17 @@ func DefaultS3Retryer() request.Retryer {
 	}
 }
 
+// NewS3Retryer creates a new s3 retryer.
+func NewS3Retryer(maxRetries int, minRetryDelay, minThrottleDelay time.Duration) request.Retryer {
+	return retryerWithLog{
+		DefaultRetryer: client.DefaultRetryer{
+			NumMaxRetries:    maxRetries,
+			MinRetryDelay:    minRetryDelay,
+			MinThrottleDelay: minThrottleDelay,
+		},
+	}
+}
+
 type extStorageWithTimeout struct {
 	storage.ExternalStorage
 	timeout time.Duration
@@ -150,7 +165,11 @@ type extStorageWithTimeout struct {
 func (s *extStorageWithTimeout) WriteFile(ctx context.Context, name string, data []byte) error {
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
 	defer cancel()
-	return s.ExternalStorage.WriteFile(ctx, name, data)
+	err := s.ExternalStorage.WriteFile(ctx, name, data)
+	if err != nil {
+		err = errors.ErrExternalStorageAPI.Wrap(err).GenWithStackByArgs("WriteFile")
+	}
+	return err
 }
 
 // ReadFile reads a complete file from storage, similar to os.ReadFile
@@ -178,9 +197,28 @@ func (s *extStorageWithTimeout) DeleteFile(ctx context.Context, name string) err
 func (s *extStorageWithTimeout) Open(
 	ctx context.Context, path string, _ *storage.ReaderOption,
 ) (storage.ExternalFileReader, error) {
+	// Unlike other methods, Open method cannot call cancel() in defer.
+	// This is because the reader's lifetime is bound to the context provided at Open().
+	// Subsequent Read() calls on reader will observe context cancellation.
+	// Instead, we wrap the reader in a struct and cancel it's context in Close().
 	ctx, cancel := context.WithTimeout(ctx, s.timeout)
-	defer cancel()
-	return s.ExternalStorage.Open(ctx, path, nil)
+	r, err := s.ExternalStorage.Open(ctx, path, nil)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	return &readerWithCancel{ExternalFileReader: r, cancel: cancel}, nil
+}
+
+type readerWithCancel struct {
+	storage.ExternalFileReader
+	cancel context.CancelFunc
+}
+
+// Close the reader and cancel the context.
+func (r *readerWithCancel) Close() error {
+	defer r.cancel()
+	return r.ExternalFileReader.Close()
 }
 
 // WalkDir traverse all the files in a dir.

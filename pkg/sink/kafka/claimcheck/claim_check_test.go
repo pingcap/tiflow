@@ -30,5 +30,5 @@ func TestClaimCheckFileName(t *testing.T) {
 	require.NoError(t, err)
 
 	fileName := claimCheck.FileNameWithPrefix("file.json")
-	require.Equal(t, "file:////tmp/abc/file.json", fileName)
+	require.Equal(t, "file:///tmp/abc/file.json", fileName)
 }

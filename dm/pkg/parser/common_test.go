@@ -16,8 +16,8 @@ package parser
 import (
 	"testing"
 
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/util/filter"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
@@ -66,6 +66,13 @@ var testCases = []testCase{
 		[][]*filter.Table{{genTableName("s1", "")}},
 		[][]*filter.Table{{genTableName("xs1", "")}},
 		[]string{"DROP DATABASE IF EXISTS `xs1`"},
+	},
+	{
+		"alter database collate utf8mb4_general_ci",
+		[]string{"ALTER DATABASE `test` COLLATE = utf8mb4_general_ci"},
+		[][]*filter.Table{{genTableName("test", "")}},
+		[][]*filter.Table{{genTableName("xtest", "")}},
+		[]string{"ALTER DATABASE `xtest` COLLATE = utf8mb4_general_ci"},
 	},
 	{
 		"drop table `Ss1`.`tT1`",
@@ -271,11 +278,11 @@ var testCases = []testCase{
 		[]string{"ALTER TABLE `xtest`.`xt1` DROP INDEX IF EXISTS `i1`"},
 	},
 	{
-		"alter table `t1` drop foreign key if exists fk_t2_id",
-		[]string{"ALTER TABLE `test`.`t1` DROP FOREIGN KEY IF EXISTS `fk_t2_id`"},
+		"alter table `t1` drop foreign key fk_t2_id",
+		[]string{"ALTER TABLE `test`.`t1` DROP FOREIGN KEY `fk_t2_id`"},
 		[][]*filter.Table{{genTableName("test", "t1")}},
 		[][]*filter.Table{{genTableName("xtest", "xt1")}},
-		[]string{"ALTER TABLE `xtest`.`xt1` DROP FOREIGN KEY IF EXISTS `fk_t2_id`"},
+		[]string{"ALTER TABLE `xtest`.`xt1` DROP FOREIGN KEY `fk_t2_id`"},
 	},
 	{
 		"alter table `t1` drop partition if exists p2",

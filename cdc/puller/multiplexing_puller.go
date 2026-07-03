@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	resolveLockFence        time.Duration = 20 * time.Second
-	resolveLockTickInterval time.Duration = 10 * time.Second
+	resolveLockFence        time.Duration = 4 * time.Second
+	resolveLockTickInterval time.Duration = 2 * time.Second
 
 	// Suppose there are 50K tables, total size of `resolvedEventsCache`s will be
 	// unsafe.SizeOf(kv.MultiplexingEvent) * 50K * 256 = 800M.
@@ -75,7 +75,7 @@ type tableProgressWithSubID struct {
 type MultiplexingPuller struct {
 	changefeed model.ChangeFeedID
 	client     *kv.SharedClient
-	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span) error
+	consume    func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error
 	hasher     func(tablepb.Span, int) int
 	frontiers  int
 
@@ -106,7 +106,7 @@ type MultiplexingPuller struct {
 func NewMultiplexingPuller(
 	changefeed model.ChangeFeedID,
 	client *kv.SharedClient,
-	consume func(context.Context, *model.RawKVEntry, []tablepb.Span) error,
+	consume func(context.Context, *model.RawKVEntry, []tablepb.Span, model.ShouldSplitKVEntry) error,
 	workers int,
 	hasher func(tablepb.Span, int) int,
 	frontiers int,
@@ -130,13 +130,23 @@ func NewMultiplexingPuller(
 }
 
 // Subscribe some spans. They will share one same resolved timestamp progress.
-func (p *MultiplexingPuller) Subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) {
+func (p *MultiplexingPuller) Subscribe(
+	spans []tablepb.Span,
+	startTs model.Ts,
+	tableName string,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+) {
 	p.subscriptions.Lock()
 	defer p.subscriptions.Unlock()
-	p.subscribe(spans, startTs, tableName)
+	p.subscribe(spans, startTs, tableName, shouldSplitKVEntry)
 }
 
-func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, tableName string) []kv.SubscriptionID {
+func (p *MultiplexingPuller) subscribe(
+	spans []tablepb.Span,
+	startTs model.Ts,
+	tableName string,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
+) []kv.SubscriptionID {
 	for _, span := range spans {
 		if _, exists := p.subscriptions.n.Get(span); exists {
 			log.Panic("redundant subscription",
@@ -164,7 +174,7 @@ func (p *MultiplexingPuller) subscribe(spans []tablepb.Span, startTs model.Ts, t
 		progress.consume.RLock()
 		defer progress.consume.RUnlock()
 		if !progress.consume.removed {
-			return p.consume(ctx, raw, spans)
+			return p.consume(ctx, raw, spans, shouldSplitKVEntry)
 		}
 		return nil
 	}
@@ -265,6 +275,16 @@ func (p *MultiplexingPuller) run(ctx context.Context, includeClient bool) error 
 		zap.Int("workerConcurrent", len(p.inputChs)),
 		zap.Int("frontierConcurrent", p.frontiers))
 	return g.Wait()
+}
+
+// Close closes the puller.
+func (p *MultiplexingPuller) Close() {
+	if p.client != nil {
+		p.client.Close()
+	}
+	log.Info("MultiplexingPuller is closed",
+		zap.String("namespace", p.changefeed.Namespace),
+		zap.String("changefeed", p.changefeed.ID))
 }
 
 func (p *MultiplexingPuller) handleInputCh(ctx context.Context, inputCh <-chan kv.MultiplexingEvent) error {

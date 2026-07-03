@@ -212,8 +212,14 @@ func TestAndWriteExampleReplicaTOML(t *testing.T) {
 		EnableKafkaSinkV2:                util.AddressOf(false),
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
 		Protocol:                         util.AddressOf("open-protocol"),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		SendBootstrapToAllPartition:      util.AddressOf(true),
+		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
+		SendAllBootstrapAtStart:          util.AddressOf(false),
 	}, cfg.Sink)
 }
 
@@ -246,7 +252,13 @@ func TestAndWriteStorageSinkTOML(t *testing.T) {
 		},
 		OnlyOutputUpdatedColumns:         util.AddressOf(false),
 		DeleteOnlyOutputHandleKeyColumns: util.AddressOf(false),
+		ContentCompatible:                util.AddressOf(false),
 		AdvanceTimeoutInSec:              util.AddressOf(uint(150)),
+		SendBootstrapIntervalInSec:       util.AddressOf(int64(120)),
+		SendBootstrapInMsgCount:          util.AddressOf(int32(10000)),
+		SendBootstrapToAllPartition:      util.AddressOf(true),
+		SendAllBootstrapAtStart:          util.AddressOf(false),
+		OpenProtocol:                     &config.OpenProtocolConfig{OutputOldValue: true},
 	}, cfg.Sink)
 }
 

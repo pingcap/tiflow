@@ -16,11 +16,11 @@ package filter
 import (
 	"fmt"
 
-	bf "github.com/pingcap/tidb-tools/pkg/binlog-filter"
-	"github.com/pingcap/tidb/parser"
-	timodel "github.com/pingcap/tidb/parser/model"
-	tifilter "github.com/pingcap/tidb/util/filter"
-	tfilter "github.com/pingcap/tidb/util/table-filter"
+	"github.com/pingcap/tidb/pkg/parser"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	tifilter "github.com/pingcap/tidb/pkg/util/filter"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )

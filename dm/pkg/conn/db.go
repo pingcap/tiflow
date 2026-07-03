@@ -29,11 +29,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
-	"github.com/pingcap/tidb/parser"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbutil"
-	"github.com/pingcap/tidb/util/filter"
-	"github.com/pingcap/tidb/util/regexpr-router"
+	"github.com/pingcap/tidb/pkg/parser"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tidb/pkg/util/regexpr-router"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -288,9 +288,9 @@ func IsNoSuchThreadError(err error) bool {
 	return IsMySQLError(err, tmysql.ErrNoSuchThread)
 }
 
-// GetGTIDMode return GTID_MODE.
+// GetGTIDMode return gtid_mode (lowercase for better upstream compatibility, e.g., txsql).
 func GetGTIDMode(ctx *tcontext.Context, db *BaseDB) (string, error) {
-	val, err := GetGlobalVariable(ctx, db, "GTID_MODE")
+	val, err := GetGlobalVariable(ctx, db, "gtid_mode")
 	return val, err
 }
 
@@ -469,7 +469,6 @@ func FetchAllDoTables(ctx context.Context, db *BaseDB, bw *filter.Filter) (map[s
 	schemaToTables := make(map[string][]string)
 	for _, ftSchema := range ftSchemas {
 		schema := ftSchema.Schema
-		// use `GetTables` from tidb-tools, no view included
 		tables, err := dbutil.GetTables(ctx, db.DB, schema)
 		if err != nil {
 			return nil, terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)

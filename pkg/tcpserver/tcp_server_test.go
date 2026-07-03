@@ -18,14 +18,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	grpcTesting "github.com/grpc-ecosystem/go-grpc-middleware/testing"
 	grpcTestingProto "github.com/grpc-ecosystem/go-grpc-middleware/testing/testproto"
-	"github.com/integralist/go-findroot/find"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -34,6 +35,8 @@ import (
 )
 
 func TestTCPServerInsecureHTTP1(t *testing.T) {
+	// Scenario: start an HTTP/1 server without TLS and validate a basic request succeeds,
+	// then ensure the server shuts down cleanly.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -69,6 +72,7 @@ func TestTCPServerInsecureHTTP1(t *testing.T) {
 }
 
 func TestTCPServerTLSHTTP1(t *testing.T) {
+	// Scenario: start an HTTP/1 server with TLS enabled and validate a basic HTTPS request succeeds.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -106,6 +110,7 @@ func TestTCPServerTLSHTTP1(t *testing.T) {
 }
 
 func TestTCPServerInsecureGrpc(t *testing.T) {
+	// Scenario: start a gRPC server without TLS and validate unary requests succeed.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -142,6 +147,7 @@ func TestTCPServerInsecureGrpc(t *testing.T) {
 }
 
 func TestTCPServerTLSGrpc(t *testing.T) {
+	// Scenario: start a gRPC server with TLS enabled and validate unary + streaming requests succeed.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
@@ -179,14 +185,33 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 }
 
 func makeCredential4Testing(t *testing.T) *security.Credential {
-	stat, err := find.Repo()
-	require.NoError(t, err)
+	t.Helper()
 
-	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
+	// Locate the certificate fixtures relative to this test file.
+	//
+	// We intentionally do not rely on go-findroot here. In some CI workspaces,
+	// the checked-out source tree lives in a subdirectory (for example `tiflow/`)
+	// while the parent workspace contains the real `.git` directory. go-findroot
+	// can then resolve the parent directory as the "repo root", causing file-not-found
+	// errors when looking up `tests/integration_tests/_certificates/*`.
+	//
+	// NOTE: when builds use `-trimpath`, `runtime.Caller` may return a relative path
+	// (for example `pkg/tcpserver/tcp_server_test.go`). In that case we fall back to
+	// `os.Getwd()` which should be the package directory under `go test`.
+	repoRoot := ""
+	_, currentFile, _, ok := runtime.Caller(0)
+	if ok && filepath.IsAbs(currentFile) {
+		repoRoot = filepath.Clean(filepath.Join(filepath.Dir(currentFile), "..", ".."))
+	} else {
+		wd, err := os.Getwd()
+		require.NoError(t, err)
+		repoRoot = filepath.Clean(filepath.Join(wd, "..", ".."))
+	}
+	tlsPath := filepath.Join(repoRoot, "tests", "integration_tests", "_certificates")
 	return &security.Credential{
-		CAPath:        path.Join(tlsPath, "ca.pem"),
-		CertPath:      path.Join(tlsPath, "server.pem"),
-		KeyPath:       path.Join(tlsPath, "server-key.pem"),
+		CAPath:        filepath.Join(tlsPath, "ca.pem"),
+		CertPath:      filepath.Join(tlsPath, "server.pem"),
+		KeyPath:       filepath.Join(tlsPath, "server-key.pem"),
 		CertAllowedCN: nil,
 	}
 }
@@ -305,6 +330,7 @@ func testWithGrpcWorkload(ctx context.Context, t *testing.T, server TCPServer, a
 }
 
 func TestTcpServerClose(t *testing.T) {
+	// Scenario: close a running server multiple times and ensure Close is idempotent.
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 	addr := fmt.Sprintf("127.0.0.1:%d", port)

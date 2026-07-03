@@ -16,7 +16,7 @@ package mysql
 import (
 	"strings"
 
-	"github.com/pingcap/tidb/parser/charset"
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/quotes"
 )
@@ -42,9 +42,9 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 	}
 	for i, column := range columnNames {
 		if i == len(columnNames)-1 {
-			builder.WriteString("`" + quotes.EscapeName(column) + "`=?")
+			builder.WriteString("`" + quotes.EscapeName(column) + "` = ?")
 		} else {
-			builder.WriteString("`" + quotes.EscapeName(column) + "`=?,")
+			builder.WriteString("`" + quotes.EscapeName(column) + "` = ?, ")
 		}
 	}
 
@@ -60,7 +60,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.Column, forceReplic
 		if wargs[i] == nil {
 			builder.WriteString(quotes.QuoteName(colNames[i]) + " IS NULL")
 		} else {
-			builder.WriteString(quotes.QuoteName(colNames[i]) + "=?")
+			builder.WriteString(quotes.QuoteName(colNames[i]) + " = ?")
 			args = append(args, wargs[i])
 		}
 	}

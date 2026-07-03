@@ -24,7 +24,7 @@ import (
 
 	"github.com/coreos/go-semver/semver"
 	"github.com/pingcap/kvproto/pkg/metapb"
-	"github.com/pingcap/tidb/util/engine"
+	"github.com/pingcap/tidb/pkg/util/engine"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -449,21 +449,21 @@ func TestCheckTiCDCVersion(t *testing.T) {
 
 	versions = map[string]struct{}{
 		"v6.3.0":       {},
-		"v8.0.0-alpha": {},
+		"v9.0.0-alpha": {},
 	}
 	err = CheckTiCDCVersion(versions)
 	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
 
 	versions = map[string]struct{}{
 		"v6.3.0":        {},
-		"v8.0.0-master": {},
+		"v9.0.0-master": {},
 	}
 	err = CheckTiCDCVersion(versions)
 	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)
 
 	versions = map[string]struct{}{
 		"v6.3.0": {},
-		"v8.0.0": {},
+		"v9.0.0": {},
 	}
 	err = CheckTiCDCVersion(versions)
 	require.Regexp(t, "TiCDC .* not supported, only support version less than.*", err)

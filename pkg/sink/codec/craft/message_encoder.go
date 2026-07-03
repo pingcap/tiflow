@@ -18,7 +18,7 @@ import (
 	"math"
 	"unsafe"
 
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 

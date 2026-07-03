@@ -674,8 +674,8 @@ func SetupEmbedEtcd(dir string) (clientURL *url.URL, e *embed.Etcd, err error) {
 	if err != nil {
 		return
 	}
-	cfg.LPUrls = []url.URL{*urls[0]}
-	cfg.LCUrls = []url.URL{*urls[1]}
+	cfg.ListenPeerUrls = []url.URL{*urls[0]}
+	cfg.ListenClientUrls = []url.URL{*urls[1]}
 	cfg.Logger = "zap"
 	cfg.LogLevel = "error"
 	clientURL = urls[1]

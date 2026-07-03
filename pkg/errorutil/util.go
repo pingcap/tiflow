@@ -18,10 +18,11 @@ import (
 
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/infoschema"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/util/dbterror"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/dbterror"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	dmretry "github.com/pingcap/tiflow/dm/pkg/retry"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
@@ -136,7 +137,8 @@ func IsRetryableDDLError(err error) bool {
 		mysql.ErrNoSuchIndex,
 		mysql.ErrKeyColumnDoesNotExits,
 		mysql.ErrWrongColumnName,
-		mysql.ErrPartitionMgmtOnNonpartitioned:
+		mysql.ErrPartitionMgmtOnNonpartitioned,
+		errno.ErrTableWithoutPrimaryKey:
 		return false
 	}
 	return true

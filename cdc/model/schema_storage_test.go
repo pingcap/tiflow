@@ -16,9 +16,9 @@ package model
 import (
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	parser_types "github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	parser_types "github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -286,14 +286,10 @@ func TestIndexByName(t *testing.T) {
 		TableInfo: &timodel.TableInfo{
 			Indices: []*timodel.IndexInfo{
 				{
-					Name: timodel.CIStr{
-						O: "idx1",
-					},
+					Name: timodel.NewCIStr("idx1"),
 					Columns: []*timodel.IndexColumn{
 						{
-							Name: timodel.CIStr{
-								O: "col1",
-							},
+							Name: timodel.NewCIStr("col1"),
 						},
 					},
 				},
@@ -310,46 +306,140 @@ func TestIndexByName(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []string{"col1"}, names)
 	require.Equal(t, []int{0}, offsets)
+
+	names, offsets, ok = tableInfo.IndexByName("IDX1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
+
+	names, offsets, ok = tableInfo.IndexByName("Idx1")
+	require.True(t, ok)
+	require.Equal(t, []string{"col1"}, names)
+	require.Equal(t, []int{0}, offsets)
 }
 
 func TestColumnsByNames(t *testing.T) {
-	tableInfo := &TableInfo{
-		TableInfo: &timodel.TableInfo{
-			Columns: []*timodel.ColumnInfo{
-				{
-					Name: timodel.CIStr{
-						O: "col2",
-					},
-					Offset: 1,
-				},
-				{
-					Name: timodel.CIStr{
-						O: "col1",
-					},
-					Offset: 0,
-				},
-				{
-					Name: timodel.CIStr{
-						O: "col3",
-					},
-					Offset: 2,
-				},
+	tableInfo := WrapTableInfo(100, "test", 100, &timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{
+				Name:   timodel.NewCIStr("col2"),
+				ID:     1,
+				Offset: 0,
+			},
+			{
+				Name:   timodel.NewCIStr("col1"),
+				ID:     0,
+				Offset: 1,
+			},
+			{
+				Name:   timodel.NewCIStr("col3"),
+				ID:     2,
+				Offset: 2,
 			},
 		},
-	}
+	})
 
 	names := []string{"col1", "col2", "col3"}
 	offsets, ok := tableInfo.OffsetsByNames(names)
 	require.True(t, ok)
-	require.Equal(t, []int{0, 1, 2}, offsets)
+	require.Equal(t, []int{1, 0, 2}, offsets)
 
 	names = []string{"col2"}
 	offsets, ok = tableInfo.OffsetsByNames(names)
 	require.True(t, ok)
-	require.Equal(t, []int{1}, offsets)
+	require.Equal(t, []int{0}, offsets)
 
 	names = []string{"col1", "col-not-found"}
 	offsets, ok = tableInfo.OffsetsByNames(names)
 	require.False(t, ok)
 	require.Nil(t, offsets)
+
+	names = []string{"Col1", "COL2", "CoL3"}
+	offsets, ok = tableInfo.OffsetsByNames(names)
+	require.True(t, ok)
+	require.Equal(t, []int{1, 0, 2}, offsets)
+}
+
+func TestWrapTableInfoWithVirtualColumns(t *testing.T) {
+	t.Parallel()
+	ftNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNull.SetFlag(mysql.NotNullFlag)
+
+	ftNotNull := parser_types.NewFieldType(mysql.TypeUnspecified)
+	ftNotNull.SetFlag(mysql.NotNullFlag | mysql.MultipleKeyFlag)
+
+	tidbTableInfo := timodel.TableInfo{
+		Columns: []*timodel.ColumnInfo{
+			{
+				Name:      timodel.CIStr{O: "a"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+			{
+				Name:      timodel.CIStr{O: "b"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+			{
+				Name:                timodel.CIStr{O: "c"},
+				FieldType:           *ftNull,
+				State:               timodel.StatePublic,
+				GeneratedExprString: "as d",
+				GeneratedStored:     false,
+			},
+			{
+				Name:      timodel.CIStr{O: "d"},
+				FieldType: *ftNotNull,
+				State:     timodel.StatePublic,
+			},
+		},
+		Indices: []*timodel.IndexInfo{
+			{
+				ID: 10,
+				Name: timodel.CIStr{
+					O: "a,b",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "a"}, Offset: 0},
+					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+				},
+				Unique: true,
+			},
+			{
+				ID: 9,
+				Name: timodel.CIStr{
+					O: "c",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "c"}, Offset: 2},
+				},
+				Unique: true,
+			},
+			{
+				ID: 8,
+				Name: timodel.CIStr{
+					O: "b",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "b"}, Offset: 1},
+				},
+				Unique: true,
+			},
+			{
+				ID: 7,
+				Name: timodel.CIStr{
+					O: "d",
+				},
+				Columns: []*timodel.IndexColumn{
+					{Name: timodel.CIStr{O: "d"}, Offset: 3},
+				},
+				Unique: true,
+			},
+		},
+		IsCommonHandle: false,
+		PKIsHandle:     false,
+	}
+
+	tableInfo := WrapTableInfo(100, "test", 1000, &tidbTableInfo)
+	require.Equal(t, []int{2}, tableInfo.VirtualColumnsOffset)
 }

@@ -22,7 +22,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	gmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/stretchr/testify/require"
 )
 

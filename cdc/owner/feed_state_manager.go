@@ -25,6 +25,7 @@ import (
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/orchestrator"
 	"github.com/pingcap/tiflow/pkg/upstream"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	"go.uber.org/zap"
@@ -144,6 +145,15 @@ func (m *feedStateManager) Tick(
 		// `handleAdminJob` returns true means that some admin jobs are pending
 		// skip to the next tick until all the admin jobs is handled
 		adminJobPending = true
+		changefeedErrorStuckDuration := util.GetOrZero(m.state.Info.Config.ChangefeedErrorStuckDuration)
+		if m.changefeedErrorStuckDuration != changefeedErrorStuckDuration {
+			log.Info("changefeedErrorStuckDuration update",
+				zap.Duration("oldChangefeedErrorStuckDuration", m.changefeedErrorStuckDuration),
+				zap.Duration("newChangefeedErrorStuckDuration", changefeedErrorStuckDuration),
+			)
+			m.errBackoff.MaxElapsedTime = changefeedErrorStuckDuration
+			m.changefeedErrorStuckDuration = changefeedErrorStuckDuration
+		}
 		return
 	}
 
@@ -586,7 +596,10 @@ func (m *feedStateManager) handleWarning(errs ...*model.RunningError) {
 		checkpointTsStuck := time.Since(m.checkpointTsAdvanced) > m.changefeedErrorStuckDuration
 		if checkpointTsStuck {
 			log.Info("changefeed retry on warning for a very long time and does not resume, "+
-				"it will be failed", zap.String("changefeed", m.state.ID.ID),
+				"it will be failed",
+				zap.String("namespace", m.state.ID.Namespace),
+				zap.String("changefeed", m.state.ID.ID),
+				zap.Time("checkpointTsAdvanced", m.checkpointTsAdvanced),
 				zap.Uint64("checkpointTs", m.state.Status.CheckpointTs),
 				zap.Duration("checkpointTime", currTime.Sub(ckptTime)),
 			)

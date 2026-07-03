@@ -18,10 +18,8 @@ type EventSink[E TableEvent] interface {
 	// WriteEvents writes events to the sink.
 	// This is an asynchronously and thread-safe method.
 	WriteEvents(events ...*CallbackableEvent[E]) error
-
-	// Scheme returns the sink scheme.
-	Scheme() string
-
+	// SchemeOption returns the sink scheme and whether the sink should output raw change event.
+	SchemeOption() (scheme string, outputRawChangeEvent bool)
 	// Close closes the sink. Can be called with `WriteEvents` concurrently.
 	Close()
 	// The EventSink meets internal errors and has been dead already.

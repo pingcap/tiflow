@@ -17,11 +17,13 @@ import (
 	"sort"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/types"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/utils"
 	canal "github.com/pingcap/tiflow/proto/canal"
 )
 
@@ -153,6 +155,7 @@ func (c *canalJSONMessageWithTiDBExtension) getCommitTs() uint64 {
 func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChangedEvent, error) {
 	result := new(model.RowChangedEvent)
 	result.CommitTs = msg.getCommitTs()
+	result.TableInfo = newTableInfo(msg)
 	result.Table = &model.TableName{
 		Schema: *msg.getSchema(),
 		Table:  *msg.getTable(),
@@ -178,13 +181,18 @@ func canalJSONMessage2RowChange(msg canalJSONMessageInterface) (*model.RowChange
 
 	// for `UPDATE`, `old` contain old data, set it as the `PreColumns`
 	if msg.eventType() == canal.EventType_UPDATE {
-		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(msg.getOld(), mysqlType)
+		oldColumns := msg.getOld()
+		for key, value := range msg.getData() {
+			if _, ok := oldColumns[key]; !ok {
+				oldColumns[key] = value
+			}
+		}
+		result.PreColumns, err = canalJSONColumnMap2RowChangeColumns(oldColumns, mysqlType)
 		if err != nil {
 			return nil, err
 		}
 	}
 	result.WithHandlePrimaryFlag(msg.pkNameSet())
-
 	return result, nil
 }
 
@@ -197,7 +205,7 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 			return nil, cerrors.ErrCanalDecodeFailed.GenWithStack(
 				"mysql type does not found, column: %+v, mysqlType: %+v", name, mysqlType)
 		}
-		mysqlTypeStr = trimUnsignedFromMySQLType(mysqlTypeStr)
+		mysqlTypeStr = extractBasicMySQLType(mysqlTypeStr)
 		isBinary := isBinaryMySQLType(mysqlTypeStr)
 		mysqlType := types.StrToType(mysqlTypeStr)
 		col := internal.NewColumn(value, mysqlType).
@@ -211,6 +219,15 @@ func canalJSONColumnMap2RowChangeColumns(cols map[string]interface{}, mysqlType 
 		return strings.Compare(result[i].Name, result[j].Name) > 0
 	})
 	return result, nil
+}
+
+func extractBasicMySQLType(mysqlType string) string {
+	for i := 0; i < len(mysqlType); i++ {
+		if mysqlType[i] == '(' || mysqlType[i] == ' ' {
+			return mysqlType[:i]
+		}
+	}
+	return mysqlType
 }
 
 func isBinaryMySQLType(mysqlType string) bool {
@@ -249,4 +266,62 @@ func getDDLActionType(query string) timodel.ActionType {
 	}
 
 	return timodel.ActionNone
+}
+
+func newTableInfo(msg canalJSONMessageInterface) *model.TableInfo {
+	schemaName := *msg.getSchema()
+	tableName := *msg.getTable()
+	tableInfo := new(timodel.TableInfo)
+	tableInfo.Name = timodel.NewCIStr(tableName)
+
+	columns := newTiColumns(msg)
+	tableInfo.Columns = columns
+	tableInfo.Indices = newTiIndices(columns, msg.pkNameSet())
+	tableInfo.PKIsHandle = len(tableInfo.Indices) != 0
+	return model.WrapTableInfo(100, schemaName, 100, tableInfo)
+}
+
+func newTiColumns(msg canalJSONMessageInterface) []*timodel.ColumnInfo {
+	var nextColumnID int64
+	result := make([]*timodel.ColumnInfo, 0, len(msg.getMySQLType()))
+	for name, mysqlType := range msg.getMySQLType() {
+		col := new(timodel.ColumnInfo)
+		col.ID = nextColumnID
+		col.Name = timodel.NewCIStr(name)
+		if utils.IsBinaryMySQLType(mysqlType) {
+			col.AddFlag(mysql.BinaryFlag)
+		}
+		if _, isPK := msg.pkNameSet()[name]; isPK {
+			col.AddFlag(mysql.PriKeyFlag)
+		}
+		result = append(result, col)
+		nextColumnID++
+	}
+	return result
+}
+
+func newTiIndices(columns []*timodel.ColumnInfo, keys map[string]struct{}) []*timodel.IndexInfo {
+	indexColumns := make([]*timodel.IndexColumn, 0, len(keys))
+	for idx, col := range columns {
+		if mysql.HasPriKeyFlag(col.GetFlag()) {
+			indexColumns = append(indexColumns, &timodel.IndexColumn{
+				Name:   col.Name,
+				Offset: idx,
+			})
+		}
+	}
+
+	result := make([]*timodel.IndexInfo, 0, len(indexColumns))
+	if len(indexColumns) == 0 {
+		return result
+	}
+	indexInfo := &timodel.IndexInfo{
+		ID:      1,
+		Name:    timodel.NewCIStr("primary"),
+		Columns: indexColumns,
+		Primary: true,
+		Unique:  true,
+	}
+	result = append(result, indexInfo)
+	return result
 }

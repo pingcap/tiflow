@@ -1,0 +1,8 @@
+[integrity]
+integrity-check-level = "correctness"
+corruption-handle-level = "error"
+
+[sink]
+send-bootstrap-interval-in-sec = 5
+send-bootstrap-in-msg-count = 100
+send-all-bootstrap-at-start = true

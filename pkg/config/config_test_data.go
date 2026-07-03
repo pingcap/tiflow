@@ -55,16 +55,24 @@ const (
       }
     ],
     "enable-partition-separator": true,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
 	"enable-kafka-sink-v2": false,
 	"only-output-updated-columns": false,
 	"delete-only-output-handle-key-columns": false,
+    "content-compatible": false,
     "large-message-handle": {
       "large-message-handle-option": "none",
       "large-message-handle-compression": "",
       "claim-check-storage-uri": ""
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
+    "open": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -136,6 +144,7 @@ const (
     "enable-multiplexing": true,
     "worker-concurrent": 8,
     "grpc-stream-concurrent": 1,
+    "advance-interval-in-ms": 300,
     "frontier-concurrent": 8,
     "worker-pool-size": 0,
     "region-scan-limit": 40,
@@ -149,7 +158,7 @@ const (
       "writer-buffer-size": 8388608,
       "compression": "snappy",
       "write-l0-pause-trigger": 2147483647,
-      "compaction-l0-trigger": 160
+      "compaction-l0-trigger": 16
     },
     "messages": {
       "client-max-batch-interval": 10000000,
@@ -203,7 +212,7 @@ const (
   },
   "sink": {
   	"encoder-concurrency": 32,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -227,6 +236,7 @@ const (
     "enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
 	"terminator": "\r\n",
 	"transaction-atomicity": "",
@@ -305,7 +315,14 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
+    "open": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",
@@ -363,7 +380,7 @@ const (
   "sink": {
     "encoder-concurrency": 32,
     "dispatchers": null,
-    "protocol": "open-protocol",
+    "protocol": "canal-json",
     "column-selectors": [
       {
         "matcher": [
@@ -389,6 +406,7 @@ const (
 	"enable-kafka-sink-v2": true,
     "only-output-updated-columns": true,
 	"delete-only-output-handle-key-columns": true,
+    "content-compatible": true,
     "safe-mode": true,
     "kafka-config": {
       "partition-num": 1,
@@ -465,7 +483,14 @@ const (
       "file-size": 1024,
       "output-column-id":false
     },
-    "advance-timeout-in-sec": 150
+    "advance-timeout-in-sec": 150,
+    "send-bootstrap-interval-in-sec": 120,
+    "send-bootstrap-in-msg-count": 10000,
+    "send-bootstrap-to-all-partition": true,
+    "send-all-bootstrap-at-start": false,
+    "open": {
+      "output-old-value": true
+    }
   },
   "consistent": {
     "level": "none",

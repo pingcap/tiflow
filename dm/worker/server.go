@@ -15,13 +15,14 @@ package worker
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/pingcap/errors"
-	toolutils "github.com/pingcap/tidb-tools/pkg/utils"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
@@ -124,7 +125,11 @@ func (s *Server) Start() error {
 			return terror.ErrWorkerServerClosed
 		}
 
-		tls, err := toolutils.NewTLS(s.cfg.SSLCA, s.cfg.SSLCert, s.cfg.SSLKey, s.cfg.AdvertiseAddr, s.cfg.CertAllowedCN)
+		tlsConfig, err := util.NewTLSConfig(
+			util.WithCAPath(s.cfg.SSLCA),
+			util.WithCertAndKeyPath(s.cfg.SSLCert, s.cfg.SSLKey),
+			util.WithVerifyCommonName(s.cfg.CertAllowedCN),
+		)
 		if err != nil {
 			return terror.ErrWorkerTLSConfigNotValid.Delegate(err)
 		}
@@ -133,14 +138,17 @@ func (s *Server) Start() error {
 		if err != nil {
 			return terror.ErrWorkerStartService.Delegate(err)
 		}
-		s.rootLis = tls.WrapListener(rootLis)
+		if tlsConfig != nil {
+			rootLis = tls.NewListener(rootLis, tlsConfig)
+		}
+		s.rootLis = rootLis
 
 		s.etcdClient, err = clientv3.New(clientv3.Config{
 			Endpoints:            GetJoinURLs(s.cfg.Join),
 			DialTimeout:          dialTimeout,
 			DialKeepAliveTime:    keepaliveTime,
 			DialKeepAliveTimeout: keepaliveTimeout,
-			TLS:                  tls.TLSConfig(),
+			TLS:                  tlsConfig,
 			AutoSyncInterval:     syncMasterEndpointsTime,
 		})
 		if err != nil {

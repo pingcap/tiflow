@@ -399,6 +399,7 @@ func TestSkipAdjustConfigMinInsyncReplicasWhenRequiredAcksIsNotWailAll(t *testin
 func TestCreateProducerFailed(t *testing.T) {
 	options := NewOptions()
 	options.Version = "invalid"
+	options.IsAssignedVersion = true
 	saramaConfig, err := NewSaramaConfig(context.Background(), options)
 	require.Regexp(t, "invalid version.*", errors.Cause(err))
 	require.Nil(t, saramaConfig)

@@ -17,7 +17,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/pingcap/tidb/tablecodec"
+	"github.com/pingcap/tidb/pkg/tablecodec"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/stretchr/testify/require"
 )

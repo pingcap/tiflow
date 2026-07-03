@@ -16,6 +16,7 @@ package common
 import (
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/gin-gonic/gin/binding"
 	"github.com/imdario/mergo"
@@ -60,6 +61,9 @@ type Config struct {
 	// exposed to the outside users.
 	AvroEnableWatermark bool
 
+	// canal-json only
+	ContentCompatible bool
+
 	// for sinking to cloud storage
 	Delimiter            string
 	Quote                string
@@ -70,7 +74,23 @@ type Config struct {
 
 	// for open protocol
 	OnlyOutputUpdatedColumns bool
+
+	TimeZone *time.Location
+	// for the simple protocol, can be "json" and "avro", default to "json"
+	EncodingFormat EncodingFormatType
+	// Whether old value should be excluded in the output.
+	OpenOutputOldValue bool
 }
+
+// EncodingFormatType is the type of encoding format
+type EncodingFormatType string
+
+const (
+	// EncodingFormatJSON is the json format
+	EncodingFormatJSON EncodingFormatType = "json"
+	// EncodingFormatAvro is the avro format
+	EncodingFormatAvro EncodingFormatType = "avro"
+)
 
 // NewConfig return a Config for codec
 func NewConfig(protocol config.Protocol) *Config {
@@ -91,6 +111,12 @@ func NewConfig(protocol config.Protocol) *Config {
 		OnlyOutputUpdatedColumns:   false,
 		DeleteOnlyHandleKeyColumns: false,
 		LargeMessageHandle:         config.NewDefaultLargeMessageHandleConfig(),
+
+		EncodingFormat: EncodingFormatJSON,
+		TimeZone:       time.Local,
+
+		// default value is true
+		OpenOutputOldValue: true,
 	}
 }
 
@@ -127,6 +153,10 @@ type urlConfig struct {
 
 	AvroSchemaRegistry       string `form:"schema-registry"`
 	OnlyOutputUpdatedColumns *bool  `form:"only-output-updated-columns"`
+	// EncodingFormatType is only works for the simple protocol,
+	// can be `json` and `avro`, default to `json`.
+	EncodingFormatType *string `form:"encoding-format"`
+	ContentCompatible  *bool   `form:"content-compatible"`
 }
 
 // Apply fill the Config
@@ -196,6 +226,9 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 				`force-replicate must be disabled, when the large message handle is enabled, large message handle: "%s"`,
 				c.LargeMessageHandle.LargeMessageHandleOption)
 		}
+		if replicaConfig.Sink.OpenProtocol != nil {
+			c.OpenOutputOldValue = replicaConfig.Sink.OpenProtocol.OutputOldValue
+		}
 	}
 	if urlParameter.OnlyOutputUpdatedColumns != nil {
 		c.OnlyOutputUpdatedColumns = *urlParameter.OnlyOutputUpdatedColumns
@@ -210,6 +243,29 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 		return cerror.ErrCodecInvalidConfig.GenWithStack(
 			`force-replicate must be disabled when configuration "delete-only-output-handle-key-columns" is true.`)
 	}
+
+	if c.Protocol == config.ProtocolSimple {
+		if urlParameter.EncodingFormatType != nil {
+			s := *urlParameter.EncodingFormatType
+			if s != "" {
+				encodingFormat := EncodingFormatType(s)
+				switch encodingFormat {
+				case EncodingFormatJSON, EncodingFormatAvro:
+					c.EncodingFormat = encodingFormat
+				default:
+					return cerror.ErrCodecInvalidConfig.GenWithStack(
+						"unsupported encoding format type: %s for the simple protocol", encodingFormat)
+				}
+			}
+		}
+	}
+	if c.Protocol == config.ProtocolCanalJSON {
+		c.ContentCompatible = util.GetOrZero(urlParameter.ContentCompatible)
+		if c.ContentCompatible {
+			c.OnlyOutputUpdatedColumns = true
+		}
+	}
+
 	return nil
 }
 
@@ -221,6 +277,10 @@ func mergeConfig(
 	if replicaConfig.Sink != nil {
 		dest.AvroSchemaRegistry = util.GetOrZero(replicaConfig.Sink.SchemaRegistry)
 		dest.OnlyOutputUpdatedColumns = replicaConfig.Sink.OnlyOutputUpdatedColumns
+		dest.ContentCompatible = replicaConfig.Sink.ContentCompatible
+		if util.GetOrZero(dest.ContentCompatible) {
+			dest.OnlyOutputUpdatedColumns = util.AddressOf(true)
+		}
 		if replicaConfig.Sink.KafkaConfig != nil {
 			dest.MaxMessageBytes = replicaConfig.Sink.KafkaConfig.MaxMessageBytes
 			if replicaConfig.Sink.KafkaConfig.CodecConfig != nil {
@@ -230,6 +290,7 @@ func mergeConfig(
 				dest.AvroEnableWatermark = codecConfig.AvroEnableWatermark
 				dest.AvroDecimalHandlingMode = codecConfig.AvroDecimalHandlingMode
 				dest.AvroBigintUnsignedHandlingMode = codecConfig.AvroBigintUnsignedHandlingMode
+				dest.EncodingFormatType = codecConfig.EncodingFormat
 			}
 		}
 	}

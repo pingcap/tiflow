@@ -22,15 +22,10 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/metrics/txn"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
-	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/causality"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
-
-type txnWithNotifier struct {
-	*txnEvent
-	postTxnExecuted func()
-}
 
 type worker struct {
 	ctx         context.Context
@@ -38,14 +33,13 @@ type worker struct {
 	workerCount int
 
 	ID      int
-	txnCh   *chann.DrainableChann[txnWithNotifier]
 	backend backend
 
 	// Metrics.
 	metricConflictDetectDuration prometheus.Observer
 	metricQueueDuration          prometheus.Observer
 	metricTxnWorkerFlushDuration prometheus.Observer
-	metricTxnWorkerBusyRatio     prometheus.Counter
+	metricTxnWorkerTotalDuration prometheus.Observer
 	metricTxnWorkerHandledRows   prometheus.Counter
 
 	// Fields only used in the background loop.
@@ -58,19 +52,19 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 	ID int, backend backend, workerCount int,
 ) *worker {
 	wid := fmt.Sprintf("%d", ID)
+
 	return &worker{
 		ctx:         ctx,
 		changefeed:  fmt.Sprintf("%s.%s", changefeedID.Namespace, changefeedID.ID),
 		workerCount: workerCount,
 
 		ID:      ID,
-		txnCh:   chann.NewAutoDrainChann[txnWithNotifier](chann.Cap(-1 /*unbounded*/)),
 		backend: backend,
 
 		metricConflictDetectDuration: txn.ConflictDetectDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 		metricQueueDuration:          txn.QueueDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
-		metricTxnWorkerBusyRatio:     txn.WorkerBusyRatio.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
+		metricTxnWorkerFlushDuration: txn.WorkerFlushDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
+		metricTxnWorkerTotalDuration: txn.WorkerTotalDuration.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 		metricTxnWorkerHandledRows:   txn.WorkerHandledRows.WithLabelValues(changefeedID.Namespace, changefeedID.ID, wid),
 
 		flushInterval:            backend.MaxFlushInterval(),
@@ -79,21 +73,8 @@ func newWorker(ctx context.Context, changefeedID model.ChangeFeedID,
 	}
 }
 
-// Add adds a txnEvent to the worker.
-// The worker will call postTxnExecuted() after the txn executed.
-// The postTxnExecuted will remove the txn related Node in the conflict detector's
-// dependency graph and resolve related dependencies for these transacitons
-// which depend on this executed txn.
-func (w *worker) Add(txn *txnEvent, postTxnExecuted func()) {
-	w.txnCh.In() <- txnWithNotifier{txn, postTxnExecuted}
-}
-
-func (w *worker) close() {
-	w.txnCh.CloseAndDrain()
-}
-
-// Run a loop.
-func (w *worker) runLoop() error {
+// Continuously get events from txnCh and call backend flush based on conditions.
+func (w *worker) run(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) error {
 	defer func() {
 		if err := w.backend.Close(); err != nil {
 			log.Info("Transaction dmlSink backend close fail",
@@ -106,14 +87,7 @@ func (w *worker) runLoop() error {
 		zap.String("changefeedID", w.changefeed),
 		zap.Int("workerID", w.ID))
 
-	ticker := time.NewTicker(w.flushInterval)
-	defer ticker.Stop()
-
-	needFlush := false
-	var flushTimeSlice, totalTimeSlice time.Duration
-	overseerTicker := time.NewTicker(time.Second)
-	defer overseerTicker.Stop()
-	startToWork := time.Now()
+	start := time.Now()
 	for {
 		select {
 		case <-w.ctx.Done():
@@ -121,64 +95,76 @@ func (w *worker) runLoop() error {
 				zap.String("changefeedID", w.changefeed),
 				zap.Int("workerID", w.ID))
 			return nil
-		case txn := <-w.txnCh.Out():
-			if txn.txnEvent != nil {
-				needFlush = w.onEvent(txn)
+		case txn := <-txnCh:
+			// we get the data from txnCh.out until no more data here or reach the state that can be flushed.
+			// If no more data in txnCh.out, and also not reach the state that can be flushed,
+			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
+			if txn.TxnEvent != nil {
+				needFlush := w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
+				if !needFlush {
+					delay := time.NewTimer(w.flushInterval)
+					for !needFlush {
+						select {
+						case txn := <-txnCh:
+							needFlush = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
+						case <-delay.C:
+							needFlush = true
+						}
+					}
+					// Release resources promptly
+					if !delay.Stop() {
+						select {
+						case <-delay.C:
+						default:
+						}
+					}
+				}
+				// needFlush must be true here, so we can do flush.
+				if err := w.doFlush(); err != nil {
+					log.Error("Transaction dmlSink worker exits unexpectly",
+						zap.String("changefeedID", w.changefeed),
+						zap.Int("workerID", w.ID),
+						zap.Error(err))
+					return err
+				}
+				// we record total time to calcuate the worker busy ratio.
+				// so we record the total time after flushing, to unified statistics on
+				// flush time and total time
+				w.metricTxnWorkerTotalDuration.Observe(time.Since(start).Seconds())
+				start = time.Now()
 			}
-		case <-ticker.C:
-			needFlush = true
-		case now := <-overseerTicker.C:
-			totalTimeSlice = now.Sub(startToWork)
-			busyRatio := int(flushTimeSlice.Seconds() / totalTimeSlice.Seconds() * 1000)
-			w.metricTxnWorkerBusyRatio.Add(float64(busyRatio) / float64(w.workerCount))
-			startToWork = now
-			flushTimeSlice = 0
-		}
-		if needFlush {
-			if err := w.doFlush(&flushTimeSlice); err != nil {
-				log.Error("Transaction dmlSink worker exits unexpectly",
-					zap.String("changefeedID", w.changefeed),
-					zap.Int("workerID", w.ID),
-					zap.Error(err))
-				return err
-			}
-			needFlush = false
 		}
 	}
 }
 
 // onEvent is called when a new event is received.
 // It returns true if the event is sent to backend.
-func (w *worker) onEvent(txn txnWithNotifier) bool {
+func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 	w.hasPending = true
 
-	if txn.txnEvent.GetTableSinkState() != state.TableSinkSinking {
+	if txn.GetTableSinkState() != state.TableSinkSinking {
 		// The table where the event comes from is in stopping, so it's safe
 		// to drop the event directly.
-		txn.txnEvent.Callback()
+		txn.Callback()
 		// Still necessary to append the callbacks into the pending list.
-		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, txn.postTxnExecuted)
+		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
 		return false
 	}
 
 	w.metricConflictDetectDuration.Observe(txn.conflictResolved.Sub(txn.start).Seconds())
 	w.metricQueueDuration.Observe(time.Since(txn.start).Seconds())
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
-	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, txn.postTxnExecuted)
-	return w.backend.OnTxnEvent(txn.txnEvent.TxnCallbackableEvent)
+	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
+	return w.backend.OnTxnEvent(txn.TxnCallbackableEvent)
 }
 
 // doFlush flushes the backend.
-// It returns true only if it can no longer be flushed.
-func (w *worker) doFlush(flushTimeSlice *time.Duration) error {
+func (w *worker) doFlush() error {
 	if w.hasPending {
 		start := time.Now()
 		defer func() {
-			elapsed := time.Since(start)
-			*flushTimeSlice += elapsed
-			w.metricTxnWorkerFlushDuration.Observe(elapsed.Seconds())
+			w.metricTxnWorkerFlushDuration.Observe(time.Since(start).Seconds())
 		}()
-
 		if err := w.backend.Flush(w.ctx); err != nil {
 			log.Warn("Transaction dmlSink backend flush fail",
 				zap.String("changefeedID", w.changefeed),

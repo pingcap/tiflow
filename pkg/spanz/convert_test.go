@@ -65,3 +65,9 @@ func TestUnsafeStringByte(t *testing.T) {
 	require.EqualValues(t, len(s), len(ub))
 	require.EqualValues(t, len(s), cap(ub))
 }
+
+func TestHexKey(t *testing.T) {
+	span := TableIDToComparableSpan(8616)
+	require.Equal(t, "7480000000000021FFA85F720000000000FA", HexKey(span.StartKey))
+	require.Equal(t, "7480000000000021FFA85F730000000000FA", HexKey(span.EndKey))
+}

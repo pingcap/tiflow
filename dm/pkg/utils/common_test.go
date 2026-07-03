@@ -18,7 +18,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/pingcap/tidb/parser"
+	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

@@ -264,6 +264,12 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 			e.l.Debug("begin to campaign", zap.Stringer("current member", e.info))
 
 			err2 := elec.Campaign(ctx2, e.infoStr)
+			failpoint.Inject("mockCapaignSucceedButReturnErr", func() {
+				if err2 == nil {
+					err2 = errors.New("mock campaign succeed but return error")
+					time.Sleep(time.Second)
+				}
+			})
 			if err2 != nil {
 				// because inner commit may return undetermined error, we try to delete the election key manually
 				deleted, err3 := e.ClearSessionIfNeeded(ctx, e.ID())
@@ -282,6 +288,7 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 		var (
 			leaderKey  string
 			leaderInfo *CampaignerInfo
+			revision   int64
 		)
 		eleObserveCh := elec.Observe(ctx2)
 
@@ -300,6 +307,7 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 				e.l.Info("get response from election observe", zap.String("key", string(resp.Kvs[0].Key)), zap.String("value", string(resp.Kvs[0].Value)))
 				leaderKey = string(resp.Kvs[0].Key)
 				leaderInfo, err = getCampaignerInfo(resp.Kvs[0].Value)
+				revision = resp.Header.Revision
 				if err != nil {
 					// this should never happened
 					e.l.Error("fail to get leader information", zap.String("value", string(resp.Kvs[0].Value)), zap.Error(err))
@@ -330,7 +338,7 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 
 		e.l.Info("become leader", zap.Stringer("current member", e.info))
 		e.notifyLeader(ctx, leaderInfo) // become the leader now
-		e.watchLeader(ctx, session, leaderKey, elec)
+		e.watchLeader(ctx, session, leaderKey, elec, revision)
 		e.l.Info("retire from leader", zap.Stringer("current member", e.info))
 		e.notifyLeader(ctx, nil) // need to re-campaign
 		oldLeaderID = ""
@@ -359,8 +367,8 @@ func (e *Election) notifyLeader(ctx context.Context, leaderInfo *CampaignerInfo)
 	}
 }
 
-func (e *Election) watchLeader(ctx context.Context, session *concurrency.Session, key string, elec *concurrency.Election) {
-	e.l.Debug("watch leader key", zap.String("key", key))
+func (e *Election) watchLeader(ctx context.Context, session *concurrency.Session, key string, elec *concurrency.Election, revision int64) {
+	e.l.Debug("watch leader key", zap.String("key", key), zap.Int64("revision", revision), zap.Stringer("current member", e.info))
 
 	e.campaignMu.Lock()
 	e.resignCh = make(chan struct{})
@@ -374,7 +382,7 @@ func (e *Election) watchLeader(ctx context.Context, session *concurrency.Session
 
 	wCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	wch := e.cli.Watch(wCtx, key)
+	wch := e.cli.Watch(wCtx, key, clientv3.WithRev(revision+1))
 
 	for {
 		if e.evictLeader.Load() {

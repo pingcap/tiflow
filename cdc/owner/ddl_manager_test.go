@@ -14,30 +14,33 @@
 package owner
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
-	config2 "github.com/pingcap/tiflow/pkg/config"
+	config "github.com/pingcap/tiflow/pkg/config"
 	cdcContext "github.com/pingcap/tiflow/pkg/context"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
 
-func createDDLManagerForTest(t *testing.T) *ddlManager {
+func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *ddlManager {
 	startTs, checkpointTs := model.Ts(0), model.Ts(1)
 	changefeedID := model.DefaultChangeFeedID("ddl-manager-test")
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
-	cfg := config2.GetDefaultReplicaConfig()
+	cfg := config.GetDefaultReplicaConfig()
 	f, err := filter.NewFilter(cfg, "")
 	require.Nil(t, err)
-	schema, err := newSchemaWrap4Owner(nil, startTs, cfg, changefeedID, f)
+	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
 	require.Equal(t, nil, err)
 	res := newDDLManager(
 		changefeedID,
@@ -49,7 +52,7 @@ func createDDLManagerForTest(t *testing.T) *ddlManager {
 		schema,
 		redo.NewDisabledDDLManager(),
 		redo.NewDisabledMetaManager(),
-		model.DB, false)
+		model.DB, false, shouldSendAllBootstrapAtStart, func(err error) {})
 	return res
 }
 
@@ -74,7 +77,7 @@ func newFakeDDLEvent(
 }
 
 func TestGetNextDDL(t *testing.T) {
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	dm.executingDDL = newFakeDDLEvent(1,
 		"test_1", timodel.ActionDropColumn, 1)
 	require.Equal(t, dm.executingDDL, dm.getNextDDL())
@@ -92,7 +95,7 @@ func TestGetNextDDL(t *testing.T) {
 }
 
 func TestBarriers(t *testing.T) {
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 
 	tableID1 := int64(1)
 	tableName1 := model.TableName{Table: "test_1", TableID: tableID1}
@@ -142,7 +145,7 @@ func TestBarriers(t *testing.T) {
 }
 
 func TestGetSnapshotTs(t *testing.T) {
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	dm.startTs = 0
 	dm.checkpointTs = 1
 	require.Equal(t, dm.getSnapshotTs(), dm.startTs)
@@ -163,7 +166,7 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	var oldSchemaIDs, newSchemaIDs, oldTableIDs []int64
@@ -245,9 +248,9 @@ func TestExecRenameTablesDDL(t *testing.T) {
 	}
 	require.Len(t, mockDDLSink.ddlHistory, 2)
 	require.Equal(t, "RENAME TABLE `test1`.`tb1` TO `test2`.`tb10`",
-		mockDDLSink.ddlHistory[0])
+		mockDDLSink.ddlHistory[0].Query)
 	require.Equal(t, "RENAME TABLE `test2`.`tb2` TO `test1`.`tb20`",
-		mockDDLSink.ddlHistory[1])
+		mockDDLSink.ddlHistory[1].Query)
 
 	// mock all rename table statements have been done
 	mockDDLSink.resetDDLDone = false
@@ -263,7 +266,7 @@ func TestExecDropTablesDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
@@ -327,7 +330,7 @@ func TestExecDropViewsDDL(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	ctx := cdcContext.NewBackendContext4Test(true)
-	dm := createDDLManagerForTest(t)
+	dm := createDDLManagerForTest(t, false)
 	mockDDLSink := dm.ddlSink.(*mockDDLSink)
 
 	execCreateStmt := func(actualDDL, expectedDDL string) {
@@ -455,4 +458,46 @@ func TestIsGlobalDDL(t *testing.T) {
 	for _, c := range cases {
 		require.Equal(t, c.ret, isGlobalDDL(c.ddl))
 	}
+}
+
+func TestTrySendBootstrap(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	ddl1 := helper.DDL2Event("create table test.tb1(id int primary key)")
+	ddl2 := helper.DDL2Event("create table test.tb2(id int primary key)")
+
+	ctx := context.Background()
+	dm := createDDLManagerForTest(t, false)
+	dm.schema = helper.SchemaStorage()
+	dm.startTs, dm.checkpointTs = ddl2.CommitTs, ddl2.CommitTs
+
+	mock := dm.ddlSink.(*mockDDLSink)
+	mock.recordDDLHistory = true
+
+	// do not send all bootstrap messages
+	currentTables, err := dm.allTables(ctx)
+	require.Equal(t, 2, len(currentTables))
+	require.NoError(t, err)
+	ok := dm.trySendBootstrap(ctx, currentTables)
+	require.True(t, ok)
+	require.True(t, dm.isBootstrapped())
+	require.Equal(t, 0, len(mock.ddlHistory))
+
+	// send all bootstrap messages -> tb1 and tb2
+	dm = createDDLManagerForTest(t, true)
+	mock = dm.ddlSink.(*mockDDLSink)
+	mock.recordDDLHistory = true
+	dm.schema = helper.SchemaStorage()
+	dm.startTs, dm.checkpointTs = ddl2.CommitTs, ddl2.CommitTs
+
+	_ = dm.trySendBootstrap(ctx, currentTables)
+	require.Eventually(t, func() bool {
+		return dm.trySendBootstrap(ctx, currentTables)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	require.Equal(t, 2, len(mock.ddlHistory))
+	require.True(t, mock.ddlHistory[0].IsBootstrap)
+	require.True(t, mock.ddlHistory[1].IsBootstrap)
+	require.Equal(t, ddl1.TableInfo.TableName, mock.ddlHistory[0].TableInfo.TableName)
+	require.Equal(t, ddl2.TableInfo.TableName, mock.ddlHistory[1].TableInfo.TableName)
 }

@@ -34,13 +34,13 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	tiddl "github.com/pingcap/tidb/ddl"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/sessionctx"
-	toolutils "github.com/pingcap/tidb/util"
-	tidbmock "github.com/pingcap/tidb/util/mock"
+	tiddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/sessionctx"
+	"github.com/pingcap/tidb/pkg/util"
+	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
 	"github.com/pingcap/tiflow/dm/checker"
 	common2 "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
@@ -1635,12 +1635,12 @@ func (t *testMasterSuite) testNormalServerLifecycle(cfg *Config, checkLogic func
 
 func (t *testMasterSuite) testHTTPInterface(url string, contain []byte) {
 	// we use HTTPS in some test cases.
-	tlsConfig, err := toolutils.NewTLSConfig(
-		toolutils.WithCAPath(pwd+"/tls_for_test/ca.pem"),
-		toolutils.WithCertAndKeyPath(pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key"),
+	tlsConfig, err := util.NewTLSConfig(
+		util.WithCAPath(pwd+"/tls_for_test/ca.pem"),
+		util.WithCertAndKeyPath(pwd+"/tls_for_test/dm.pem", pwd+"/tls_for_test/dm.key"),
 	)
 	require.NoError(t.T(), err)
-	cli := toolutils.ClientWithTLS(tlsConfig)
+	cli := util.ClientWithTLS(tlsConfig)
 
 	// nolint:noctx
 	resp, err := cli.Get(url)

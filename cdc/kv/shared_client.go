@@ -16,13 +16,10 @@ package kv
 import (
 	"context"
 	"encoding/binary"
-	"fmt"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"blainsmith.com/go/seahash"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/kvproto/pkg/kvrpcpb"
@@ -39,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/util"
+	"github.com/pingcap/tiflow/pkg/util/seahash"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	kvclientv2 "github.com/tikv/client-go/v2/kv"
@@ -108,7 +106,6 @@ type rangeTask struct {
 }
 
 type requestedStore struct {
-	storeID    uint64
 	storeAddr  string
 	nextStream atomic.Uint32
 	streams    []*requestedStream
@@ -122,11 +119,13 @@ type requestedTable struct {
 	rangeLock *regionlock.RegionRangeLock
 	eventCh   chan<- MultiplexingEvent
 
+	lastAdvanceTime atomic.Int64
+
 	// To handle table removing.
 	stopped atomic.Bool
 
 	// To handle lock resolvings.
-	postUpdateRegionResolvedTs func(regionID uint64, state *regionlock.LockedRange)
+	postUpdateRegionResolvedTs func(regionID, version uint64, state *regionlock.LockedRange, span tablepb.Span)
 	staleLocksVersion          atomic.Uint64
 }
 
@@ -360,9 +359,8 @@ func (s *SharedClient) requestRegionToStore(ctx context.Context, g *errgroup.Gro
 			continue
 		}
 
-		storeID := sri.rpcCtx.Peer.StoreId
 		storeAddr := sri.rpcCtx.Addr
-		s.appendRequest(s.requestStore(ctx, g, storeID, storeAddr), sri)
+		s.appendRequest(s.requestStore(ctx, g, storeAddr), sri)
 	}
 }
 
@@ -375,16 +373,12 @@ func (s *SharedClient) getRPCContextForRegion(ctx context.Context, id tikv.Regio
 	return rpcCtx, nil
 }
 
-func (s *SharedClient) requestStore(
-	ctx context.Context, g *errgroup.Group,
-	storeID uint64, storeAddr string,
-) *requestedStore {
+func (s *SharedClient) requestStore(ctx context.Context, g *errgroup.Group, storeAddr string) *requestedStore {
 	var rs *requestedStore
 	if rs = s.requestedStores[storeAddr]; rs != nil {
 		return rs
 	}
-
-	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
+	rs = &requestedStore{storeAddr: storeAddr}
 	s.requestedStores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
@@ -416,7 +410,6 @@ func (s *SharedClient) appendRequest(r *requestedStore, sri singleRegionInfo) {
 		zap.Uint64("streamID", r.streams[offset].streamID),
 		zap.Any("subscriptionID", sri.requestedTable.subscriptionID),
 		zap.Uint64("regionID", sri.verID.GetID()),
-		zap.Uint64("storeID", r.storeID),
 		zap.String("addr", r.storeAddr))
 	r.streams[offset].requests.In() <- sri
 }
@@ -464,6 +457,9 @@ func (s *SharedClient) divideAndScheduleRegions(
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(bo, nextSpan.StartKey, nextSpan.EndKey, limit)
 		if err != nil {
+			if errors.Cause(err) == context.Canceled {
+				return nil
+			}
 			log.Warn("event feed load regions failed",
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
@@ -624,6 +620,13 @@ func (s *SharedClient) handleError(ctx context.Context, errInfo regionErrorInfo)
 		metricFeedRPCCtxUnavailable.Inc()
 		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
 		return nil
+	case *getStoreErr:
+		metricGetStoreErr.Inc()
+		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
+		// cannot get the store the region belongs to, so we need to reload the region.
+		s.regionCache.OnSendFail(bo, errInfo.rpcCtx, true, err)
+		s.scheduleRangeRequest(ctx, errInfo.span, errInfo.requestedTable)
+		return nil
 	case *sendRequestToStoreErr:
 		metricStoreSendRequestErr.Inc()
 		bo := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
@@ -658,7 +661,11 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 	}
 
 	doResolve := func(regionID uint64, state *regionlock.LockedRange, maxVersion uint64) {
-		if state.CheckpointTs.Load() > maxVersion || !state.Initialzied.Load() {
+		if state == nil {
+			log.Warn("found nil state in resolve lock", zap.Uint64("regionID", regionID))
+			return
+		}
+		if state.ResolvedTs.Load() > maxVersion || !state.Initialzied.Load() {
 			return
 		}
 		if lastRun, ok := resolveLastRun[regionID]; ok {
@@ -667,7 +674,9 @@ func (s *SharedClient) resolveLock(ctx context.Context) error {
 			}
 		}
 		start := time.Now()
-		defer s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+		defer func() {
+			s.metrics.lockResolveRunDuration.Observe(float64(time.Since(start).Milliseconds()))
+		}()
 
 		if err := s.lockResolver.Resolve(ctx, regionID, maxVersion); err != nil {
 			log.Warn("event feed resolve lock fail",
@@ -712,7 +721,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 		s.totalSpans.RLock()
 		for subscriptionID, rt := range s.totalSpans.v {
 			attr := rt.rangeLock.CollectLockedRangeAttrs(nil)
-			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.CheckpointTs)
+			ckptTime := oracle.GetTimeFromTS(attr.SlowestRegion.ResolvedTs)
 			if attr.SlowestRegion.Initialized {
 				if currTime.Sub(ckptTime) > 2*resolveLockMinInterval {
 					log.Info("event feed finds a initialized slow region",
@@ -735,15 +744,11 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.Any("slowRegion", attr.SlowestRegion))
 			}
 			if len(attr.Holes) > 0 {
-				holes := make([]string, 0, len(attr.Holes))
-				for _, hole := range attr.Holes {
-					holes = append(holes, fmt.Sprintf("[%s,%s)", hole.StartKey, hole.EndKey))
-				}
 				log.Info("event feed holes exist",
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
-					zap.String("holes", strings.Join(holes, ", ")))
+					zap.Any("holes", attr.Holes))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -765,9 +770,9 @@ func (s *SharedClient) newRequestedTable(
 		eventCh:        eventCh,
 	}
 
-	rt.postUpdateRegionResolvedTs = func(regionID uint64, state *regionlock.LockedRange) {
+	rt.postUpdateRegionResolvedTs = func(regionID, _ uint64, state *regionlock.LockedRange, _ tablepb.Span) {
 		maxVersion := rt.staleLocksVersion.Load()
-		if state.CheckpointTs.Load() <= maxVersion && state.Initialzied.Load() {
+		if state.ResolvedTs.Load() <= maxVersion && state.Initialzied.Load() {
 			enter := time.Now()
 			s.resolveLockCh.In() <- resolveLockTask{regionID, maxVersion, state, enter}
 		}
@@ -784,16 +789,7 @@ func (r *requestedTable) associateSubscriptionID(event model.RegionFeedEvent) Mu
 }
 
 func (r *requestedTable) updateStaleLocks(s *SharedClient, maxVersion uint64) {
-	for {
-		old := r.staleLocksVersion.Load()
-		if old >= maxVersion {
-			return
-		}
-		if r.staleLocksVersion.CompareAndSwap(old, maxVersion) {
-			break
-		}
-	}
-
+	util.MustCompareAndMonotonicIncrease(&r.staleLocksVersion, maxVersion)
 	res := r.rangeLock.CollectLockedRangeAttrs(r.postUpdateRegionResolvedTs)
 	log.Warn("event feed finds slow locked ranges",
 		zap.String("namespace", s.changefeed.Namespace),

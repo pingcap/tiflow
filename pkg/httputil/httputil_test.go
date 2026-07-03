@@ -26,7 +26,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/stretchr/testify/require"
 )

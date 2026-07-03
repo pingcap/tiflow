@@ -227,13 +227,44 @@ func TestSplitRegionEven(t *testing.T) {
 	info := splitter.splitRegionsByWrittenKeysV1(tblID, regions, 5)
 	require.Len(t, info.RegionCounts, 5)
 	require.Len(t, info.Weights, 5)
+	count := 0
 	for i, w := range info.Weights {
 		if i == 4 {
 			require.Equal(t, uint64(9576), w, i)
 		} else {
 			require.Equal(t, uint64(9591), w, i)
 		}
+		count += info.RegionCounts[i]
 	}
+	require.Equal(t, count, regionCount)
+}
+
+func TestSplitLargeRegion(t *testing.T) {
+	tblID := model.TableID(1)
+	regionCount := spanRegionLimit*5 + 1000
+	regions := make([]pdutil.RegionInfo, regionCount)
+	for i := 0; i < regionCount; i++ {
+		regions[i] = pdutil.RegionInfo{
+			ID:          uint64(i),
+			StartKey:    "" + strconv.Itoa(i),
+			EndKey:      "" + strconv.Itoa(i),
+			WrittenKeys: 2,
+		}
+	}
+	splitter := newWriteSplitter(model.ChangeFeedID4Test("test", "test"), nil, 4)
+	info := splitter.splitRegionsByWrittenKeysV1(tblID, regions, 5)
+	require.Len(t, info.RegionCounts, 6)
+	require.Len(t, info.Weights, 6)
+	count := 0
+	for i, c := range info.RegionCounts {
+		if i == 5 {
+			require.Equal(t, 1000, c, i)
+		} else {
+			require.Equal(t, spanRegionLimit, c, i)
+		}
+		count += c
+	}
+	require.Equal(t, count, regionCount)
 }
 
 func TestSpanRegionLimitBase(t *testing.T) {
@@ -247,9 +278,12 @@ func TestSpanRegionLimitBase(t *testing.T) {
 	spanNum := getSpansNumber(len(regions), captureNum)
 	info := splitter.splitRegionsByWrittenKeysV1(0, cloneRegions(regions), spanNum)
 	require.Len(t, info.RegionCounts, spanNum)
+	count := 0
 	for _, c := range info.RegionCounts {
 		require.LessOrEqual(t, c, int(spanRegionLimit*1.1))
+		count += c
 	}
+	require.Equal(t, count, len(regions))
 }
 
 func TestSpanRegionLimit(t *testing.T) {
@@ -273,7 +307,7 @@ func TestSpanRegionLimit(t *testing.T) {
 	}
 
 	// total region number
-	totalRegionNumbers := spanRegionLimit * 10
+	totalRegionNumbers := spanRegionLimit*10 + 100
 
 	// writtenKeys over 20000 percentage
 	percentOver20000 := 1
@@ -318,7 +352,12 @@ func TestSpanRegionLimit(t *testing.T) {
 	spanNum := getSpansNumber(len(regions), captureNum)
 	info := splitter.splitRegionsByWrittenKeysV1(0, cloneRegions(regions), spanNum)
 	require.LessOrEqual(t, spanNum, len(info.RegionCounts))
-	for _, c := range info.RegionCounts {
-		require.LessOrEqual(t, c, int(spanRegionLimit*1.1))
+	count := 0
+	for i, c := range info.RegionCounts {
+		if i != len(info.RegionCounts)-1 {
+			require.LessOrEqual(t, c, int(spanRegionLimit*1.1))
+		}
+		count += c
 	}
+	require.Equal(t, count, totalRegionNumbers)
 }

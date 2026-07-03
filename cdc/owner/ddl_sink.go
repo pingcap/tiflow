@@ -23,9 +23,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/format"
-	"github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/format"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink"
 	"github.com/pingcap/tiflow/cdc/sink/ddlsink/factory"
@@ -55,6 +55,9 @@ type DDLSink interface {
 	// the caller of this function can call again and again until a true returned
 	emitDDLEvent(ctx context.Context, ddl *model.DDLEvent) (bool, error)
 	emitSyncPoint(ctx context.Context, checkpointTs uint64) error
+	// emitBootstrap emits the table bootstrap event in a blocking way.
+	// It will return after the bootstrap event is sent.
+	emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error
 	// close the ddlsink, cancel running goroutine.
 	close(ctx context.Context) error
 }
@@ -122,10 +125,6 @@ func ddlSinkInitializer(ctx context.Context, a *ddlSinkImpl) error {
 		return errors.Trace(err)
 	}
 	a.sink = s
-
-	if !util.GetOrZero(a.info.Config.EnableSyncPoint) {
-		return nil
-	}
 	return nil
 }
 
@@ -475,4 +474,11 @@ func (s *ddlSinkImpl) addSpecialComment(ddl *model.DDLEvent) (string, error) {
 		zap.String("result", result))
 
 	return result, nil
+}
+
+func (s *ddlSinkImpl) emitBootstrap(ctx context.Context, bootstrap *model.DDLEvent) error {
+	if err := s.makeSinkReady(ctx); err != nil {
+		return errors.Trace(err)
+	}
+	return s.sink.WriteDDLEvent(ctx, bootstrap)
 }

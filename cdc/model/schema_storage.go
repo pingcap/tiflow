@@ -15,12 +15,15 @@ package model
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
-	"github.com/pingcap/tidb/parser/types"
-	"github.com/pingcap/tidb/table/tables"
-	"github.com/pingcap/tidb/util/rowcodec"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/types"
+	"github.com/pingcap/tidb/pkg/table/tables"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
+	"go.uber.org/zap"
 )
 
 const (
@@ -50,6 +53,9 @@ type TableInfo struct {
 	columnsOffset map[int64]int
 	indicesOffset map[int64]int
 
+	// Column name -> ColumnID
+	nameToColID map[string]int64
+
 	hasUniqueColumn bool
 
 	// It's a mapping from ColumnID to the offset of the columns in row changed events.
@@ -71,6 +77,13 @@ type TableInfo struct {
 	// it's the same length and order with the model.TableInfo.Columns
 	rowColInfos    []rowcodec.ColInfo
 	rowColFieldTps map[int64]*types.FieldType
+
+	// offset of virtual columns in TableInfo.Columns
+	// for example:
+	// Table has 4 columns: a (physical), b (physical), c (virtual), d (virtual)
+	// TableInfo.Columns order: a, b, c, d
+	// VirtualColumnsOffset will be [2, 3] (indices of virtual columns c and d)
+	VirtualColumnsOffset []int
 }
 
 // WrapTableInfo creates a TableInfo from a timodel.TableInfo
@@ -87,6 +100,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		hasUniqueColumn:  false,
 		Version:          version,
 		columnsOffset:    make(map[int64]int, len(info.Columns)),
+		nameToColID:      make(map[string]int64, len(info.Columns)),
 		indicesOffset:    make(map[int64]int, len(info.Indices)),
 		RowColumnsOffset: make(map[int64]int, len(info.Columns)),
 		ColumnsFlag:      make(map[int64]ColumnFlagType, len(info.Columns)),
@@ -102,6 +116,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 		ti.columnsOffset[col.ID] = i
 		pkIsHandle := false
 		if IsColCDCVisible(col) {
+			ti.nameToColID[col.Name.O] = col.ID
 			ti.RowColumnsOffset[col.ID] = rowColumnsCurrentOffset
 			rowColumnsCurrentOffset++
 			pkIsHandle = (ti.PKIsHandle && mysql.HasPriKeyFlag(col.GetFlag())) || col.ID == model.ExtraHandleID
@@ -120,7 +135,8 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 					ti.handleColID = append(ti.handleColID, id)
 				}
 			}
-
+		} else {
+			ti.VirtualColumnsOffset = append(ti.VirtualColumnsOffset, i)
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:            col.ID,
@@ -211,6 +227,9 @@ func (ti *TableInfo) initColumnsFlag() {
 		if mysql.HasUnsignedFlag(colInfo.GetFlag()) {
 			flag.SetIsUnsigned()
 		}
+		if mysql.HasZerofillFlag(colInfo.GetFlag()) {
+			flag.SetZeroFill()
+		}
 		ti.ColumnsFlag[colInfo.ID] = flag
 	}
 
@@ -227,8 +246,7 @@ func (ti *TableInfo) initColumnsFlag() {
 			flag := ti.ColumnsFlag[colInfo.ID]
 			if idxInfo.Primary {
 				flag.SetIsPrimaryKey()
-			}
-			if idxInfo.Unique {
+			} else if idxInfo.Unique {
 				flag.SetIsUniqueKey()
 			}
 			if len(idxInfo.Columns) > 1 {
@@ -319,7 +337,7 @@ func (ti *TableInfo) Clone() *TableInfo {
 // GetIndex return the corresponding index by the given name.
 func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 	for _, index := range ti.Indices {
-		if index != nil && index.Name.O == name {
+		if index != nil && index.Name.L == strings.ToLower(name) {
 			return index
 		}
 	}
@@ -327,6 +345,9 @@ func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 }
 
 // IndexByName returns the index columns and offsets of the corresponding index by name
+// Index is not case-sensitive on any platform.
+// So we always match in lowercase.
+// See also: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html
 func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 	index := ti.GetIndex(name)
 	if index == nil {
@@ -343,18 +364,21 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 
 // OffsetsByNames returns the column offsets of the corresponding columns by names
 // If any column does not exist, return false
+// Column is not case-sensitive on any platform, nor are column aliases.
+// So we always match in lowercase.
+// See also: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html
 func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 	// todo: optimize it
 	columnOffsets := make(map[string]int, len(ti.Columns))
 	for _, col := range ti.Columns {
 		if col != nil {
-			columnOffsets[col.Name.O] = col.Offset
+			columnOffsets[col.Name.L] = ti.columnsOffset[col.ID]
 		}
 	}
 
 	result := make([]int, 0, len(names))
 	for _, col := range names {
-		offset, ok := columnOffsets[col]
+		offset, ok := columnOffsets[strings.ToLower(col)]
 		if !ok {
 			return nil, false
 		}
@@ -365,24 +389,74 @@ func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
 }
 
 // GetPrimaryKeyColumnNames returns the primary key column names
-func (ti *TableInfo) GetPrimaryKeyColumnNames() map[string]struct{} {
-	result := make(map[string]struct{})
-	for _, index := range ti.Indices {
-		if index.Primary {
-			for _, col := range index.Columns {
-				result[col.Name.O] = struct{}{}
-			}
-			return result
-		}
+func (ti *TableInfo) GetPrimaryKeyColumnNames() []string {
+	var result []string
+	if ti.PKIsHandle {
+		result = append(result, ti.GetPkColInfo().Name.O)
+		return result
 	}
 
-	for _, columnsOffsets := range ti.IndexColumnsOffset {
-		for _, offset := range columnsOffsets {
-			columnInfo := ti.Columns[offset]
-			if mysql.HasPriKeyFlag(columnInfo.FieldType.GetFlag()) {
-				result[columnInfo.Name.O] = struct{}{}
-			}
+	indexInfo := ti.GetPrimaryKey()
+	if indexInfo != nil {
+		for _, col := range indexInfo.Columns {
+			result = append(result, col.Name.O)
 		}
 	}
 	return result
+}
+
+// GetSchemaName returns the schema name of the table
+func (ti *TableInfo) GetSchemaName() string {
+	return ti.TableName.Schema
+}
+
+// GetTableName returns the table name of the table
+func (ti *TableInfo) GetTableName() string {
+	return ti.TableName.Table
+}
+
+// GetSchemaNamePtr returns the pointer to the schema name of the table
+func (ti *TableInfo) GetSchemaNamePtr() *string {
+	return &ti.TableName.Schema
+}
+
+// GetTableNamePtr returns the pointer to the table name of the table
+func (ti *TableInfo) GetTableNamePtr() *string {
+	return &ti.TableName.Table
+}
+
+// ForceGetColumnInfo return the column info by ID
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnInfo(colID int64) *model.ColumnInfo {
+	colInfo, ok := ti.GetColumnInfo(colID)
+	if !ok {
+		log.Panic("invalid column id", zap.Int64("columnID", colID))
+	}
+	return colInfo
+}
+
+// ForceGetColumnFlagType return the column flag type by ID
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnFlagType(colID int64) *ColumnFlagType {
+	flag, ok := ti.ColumnsFlag[colID]
+	if !ok {
+		log.Panic("invalid column id", zap.Int64("columnID", colID))
+	}
+	return &flag
+}
+
+// ForceGetColumnName return the column name by ID
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnName(colID int64) string {
+	return ti.ForceGetColumnInfo(colID).Name.O
+}
+
+// ForceGetColumnIDByName return column ID by column name
+// Caller must ensure `colID` exists
+func (ti *TableInfo) ForceGetColumnIDByName(name string) int64 {
+	colID, ok := ti.nameToColID[name]
+	if !ok {
+		log.Panic("invalid column name", zap.String("column", name))
+	}
+	return colID
 }

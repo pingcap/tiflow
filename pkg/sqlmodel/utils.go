@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 )
 
 func getColsAndValuesOfIdx(

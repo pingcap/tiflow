@@ -18,7 +18,7 @@ import (
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
 	dmysql "github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/util"
+	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/engine/pkg/dbutil"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/security"

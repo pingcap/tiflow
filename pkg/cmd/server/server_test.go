@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	ticonfig "github.com/pingcap/tidb/config"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
@@ -164,6 +164,7 @@ func TestParseCfg(t *testing.T) {
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -177,7 +178,7 @@ func TestParseCfg(t *testing.T) {
 				WriterBufferSize:    8388608,
 				Compression:         "snappy",
 				WriteL0PauseTrigger: math.MaxInt32,
-				CompactionL0Trigger: 160,
+				CompactionL0Trigger: 16,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -308,6 +309,7 @@ check-balance-interval = "10s"
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -442,6 +444,7 @@ cert-allowed-cn = ["dd","ee"]
 			EnableMultiplexing:   true,
 			WorkerConcurrent:     8,
 			GrpcStreamConcurrent: 1,
+			AdvanceIntervalInMs:  300,
 			FrontierConcurrent:   8,
 			WorkerPoolSize:       0,
 			RegionScanLimit:      40,
@@ -455,7 +458,7 @@ cert-allowed-cn = ["dd","ee"]
 				WriterBufferSize:    8388608,
 				Compression:         "snappy",
 				WriteL0PauseTrigger: math.MaxInt32,
-				CompactionL0Trigger: 160,
+				CompactionL0Trigger: 16,
 			},
 			// We expect the default configuration here.
 			Messages: &config.MessagesConfig{
@@ -517,7 +520,7 @@ unknown3 = 3
 			WriterBufferSize:    8388608,
 			Compression:         "snappy",
 			WriteL0PauseTrigger: math.MaxInt32,
-			CompactionL0Trigger: 160,
+			CompactionL0Trigger: 16,
 		},
 		// We expect the default configuration here.
 		Messages: &config.MessagesConfig{

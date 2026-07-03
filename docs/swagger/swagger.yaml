@@ -19,11 +19,21 @@ definitions:
     type: object
   config.CloudStorageConfig:
     properties:
+      file-cleanup-cron-spec:
+        type: string
+      file-expiration-days:
+        type: integer
       file-size:
+        type: integer
+      flush-concurrency:
         type: integer
       flush-interval:
         type: string
       output-column-id:
+        type: boolean
+      output-raw-change-event:
+        description: OutputRawChangeEvent controls whether to split the update pk/uk
+          events.
         type: boolean
       worker-count:
         type: integer
@@ -38,6 +48,8 @@ definitions:
         type: boolean
       enable-tidb-extension:
         type: boolean
+      encoding-format:
+        type: string
       max-batch-size:
         type: integer
     type: object
@@ -125,6 +137,10 @@ definitions:
         $ref: '#/definitions/config.LargeMessageHandleConfig'
       max-message-bytes:
         type: integer
+      output-raw-change-event:
+        description: OutputRawChangeEvent controls whether to split the update pk/uk
+          events.
+        type: boolean
       partition-num:
         type: integer
       read-timeout:
@@ -232,6 +248,11 @@ definitions:
         description: OAuth2Scope scope
         type: string
     type: object
+  config.OpenProtocolConfig:
+    properties:
+      output-old-value:
+        type: boolean
+    type: object
   config.PulsarConfig:
     properties:
       auth-tls-certificate-path:
@@ -279,6 +300,10 @@ definitions:
           Producer-create, subscribe and unsubscribe operations will be retried until this interval, after which the
           operation will be marked as failed
         type: integer
+      output-raw-change-event:
+        description: OutputRawChangeEvent controls whether to split the update pk/uk
+          events.
+        type: boolean
       pulsar-producer-cache-size:
         description: PulsarProducerCacheSize is the size of the cache of pulsar producers
         type: integer
@@ -291,9 +316,9 @@ definitions:
           Send and SendAsync returns an error after timeout.
           default: 30s
         type: integer
-      tls-certificate-path:
+      tls-certificate-file:
         type: string
-      tls-private-key-path:
+      tls-key-file-path:
         type: string
       tls-trust-certs-file-path:
         type: string
@@ -313,7 +338,6 @@ definitions:
       cloud-storage-config:
         $ref: '#/definitions/config.CloudStorageConfig'
       column-selectors:
-        description: ColumnSelectors is Deprecated.
         items:
           $ref: '#/definitions/config.ColumnSelector'
         type: array
@@ -355,6 +379,9 @@ definitions:
         description: OnlyOutputUpdatedColumns is only available when the downstream
           is MQ.
         type: boolean
+      open:
+        $ref: '#/definitions/config.OpenProtocolConfig'
+        description: OpenProtocol related configurations
       protocol:
         description: Protocol is NOT available when the downstream is DB.
         type: string
@@ -367,6 +394,23 @@ definitions:
         description: SchemaRegistry is only available when the downstream is MQ using
           avro protocol.
         type: string
+      send-bootstrap-in-msg-count:
+        description: SendBootstrapInMsgCount means bootstrap messages are being sent
+          every SendBootstrapInMsgCount row change messages.
+        type: integer
+      send-bootstrap-interval-in-sec:
+        description: |-
+          Simple Protocol only config, use to control the behavior of sending bootstrap message.
+          Note: When one of the following conditions is set to negative value,
+          bootstrap sending function will be disabled.
+          SendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.
+        type: integer
+      send-bootstrap-to-all-partition:
+        description: |-
+          SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.
+          If set to false, bootstrap message will only be sent to the first partition of each topic.
+          Default value is true.
+        type: boolean
       terminator:
         description: Terminator is NOT available when the downstream is DB.
         type: string
@@ -693,11 +737,19 @@ definitions:
     type: object
   v2.CloudStorageConfig:
     properties:
+      file_cleanup_cron_spec:
+        type: string
+      file_expiration_days:
+        type: integer
       file_size:
+        type: integer
+      flush_concurrency:
         type: integer
       flush_interval:
         type: string
       output_column_id:
+        type: boolean
+      output_raw_change_event:
         type: boolean
       worker_count:
         type: integer
@@ -712,6 +764,8 @@ definitions:
         type: boolean
       enable_tidb_extension:
         type: boolean
+      encoding_format:
+        type: string
       max_batch_size:
         type: integer
     type: object
@@ -728,16 +782,35 @@ definitions:
     type: object
   v2.ConsistentConfig:
     properties:
+      compression:
+        type: string
+      encoding_worker_num:
+        type: integer
+      flush_concurrency:
+        type: integer
       flush_interval:
+        type: integer
+      flush_worker_num:
         type: integer
       level:
         type: string
       max_log_size:
         type: integer
+      memory_usage:
+        $ref: '#/definitions/v2.ConsistentMemoryUsage'
+      meta_flush_interval:
+        type: integer
       storage:
         type: string
       use_file_backend:
         type: boolean
+    type: object
+  v2.ConsistentMemoryUsage:
+    properties:
+      event_cache_percentage:
+        type: integer
+      memory_quota_percentage:
+        type: integer
     type: object
   v2.DispatchRule:
     properties:
@@ -842,6 +915,8 @@ definitions:
       integrity_check_level:
         type: string
     type: object
+  v2.JSONDuration:
+    type: object
   v2.KafkaConfig:
     properties:
       auto_create_topic:
@@ -872,6 +947,8 @@ definitions:
         $ref: '#/definitions/v2.LargeMessageHandleConfig'
       max_message_bytes:
         type: integer
+      output_raw_change_event:
+        type: boolean
       partition_num:
         type: integer
       read_timeout:
@@ -971,6 +1048,11 @@ definitions:
       write_timeout:
         type: string
     type: object
+  v2.OpenProtocolConfig:
+    properties:
+      output_old_value:
+        type: boolean
+    type: object
   v2.ProcessorCommonInfo:
     properties:
       capture_id:
@@ -1012,6 +1094,8 @@ definitions:
         $ref: '#/definitions/v2.PulsarOAuth2'
       operation-timeout:
         type: integer
+      output-raw-change-event:
+        type: boolean
       pulsar-producer-cache-size:
         type: integer
       pulsar-version:
@@ -1046,6 +1130,8 @@ definitions:
         type: boolean
       case_sensitive:
         type: boolean
+      changefeed_error_stuck_duration:
+        $ref: '#/definitions/v2.JSONDuration'
       check_gc_safe_point:
         type: boolean
       consistent:
@@ -1068,10 +1154,14 @@ definitions:
         $ref: '#/definitions/v2.ChangefeedSchedulerConfig'
       sink:
         $ref: '#/definitions/v2.SinkConfig'
+      sql_mode:
+        type: string
       sync_point_interval:
         type: string
       sync_point_retention:
         type: string
+      synced_status:
+        $ref: '#/definitions/v2.SyncedStatusConfig'
     type: object
   v2.ResumeChangefeedConfig:
     properties:
@@ -1154,6 +1244,8 @@ definitions:
         $ref: '#/definitions/v2.MySQLConfig'
       only_output_updated_columns:
         type: boolean
+      open:
+        $ref: '#/definitions/v2.OpenProtocolConfig'
       protocol:
         type: string
       pulsar_config:
@@ -1162,10 +1254,43 @@ definitions:
         type: boolean
       schema_registry:
         type: string
+      send_bootstrap_in_msg_count:
+        type: integer
+      send_bootstrap_interval_in_sec:
+        type: integer
+      send_bootstrap_to_all_partition:
+        type: boolean
       terminator:
         type: string
       transaction_atomicity:
         type: string
+    type: object
+  v2.SyncedStatus:
+    properties:
+      info:
+        type: string
+      last_synced_ts:
+        type: string
+      now_ts:
+        type: string
+      puller_resolved_ts:
+        type: string
+      sink_checkpoint_ts:
+        type: string
+      synced:
+        type: boolean
+    type: object
+  v2.SyncedStatusConfig:
+    properties:
+      checkpoint_interval:
+        description: |-
+          The maximum interval between latest checkpoint ts and now or
+          between latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state
+        type: integer
+      synced_check_interval:
+        description: The minimum interval between the latest synced ts and now required
+          to reach synced state
+        type: integer
     type: object
   v2.Table:
     properties:
@@ -1891,6 +2016,40 @@ paths:
           schema:
             $ref: '#/definitions/model.HTTPError'
       summary: Resume a changefeed
+      tags:
+      - changefeed
+      - v2
+  /api/v2/changefeeds/{changefeed_id}/synced:
+    get:
+      consumes:
+      - application/json
+      description: get the synced status of a changefeed
+      parameters:
+      - description: changefeed_id
+        in: path
+        name: changefeed_id
+        required: true
+        type: string
+      - description: default
+        in: query
+        name: namespace
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SyncedStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/model.HTTPError'
+      summary: Get synced status
       tags:
       - changefeed
       - v2

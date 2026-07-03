@@ -16,6 +16,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
@@ -93,6 +94,11 @@ type RawKVEntry struct {
 	RegionID uint64 `msg:"region_id"`
 }
 
+// IsUpdate checks if the event is an update event.
+func (v *RawKVEntry) IsUpdate() bool {
+	return v.OpType == OpTypePut && v.OldValue != nil && v.Value != nil
+}
+
 func (v *RawKVEntry) String() string {
 	// TODO: redact values.
 	return fmt.Sprintf(
@@ -104,4 +110,21 @@ func (v *RawKVEntry) String() string {
 // representation of this event.
 func (v *RawKVEntry) ApproximateDataSize() int64 {
 	return int64(len(v.Key) + len(v.Value) + len(v.OldValue))
+}
+
+// ShouldSplitKVEntry checks whether the raw kv entry should be splitted.
+type ShouldSplitKVEntry func(raw *RawKVEntry) bool
+
+// SplitUpdateKVEntry splits the raw kv entry into a delete entry and an insert entry.
+func SplitUpdateKVEntry(raw *RawKVEntry) (*RawKVEntry, *RawKVEntry, error) {
+	if raw == nil {
+		return nil, nil, errors.New("nil event cannot be split")
+	}
+	deleteKVEntry := *raw
+	deleteKVEntry.Value = nil
+
+	insertKVEntry := *raw
+	insertKVEntry.OldValue = nil
+
+	return &deleteKVEntry, &insertKVEntry, nil
 }

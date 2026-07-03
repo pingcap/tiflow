@@ -17,12 +17,14 @@ import (
 	"context"
 	"math/rand"
 	"sort"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/puller"
 	"github.com/pingcap/tiflow/cdc/redo"
@@ -103,7 +105,7 @@ type ddlManager struct {
 	// use to pull DDL jobs from TiDB
 	ddlPuller puller.DDLPuller
 	// schema store multiple version of schema, it is used by scheduler
-	schema *schemaWrap4Owner
+	schema entry.SchemaStorage
 	// redoDDLManager is used to send DDL events to redo log and get redo resolvedTs.
 	redoDDLManager  redo.DDLManager
 	redoMetaManager redo.MetaManager
@@ -132,6 +134,25 @@ type ddlManager struct {
 	BDRMode       bool
 	sinkType      model.DownstreamType
 	ddlResolvedTs model.Ts
+
+	bootstrapState bootstrapState
+	reportError    func(err error)
+}
+
+type bootstrapState int32
+
+const (
+	bootstrapNotStarted bootstrapState = iota
+	bootstrapInProgress
+	bootstrapFinished
+)
+
+func storeBootstrapState(addr *bootstrapState, state bootstrapState) {
+	atomic.StoreInt32((*int32)(addr), int32(state))
+}
+
+func loadBootstrapState(addr *bootstrapState) bootstrapState {
+	return bootstrapState(atomic.LoadInt32((*int32)(addr)))
 }
 
 func newDDLManager(
@@ -141,11 +162,13 @@ func newDDLManager(
 	ddlSink DDLSink,
 	filter filter.Filter,
 	ddlPuller puller.DDLPuller,
-	schema *schemaWrap4Owner,
+	schema entry.SchemaStorage,
 	redoManager redo.DDLManager,
 	redoMetaManager redo.MetaManager,
 	sinkType model.DownstreamType,
 	bdrMode bool,
+	shouldSendAllBootstrapAtStart bool,
+	reportError func(err error),
 ) *ddlManager {
 	log.Info("create ddl manager",
 		zap.String("namaspace", changefeedID.Namespace),
@@ -154,6 +177,11 @@ func newDDLManager(
 		zap.Uint64("checkpointTs", checkpointTs),
 		zap.Bool("bdrMode", bdrMode),
 		zap.Stringer("sinkType", sinkType))
+
+	bootstrap := bootstrapFinished
+	if shouldSendAllBootstrapAtStart {
+		bootstrap = bootstrapNotStarted
+	}
 
 	return &ddlManager{
 		changfeedID:     changefeedID,
@@ -171,7 +199,58 @@ func newDDLManager(
 		sinkType:        model.DB,
 		tableCheckpoint: make(map[model.TableName]model.Ts),
 		pendingDDLs:     make(map[model.TableName][]*model.DDLEvent),
+		bootstrapState:  bootstrap,
+		reportError:     reportError,
 	}
+}
+
+func (m *ddlManager) isBootstrapped() bool {
+	return loadBootstrapState(&m.bootstrapState) == bootstrapFinished
+}
+
+// return true if bootstrapped
+func (m *ddlManager) trySendBootstrap(ctx context.Context, currentTables []*model.TableInfo) bool {
+	bootstrap := loadBootstrapState(&m.bootstrapState)
+	switch bootstrap {
+	case bootstrapFinished:
+		return true
+	case bootstrapInProgress:
+		return false
+	case bootstrapNotStarted:
+	}
+	storeBootstrapState(&m.bootstrapState, bootstrapInProgress)
+	start := time.Now()
+	go func() {
+		log.Info("start to send bootstrap messages",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)))
+		for idx, table := range currentTables {
+			if table.TableInfo.IsView() {
+				continue
+			}
+			ddlEvent := &model.DDLEvent{
+				TableInfo:   table,
+				IsBootstrap: true,
+			}
+			err := m.ddlSink.emitBootstrap(ctx, ddlEvent)
+			if err != nil {
+				log.Error("send bootstrap message failed",
+					zap.Stringer("changefeed", m.changfeedID),
+					zap.Int("tables", len(currentTables)),
+					zap.Int("emitted", idx+1),
+					zap.Duration("duration", time.Since(start)),
+					zap.Error(err))
+				m.reportError(err)
+				return
+			}
+		}
+		storeBootstrapState(&m.bootstrapState, bootstrapFinished)
+		log.Info("send bootstrap messages finished",
+			zap.Stringer("changefeed", m.changfeedID),
+			zap.Int("tables", len(currentTables)),
+			zap.Duration("cost", time.Since(start)))
+	}()
+	return m.isBootstrapped()
 }
 
 // tick the ddlHandler, it does the following things:
@@ -196,6 +275,12 @@ func (m *ddlManager) tick(
 		return nil, nil, errors.Trace(err)
 	}
 
+	// before bootstrap finished, cannot send any event.
+	ok := m.trySendBootstrap(ctx, currentTables)
+	if !ok {
+		return nil, nil, nil
+	}
+
 	if m.executingDDL == nil {
 		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
 	}
@@ -213,20 +298,44 @@ func (m *ddlManager) tick(
 			break
 		}
 
-		if job != nil && job.BinlogInfo != nil {
-			log.Info("handle a ddl job",
-				zap.String("namespace", m.changfeedID.Namespace),
-				zap.String("ID", m.changfeedID.ID),
-				zap.Int64("tableID", job.TableID),
-				zap.Int64("jobID", job.ID),
-				zap.String("query", job.Query),
-				zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			)
-			events, err := m.schema.BuildDDLEvents(ctx, job)
-			if err != nil {
-				return nil, nil, err
-			}
+		if job.BinlogInfo == nil {
+			continue
+		}
 
+		// Note: do not change the key words in the log, it is used to search the
+		// FinishTS of the DDL job. Some integration tests and users depend on it.
+		log.Info("handle a ddl job",
+			zap.String("namespace", m.changfeedID.Namespace),
+			zap.String("changefeed", m.changfeedID.ID),
+			zap.Int64("tableID", job.TableID),
+			zap.Int64("jobID", job.ID),
+			zap.String("query", job.Query),
+			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
+		)
+		events, err := m.schema.BuildDDLEvents(ctx, job)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		for _, event := range events {
+			snap := m.schema.GetLastSnapshot()
+			if event.Type == timodel.ActionCreateTable ||
+				event.Type == timodel.ActionCreateTables {
+				if snap.IsIneligibleTableID(event.TableInfo.ID) {
+					log.Info("table is ineligible, skip the ddl",
+						zap.String("namespace", m.changfeedID.Namespace),
+						zap.String("changefeed", m.changfeedID.ID),
+						zap.String("query", job.Query),
+						zap.Any("table", event.TableInfo))
+					continue
+				}
+			}
+			tableName := event.TableInfo.TableName
+			m.pendingDDLs[tableName] = append(m.pendingDDLs[tableName], event)
+		}
+
+		// Send DDL events to redo log.
+		if m.redoDDLManager.Enabled() {
 			for _, event := range events {
 				// TODO: find a better place to do this check
 				// check if the ddl event is belong to an ineligible table.
@@ -306,6 +415,13 @@ func (m *ddlManager) tick(
 					zap.Uint64("commitTs", nextDDL.CommitTs),
 					zap.Uint64("checkpointTs", m.checkpointTs))
 				m.executingDDL = nextDDL
+				skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
+				if err != nil {
+					return nil, nil, errors.Trace(err)
+				}
+				if skip {
+					m.cleanCache(cleanMsg)
+				}
 			}
 			err := m.executeDDL(ctx)
 			if err != nil {
@@ -369,14 +485,6 @@ func (m *ddlManager) shouldSkipDDL(ddl *model.DDLEvent) (bool, string, error) {
 // executeDDL executes ddlManager.executingDDL.
 func (m *ddlManager) executeDDL(ctx context.Context) error {
 	if m.executingDDL == nil {
-		return nil
-	}
-	skip, cleanMsg, err := m.shouldSkipDDL(m.executingDDL)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	if skip {
-		m.cleanCache(cleanMsg)
 		return nil
 	}
 
@@ -531,8 +639,7 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 	return barrier
 }
 
-// allTables returns all tables in the schema that
-// less or equal than the checkpointTs.
+// allTables returns all tables in the schema in current checkpointTs.
 func (m *ddlManager) allTables(ctx context.Context) ([]*model.TableInfo, error) {
 	if m.tableInfoCache != nil {
 		return m.tableInfoCache, nil

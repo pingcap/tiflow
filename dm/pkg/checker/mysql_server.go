@@ -18,9 +18,9 @@ import (
 	"database/sql"
 	"fmt"
 
-	toolsutils "github.com/pingcap/tidb-tools/pkg/utils"
-	"github.com/pingcap/tidb/util/dbutil"
+	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/pkg/errors"
 )
 
 // MySQLVersionChecker checks mysql/mariadb/rds,... version.
@@ -135,7 +135,7 @@ func (pc *MySQLServerIDChecker) Check(ctx context.Context) *Result {
 
 	serverID, err := dbutil.ShowServerID(ctx, pc.db)
 	if err != nil {
-		if toolsutils.OriginError(err) != sql.ErrNoRows {
+		if errors.OriginError(err) != sql.ErrNoRows {
 			markCheckError(result, err)
 			return result
 		}

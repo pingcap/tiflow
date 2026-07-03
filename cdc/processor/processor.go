@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -24,8 +25,8 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/async"
 	"github.com/pingcap/tiflow/cdc/entry"
-	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sinkmanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -41,10 +42,13 @@ import (
 	"github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
+	"github.com/pingcap/tiflow/pkg/sink"
+	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
+	"go.uber.org/atomic"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -88,7 +92,8 @@ type processor struct {
 
 	sinkManager component[*sinkmanager.SinkManager]
 
-	initialized bool
+	initialized *atomic.Bool
+	initializer *async.Initializer
 
 	lazyInit func(ctx cdcContext.Context) error
 	newAgent func(
@@ -211,13 +216,13 @@ func (p *processor) AddTableSpan(
 			zap.Bool("isPrepare", isPrepare))
 	}
 
-	p.sinkManager.r.AddTable(
+	table := p.sinkManager.r.AddTable(
 		span, startTs, p.latestInfo.TargetTs)
 	if p.redo.r.Enabled() {
 		p.redo.r.AddTable(span, startTs)
 	}
-	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs)
 
+	p.sourceManager.r.AddTable(span, p.getTableName(ctx, span.TableID), startTs, table.GetReplicaTs)
 	return true, nil
 }
 
@@ -374,11 +379,9 @@ func (p *processor) getStatsFromSourceManagerAndSinkManager(
 	span tablepb.Span, sinkStats sinkmanager.TableStats,
 ) tablepb.Stats {
 	pullerStats := p.sourceManager.r.GetTablePullerStats(span)
-	now := p.upstream.PDClock.CurrentTime()
 
 	stats := tablepb.Stats{
 		RegionCount: pullerStats.RegionCount,
-		CurrentTs:   oracle.ComposeTS(oracle.GetPhysical(now), 0),
 		BarrierTs:   sinkStats.BarrierTs,
 		StageCheckpoints: map[string]tablepb.Checkpoint{
 			"puller-ingress": {
@@ -430,6 +433,8 @@ func NewProcessor(
 		latestInfo:      info,
 		latestStatus:    status,
 
+		initialized: atomic.NewBool(false),
+
 		ownerCaptureInfoClient: ownerCaptureInfoClient,
 
 		metricSyncTableNumGauge: syncTableNumGauge.
@@ -446,6 +451,7 @@ func NewProcessor(
 	p.lazyInit = p.lazyInitImpl
 	p.newAgent = p.newAgentImpl
 	p.cfg = cfg
+	p.initializer = async.NewInitializer()
 	return p
 }
 
@@ -482,6 +488,16 @@ func (p *processor) Tick(
 	ctx cdcContext.Context,
 	info *model.ChangeFeedInfo, status *model.ChangeFeedStatus,
 ) (error, error) {
+	if !p.initialized.Load() {
+		initialized, err := p.initializer.TryInitialize(ctx, p.lazyInit, ctx.GlobalVars().ChangefeedThreadPool)
+		if err != nil {
+			return errors.Trace(err), nil
+		}
+		if !initialized {
+			return nil, nil
+		}
+	}
+
 	p.latestInfo = info
 	p.latestStatus = status
 
@@ -506,8 +522,7 @@ func (p *processor) Tick(
 		return nil, nil
 	}
 	startTime := time.Now()
-	warning := p.handleWarnings()
-	err := p.tick(ctx)
+	err, warning := p.tick(ctx)
 	costTime := time.Since(startTime)
 	if costTime > processorLogsWarnDuration {
 		log.Warn("processor tick took too long",
@@ -542,17 +557,15 @@ func (p *processor) handleWarnings() error {
 	return err
 }
 
-func (p *processor) tick(ctx cdcContext.Context) error {
+func (p *processor) tick(ctx cdcContext.Context) (error, error) {
+	warning := p.handleWarnings()
 	if err := p.handleErrorCh(); err != nil {
-		return errors.Trace(err)
-	}
-	if err := p.lazyInit(ctx); err != nil {
-		return errors.Trace(err)
+		return errors.Trace(err), warning
 	}
 
 	barrier, err := p.agent.Tick(ctx)
 	if err != nil {
-		return errors.Trace(err)
+		return errors.Trace(err), warning
 	}
 
 	if barrier != nil && barrier.GlobalBarrierTs != 0 {
@@ -560,12 +573,51 @@ func (p *processor) tick(ctx cdcContext.Context) error {
 	}
 	p.doGCSchemaStorage()
 
-	return nil
+	return nil, warning
+}
+
+// isMysqlCompatibleBackend returns true if the sinkURIStr is mysql compatible.
+func isMysqlCompatibleBackend(sinkURIStr string) (bool, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return false, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	return sink.IsMySQLCompatibleScheme(scheme), nil
+}
+
+// getPullerSplitUpdateMode returns how to split update kv entries at puller.
+//
+// If the sinkURI is not mysql compatible, it returns PullerSplitUpdateModeNone
+// which means don't split any update kv entries at puller;
+// If the sinkURI is mysql compatible, it has the following two cases:
+//  1. if the user config safe mode in sink module, it returns PullerSplitUpdateModeAlways,
+//     which means split all update kv entries at puller;
+//  2. if the user does not config safe mode in sink module, it returns PullerSplitUpdateModeAtStart,
+//     which means split update kv entries whose commitTS is older than the replicate ts of sink.
+func getPullerSplitUpdateMode(sinkURIStr string, config *config.ReplicaConfig) (sourcemanager.PullerSplitUpdateMode, error) {
+	sinkURI, err := url.Parse(sinkURIStr)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateModeNone, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+	}
+	scheme := sink.GetScheme(sinkURI)
+	if !sink.IsMySQLCompatibleScheme(scheme) {
+		return sourcemanager.PullerSplitUpdateModeNone, nil
+	}
+	// must be mysql sink
+	isSinkInSafeMode, err := mysql.IsSinkSafeMode(sinkURI, config)
+	if err != nil {
+		return sourcemanager.PullerSplitUpdateModeNone, err
+	}
+	if isSinkInSafeMode {
+		return sourcemanager.PullerSplitUpdateModeAlways, nil
+	}
+	return sourcemanager.PullerSplitUpdateModeAtStart, nil
 }
 
 // lazyInitImpl create Filter, SchemaStorage, Mounter instances at the first tick.
 func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
-	if p.initialized {
+	if p.initialized.Load() {
 		return nil
 	}
 
@@ -581,7 +633,11 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	p.filter, err = filter.NewFilter(p.latestInfo.Config, util.GetTimeZoneName(tz))
+
+	// Clone the config to avoid data race
+	cfConfig := p.latestInfo.Config.Clone()
+
+	p.filter, err = filter.NewFilter(cfConfig, util.GetTimeZoneName(tz))
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -594,8 +650,8 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	p.ddlHandler.spawn(prcCtx)
 
 	p.mg.r = entry.NewMounterGroup(p.ddlHandler.r.schemaStorage,
-		p.latestInfo.Config.Mounter.WorkerNum,
-		p.filter, tz, p.changefeedID, p.latestInfo.Config.Integrity)
+		cfConfig.Mounter.WorkerNum,
+		p.filter, tz, p.changefeedID, cfConfig.Integrity)
 	p.mg.name = "MounterGroup"
 	p.mg.changefeedID = p.changefeedID
 	p.mg.spawn(prcCtx)
@@ -604,9 +660,11 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 	if err != nil {
 		return errors.Trace(err)
 	}
-	p.latestInfo.Config.Sink.TiDBSourceID = sourceID
+	cfConfig.Sink.TiDBSourceID = sourceID
+	log.Info("get sourceID from PD", zap.Uint64("sourceID", sourceID),
+		zap.Stringer("changefeedID", p.changefeedID))
 
-	p.redo.r = redo.NewDMLManager(p.changefeedID, p.latestInfo.Config.Consistent)
+	p.redo.r = redo.NewDMLManager(p.changefeedID, cfConfig.Consistent)
 	p.redo.name = "RedoManager"
 	p.redo.changefeedID = p.changefeedID
 	p.redo.spawn(prcCtx)
@@ -620,16 +678,25 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return errors.Trace(err)
 	}
 
+	pullerSplitUpdateMode, err := getPullerSplitUpdateMode(p.latestInfo.SinkURI, cfConfig)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.sourceManager.r = sourcemanager.New(
 		p.changefeedID, p.upstream, p.mg.r,
-		sortEngine, util.GetOrZero(p.latestInfo.Config.BDRMode))
+		sortEngine, pullerSplitUpdateMode,
+		util.GetOrZero(cfConfig.BDRMode))
 	p.sourceManager.name = "SourceManager"
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(prcCtx)
 
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	p.sinkManager.r = sinkmanager.New(
-		p.changefeedID, p.latestInfo, p.upstream,
-		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r)
+		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
+		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)
 	p.sinkManager.name = "SinkManager"
 	p.sinkManager.changefeedID = p.changefeedID
 	p.sinkManager.spawn(prcCtx)
@@ -641,7 +708,7 @@ func (p *processor) lazyInitImpl(etcdCtx cdcContext.Context) (err error) {
 		return err
 	}
 
-	p.initialized = true
+	p.initialized.Store(true)
 	log.Info("processor initialized",
 		zap.String("capture", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
@@ -708,15 +775,11 @@ func (p *processor) initDDLHandler(ctx context.Context) error {
 		ddlStartTs = checkpointTs - 1
 	}
 
-	meta, err := kv.GetSnapshotMeta(p.upstream.KVStorage, ddlStartTs)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	f, err := filter.NewFilter(p.latestInfo.Config, "")
 	if err != nil {
 		return errors.Trace(err)
 	}
-	schemaStorage, err := entry.NewSchemaStorage(meta, ddlStartTs,
+	schemaStorage, err := entry.NewSchemaStorage(p.upstream.KVStorage, ddlStartTs,
 		forceReplicate, p.changefeedID, util.RoleProcessor, f)
 	if err != nil {
 		return errors.Trace(err)
@@ -822,7 +885,7 @@ func (p *processor) doGCSchemaStorage() {
 func (p *processor) refreshMetrics() {
 	// Before the processor is initialized, we should not refresh metrics.
 	// Otherwise, it will cause panic.
-	if !p.initialized {
+	if !p.initialized.Load() {
 		return
 	}
 	p.metricSyncTableNumGauge.Set(float64(p.sinkManager.r.GetAllCurrentTableSpansCount()))
@@ -833,7 +896,7 @@ func (p *processor) Close() error {
 	log.Info("processor closing ...",
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID))
-
+	p.initializer.Terminate()
 	// clean up metrics first to avoid some metrics are not cleaned up
 	// when error occurs during closing the processor
 	p.cleanupMetrics()
@@ -910,6 +973,10 @@ func (p *processor) cleanupMetrics() {
 
 // WriteDebugInfo write the debug info to Writer
 func (p *processor) WriteDebugInfo(w io.Writer) error {
+	if !p.initialized.Load() {
+		fmt.Fprintln(w, "processor is not initialized")
+		return nil
+	}
 	fmt.Fprintf(w, "%+v\n%+v\n", *p.latestInfo, *p.latestStatus)
 	spans := p.sinkManager.r.GetAllCurrentTableSpans()
 	for _, span := range spans {
@@ -1022,4 +1089,8 @@ func (d *ddlHandler) Run(ctx context.Context, _ ...chan<- error) error {
 
 func (d *ddlHandler) WaitForReady(_ context.Context) {}
 
-func (d *ddlHandler) Close() {}
+func (d *ddlHandler) Close() {
+	if d.puller != nil {
+		d.puller.Close()
+	}
+}

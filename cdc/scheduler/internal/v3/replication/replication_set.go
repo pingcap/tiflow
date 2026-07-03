@@ -81,7 +81,7 @@ func (r ReplicationSetState) String() string {
 	case ReplicationSetStateRemoving:
 		return "Removing"
 	default:
-		return fmt.Sprintf("Unknown %d", r)
+		return "Unknown"
 	}
 }
 

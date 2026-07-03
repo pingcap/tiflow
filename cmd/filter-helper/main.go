@@ -17,7 +17,7 @@ import (
 	"fmt"
 	"strings"
 
-	timodel "github.com/pingcap/tidb/parser/model"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -81,11 +81,7 @@ func runFilter(cmd *cobra.Command, args []string) {
 		fmt.Printf("Table: %s, Not matched filter rule\n", table)
 	case "ddl":
 		ddlType := timodel.ActionCreateTable
-		discard := ft.ShouldDiscardDDL(ddlType, tableAndSchema[0], tableAndSchema[1])
-		if err != nil {
-			fmt.Printf("filter ddl error: %s, error: %v\n", ddl, err)
-			return
-		}
+		discard := ft.ShouldDiscardDDL(ddlType, tableAndSchema[0], tableAndSchema[1], 0)
 		if discard {
 			fmt.Printf("DDL: %s, should be discard by event filter rule\n", ddl)
 			return

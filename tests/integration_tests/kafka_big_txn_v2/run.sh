@@ -45,12 +45,9 @@ function run() {
 	check_table_exists "big_txn.usertable" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
 	run_sql "CREATE TABLE big_txn.usertable1 LIKE big_txn.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO big_txn.usertable1 SELECT * FROM big_txn.usertable" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
-	sleep 60
-	check_table_exists "big_txn.usertable1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT}
-
-	run_sql "CREATE TABLE big_txn.finish_mark_1 (a int primary key);"
+	run_sql "CREATE TABLE big_txn.finish_mark (a int primary key);"
 	sleep 120
-	check_table_exists "big_txn.finish_mark_1" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 60
+	check_table_exists "big_txn.finish_mark" ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 120
 
 	check_sync_diff $WORK_DIR $CUR/conf/diff_config.toml
 

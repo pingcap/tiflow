@@ -19,8 +19,8 @@ import (
 	"fmt"
 
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/pingcap/tidb/parser"
-	"github.com/pingcap/tidb/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"

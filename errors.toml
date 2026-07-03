@@ -488,7 +488,7 @@ kafka send message failed
 
 ["CDC:ErrKafkaTopicExprInvalid"]
 error = '''
-invalid topic expression
+invalid topic expression: %s 
 '''
 
 ["CDC:ErrLeaseExpired"]
@@ -544,6 +544,11 @@ multiple TiCDC clusters exist while using --pd
 ["CDC:ErrMySQLConnectionError"]
 error = '''
 MySQL connection error
+'''
+
+["CDC:ErrMySQLDuplicateEntry"]
+error = '''
+MySQL duplicate entry error
 '''
 
 ["CDC:ErrMySQLInvalidConfig"]
@@ -899,6 +904,11 @@ serve http error
 ["CDC:ErrServerIsNotReady"]
 error = '''
 cdc server is not ready
+'''
+
+["CDC:ErrSinkIncompatibleConfig"]
+error = '''
+incompatible configuration %s
 '''
 
 ["CDC:ErrSinkInvalidConfig"]

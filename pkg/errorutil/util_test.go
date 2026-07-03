@@ -18,8 +18,9 @@ import (
 	"testing"
 
 	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/tidb/infoschema"
-	tmysql "github.com/pingcap/tidb/parser/mysql"
+	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/stretchr/testify/require"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/raft/v3"
@@ -105,6 +106,7 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrWrongColumnName, "wrong column name'"), false},
 		{newMysqlErr(tmysql.ErrDupKeyName, "Duplicate key name 'some_key'"), true},
 		{newMysqlErr(tmysql.ErrPartitionMgmtOnNonpartitioned, "xx"), false},
+		{newMysqlErr(errno.ErrTableWithoutPrimaryKey, "Unable to create or change a table without a primary key"), false},
 		{mysql.ErrInvalidConn, true},
 	}
 

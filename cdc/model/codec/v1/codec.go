@@ -14,8 +14,8 @@
 package v1
 
 import (
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/util/rowcodec"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/cdc/model"
 )
 

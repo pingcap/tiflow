@@ -17,7 +17,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/tidb/sessionctx"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"

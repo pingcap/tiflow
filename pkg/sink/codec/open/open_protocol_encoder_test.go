@@ -16,10 +16,11 @@ package open
 import (
 	"context"
 	"database/sql"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"testing"
 
-	timodel "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	timodel "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/compression"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -149,6 +150,23 @@ var (
 		},
 		Query: "create table person(id int, name varchar(32), tiny tinyint unsigned, comment text, primary key(id))",
 		Type:  timodel.ActionCreateTable,
+	}
+	updateEvent = &model.RowChangedEvent{
+		CommitTs: 1,
+		Table:    &model.TableName{Schema: "a", Table: "b"},
+		Columns: []*model.Column{
+			{
+				Name:  "col1",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("aa"),
+				Flag:  model.HandleKeyFlag | model.PrimaryKeyFlag,
+			},
+			{
+				Name:  "col2",
+				Type:  mysql.TypeVarchar,
+				Value: []byte("bb"),
+			},
+		},
 	}
 )
 
@@ -323,6 +341,7 @@ func TestEncodeDecodeE2E(t *testing.T) {
 	topic := "test"
 
 	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OpenOutputOldValue = false
 	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
 	require.NoError(t, err)
 	encoder := builder.Build()
@@ -353,6 +372,58 @@ func TestEncodeDecodeE2E(t *testing.T) {
 
 	for _, col := range testEvent.Columns {
 		require.Contains(t, obtainedColumns, col.Name)
+	}
+}
+
+func TestE2EPartitionTable(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	ctx := context.Background()
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	helper.Tk().MustExec("use test")
+
+	createPartitionTableDDL := helper.DDL2Event(`create table test.t(a int primary key, b int) partition by range (a) (
+		partition p0 values less than (10),
+		partition p1 values less than (20),
+		partition p2 values less than MAXVALUE)`)
+	require.NotNil(t, createPartitionTableDDL)
+
+	insertEvent := helper.DML2Event(`insert into test.t values (1, 1)`, "test", "t", "p0")
+	require.NotNil(t, insertEvent)
+
+	insertEvent1 := helper.DML2Event(`insert into test.t values (11, 11)`, "test", "t", "p1")
+	require.NotNil(t, insertEvent1)
+
+	insertEvent2 := helper.DML2Event(`insert into test.t values (21, 21)`, "test", "t", "p2")
+	require.NotNil(t, insertEvent2)
+
+	events := []*model.RowChangedEvent{insertEvent, insertEvent1, insertEvent2}
+
+	for _, event := range events {
+		err = encoder.AppendRowChangedEvent(ctx, "", event, nil)
+		require.NoError(t, err)
+		message := encoder.Build()[0]
+
+		err = decoder.AddKeyValue(message.Key, message.Value)
+		require.NoError(t, err)
+		tp, hasNext, err := decoder.HasNext()
+		require.NoError(t, err)
+		require.True(t, hasNext)
+		require.Equal(t, model.MessageTypeRow, tp)
+
+		decodedEvent, err := decoder.NextRowChangedEvent()
+		require.NoError(t, err)
+		// table id should be set to the partition table id, the PhysicalTableID
+		require.Equal(t, decodedEvent.GetTableID(), event.GetTableID())
 	}
 }
 
@@ -510,4 +581,35 @@ func TestE2EClaimCheckMessage(t *testing.T) {
 		require.Equal(t, column.Type, decodedColumn.Type)
 		require.Equal(t, column.Value, decodedColumn.Value)
 	}
+}
+
+func TestOutputOldValueFalse(t *testing.T) {
+	ctx := context.Background()
+	topic := "test"
+
+	codecConfig := common.NewConfig(config.ProtocolOpen)
+	codecConfig.OpenOutputOldValue = false
+	builder, err := NewBatchEncoderBuilder(ctx, codecConfig)
+	require.NoError(t, err)
+	encoder := builder.Build()
+
+	err = encoder.AppendRowChangedEvent(ctx, topic, updateEvent, func() {})
+	require.NoError(t, err)
+
+	message := encoder.Build()[0]
+
+	decoder, err := NewBatchDecoder(ctx, codecConfig, nil)
+	require.NoError(t, err)
+
+	err = decoder.AddKeyValue(message.Key, message.Value)
+	require.NoError(t, err)
+
+	messageType, hasNext, err := decoder.HasNext()
+	require.NoError(t, err)
+	require.True(t, hasNext)
+	require.Equal(t, messageType, model.MessageTypeRow)
+
+	decoded, err := decoder.NextRowChangedEvent()
+	require.NoError(t, err)
+	require.Nil(t, decoded.PreColumns)
 }

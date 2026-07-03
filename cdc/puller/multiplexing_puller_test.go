@@ -28,7 +28,7 @@ import (
 
 func newMultiplexingPullerForTest(outputCh chan<- *model.RawKVEntry) *MultiplexingPuller {
 	client := kv.NewSharedClient(model.ChangeFeedID{}, nil, false, nil, nil, nil, nil, nil)
-	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span) error {
+	consume := func(ctx context.Context, e *model.RawKVEntry, _ []tablepb.Span, _ model.ShouldSplitKVEntry) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -81,7 +81,10 @@ func TestMultiplexingPullerResolvedForward(t *testing.T) {
 
 	spans := []tablepb.Span{spanz.ToSpan([]byte("t_a"), []byte("t_e"))}
 	spans[0].TableID = 1
-	subID := puller.subscribe(spans, 996, "test")[0]
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		return false
+	}
+	subID := puller.subscribe(spans, 996, "test", shouldSplitKVEntry)[0]
 	for _, event := range events {
 		puller.inputChs[0] <- kv.MultiplexingEvent{RegionFeedEvent: event, SubscriptionID: subID}
 	}

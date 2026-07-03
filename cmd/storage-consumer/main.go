@@ -191,7 +191,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 		stdCtx,
 		model.DefaultChangeFeedID(defaultChangefeedName),
 		downstreamURIStr,
-		config.GetDefaultReplicaConfig(),
+		replicaConfig,
 		errCh,
 		nil,
 	)
@@ -201,7 +201,7 @@ func newConsumer(ctx context.Context) (*consumer, error) {
 	}
 
 	ddlSink, err := ddlfactory.New(ctx, model.DefaultChangeFeedID(defaultChangefeedName),
-		downstreamURIStr, config.GetDefaultReplicaConfig())
+		downstreamURIStr, replicaConfig)
 	if err != nil {
 		log.Error("failed to create ddl sink", zap.Error(err))
 		return nil, err

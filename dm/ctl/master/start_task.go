@@ -60,13 +60,6 @@ func startTaskFunc(cmd *cobra.Command, _ []string) error {
 	if yamlErr != nil {
 		return yamlErr
 	}
-	if task.TargetDB != nil && task.TargetDB.Security != nil {
-		loadErr := task.TargetDB.Security.LoadTLSContent()
-		if loadErr != nil {
-			log.L().Warn("load tls content failed", zap.Error(terror.ErrCtlLoadTLSCfg.Generate(loadErr)))
-		}
-		content = []byte(task.String())
-	}
 
 	lines := bytes.Split(content, []byte("\n"))
 	// we check if `is-sharding` is explicitly set, to distinguish between `false` from default value
@@ -93,6 +86,14 @@ func startTaskFunc(cmd *cobra.Command, _ []string) error {
 	if shardModeSet && task.ShardMode == "" && task.IsSharding {
 		common.PrintLinesf("The behaviour of `is-sharding` and `shard-mode` is conflicting. `is-sharding` is deprecated, please use `shard-mode` only.")
 		return errors.New("please check output to see error")
+	}
+
+	if task.TargetDB != nil && task.TargetDB.Security != nil {
+		loadErr := task.TargetDB.Security.LoadTLSContent()
+		if loadErr != nil {
+			log.L().Warn("load tls content failed", zap.Error(terror.ErrCtlLoadTLSCfg.Generate(loadErr)))
+		}
+		content = []byte(task.String())
 	}
 
 	sources, err := common.GetSourceArgs(cmd)

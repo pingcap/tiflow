@@ -1103,6 +1103,57 @@ var doc = `{
                 }
             }
         },
+        "/api/v2/changefeeds/{changefeed_id}/synced": {
+            "get": {
+                "description": "get the synced status of a changefeed",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "changefeed",
+                    "v2"
+                ],
+                "summary": "Get synced status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "changefeed_id",
+                        "name": "changefeed_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "default",
+                        "name": "namespace",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SyncedStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/model.HTTPError"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v2/health": {
             "get": {
                 "description": "Check the health status of a TiCDC cluster",
@@ -1370,13 +1421,26 @@ var doc = `{
         "config.CloudStorageConfig": {
             "type": "object",
             "properties": {
+                "file-cleanup-cron-spec": {
+                    "type": "string"
+                },
+                "file-expiration-days": {
+                    "type": "integer"
+                },
                 "file-size": {
+                    "type": "integer"
+                },
+                "flush-concurrency": {
                     "type": "integer"
                 },
                 "flush-interval": {
                     "type": "string"
                 },
                 "output-column-id": {
+                    "type": "boolean"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
                     "type": "boolean"
                 },
                 "worker-count": {
@@ -1398,6 +1462,9 @@ var doc = `{
                 },
                 "enable-tidb-extension": {
                     "type": "boolean"
+                },
+                "encoding-format": {
+                    "type": "string"
                 },
                 "max-batch-size": {
                     "type": "integer"
@@ -1522,6 +1589,10 @@ var doc = `{
                 },
                 "max-message-bytes": {
                     "type": "integer"
+                },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
                 },
                 "partition-num": {
                     "type": "integer"
@@ -1683,6 +1754,14 @@ var doc = `{
                 }
             }
         },
+        "config.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output-old-value": {
+                    "type": "boolean"
+                }
+            }
+        },
         "config.PulsarConfig": {
             "type": "object",
             "properties": {
@@ -1730,6 +1809,10 @@ var doc = `{
                     "description": "Set the operation timeout (default: 30 seconds)\nProducer-create, subscribe and unsubscribe operations will be retried until this interval, after which the\noperation will be marked as failed",
                     "type": "integer"
                 },
+                "output-raw-change-event": {
+                    "description": "OutputRawChangeEvent controls whether to split the update pk/uk events.",
+                    "type": "boolean"
+                },
                 "pulsar-producer-cache-size": {
                     "description": "PulsarProducerCacheSize is the size of the cache of pulsar producers",
                     "type": "integer"
@@ -1742,10 +1825,10 @@ var doc = `{
                     "description": "SendTimeout specifies the timeout for a message that has not been acknowledged by the server since sent.\nSend and SendAsync returns an error after timeout.\ndefault: 30s",
                     "type": "integer"
                 },
-                "tls-certificate-path": {
+                "tls-certificate-file": {
                     "type": "string"
                 },
-                "tls-private-key-path": {
+                "tls-key-file-path": {
                     "type": "string"
                 },
                 "tls-trust-certs-file-path": {
@@ -1768,7 +1851,6 @@ var doc = `{
                     "$ref": "#/definitions/config.CloudStorageConfig"
                 },
                 "column-selectors": {
-                    "description": "ColumnSelectors is Deprecated.",
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/config.ColumnSelector"
@@ -1819,6 +1901,10 @@ var doc = `{
                     "description": "OnlyOutputUpdatedColumns is only available when the downstream is MQ.",
                     "type": "boolean"
                 },
+                "open": {
+                    "description": "OpenProtocol related configurations",
+                    "$ref": "#/definitions/config.OpenProtocolConfig"
+                },
                 "protocol": {
                     "description": "Protocol is NOT available when the downstream is DB.",
                     "type": "string"
@@ -1833,6 +1919,18 @@ var doc = `{
                 "schema-registry": {
                     "description": "SchemaRegistry is only available when the downstream is MQ using avro protocol.",
                     "type": "string"
+                },
+                "send-bootstrap-in-msg-count": {
+                    "description": "SendBootstrapInMsgCount means bootstrap messages are being sent every SendBootstrapInMsgCount row change messages.",
+                    "type": "integer"
+                },
+                "send-bootstrap-interval-in-sec": {
+                    "description": "Simple Protocol only config, use to control the behavior of sending bootstrap message.\nNote: When one of the following conditions is set to negative value,\nbootstrap sending function will be disabled.\nSendBootstrapIntervalInSec is the interval in seconds to send bootstrap message.",
+                    "type": "integer"
+                },
+                "send-bootstrap-to-all-partition": {
+                    "description": "SendBootstrapToAllPartition determines whether to send bootstrap message to all partitions.\nIf set to false, bootstrap message will only be sent to the first partition of each topic.\nDefault value is true.",
+                    "type": "boolean"
                 },
                 "terminator": {
                     "description": "Terminator is NOT available when the downstream is DB.",
@@ -2314,13 +2412,25 @@ var doc = `{
         "v2.CloudStorageConfig": {
             "type": "object",
             "properties": {
+                "file_cleanup_cron_spec": {
+                    "type": "string"
+                },
+                "file_expiration_days": {
+                    "type": "integer"
+                },
                 "file_size": {
+                    "type": "integer"
+                },
+                "flush_concurrency": {
                     "type": "integer"
                 },
                 "flush_interval": {
                     "type": "string"
                 },
                 "output_column_id": {
+                    "type": "boolean"
+                },
+                "output_raw_change_event": {
                     "type": "boolean"
                 },
                 "worker_count": {
@@ -2342,6 +2452,9 @@ var doc = `{
                 },
                 "enable_tidb_extension": {
                     "type": "boolean"
+                },
+                "encoding_format": {
+                    "type": "string"
                 },
                 "max_batch_size": {
                     "type": "integer"
@@ -2368,7 +2481,19 @@ var doc = `{
         "v2.ConsistentConfig": {
             "type": "object",
             "properties": {
+                "compression": {
+                    "type": "string"
+                },
+                "encoding_worker_num": {
+                    "type": "integer"
+                },
+                "flush_concurrency": {
+                    "type": "integer"
+                },
                 "flush_interval": {
+                    "type": "integer"
+                },
+                "flush_worker_num": {
                     "type": "integer"
                 },
                 "level": {
@@ -2377,11 +2502,28 @@ var doc = `{
                 "max_log_size": {
                     "type": "integer"
                 },
+                "memory_usage": {
+                    "$ref": "#/definitions/v2.ConsistentMemoryUsage"
+                },
+                "meta_flush_interval": {
+                    "type": "integer"
+                },
                 "storage": {
                     "type": "string"
                 },
                 "use_file_backend": {
                     "type": "boolean"
+                }
+            }
+        },
+        "v2.ConsistentMemoryUsage": {
+            "type": "object",
+            "properties": {
+                "event_cache_percentage": {
+                    "type": "integer"
+                },
+                "memory_quota_percentage": {
+                    "type": "integer"
                 }
             }
         },
@@ -2537,6 +2679,9 @@ var doc = `{
                 }
             }
         },
+        "v2.JSONDuration": {
+            "type": "object"
+        },
         "v2.KafkaConfig": {
             "type": "object",
             "properties": {
@@ -2581,6 +2726,9 @@ var doc = `{
                 },
                 "max_message_bytes": {
                     "type": "integer"
+                },
+                "output_raw_change_event": {
+                    "type": "boolean"
                 },
                 "partition_num": {
                     "type": "integer"
@@ -2733,6 +2881,14 @@ var doc = `{
                 }
             }
         },
+        "v2.OpenProtocolConfig": {
+            "type": "object",
+            "properties": {
+                "output_old_value": {
+                    "type": "boolean"
+                }
+            }
+        },
         "v2.ProcessorCommonInfo": {
             "type": "object",
             "properties": {
@@ -2795,6 +2951,9 @@ var doc = `{
                 "operation-timeout": {
                     "type": "integer"
                 },
+                "output-raw-change-event": {
+                    "type": "boolean"
+                },
                 "pulsar-producer-cache-size": {
                     "type": "integer"
                 },
@@ -2847,6 +3006,9 @@ var doc = `{
                 "case_sensitive": {
                     "type": "boolean"
                 },
+                "changefeed_error_stuck_duration": {
+                    "$ref": "#/definitions/v2.JSONDuration"
+                },
                 "check_gc_safe_point": {
                     "type": "boolean"
                 },
@@ -2880,11 +3042,17 @@ var doc = `{
                 "sink": {
                     "$ref": "#/definitions/v2.SinkConfig"
                 },
+                "sql_mode": {
+                    "type": "string"
+                },
                 "sync_point_interval": {
                     "type": "string"
                 },
                 "sync_point_retention": {
                     "type": "string"
+                },
+                "synced_status": {
+                    "$ref": "#/definitions/v2.SyncedStatusConfig"
                 }
             }
         },
@@ -3011,6 +3179,9 @@ var doc = `{
                 "only_output_updated_columns": {
                     "type": "boolean"
                 },
+                "open": {
+                    "$ref": "#/definitions/v2.OpenProtocolConfig"
+                },
                 "protocol": {
                     "type": "string"
                 },
@@ -3023,11 +3194,56 @@ var doc = `{
                 "schema_registry": {
                     "type": "string"
                 },
+                "send_bootstrap_in_msg_count": {
+                    "type": "integer"
+                },
+                "send_bootstrap_interval_in_sec": {
+                    "type": "integer"
+                },
+                "send_bootstrap_to_all_partition": {
+                    "type": "boolean"
+                },
                 "terminator": {
                     "type": "string"
                 },
                 "transaction_atomicity": {
                     "type": "string"
+                }
+            }
+        },
+        "v2.SyncedStatus": {
+            "type": "object",
+            "properties": {
+                "info": {
+                    "type": "string"
+                },
+                "last_synced_ts": {
+                    "type": "string"
+                },
+                "now_ts": {
+                    "type": "string"
+                },
+                "puller_resolved_ts": {
+                    "type": "string"
+                },
+                "sink_checkpoint_ts": {
+                    "type": "string"
+                },
+                "synced": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "v2.SyncedStatusConfig": {
+            "type": "object",
+            "properties": {
+                "checkpoint_interval": {
+                    "description": "The maximum interval between latest checkpoint ts and now or\nbetween latest sink's checkpoint ts and puller's checkpoint ts required to reach synced state",
+                    "type": "integer"
+                },
+                "synced_check_interval": {
+                    "description": "The minimum interval between the latest synced ts and now required to reach synced state",
+                    "type": "integer"
                 }
             }
         },

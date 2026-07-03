@@ -22,7 +22,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
-	ticonfig "github.com/pingcap/tidb/config"
+	ticonfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tiflow/cdc/server"
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/util"

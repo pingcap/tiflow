@@ -47,7 +47,7 @@ type DBConfig struct {
 	// CompactionL0Trigger defines number of db sst file at level-0 that will
 	// trigger compaction.
 	//
-	// The default value is 160.
+	// The default value is 16, which is based on a performance test on 4K tables.
 	CompactionL0Trigger int `toml:"compaction-l0-trigger" json:"compaction-l0-trigger"`
 }
 

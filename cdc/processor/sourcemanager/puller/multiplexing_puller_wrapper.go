@@ -38,15 +38,25 @@ func NewMultiplexingPullerWrapper(
 	eventSortEngine engine.SortEngine,
 	frontiers int,
 ) *MultiplexingWrapper {
-	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span) error {
+	consume := func(ctx context.Context, raw *model.RawKVEntry, spans []tablepb.Span, shouldSplitKVEntry model.ShouldSplitKVEntry) error {
 		if len(spans) > 1 {
 			log.Panic("DML puller subscribes multiple spans",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID))
 		}
 		if raw != nil {
-			pEvent := model.NewPolymorphicEvent(raw)
-			eventSortEngine.Add(spans[0], pEvent)
+			if shouldSplitKVEntry(raw) {
+				deleteKVEntry, insertKVEntry, err := model.SplitUpdateKVEntry(raw)
+				if err != nil {
+					return err
+				}
+				deleteEvent := model.NewPolymorphicEvent(deleteKVEntry)
+				insertEvent := model.NewPolymorphicEvent(insertKVEntry)
+				eventSortEngine.Add(spans[0], deleteEvent, insertEvent)
+			} else {
+				pEvent := model.NewPolymorphicEvent(raw)
+				eventSortEngine.Add(spans[0], pEvent)
+			}
 		}
 		return nil
 	}

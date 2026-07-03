@@ -76,8 +76,8 @@ function run() {
 	sequential_cases2=(
 		"list_changefeed"
 		"get_changefeed"
-		"resume_changefeed"
 		"pause_changefeed"
+		"resume_changefeed"
 		"rebalance_table"
 		"move_table"
 		"get_processor"

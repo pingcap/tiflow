@@ -43,6 +43,7 @@ type pullerWrapperCreator func(
 	tableName string,
 	startTs model.Ts,
 	bdrMode bool,
+	shouldSplitKVEntry model.ShouldSplitKVEntry,
 ) pullerwrapper.Wrapper
 
 type tablePullers struct {
@@ -55,6 +56,16 @@ type tablePullers struct {
 type multiplexingPuller struct {
 	puller *pullerwrapper.MultiplexingWrapper
 }
+
+// PullerSplitUpdateMode is the mode to split update events in puller.
+type PullerSplitUpdateMode int32
+
+// PullerSplitUpdateMode constants.
+const (
+	PullerSplitUpdateModeNone    PullerSplitUpdateMode = 0
+	PullerSplitUpdateModeAtStart PullerSplitUpdateMode = 1
+	PullerSplitUpdateModeAlways  PullerSplitUpdateMode = 2
+)
 
 // SourceManager is the manager of the source engine and puller.
 type SourceManager struct {
@@ -77,6 +88,8 @@ type SourceManager struct {
 	multiplexing       bool
 	tablePullers       tablePullers
 	multiplexingPuller multiplexingPuller
+
+	splitUpdateMode PullerSplitUpdateMode
 }
 
 // New creates a new source manager.
@@ -85,10 +98,11 @@ func New(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
 ) *SourceManager {
 	multiplexing := config.GetGlobalServerConfig().KVClient.EnableMultiplexing
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
+	return newSourceManager(changefeedID, up, mg, engine, splitUpdateMode, bdrMode, multiplexing, pullerwrapper.NewPullerWrapper)
 }
 
 // NewForTest creates a new source manager for testing.
@@ -99,7 +113,11 @@ func NewForTest(
 	engine engine.SortEngine,
 	bdrMode bool,
 ) *SourceManager {
-	return newSourceManager(changefeedID, up, mg, engine, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
+	return newSourceManager(changefeedID, up, mg, engine, PullerSplitUpdateModeNone, bdrMode, false, pullerwrapper.NewPullerWrapperForTest)
+}
+
+func isOldUpdateKVEntry(raw *model.RawKVEntry, getReplicaTs func() model.Ts) bool {
+	return raw != nil && raw.IsUpdate() && raw.CRTs < getReplicaTs()
 }
 
 func newSourceManager(
@@ -107,18 +125,20 @@ func newSourceManager(
 	up *upstream.Upstream,
 	mg entry.MounterGroup,
 	engine engine.SortEngine,
+	splitUpdateMode PullerSplitUpdateMode,
 	bdrMode bool,
 	multiplexing bool,
 	pullerWrapperCreator pullerWrapperCreator,
 ) *SourceManager {
 	mgr := &SourceManager{
-		ready:        make(chan struct{}),
-		changefeedID: changefeedID,
-		up:           up,
-		mg:           mg,
-		engine:       engine,
-		bdrMode:      bdrMode,
-		multiplexing: multiplexing,
+		ready:           make(chan struct{}),
+		changefeedID:    changefeedID,
+		up:              up,
+		mg:              mg,
+		engine:          engine,
+		splitUpdateMode: splitUpdateMode,
+		bdrMode:         bdrMode,
+		multiplexing:    multiplexing,
 	}
 	if !multiplexing {
 		mgr.tablePullers.errChan = make(chan error, 16)
@@ -128,16 +148,34 @@ func newSourceManager(
 }
 
 // AddTable adds a table to the source manager. Start puller and register table to the engine.
-func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts) {
+func (m *SourceManager) AddTable(span tablepb.Span, tableName string, startTs model.Ts, getReplicaTs func() model.Ts) {
 	// Add table to the engine first, so that the engine can receive the events from the puller.
 	m.engine.AddTable(span, startTs)
 
+	shouldSplitKVEntry := func(raw *model.RawKVEntry) bool {
+		if raw == nil || !raw.IsUpdate() {
+			return false
+		}
+		switch m.splitUpdateMode {
+		case PullerSplitUpdateModeNone:
+			return false
+		case PullerSplitUpdateModeAlways:
+			return true
+		case PullerSplitUpdateModeAtStart:
+			return isOldUpdateKVEntry(raw, getReplicaTs)
+		default:
+			log.Panic("Unknown split update mode", zap.Int32("mode", int32(m.splitUpdateMode)))
+		}
+		log.Panic("Shouldn't reach here")
+		return false
+	}
+
 	if m.multiplexing {
-		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName)
+		m.multiplexingPuller.puller.Subscribe([]tablepb.Span{span}, startTs, tableName, shouldSplitKVEntry)
 		return
 	}
 
-	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode)
+	p := m.tablePullers.pullerWrapperCreator(m.changefeedID, span, tableName, startTs, m.bdrMode, shouldSplitKVEntry)
 	p.Start(m.tablePullers.ctx, m.up, m.engine, m.tablePullers.errChan)
 	m.tablePullers.Store(span, p)
 }
@@ -206,6 +244,7 @@ func (m *SourceManager) Run(ctx context.Context, _ ...chan<- error) error {
 			m.up.PDClient, grpcPool, m.up.RegionCache, m.up.PDClock,
 			txnutil.NewLockerResolver(m.up.KVStorage.(tikv.Storage), m.changefeedID),
 		)
+
 		m.multiplexingPuller.puller = pullerwrapper.NewMultiplexingPullerWrapper(
 			m.changefeedID, client, m.engine,
 			int(serverConfig.KVClient.FrontierConcurrent),
@@ -241,11 +280,15 @@ func (m *SourceManager) Close() {
 		zap.String("changefeed", m.changefeedID.ID))
 
 	start := time.Now()
-	m.tablePullers.Range(func(span tablepb.Span, value interface{}) bool {
-		value.(pullerwrapper.Wrapper).Close()
-		return true
-	})
-	log.Info("All pullers have been closed",
+	if m.multiplexing {
+		m.multiplexingPuller.puller.Close()
+	} else {
+		m.tablePullers.Range(func(span tablepb.Span, value interface{}) bool {
+			value.(pullerwrapper.Wrapper).Close()
+			return true
+		})
+	}
+	log.Info("SourceManager puller have been closed",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
 		zap.Duration("cost", time.Since(start)))

@@ -1,0 +1,11 @@
+[integrity]
+integrity-check-level = "correctness"
+corruption-handle-level = "error"
+
+[sink]
+send-bootstrap-interval-in-sec = 0
+send-bootstrap-in-msg-count = 0
+
+[sink.kafka-config.large-message-handle]
+large-message-handle-option = "handle-key-only"
+large-message-handle-compression = "lz4"

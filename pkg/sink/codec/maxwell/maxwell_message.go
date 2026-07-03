@@ -16,12 +16,12 @@ package maxwell
 import (
 	"encoding/json"
 
-	model2 "github.com/pingcap/tidb/parser/model"
-	"github.com/pingcap/tidb/parser/mysql"
+	model2 "github.com/pingcap/tidb/pkg/parser/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink/codec/internal"
-	"github.com/tikv/pd/pkg/utils/tsoutil"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 type maxwellMessage struct {
@@ -62,8 +62,7 @@ func rowChangeToMaxwellMsg(e *model.RowChangedEvent, onlyHandleKeyColumns bool) 
 		Data:     make(map[string]interface{}),
 		Old:      make(map[string]interface{}),
 	}
-
-	physicalTime, _ := tsoutil.ParseTS(e.CommitTs)
+	physicalTime := oracle.GetTimeFromTS(e.CommitTs)
 	value.Ts = physicalTime.Unix()
 	if e.IsDelete() {
 		value.Type = "delete"
