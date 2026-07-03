@@ -64,22 +64,3 @@ jobs:
 
       - name: Build
         run: make build
-
-  arm_build:
-    runs-on: [ARM64]
-    name: Arm Build
-    strategy:
-      fail-fast: false
-      matrix:
-        arch: [ARM64]
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-
-      - name: Setup Go environment
-        uses: actions/setup-go@v3
-        with:
-          go-version: "1.21"
-
-      - name: Build
-        run: make build
