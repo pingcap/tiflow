@@ -28,7 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tikv/pd/pkg/errs"
+	"github.com/tikv/pd/client/errs"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
@@ -358,7 +358,6 @@ func newClient(tlsConfig *tls.Config, grpcDialOption grpc.DialOption, endpoints 
 		TLS:                  tlsConfig,
 		LogConfig:            &logConfig,
 		DialTimeout:          defaultEtcdClientTimeout,
-		AutoSyncInterval:     30 * time.Second,
 		DialKeepAliveTime:    defaultDialKeepAliveTime,
 		DialKeepAliveTimeout: defaultDialKeepAliveTimeout,
 		DialOptions: []grpc.DialOption{
@@ -491,7 +490,7 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 			defer wg.Done()
 			ep := key.(string)
 			client := value.(*healthyClient)
-			if IsHealthy(ctx, client.Client) {
+			if isHealthy(ctx, client.Client) {
 				hch <- ep
 				checker.Store(ep, &healthyClient{
 					Client:     client.Client,
@@ -511,23 +510,37 @@ func (checker *healthyChecker) patrol(ctx context.Context) []string {
 }
 
 func (checker *healthyChecker) update(eps []string) {
+	updateEps := make(map[string]struct{}, len(eps))
 	for _, ep := range eps {
+		updateEps[ep] = struct{}{}
 		// check if client exists, if not, create one, if exists, check if it's offline or disconnected.
-		if client, ok := checker.Load(ep); ok {
-			lastHealthy := client.(*healthyClient).lastHealth
+		if value, ok := checker.Load(ep); ok {
+			client := value.(*healthyClient)
+			lastHealthy := client.lastHealth
 			if time.Since(lastHealthy) > etcdServerOfflineTimeout {
 				log.Info("some etcd server maybe offline", zap.String("endpoint", ep))
+				client.Close()
 				checker.Delete(ep)
 			}
 			if time.Since(lastHealthy) > etcdServerDisconnectedTimeout {
 				// try to reset client endpoint to trigger reconnect
-				client.(*healthyClient).Client.SetEndpoints([]string{}...)
-				client.(*healthyClient).Client.SetEndpoints(ep)
+				client.Client.SetEndpoints([]string{}...)
+				client.Client.SetEndpoints(ep)
 			}
 			continue
 		}
 		checker.addClient(ep, time.Now())
 	}
+	checker.Range(func(key, value interface{}) bool {
+		ep := key.(string)
+		if _, exist := updateEps[ep]; !exist {
+			if client, ok := value.(*healthyClient); ok {
+				client.Close()
+			}
+			checker.Delete(key)
+		}
+		return true
+	})
 }
 
 func (checker *healthyChecker) addClient(ep string, lastHealth time.Time) {
@@ -561,8 +574,8 @@ func syncUrls(client *clientv3.Client) []string {
 	return eps
 }
 
-// IsHealthy checks if the etcd is healthy.
-func IsHealthy(ctx context.Context, client *clientv3.Client) bool {
+// isHealthy checks if the etcd is healthy.
+func isHealthy(ctx context.Context, client *clientv3.Client) bool {
 	timeout := etcdClientTimeoutDuration
 	ctx, cancel := context.WithTimeout(clientv3.WithRequireLeader(ctx), timeout)
 	defer cancel()
