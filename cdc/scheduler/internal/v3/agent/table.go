@@ -272,7 +272,7 @@ func (t *tableSpan) injectDispatchTableTask(task *dispatchTableTask) {
 		t.task = task
 		return
 	}
-	log.Debug("schedulerv3: table inject dispatch table task ignored,"+
+	log.Warn("schedulerv3: table inject dispatch table task ignored,"+
 		"since there is one not finished yet",
 		zap.String("namespace", t.changefeedID.Namespace),
 		zap.String("changefeed", t.changefeedID.ID),
