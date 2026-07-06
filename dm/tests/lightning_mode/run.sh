@@ -87,8 +87,14 @@ function run() {
 		"stop-task test" \
 		"\"result\": true" 3
 	run_sql_tidb "drop database if exists lightning_mode;"
+	run_sql_tidb "drop database if exists dm_meta;"
+	run_sql_tidb "drop database if exists lightning_metadata;"
 
-	dmctl_start_task "$cur/conf/dm-task.yaml" "--remove-meta"
+	task_conf=$(cat $cur/conf/task.json)
+	# create task
+	curl -X POST http://127.0.0.1:8261/api/v1/tasks -H "Content-Type: application/json" -d "$task_conf"
+	# start task
+	curl -X POST http://127.0.0.1:8261/api/v1/tasks/test/start
 
 	# use sync_diff_inspector to check full dump loader
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
