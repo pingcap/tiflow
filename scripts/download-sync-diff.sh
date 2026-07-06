@@ -15,7 +15,7 @@
 set -eu
 
 echo "will download tidb-tools v6.1.0 to get sync_diff_inspector"
-curl -C - --retry 3 -o /tmp/tidb-tools.tar.gz https://download.pingcap.org/tidb-community-toolkit-v6.1.0-linux-amd64.tar.gz
+curl -C - --retry 3 -o /tmp/tidb-tools.tar.gz https://download.pingcap.com/tidb-community-toolkit-v6.1.0-linux-amd64.tar.gz
 mkdir -p /tmp/tidb-tools
 tar -zxf /tmp/tidb-tools.tar.gz -C /tmp/tidb-tools
 mv /tmp/tidb-tools/tidb-community-toolkit-v6.1.0-linux-amd64/sync_diff_inspector ./bin/sync_diff_inspector
