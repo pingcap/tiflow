@@ -36,6 +36,20 @@ import (
 	"go.uber.org/zap"
 )
 
+var stableContextForMock = context.Background()
+
+func sanitizeMockArgs(args ...interface{}) []interface{} {
+	sanitized := make([]interface{}, len(args))
+	for i, arg := range args {
+		if _, ok := arg.(context.Context); ok {
+			sanitized[i] = stableContextForMock
+			continue
+		}
+		sanitized[i] = arg
+	}
+	return sanitized
+}
+
 // MockMasterImpl implements a mock MasterImpl
 type MockMasterImpl struct {
 	mu sync.Mutex
@@ -143,7 +157,7 @@ func (m *MockMasterImpl) InitImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -152,7 +166,7 @@ func (m *MockMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -178,7 +192,7 @@ func (m *MockMasterImpl) Tick(ctx context.Context) error {
 	m.tickCount.Add(1)
 	log.Info("tick")
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -231,7 +245,7 @@ func (m *MockMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Called(ctx)
+	m.Called(sanitizeMockArgs(ctx)...)
 }
 
 // StopImpl implements MasterImpl.StopImpl
@@ -239,7 +253,7 @@ func (m *MockMasterImpl) StopImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Called(ctx)
+	m.Called(sanitizeMockArgs(ctx)...)
 }
 
 // MasterClient returns internal server master client
@@ -284,7 +298,7 @@ func (m *MockWorkerHandler) Unwrap() master.RunningHandle {
 
 // SendMessage implements RunningHandle.SendMessage
 func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
-	args := m.Called(ctx, topic, message, nonblocking)
+	args := m.Called(sanitizeMockArgs(ctx, topic, message, nonblocking)...)
 	return args.Error(0)
 }
 

@@ -68,7 +68,7 @@ func (w *mockWorkerImpl) InitImpl(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called(ctx)
+	args := w.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -80,7 +80,7 @@ func (w *mockWorkerImpl) Tick(ctx context.Context) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called(ctx)
+	args := w.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -96,7 +96,7 @@ func (w *mockWorkerImpl) OnMasterMessage(ctx context.Context, topic p2p.Topic, m
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	args := w.Called(ctx, topic, message)
+	args := w.Called(sanitizeMockArgs(ctx, topic, message)...)
 	return args.Error(0)
 }
 
