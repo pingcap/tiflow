@@ -24,6 +24,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -317,7 +318,13 @@ func TestServerTLSWithCommonNameAndRotate(t *testing.T) {
 		return nil
 	}, retry.WithMaxTries(retryTime), retry.WithBackoffBaseDelay(50),
 		retry.WithIsRetryableErr(cerrors.IsRetryableError))
-	require.ErrorContains(t, err, "remote error: tls: bad certificate")
+	require.Error(t, err)
+	// Go may surface either "certificate required" or "bad certificate"
+	// here depending on which side aborts the mutual TLS handshake first.
+	require.True(t,
+		strings.Contains(err.Error(), "remote error: tls: bad certificate") ||
+			strings.Contains(err.Error(), "remote error: tls: certificate required"),
+		"unexpected TLS handshake error: %v", err)
 
 	testTlSClient := func(securityCfg *security.Credential) error {
 		return retry.Do(ctx, func() error {
