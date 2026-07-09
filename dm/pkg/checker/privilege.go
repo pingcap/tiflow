@@ -556,17 +556,17 @@ func restoreRequiredPrivAtLevel(
 	case ast.GrantLevelGlobal:
 		mergePriv(lackPrivs, privName, requiredPriv)
 	case ast.GrantLevelDB:
-		dbPatChar, dbPatType := stringutil.CompilePattern(revokeLevel.DBName, '\\')
 		toRestore := priv{dbs: make(map[string]dbPriv)}
 		for dbName, dbPrivs := range requiredPriv.dbs {
-			if stringutil.DoMatch(dbName, dbPatChar, dbPatType) {
+			// MySQL partial revokes record schema names literally when
+			// partial_revokes is enabled, even if the name contains `_` or `%`.
+			if dbName == revokeLevel.DBName {
 				toRestore.dbs[dbName] = cloneDBPriv(dbPrivs)
 			}
 		}
 		mergePriv(lackPrivs, privName, toRestore)
 	case ast.GrantLevelTable:
 		dbName := revokeLevel.DBName
-		tablePatChar, tablePatType := stringutil.CompilePattern(revokeLevel.TableName, '\\')
 		requiredDBPrivs, ok := requiredPriv.dbs[dbName]
 		if !ok {
 			return
@@ -579,7 +579,7 @@ func restoreRequiredPrivAtLevel(
 		}
 		toRestoreDBPrivs := dbPriv{tables: make(map[string]tablePriv)}
 		for tableName, tablePrivs := range requiredDBPrivs.tables {
-			if stringutil.DoMatch(tableName, tablePatChar, tablePatType) {
+			if tableName == revokeLevel.TableName {
 				toRestoreDBPrivs.tables[tableName] = cloneTablePriv(tablePrivs)
 			}
 		}
