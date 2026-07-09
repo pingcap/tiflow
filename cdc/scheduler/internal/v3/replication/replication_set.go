@@ -771,7 +771,7 @@ func (r *ReplicationSet) pollOnReplicating(
 			return nil, true, nil
 		}
 	}
-	log.Warn("schedulerv3: ignore input, unexpected replication set state",
+	log.Debug("schedulerv3: ignore input, unexpected replication set state",
 		zap.String("namespace", r.Changefeed.Namespace),
 		zap.String("changefeed", r.Changefeed.ID),
 		zap.Stringer("tableState", input),

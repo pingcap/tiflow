@@ -27,6 +27,8 @@ import (
 
 const timeout = 5 * time.Second
 
+var waitAsyncExecDoneCheckInterval = 5 * time.Second
+
 // TODO: Use the flollowing SQL to check the ddl job status after tidb optimize
 // the information_schema.ddl_jobs table. Ref: https://github.com/pingcap/tidb/issues/55725
 //
@@ -112,10 +114,6 @@ func (m *DDLSink) needWaitAsyncExecDone(t timodel.ActionType) bool {
 
 // Should always wait for async ddl done before executing the next ddl.
 func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
-	if !m.needWaitAsyncExecDone(ddl.Type) {
-		return
-	}
-
 	tables := make(map[model.TableName]struct{})
 	if ddl.TableInfo != nil {
 		tables[ddl.TableInfo.TableName] = struct{}{}
@@ -124,29 +122,58 @@ func (m *DDLSink) waitAsynExecDone(ctx context.Context, ddl *model.DDLEvent) {
 		tables[ddl.PreTableInfo.TableName] = struct{}{}
 	}
 
+	sourceTable, hasSourceTable := m.getCreateTableLikeSourceTable(ddl)
+	if hasSourceTable {
+		tables[sourceTable] = struct{}{}
+	}
+	if !m.needWaitAsyncExecDone(ddl.Type) && !hasSourceTable {
+		return
+	}
+
 	log.Debug("wait async exec ddl done",
 		zap.String("namespace", m.id.Namespace),
 		zap.String("changefeed", m.id.ID),
 		zap.Any("tables", tables),
 		zap.Uint64("commitTs", ddl.CommitTs),
 		zap.String("ddl", ddl.Query))
+
 	if len(tables) == 0 || m.checkAsyncExecDDLDone(ctx, tables) {
 		return
 	}
 
-	ticker := time.NewTicker(5 * time.Second)
+	waitStart := time.Now()
+	checkCount := 0
+	ticker := time.NewTicker(waitAsyncExecDoneCheckInterval)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			checkCount++
+			now := time.Now()
+			log.Debug("check async exec ddl done",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Any("tables", tables),
+				zap.Uint64("commitTs", ddl.CommitTs),
+				zap.String("ddlType", ddl.Type.String()),
+				zap.Int("checkCount", checkCount),
+				zap.Duration("elapsed", now.Sub(waitStart)))
 			done := m.checkAsyncExecDDLDone(ctx, tables)
 			if done {
 				return
 			}
 		}
 	}
+}
+
+// getCreateTableLikeSourceTable returns the refer table for CREATE TABLE ... LIKE ....
+func (m *DDLSink) getCreateTableLikeSourceTable(ddl *model.DDLEvent) (model.TableName, bool) {
+	if ddl.Type != timodel.ActionCreateTable || ddl.ReferTable == nil {
+		return model.TableName{}, false
+	}
+	return *ddl.ReferTable, true
 }
 
 func (m *DDLSink) checkAsyncExecDDLDone(ctx context.Context, tables map[model.TableName]struct{}) bool {

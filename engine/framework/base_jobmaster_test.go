@@ -58,7 +58,7 @@ func (m *testJobMasterImpl) InitImpl(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -66,7 +66,7 @@ func (m *testJobMasterImpl) Tick(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -74,21 +74,21 @@ func (m *testJobMasterImpl) CloseImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Called(ctx)
+	m.Called(sanitizeMockArgs(ctx)...)
 }
 
 func (m *testJobMasterImpl) StopImpl(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.Called(ctx)
+	m.Called(sanitizeMockArgs(ctx)...)
 }
 
 func (m *testJobMasterImpl) OnMasterRecovered(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -152,7 +152,7 @@ func (m *testJobMasterImpl) OnCancel(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	args := m.Called(ctx)
+	args := m.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 

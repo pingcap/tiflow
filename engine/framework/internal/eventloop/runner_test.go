@@ -26,6 +26,20 @@ import (
 	"go.uber.org/atomic"
 )
 
+var stableContextForMock = context.Background()
+
+func sanitizeMockArgs(args ...interface{}) []interface{} {
+	sanitized := make([]interface{}, len(args))
+	for i, arg := range args {
+		if _, ok := arg.(context.Context); ok {
+			sanitized[i] = stableContextForMock
+			continue
+		}
+		sanitized[i] = arg
+	}
+	return sanitized
+}
+
 type toyTaskStatus = int32
 
 const (
@@ -58,7 +72,7 @@ func newToyTask(t *testing.T, willExitForcefully bool) *toyTask {
 func (t *toyTask) Init(ctx context.Context) error {
 	require.True(t.t, t.status.CAS(toyTaskUninit, toyTaskRunning))
 
-	args := t.Called(ctx)
+	args := t.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -77,7 +91,7 @@ func (t *toyTask) Poll(ctx context.Context) error {
 
 func (t *toyTask) Stop(ctx context.Context) error {
 	require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskCanceled))
-	args := t.Called(ctx)
+	args := t.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 
@@ -86,7 +100,7 @@ func (t *toyTask) NotifyExit(ctx context.Context, errIn error) error {
 		require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskClosing))
 	}
 
-	args := t.Called(ctx, errIn)
+	args := t.Called(sanitizeMockArgs(ctx, errIn)...)
 	return args.Error(0)
 }
 
@@ -97,7 +111,7 @@ func (t *toyTask) Close(ctx context.Context) error {
 		require.True(t.t, t.status.CAS(toyTaskRunning, toyTaskClosed))
 	}
 
-	args := t.Called(ctx)
+	args := t.Called(sanitizeMockArgs(ctx)...)
 	return args.Error(0)
 }
 

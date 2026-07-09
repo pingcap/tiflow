@@ -458,6 +458,86 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
 }
 
+func TestExchangeTablePartitionWithoutValidation(t *testing.T) {
+	preTableInfo := &TableInfo{
+		TableName: TableName{
+			Schema: "test2",
+			Table:  "t2",
+		},
+	}
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema: "test1",
+			Table:  "t1",
+		},
+	}
+
+	testCases := []struct {
+		name  string
+		query string
+		want  string
+	}{
+		{
+			name:  "exact suffix keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing newline keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing newline keeps without validation v2",
+			query: "ALTER TABLE t1\n EXCHANGE PARTITION p0\n WITH TABLE t2\n WITHOUT VALIDATION\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing carriage return newline keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\r\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing space keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION ",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing tab keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION\t",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing semicolon keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION;",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing space semicolon keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION ;",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+		{
+			name:  "trailing semicolon newline keeps without validation",
+			query: "ALTER TABLE t1 EXCHANGE PARTITION p0 WITH TABLE t2 WITHOUT VALIDATION;\n",
+			want:  "ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			job := &timodel.Job{
+				Type:       timodel.ActionExchangeTablePartition,
+				Query:      tc.query,
+				BinlogInfo: &timodel.HistoryInfo{},
+			}
+			event := &DDLEvent{}
+			event.FromJob(job, preTableInfo, tableInfo)
+			require.Equal(t, tc.want, event.Query)
+		})
+	}
+}
+
 func TestSortRowChangedEvent(t *testing.T) {
 	events := []*RowChangedEvent{
 		{
@@ -693,4 +773,35 @@ func TestTrySplitAndSortUpdateEventOne(t *testing.T) {
 	err = txn.TrySplitAndSortUpdateEvent(sink.MySQLScheme, notOutputRawChangeEvent)
 	require.NoError(t, err)
 	require.Len(t, txn2.Rows, 2)
+}
+
+func TestDDLEventCreateTableLikeReferTable(t *testing.T) {
+	job := &timodel.Job{
+		Type:       timodel.ActionCreateTable,
+		SchemaName: "test",
+		Query:      "create table b like a",
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 123,
+		},
+	}
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema: "test",
+			Table:  "b",
+		},
+		TableInfo: &timodel.TableInfo{
+			Name: timodel.CIStr{O: "b"},
+		},
+	}
+
+	event := &DDLEvent{}
+	event.FromJobWithArgs(job, nil, tableInfo, "", "")
+	require.NotNil(t, event.ReferTable)
+	require.Equal(t, &TableName{Schema: "test", Table: "a"}, event.ReferTable)
+
+	job.Query = "create table b like other.a"
+	event = &DDLEvent{}
+	event.FromJobWithArgs(job, nil, tableInfo, "", "")
+	require.NotNil(t, event.ReferTable)
+	require.Equal(t, &TableName{Schema: "other", Table: "a"}, event.ReferTable)
 }
