@@ -2208,6 +2208,20 @@ func NewDMAPIDeleteTaskRequest(server string, taskName string, params *DMAPIDele
 		}
 	}
 
+	if params.KeepMeta != nil {
+		if queryFrag, err := runtime.StyleParamWithLocation("form", true, "keep_meta", runtime.ParamLocationQuery, *params.KeepMeta); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+	}
+
 	queryURL.RawQuery = queryValues.Encode()
 
 	req, err := http.NewRequest("DELETE", queryURL.String(), nil)

@@ -27,6 +27,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
+	dmcommon "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -35,8 +36,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pbmock"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
+	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
 )
 
 type OpenAPIControllerSuite struct {
@@ -405,7 +409,7 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData"))
 		s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError", `return(true)`))
 
-		s.NoError(server.deleteTask(ctx, s.testTask.Name, true))
+		s.NoError(server.deleteTask(ctx, s.testTask.Name, true, false))
 
 		s.Nil(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError"))
 		s.Nil(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData", `return(true)`))
@@ -609,12 +613,148 @@ func (s *OpenAPIControllerSuite) TestDeleteTaskUsesTimeoutForWholeDownstreamClea
 	}()
 
 	start := time.Now()
-	s.NoError(server.deleteTask(context.Background(), task.Name, true))
+	s.NoError(server.deleteTask(context.Background(), task.Name, true, false))
 	s.Less(time.Since(start), 150*time.Millisecond)
 
 	taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
 	s.NoError(err)
 	s.Len(taskList, 0)
+}
+
+func (s *OpenAPIControllerSuite) TestDeleteTaskKeepMeta() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	workerName := "worker-1"
+	s.NoError(server.scheduler.AddWorker(workerName, "172.16.10.72:8262"))
+	worker := server.scheduler.GetWorkerByName(workerName)
+	worker.ToFree()
+	_, err := server.createSource(ctx, openapi.CreateSourceRequest{
+		Source:     *s.testSource,
+		WorkerName: &workerName,
+	})
+	s.NoError(err)
+
+	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData"))
+	defer func() {
+		s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData", `return(true)`))
+	}()
+	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError", `return(true)`))
+	defer func() {
+		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError"))
+	}()
+
+	createTask := func(taskName string) {
+		task := *s.testTask
+		task.Name = taskName
+		_, err := server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
+		s.NoError(err)
+	}
+	putMeta := func(taskName string) {
+		_, err := ha.PutLoadTask(server.etcdClient, taskName, source1Name, workerName)
+		s.NoError(err)
+		_, err = ha.PutLightningStatus(server.etcdClient, taskName, source1Name, ha.LightningReady)
+		s.NoError(err)
+
+		info := pessimism.NewInfo(taskName, source1Name, "db", "tbl", []string{"ALTER TABLE tbl ADD COLUMN c INT"})
+		_, err = pessimism.PutInfo(server.etcdClient, info)
+		s.NoError(err)
+
+		sourceTables := optimism.NewSourceTables(taskName, source1Name)
+		sourceTables.AddTable("db", "tbl", "db", "tbl")
+		_, err = optimism.PutSourceTables(server.etcdClient, sourceTables)
+		s.NoError(err)
+	}
+	assertMeta := func(taskName string, keepResumableMeta bool) {
+		loadWorker, _, err := ha.GetLoadTask(server.etcdClient, taskName, source1Name)
+		s.NoError(err)
+		if keepResumableMeta {
+			s.Equal(workerName, loadWorker)
+		} else {
+			s.Empty(loadWorker)
+		}
+
+		lightningStatus, err := ha.GetAllLightningStatus(server.etcdClient, taskName)
+		s.NoError(err)
+		if keepResumableMeta {
+			s.Equal([]string{ha.LightningReady}, lightningStatus)
+		} else {
+			s.Empty(lightningStatus)
+		}
+
+		pessimisticInfo, _, err := pessimism.GetAllInfo(server.etcdClient)
+		s.NoError(err)
+		_, exists := pessimisticInfo[taskName]
+		s.Equal(keepResumableMeta, exists)
+
+		optimisticSourceTables, _, err := optimism.GetAllSourceTables(server.etcdClient)
+		s.NoError(err)
+		_, exists = optimisticSourceTables[taskName]
+		s.False(exists)
+	}
+
+	defaultDeleteTask := "test-default-delete-meta"
+	createTask(defaultDeleteTask)
+	putMeta(defaultDeleteTask)
+	s.NoError(server.deleteTask(ctx, defaultDeleteTask, false, false))
+	s.Nil(server.scheduler.GetSubTaskCfgsByTask(defaultDeleteTask))
+	assertMeta(defaultDeleteTask, false)
+
+	keepMetaTask := "test-keep-delete-meta"
+	createTask(keepMetaTask)
+	putMeta(keepMetaTask)
+	s.NoError(server.startTask(ctx, keepMetaTask, openapi.StartTaskRequest{}))
+	err = server.deleteTask(ctx, keepMetaTask, false, true)
+	s.True(terror.ErrOpenAPICommonError.Equal(err))
+	s.NotNil(server.scheduler.GetSubTaskCfgsByTask(keepMetaTask))
+
+	ctrl := gomock.NewController(s.T())
+	defer ctrl.Finish()
+	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	var (
+		queryCalled                  bool
+		taskRemovedBeforeQuery       bool
+		optimisticMetaPresentAtQuery bool
+		optimisticMetaReadErr        error
+	)
+	mockWorkerClient.EXPECT().QueryStatus(
+		gomock.Any(),
+		&pb.QueryStatusRequest{Name: keepMetaTask},
+	).DoAndReturn(func(context.Context, *pb.QueryStatusRequest, ...grpc.CallOption) (*pb.QueryStatusResponse, error) {
+		queryCalled = true
+		taskRemovedBeforeQuery = server.scheduler.GetSubTaskCfgsByTask(keepMetaTask) == nil
+		allSourceTables, _, err := optimism.GetAllSourceTables(server.etcdClient)
+		optimisticMetaReadErr = err
+		if err == nil {
+			_, optimisticMetaPresentAtQuery = allSourceTables[keepMetaTask]
+		}
+		return &pb.QueryStatusResponse{
+			Result: true,
+			SourceStatus: &pb.SourceStatus{
+				Source: source1Name,
+				Worker: workerName,
+			},
+			SubTaskStatus: []*pb.SubTaskStatus{{
+				Name: keepMetaTask,
+				Status: &pb.SubTaskStatus_Msg{
+					Msg: dmcommon.NoSubTaskMsg(keepMetaTask),
+				},
+			}},
+		}, nil
+	})
+	server.scheduler.SetWorkerClientForTest(workerName, newMockRPCClient(mockWorkerClient))
+
+	s.NoError(server.deleteTask(ctx, keepMetaTask, true, true))
+	s.True(queryCalled)
+	s.True(taskRemovedBeforeQuery)
+	s.NoError(optimisticMetaReadErr)
+	s.True(optimisticMetaPresentAtQuery)
+	s.Nil(server.scheduler.GetSubTaskCfgsByTask(keepMetaTask))
+	assertMeta(keepMetaTask, true)
 }
 
 func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
@@ -708,7 +848,7 @@ func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 
 	// delete
 	{
-		s.NoError(server.deleteTask(ctx, task.Name, true)) // delete with fore
+		s.NoError(server.deleteTask(ctx, task.Name, true, false)) // delete with fore
 		taskList, err := server.listTask(ctx, openapi.DMAPIGetTaskListParams{})
 		s.NoError(err)
 		s.Len(taskList, 0)

@@ -462,7 +462,7 @@ type StartTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 
-	// task start time. Prefer RFC3339-like values with timezone offset (+08:00 or +0800). Legacy values without timezone are interpreted in upstream timezone.
+	// task start time. Prefer RFC3339-like values with timezone offset (`+08:00` or `+0800`). Legacy values without timezone are interpreted in upstream timezone.
 	StartTime *string `json:"start_time,omitempty"`
 }
 
@@ -605,7 +605,11 @@ type TaskFullMigrateConf struct {
 	// to control the way in which data is exported for consistency assurance
 	Consistency *string `json:"consistency,omitempty"`
 
-	// storage dir name
+	// Storage directory for full import.
+	//
+	// Notes:
+	// - When `import_mode` is `import-into`, this must be a shared storage URI (for example, `s3://bucket/prefix`).
+	// - Local filesystem paths (for example, `/data/...` or `./exported_data`) are rejected when `import_mode` is `import-into`.
 	DataDir *string `json:"data_dir,omitempty"`
 
 	// disk quota for physical import
@@ -614,7 +618,15 @@ type TaskFullMigrateConf struct {
 	// full export of concurrent
 	ExportThreads *int `json:"export_threads,omitempty"`
 
-	// to control import mode of full import
+	// Import mode of full import.
+	//
+	// Notes:
+	// - `import-into` does not support sharding / multi-source tasks (for example, when `task.shard_mode` is set, or `source_config.source_conf` contains multiple sources).
+	// - `import-into` requires `data_dir` to be a shared storage URI (for example, `s3://bucket/prefix`).
+	//
+	// Validation failures (error message may be returned):
+	// - `import-into` + sharding/multi-source: "import-into mode does not support sharding"
+	// - `import-into` + local `data_dir`: "import-into mode requires shared storage"
 	ImportMode *TaskFullMigrateConfImportMode `json:"import_mode,omitempty"`
 
 	// full import of concurrent
@@ -645,7 +657,15 @@ type TaskFullMigrateConfAnalyze string
 // to control checksum of physical import
 type TaskFullMigrateConfChecksum string
 
-// to control import mode of full import
+// Import mode of full import.
+//
+// Notes:
+// - `import-into` does not support sharding / multi-source tasks (for example, when `task.shard_mode` is set, or `source_config.source_conf` contains multiple sources).
+// - `import-into` requires `data_dir` to be a shared storage URI (for example, `s3://bucket/prefix`).
+//
+// Validation failures (error message may be returned):
+// - `import-into` + sharding/multi-source: "import-into mode does not support sharding"
+// - `import-into` + local `data_dir`: "import-into mode requires shared storage"
 type TaskFullMigrateConfImportMode string
 
 // to control the duplication resolution when meet duplicate rows for logical import
@@ -863,6 +883,9 @@ type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
 type DMAPIDeleteTaskParams struct {
 	// force stop task even if some subtask is running
 	Force *bool `json:"force,omitempty"`
+
+	// whether to keep task checkpoints and resumable metadata when deleting the task
+	KeepMeta *bool `json:"keep_meta,omitempty"`
 }
 
 // DMAPIGetTaskParams defines parameters for DMAPIGetTask.

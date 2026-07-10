@@ -549,6 +549,14 @@ paths:
           schema:
             type: boolean
             example: true
+        - name: "keep_meta"
+          in: query
+          required: false
+          description: "whether to keep task checkpoints and resumable metadata when deleting the task"
+          schema:
+            type: boolean
+            default: false
+            example: true
       responses:
         "204":
           description: "success"
