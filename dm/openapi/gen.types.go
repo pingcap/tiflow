@@ -884,7 +884,11 @@ type DMAPIDeleteTaskParams struct {
 	// force stop task even if some subtask is running
 	Force *bool `json:"force,omitempty"`
 
-	// whether to keep task checkpoints and resumable metadata when deleting the task
+	// Whether to keep downstream checkpoints and resumable internal metadata when deleting the task.
+	// Optimistic shard DDL metadata is always removed.
+	// With force=true, only already-persisted checkpoint state is retained; deletion does not flush the latest checkpoint.
+	// Stop the task and wait for the stop operation to complete before deleting it when the latest checkpoint must be retained.
+	// Only use keep_meta=true after all DM masters are upgraded, because older versions ignore unknown query parameters.
 	KeepMeta *bool `json:"keep_meta,omitempty"`
 }
 

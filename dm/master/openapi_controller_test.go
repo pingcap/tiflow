@@ -26,8 +26,8 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tiflow/dm/checker"
-	dmcommon "github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/master/scheduler"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -639,14 +639,10 @@ func (s *OpenAPIControllerSuite) TestDeleteTaskKeepMeta() {
 	})
 	s.NoError(err)
 
-	s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData"))
-	defer func() {
-		s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockSkipRemoveMetaData", `return(true)`))
-	}()
-	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError", `return(true)`))
-	defer func() {
-		s.NoError(failpoint.Disable("github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError"))
-	}()
+	// The default-delete case consumes the first action to avoid accessing a real
+	// downstream. Any later downstream cleanup from a keep-meta case must fail.
+	testfailpoint.Enable(s.T(), "github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError",
+		`1*return(true)->panic("downstream metadata cleanup called with keep_meta")`)
 
 	createTask := func(taskName string) {
 		task := *s.testTask
@@ -715,6 +711,8 @@ func (s *OpenAPIControllerSuite) TestDeleteTaskKeepMeta() {
 	ctrl := gomock.NewController(s.T())
 	defer ctrl.Finish()
 	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	workerConfirmationCtx, cancelWorkerConfirmation := context.WithCancel(ctx)
+	defer cancelWorkerConfirmation()
 	var (
 		queryCalled                  bool
 		taskRemovedBeforeQuery       bool
@@ -732,23 +730,12 @@ func (s *OpenAPIControllerSuite) TestDeleteTaskKeepMeta() {
 		if err == nil {
 			_, optimisticMetaPresentAtQuery = allSourceTables[keepMetaTask]
 		}
-		return &pb.QueryStatusResponse{
-			Result: true,
-			SourceStatus: &pb.SourceStatus{
-				Source: source1Name,
-				Worker: workerName,
-			},
-			SubTaskStatus: []*pb.SubTaskStatus{{
-				Name: keepMetaTask,
-				Status: &pb.SubTaskStatus_Msg{
-					Msg: dmcommon.NoSubTaskMsg(keepMetaTask),
-				},
-			}},
-		}, nil
+		cancelWorkerConfirmation()
+		return nil, context.Canceled
 	})
 	server.scheduler.SetWorkerClientForTest(workerName, newMockRPCClient(mockWorkerClient))
 
-	s.NoError(server.deleteTask(ctx, keepMetaTask, true, true))
+	s.NoError(server.deleteTask(workerConfirmationCtx, keepMetaTask, true, true))
 	s.True(queryCalled)
 	s.True(taskRemovedBeforeQuery)
 	s.NoError(optimisticMetaReadErr)
