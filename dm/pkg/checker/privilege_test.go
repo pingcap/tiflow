@@ -210,6 +210,14 @@ func TestVerifyDumpPrivileges(t *testing.T) {
 		},
 		{
 			grants: []string{
+				"GRANT `administrator ON call`@`%` TO `dmtest`@`%` WITH ADMIN OPTION",
+				"GRANT SELECT ON *.* TO `dmtest`@`%`",
+				"GRANT FLUSH_TABLES ON *.* TO `dmtest`@`%`",
+			},
+			dumpState: StateSuccess,
+		},
+		{
+			grants: []string{
 				"GRANT SELECT ON *.* TO `root`@`localhost`",
 				"GRANT FLUSH_STATUS ON *.* TO `root`@`localhost`",
 			},
@@ -419,10 +427,12 @@ func TestShowGrantsIgnoresUnparseableGrantForRoleDiscovery(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestTrimAdminOptionWithNonASCIIGrant(t *testing.T) {
+func TestTrimAdminOption(t *testing.T) {
 	grant := "GRANT `admİN`@`%` TO `dmtest`@`%` WITH ADMIN OPTION"
-	require.True(t, isRoleGrantWithAdminOption(grant))
 	require.Equal(t, "GRANT `admİN`@`%` TO `dmtest`@`%`", trimAdminOption(grant))
+
+	grantWithoutAdminOption := "GRANT SELECT ON *.* TO `dmtest`@`%`"
+	require.Equal(t, grantWithoutAdminOption, trimAdminOption(grantWithoutAdminOption))
 }
 
 func TestVerifyReplicationPrivileges(t *testing.T) {

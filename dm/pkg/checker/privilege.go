@@ -308,10 +308,7 @@ func VerifyPrivileges(
 		if len(lackPrivs) == 0 && !isRevokeGrant(grant) {
 			continue
 		}
-		if shouldSkipGrantForPrivilegeCheck(grant) {
-			continue
-		}
-		node, err := p.ParseOneStmt(grant, "", "")
+		node, err := p.ParseOneStmt(trimAdminOption(grant), "", "")
 		if err != nil {
 			return nil, errors.New(err.Error())
 		}
@@ -469,21 +466,7 @@ func clonePriv(privs priv) priv {
 	}
 	cloned.dbs = make(map[string]dbPriv, len(privs.dbs))
 	for dbName, dbPrivs := range privs.dbs {
-		clonedDBPrivs := dbPriv{wholeDB: dbPrivs.wholeDB}
-		if dbPrivs.tables != nil {
-			clonedDBPrivs.tables = make(map[string]tablePriv, len(dbPrivs.tables))
-			for tableName, tablePrivs := range dbPrivs.tables {
-				clonedTablePrivs := tablePriv{wholeTable: tablePrivs.wholeTable}
-				if tablePrivs.columns != nil {
-					clonedTablePrivs.columns = make(map[string]struct{}, len(tablePrivs.columns))
-					for columnName := range tablePrivs.columns {
-						clonedTablePrivs.columns[columnName] = struct{}{}
-					}
-				}
-				clonedDBPrivs.tables[tableName] = clonedTablePrivs
-			}
-		}
-		cloned.dbs[dbName] = clonedDBPrivs
+		cloned.dbs[dbName] = cloneDBPriv(dbPrivs)
 	}
 	return cloned
 }
@@ -701,15 +684,11 @@ func showGrants(ctx context.Context, db dbutil.QueryExecutor, user, host string)
 
 	// For MySQL 8.0, collect granted roles and read grants using those roles.
 	// HeatWave SHOW GRANTS may append `WITH ADMIN OPTION` to role grants, which
-	// TiDB parser cannot parse yet. Strip the suffix for role discovery only.
+	// TiDB parser cannot parse yet. trimAdminOption leaves other grants unchanged.
 	var roles []string
 	p := parser.New()
 	for _, grant := range grants {
-		grantForParse := grant
-		if isRoleGrantWithAdminOption(grant) {
-			grantForParse = trimAdminOption(grant)
-		}
-		node, err := p.ParseOneStmt(grantForParse, "", "")
+		node, err := p.ParseOneStmt(trimAdminOption(grant), "", "")
 		if err != nil {
 			log.L().Warn("failed to parse grant statement during role discovery",
 				zap.String("grant", grant), zap.Error(err))
@@ -737,25 +716,8 @@ func showGrants(ctx context.Context, db dbutil.QueryExecutor, user, host string)
 	return readGrants(builder.String())
 }
 
-func shouldSkipGrantForPrivilegeCheck(grant string) bool {
-	return isRoleGrantWithAdminOption(grant)
-}
-
 func isRevokeGrant(grant string) bool {
 	return strings.HasPrefix(strings.ToUpper(strings.TrimSpace(grant)), "REVOKE ")
-}
-
-func isRoleGrantWithAdminOption(grant string) bool {
-	normalized := strings.ToUpper(strings.Join(strings.Fields(grant), " "))
-
-	// MySQL 8.0 and HeatWave SHOW GRANTS may return role grants with
-	// `WITH ADMIN OPTION`, while TiDB parser currently accepts GrantRoleStmt
-	// without this suffix only. Role grants do not directly grant the source
-	// privileges checked here, so ignore them just like parsed GrantRoleStmt.
-	return strings.HasPrefix(normalized, "GRANT ") &&
-		strings.Contains(normalized, " TO ") &&
-		strings.Contains(normalized, " WITH ADMIN OPTION") &&
-		!strings.Contains(normalized, " ON ")
 }
 
 func trimAdminOption(grant string) string {
