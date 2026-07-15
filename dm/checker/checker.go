@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -571,9 +572,6 @@ func (c *Checker) fetchSourceTargetDB(
 	if err != nil {
 		return nil, nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
 	}
-	if err := sameTargetTableNameDetectionForRouteRules(instance.cfg.CaseSensitive, instance.cfg.RouteRules); err != nil {
-		return nil, nil, err
-	}
 
 	if err != nil {
 		return nil, nil, terror.ErrTaskCheckGenColumnMapping.Delegate(err)
@@ -603,7 +601,14 @@ func (c *Checker) fetchSourceTargetDB(
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}
-	return conn.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB, instance.baList, r)
+	sourceTables, err := conn.FetchAllDoTables(ctx, instance.sourceDB, instance.baList)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := checkTableRouteCaseCollisions(instance.cfg.CaseSensitive, instance.cfg.RouteRules, sourceTables); err != nil {
+		return nil, nil, err
+	}
+	return conn.RouteTargetDoTables(instance.cfg.SourceID, sourceTables, r)
 }
 
 func (c *Checker) displayCheckingItems() string {
@@ -880,47 +885,78 @@ func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 	return nil
 }
 
-func sameTargetTableNameDetectionForRouteRules(caseSensitive bool, rules []*router.TableRule) error {
-	if caseSensitive {
+func checkTableRouteCaseCollisions(
+	caseSensitive bool,
+	rules []*router.TableRule,
+	sourceTables map[string][]string,
+) error {
+	if caseSensitive || len(sourceTables) == 0 {
 		return nil
 	}
 
 	// regexprrouter matches source patterns case-insensitively in this mode and
 	// reports "matches more than one rule" before the checker can build target
-	// table mappings. Detect the same-target-table conflict from the route
-	// rules first so the precheck reports the actionable table names.
-	sourceTableToTargetNameSets := make(map[string]map[string]string)
-	var messages []string
+	// table mappings. Match table-level route rules with the same filter
+	// semantics, but only against source tables that exist and remain after
+	// block/allow filtering.
+	type matchableRule struct {
+		rule    *router.TableRule
+		matcher *filter.Filter
+	}
+	matchableRules := make([]matchableRule, 0, len(rules))
 	for _, rule := range rules {
 		if rule == nil || rule.TablePattern == "" {
 			continue
 		}
 
-		targetTable := rule.TargetTable
-		if targetTable == "" {
-			targetTable = rule.TablePattern
+		matcher, err := filter.New(false, &filter.Rules{
+			DoDBs: []string{rule.SchemaPattern},
+			DoTables: []*filter.Table{
+				{Schema: rule.SchemaPattern, Name: rule.TablePattern},
+			},
+		})
+		if err != nil {
+			return terror.ErrTaskCheckGenTableRouter.Delegate(err)
 		}
-		source := filter.Table{
-			Schema: rule.SchemaPattern,
-			Name:   rule.TablePattern,
-		}
-		sourceNameL := strings.ToLower(source.String())
-		tableNameSets := sourceTableToTargetNameSets[sourceNameL]
-		if tableNameSets == nil {
-			tableNameSets = make(map[string]string)
-			sourceTableToTargetNameSets[sourceNameL] = tableNameSets
-		}
+		matchableRules = append(matchableRules, matchableRule{rule: rule, matcher: matcher})
+	}
 
-		target := filter.Table{
-			Schema: rule.TargetSchema,
-			Name:   targetTable,
+	selectedTables := make([]filter.Table, 0)
+	for schema, tables := range sourceTables {
+		for _, table := range tables {
+			selectedTables = append(selectedTables, filter.Table{Schema: schema, Name: table})
 		}
-		name := target.String()
-		nameL := strings.ToLower(name)
-		if nameO, ok := tableNameSets[nameL]; !ok {
-			tableNameSets[nameL] = name
-		} else {
-			messages = append(messages, fmt.Sprintf("same target table %v vs %s", nameO, name))
+	}
+	sort.Slice(selectedTables, func(i, j int) bool {
+		return selectedTables[i].String() < selectedTables[j].String()
+	})
+
+	var messages []string
+	messageSet := make(map[string]struct{})
+	for i := range selectedTables {
+		targetNameSets := make(map[string]string)
+		for _, matchable := range matchableRules {
+			if !matchable.matcher.Match(&selectedTables[i]) {
+				continue
+			}
+
+			targetTable := matchable.rule.TargetTable
+			if targetTable == "" {
+				targetTable = selectedTables[i].Name
+			}
+
+			target := filter.Table{Schema: matchable.rule.TargetSchema, Name: targetTable}
+			name := target.String()
+			nameL := strings.ToLower(name)
+			if nameO, ok := targetNameSets[nameL]; !ok {
+				targetNameSets[nameL] = name
+			} else {
+				message := fmt.Sprintf("same target table %v vs %s", nameO, name)
+				if _, ok := messageSet[message]; !ok {
+					messageSet[message] = struct{}{}
+					messages = append(messages, message)
+				}
+			}
 		}
 	}
 
