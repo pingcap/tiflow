@@ -567,12 +567,12 @@ func (c *Checker) fetchSourceTargetDB(
 		return nil, nil, terror.ErrTaskCheckGenBAList.Delegate(err)
 	}
 	instance.baList = bAList
-	if err := sameTargetTableNameDetectionForRouteRules(instance.cfg.CaseSensitive, instance.cfg.RouteRules); err != nil {
-		return nil, nil, err
-	}
 	r, err := regexprrouter.NewRegExprRouter(instance.cfg.CaseSensitive, instance.cfg.RouteRules)
 	if err != nil {
 		return nil, nil, terror.ErrTaskCheckGenTableRouter.Delegate(err)
+	}
+	if err := sameTargetTableNameDetectionForRouteRules(instance.cfg.CaseSensitive, instance.cfg.RouteRules); err != nil {
+		return nil, nil, err
 	}
 
 	if err != nil {
@@ -892,7 +892,7 @@ func sameTargetTableNameDetectionForRouteRules(caseSensitive bool, rules []*rout
 	sourceTableToTargetNameSets := make(map[string]map[string]string)
 	var messages []string
 	for _, rule := range rules {
-		if rule == nil || rule.TablePattern == "" || rule.TargetSchema == "" {
+		if rule == nil || rule.TablePattern == "" {
 			continue
 		}
 
@@ -900,10 +900,6 @@ func sameTargetTableNameDetectionForRouteRules(caseSensitive bool, rules []*rout
 		if targetTable == "" {
 			targetTable = rule.TablePattern
 		}
-		if targetTable == "" {
-			continue
-		}
-
 		source := filter.Table{
 			Schema: rule.SchemaPattern,
 			Name:   rule.TablePattern,

@@ -834,6 +834,23 @@ func TestSameTargetTableDetectionBeforeRouteDupMatch(t *testing.T) {
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
 		},
 	}
+	cfgsWithInvalidTargetSchema := []*config.SubTaskConfig{
+		{
+			RouteRules: []*router.TableRule{
+				{
+					SchemaPattern: "test",
+					TablePattern:  "T",
+					TargetTable:   "T",
+				}, {
+					SchemaPattern: "test",
+					TablePattern:  "t",
+					TargetTable:   "t",
+				},
+			},
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
 
 	require.NoError(t, sameTargetTableNameDetectionForRouteRules(false, []*router.TableRule{
 		{
@@ -885,6 +902,12 @@ func TestSameTargetTableDetectionBeforeRouteDupMatch(t *testing.T) {
 	require.Contains(t, processErr.Message, "same table name in case-insensitive")
 	require.Contains(t, processErr.Message, "same target table `test`.`T` vs `test`.`T`")
 	require.Empty(t, processErr.RawCause)
+
+	msg, err = CheckSyncConfig(context.Background(), cfgsWithInvalidTargetSchema, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "target schema of table route rule should not be empty")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
+	require.Len(t, msg, 0)
 }
 
 func TestMetaPositionChecking(t *testing.T) {
