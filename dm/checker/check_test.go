@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/stretchr/testify/require"
 )
@@ -818,7 +819,7 @@ func TestCheckTableRouteCaseCollisionsBeforeRouteDupMatch(t *testing.T) {
 			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
 		},
 	}
-	cfgsWithSameTarget := []*config.SubTaskConfig{
+	cfgsWithExactSameTarget := []*config.SubTaskConfig{
 		{
 			RouteRules: []*router.TableRule{
 				{
@@ -878,26 +879,25 @@ func TestCheckTableRouteCaseCollisionsBeforeRouteDupMatch(t *testing.T) {
 	require.Empty(t, processErr.RawCause)
 
 	mock = initMockDB(t)
-	msg, err = CheckSyncConfig(context.Background(), cfgsWithSameTarget, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	msg, err = CheckSyncConfig(context.Background(), cfgsWithExactSameTarget, common.DefaultErrorCnt, common.DefaultWarnCnt)
 	require.ErrorContains(t, err, "fail to initialize checker")
-	require.ErrorContains(t, err, "same table name in case-insensitive")
-	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`T`")
-	require.NotContains(t, err.Error(), "matches more than one rule")
+	require.ErrorContains(t, err, "matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
 	require.Len(t, msg, 0)
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	mock = initMockDB(t)
-	_, err = RunCheckOnConfigs(context.Background(), cfgsWithSameTarget, false, 100, 100)
+	_, err = RunCheckOnConfigs(context.Background(), cfgsWithExactSameTarget, false, 100, 100)
 	require.ErrorContains(t, err, "fail to initialize checker")
-	require.ErrorContains(t, err, "same table name in case-insensitive")
-	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`T`")
-	require.NotContains(t, err.Error(), "matches more than one rule")
+	require.ErrorContains(t, err, "matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
 	require.NoError(t, mock.ExpectationsWereMet())
 
 	processErr = unit.NewProcessError(err)
-	require.Contains(t, processErr.Message, "same table name in case-insensitive")
-	require.Contains(t, processErr.Message, "same target table `test`.`T` vs `test`.`T`")
-	require.Empty(t, processErr.RawCause)
+	require.Equal(t, int32(terror.ErrGenTableRouter.Code()), processErr.ErrCode)
+	require.Contains(t, processErr.Message, "generate table router")
+	require.Contains(t, processErr.RawCause, "table db_1.t_1 matches more than one rule")
+	require.Contains(t, processErr.Workaround, "`routes`")
 
 	mock, mockErr := conn.MockDefaultDBProvider()
 	require.NoError(t, mockErr)
@@ -1000,6 +1000,20 @@ func TestCheckTableRouteCaseCollisions(t *testing.T) {
 	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
 	require.Equal(t, 1, strings.Count(err.Error(), "same target table `test`.`T` vs `test`.`t`"))
 
+	schemaRules := []*router.TableRule{
+		{SchemaPattern: "DB_*", TargetSchema: "archive"},
+		{SchemaPattern: schema, TargetSchema: "Archive"},
+	}
+	// Schema-level route conflicts intentionally retain the router's generic
+	// duplicate-rule error instead of the target-table diagnostic.
+	require.NoError(t, checkTableRouteCaseCollisions(false, schemaRules, map[string][]string{schema: {tb1}}))
+	tableRouter, err := regexprrouter.NewRegExprRouter(false, schemaRules)
+	require.NoError(t, err)
+	_, _, err = conn.RouteTargetDoTables("", map[string][]string{schema: {tb1}}, tableRouter)
+	require.True(t, terror.ErrGenTableRouter.Equal(err))
+	require.ErrorContains(t, err, "table db_1.t_1 matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
+
 	implicitTargetRules := []*router.TableRule{
 		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "T_*"},
 		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "t_1", TargetTable: "T_1"},
@@ -1017,7 +1031,7 @@ func TestCheckTableRouteCaseCollisions(t *testing.T) {
 		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "t_1", TargetTable: "right"},
 	}
 	require.NoError(t, checkTableRouteCaseCollisions(false, differentTargetRules, selectedTables))
-	tableRouter, err := regexprrouter.NewRegExprRouter(false, differentTargetRules)
+	tableRouter, err = regexprrouter.NewRegExprRouter(false, differentTargetRules)
 	require.NoError(t, err)
 	_, _, err = conn.RouteTargetDoTables("", map[string][]string{schema: {tb1}}, tableRouter)
 	require.ErrorContains(t, err, "matches more than one rule")

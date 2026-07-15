@@ -898,7 +898,9 @@ func checkTableRouteCaseCollisions(
 	// reports "matches more than one rule" before the checker can build target
 	// table mappings. Match table-level route rules with the same filter
 	// semantics, but only against source tables that exist and remain after
-	// block/allow filtering.
+	// block/allow filtering. Schema-level route conflicts intentionally keep the
+	// router's generic duplicate-rule error because they are outside this target-
+	// table diagnostic.
 	type matchableRule struct {
 		rule    *router.TableRule
 		matcher *filter.Filter
@@ -950,7 +952,7 @@ func checkTableRouteCaseCollisions(
 			nameL := strings.ToLower(name)
 			if nameO, ok := targetNameSets[nameL]; !ok {
 				targetNameSets[nameL] = name
-			} else {
+			} else if nameO != name {
 				message := fmt.Sprintf("same target table %v vs %s", nameO, name)
 				if _, ok := messageSet[message]; !ok {
 					messageSet[message] = struct{}{}
