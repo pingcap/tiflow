@@ -46,7 +46,7 @@ func newConnNumberChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig
 func (c *connNumberChecker) check(ctx context.Context, checkerName string, neededPriv map[mysql.PrivilegeType]priv) *Result {
 	result := &Result{
 		Name:  checkerName,
-		Desc:  "check if connetion concurrency exceeds database's maximum connection limit",
+		Desc:  "check if connection concurrency exceeds database's maximum connection limit",
 		State: StateSuccess,
 	}
 	baseConn, err := c.toCheckDB.GetBaseConn(ctx)
