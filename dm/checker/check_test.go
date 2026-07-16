@@ -16,16 +16,21 @@ package checker
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/util/filter"
+	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/ctl/common"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -792,6 +797,245 @@ func TestSameTargetTableDetection(t *testing.T) {
 	mock.ExpectQuery("SHOW CREATE TABLE .*").WillReturnRows(sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow(tb1, fmt.Sprintf(createTable1, tb2)))
 	_, err = RunCheckOnConfigs(context.Background(), cfgs, false, 100, 100)
 	require.ErrorContains(t, err, "same table name in case-insensitive")
+}
+
+func TestCheckTableRouteCaseCollisionsBeforeRouteDupMatch(t *testing.T) {
+	cfgs := []*config.SubTaskConfig{
+		{
+			RouteRules: []*router.TableRule{
+				{
+					SchemaPattern: schema,
+					TargetSchema:  "test",
+					TablePattern:  "T_1",
+					TargetTable:   "T",
+				}, {
+					SchemaPattern: schema,
+					TargetSchema:  "test",
+					TablePattern:  "t_1",
+					TargetTable:   "t",
+				},
+			},
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
+	cfgsWithExactSameTarget := []*config.SubTaskConfig{
+		{
+			RouteRules: []*router.TableRule{
+				{
+					SchemaPattern: schema,
+					TargetSchema:  "test",
+					TablePattern:  "T_1",
+					TargetTable:   "T",
+				}, {
+					SchemaPattern: schema,
+					TargetSchema:  "test",
+					TablePattern:  "t_1",
+					TargetTable:   "T",
+				},
+			},
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
+	cfgsWithInvalidTargetSchema := []*config.SubTaskConfig{
+		{
+			RouteRules: []*router.TableRule{
+				{
+					SchemaPattern: "test",
+					TablePattern:  "T",
+					TargetTable:   "T",
+				}, {
+					SchemaPattern: "test",
+					TablePattern:  "t",
+					TargetTable:   "t",
+				},
+			},
+			Mode:                config.ModeAll,
+			IgnoreCheckingItems: ignoreExcept(map[string]struct{}{config.TableSchemaChecking: {}}),
+		},
+	}
+
+	mock := initMockDB(t)
+	msg, err := CheckSyncConfig(context.Background(), cfgs, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "same table name in case-insensitive")
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
+	require.NotContains(t, err.Error(), "matches more than one rule")
+	require.Len(t, msg, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	mock = initMockDB(t)
+	_, err = RunCheckOnConfigs(context.Background(), cfgs, false, 100, 100)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "same table name in case-insensitive")
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
+	require.NotContains(t, err.Error(), "matches more than one rule")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	processErr := unit.NewProcessError(err)
+	require.Contains(t, processErr.Message, "same table name in case-insensitive")
+	require.Contains(t, processErr.Message, "same target table `test`.`T` vs `test`.`t`")
+	require.Empty(t, processErr.RawCause)
+
+	mock = initMockDB(t)
+	msg, err = CheckSyncConfig(context.Background(), cfgsWithExactSameTarget, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
+	require.Len(t, msg, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	mock = initMockDB(t)
+	_, err = RunCheckOnConfigs(context.Background(), cfgsWithExactSameTarget, false, 100, 100)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	processErr = unit.NewProcessError(err)
+	require.Equal(t, int32(terror.ErrGenTableRouter.Code()), processErr.ErrCode)
+	require.Contains(t, processErr.Message, "generate table router")
+	require.Contains(t, processErr.RawCause, "table db_1.t_1 matches more than one rule")
+	require.Contains(t, processErr.Workaround, "`routes`")
+
+	mock, mockErr := conn.MockDefaultDBProvider()
+	require.NoError(t, mockErr)
+	msg, err = CheckSyncConfig(context.Background(), cfgsWithInvalidTargetSchema, common.DefaultErrorCnt, common.DefaultWarnCnt)
+	require.ErrorContains(t, err, "fail to initialize checker")
+	require.ErrorContains(t, err, "target schema of table route rule should not be empty")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
+	require.Len(t, msg, 0)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckTableRouteCaseCollisionsUsesSelectedSourceTables(t *testing.T) {
+	caseCollisionRules := []*router.TableRule{
+		{
+			SchemaPattern: schema,
+			TargetSchema:  "test",
+			TablePattern:  "T_1",
+			TargetTable:   "T",
+		}, {
+			SchemaPattern: schema,
+			TargetSchema:  "test",
+			TablePattern:  "t_1",
+			TargetTable:   "t",
+		},
+	}
+
+	// A collision for a nonexistent source table must not affect selected tables.
+	mock := initMockDB(t)
+	tableMap, _, err := (&Checker{}).fetchSourceTargetDB(context.Background(), &mysqlInstance{
+		cfg: &config.SubTaskConfig{RouteRules: []*router.TableRule{
+			{
+				SchemaPattern: "missing",
+				TargetSchema:  "test",
+				TablePattern:  "T",
+				TargetTable:   "T",
+			}, {
+				SchemaPattern: "missing",
+				TargetSchema:  "test",
+				TablePattern:  "t",
+				TargetTable:   "t",
+			},
+		}},
+	})
+	require.NoError(t, err)
+	require.Len(t, tableMap, 2)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	// A block/allow list excluding the colliding table must also suppress it.
+	mock = initMockDB(t)
+	tableMap, _, err = (&Checker{}).fetchSourceTargetDB(context.Background(), &mysqlInstance{
+		cfg: &config.SubTaskConfig{
+			RouteRules: caseCollisionRules,
+			BAList: &filter.Rules{DoTables: []*filter.Table{
+				{Schema: schema, Name: tb2},
+			}},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, map[filter.Table][]filter.Table{
+		{Schema: schema, Name: tb2}: {{Schema: schema, Name: tb2}},
+	}, tableMap)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCheckTableRouteCaseCollisions(t *testing.T) {
+	selectedTables := map[string][]string{schema: {tb1, tb2}}
+	rules := []*router.TableRule{
+		{
+			SchemaPattern: schema,
+			TargetSchema:  "test",
+			TablePattern:  "T_1",
+			TargetTable:   "T",
+		}, {
+			SchemaPattern: schema,
+			TargetSchema:  "test",
+			TablePattern:  "t_1",
+			TargetTable:   "t",
+		},
+	}
+
+	err := checkTableRouteCaseCollisions(false, rules, selectedTables)
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
+	require.NoError(t, checkTableRouteCaseCollisions(true, rules, selectedTables))
+	require.NoError(t, checkTableRouteCaseCollisions(false, rules, map[string][]string{schema: {tb2}}))
+
+	wildcardRules := []*router.TableRule{
+		{
+			SchemaPattern: schema,
+			TargetSchema:  "test",
+			TablePattern:  "T_*",
+			TargetTable:   "T",
+		}, {
+			SchemaPattern: schema,
+			TargetSchema:  "test",
+			TablePattern:  "t_1",
+			TargetTable:   "t",
+		},
+	}
+	err = checkTableRouteCaseCollisions(false, wildcardRules, selectedTables)
+	require.ErrorContains(t, err, "same target table `test`.`T` vs `test`.`t`")
+	require.Equal(t, 1, strings.Count(err.Error(), "same target table `test`.`T` vs `test`.`t`"))
+
+	schemaRules := []*router.TableRule{
+		{SchemaPattern: "DB_*", TargetSchema: "archive"},
+		{SchemaPattern: schema, TargetSchema: "Archive"},
+	}
+	// Schema-level route conflicts intentionally retain the router's generic
+	// duplicate-rule error instead of the target-table diagnostic.
+	require.NoError(t, checkTableRouteCaseCollisions(false, schemaRules, map[string][]string{schema: {tb1}}))
+	tableRouter, err := regexprrouter.NewRegExprRouter(false, schemaRules)
+	require.NoError(t, err)
+	_, _, err = conn.RouteTargetDoTables("", map[string][]string{schema: {tb1}}, tableRouter)
+	require.True(t, terror.ErrGenTableRouter.Equal(err))
+	require.ErrorContains(t, err, "table db_1.t_1 matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
+
+	implicitTargetRules := []*router.TableRule{
+		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "T_*"},
+		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "t_1", TargetTable: "T_1"},
+	}
+	err = checkTableRouteCaseCollisions(false, implicitTargetRules, selectedTables)
+	require.ErrorContains(t, err, "same target table `test`.`t_1` vs `test`.`T_1`")
+
+	require.NoError(t, checkTableRouteCaseCollisions(false, []*router.TableRule{
+		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "a", TargetTable: "T"},
+		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "b", TargetTable: "t"},
+	}, selectedTables))
+
+	differentTargetRules := []*router.TableRule{
+		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "T_*", TargetTable: "left"},
+		{SchemaPattern: schema, TargetSchema: "test", TablePattern: "t_1", TargetTable: "right"},
+	}
+	require.NoError(t, checkTableRouteCaseCollisions(false, differentTargetRules, selectedTables))
+	tableRouter, err = regexprrouter.NewRegExprRouter(false, differentTargetRules)
+	require.NoError(t, err)
+	_, _, err = conn.RouteTargetDoTables("", map[string][]string{schema: {tb1}}, tableRouter)
+	require.ErrorContains(t, err, "matches more than one rule")
+	require.NotContains(t, err.Error(), "same table name in case-insensitive")
 }
 
 func TestMetaPositionChecking(t *testing.T) {
