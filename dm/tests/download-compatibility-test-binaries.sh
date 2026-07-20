@@ -77,7 +77,7 @@ main() {
 	# Define download URLs
 	local download_urls=(
 		"${FILE_SERVER_URL}/download/builds/pingcap/tidb/${tidb_sha1}/centos7/tidb-server.tar.gz"
-		"http://download.pingcap.org/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
+		"http://download.pingcap.com/tidb-enterprise-tools-latest-linux-amd64.tar.gz"
 		"${GITHUB_RELEASE_URL}/gh-ost-binary-linux-20200828140552.tar.gz"
 		"${FILE_SERVER_URL}/download/minio.tar.gz"
 	)
