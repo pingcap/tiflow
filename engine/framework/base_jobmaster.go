@@ -70,7 +70,7 @@ type BaseJobMaster interface {
 	CurrentEpoch() frameModel.Epoch
 
 	// SendMessage sends a message of specific topic to jobmanager in a blocking or nonblocking way
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error
 
 	// Exit should be called when jobmaster (in user logic) wants to exit.
 	// exitReason: ExitReasonFinished/ExitReasonCanceled/ExitReasonFailed
@@ -344,7 +344,7 @@ func (d *DefaultBaseJobMaster) GetEnabledBucketStorage() (bool, resModel.Resourc
 }
 
 // SendMessage delegates the SendMessage or inner worker
-func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+func (d *DefaultBaseJobMaster) SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error {
 	ctx, cancel := d.errCenter.WithCancelOnFirstError(ctx)
 	defer cancel()
 
@@ -394,7 +394,7 @@ func (j *jobMasterImplAsWorkerImpl) Tick(ctx context.Context) error {
 }
 
 func (j *jobMasterImplAsWorkerImpl) OnMasterMessage(
-	ctx context.Context, topic p2p.Topic, message interface{},
+	ctx context.Context, topic p2p.Topic, message any,
 ) error {
 	switch msg := message.(type) {
 	case *frameModel.StatusChangeRequest:
@@ -451,7 +451,7 @@ func (j *jobMasterImplAsMasterImpl) OnWorkerOffline(worker WorkerHandle, reason 
 	return j.inner.OnWorkerOffline(worker, reason)
 }
 
-func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (j *jobMasterImplAsMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message any) error {
 	return j.inner.OnWorkerMessage(worker, topic, message)
 }
 

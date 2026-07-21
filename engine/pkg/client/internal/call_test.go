@@ -59,15 +59,12 @@ func TestCallFuncCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		resp, err := call.Do(ctx)
 		require.Nil(t, resp)
 		require.Error(t, err)
 		require.ErrorIs(t, err, context.Canceled)
-	}()
+	})
 
 	cancel()
 	wg.Wait()
@@ -84,15 +81,12 @@ func TestCallRetryCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		resp, err := call.Do(ctx)
 		require.Nil(t, resp)
 		require.Error(t, err)
 		require.ErrorIs(t, err, context.Canceled)
-	}()
+	})
 
 	cancel()
 	wg.Wait()
