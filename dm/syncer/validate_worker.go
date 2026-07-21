@@ -320,7 +320,7 @@ func (vw *validateWorker) batchValidateRowChanges(rows []*rowValidationJob, dele
 	firstRow := rows[0].row
 	cond := &Cond{
 		TargetTbl: firstRow.TargetTableID(),
-		Columns:   visibleColumns(firstRow.SourceTableInfo().Columns),
+		Columns:   sqlmodel.VisibleColumns(firstRow.SourceTableInfo().Columns),
 		PK:        firstRow.UniqueNotNullIdx(),
 		PkValues:  pkValues,
 	}
@@ -451,18 +451,6 @@ func (vw *validateWorker) resetErrorRows() {
 	vw.Lock()
 	defer vw.Unlock()
 	vw.errorRows = make([]*validateFailedRow, 0)
-}
-
-// TODO(joechenrh): Share visible-row/source-column offset mapping with sqlmodel
-// instead of maintaining validator-specific hidden column helpers.
-func visibleColumns(columns []*model.ColumnInfo) []*model.ColumnInfo {
-	ret := make([]*model.ColumnInfo, 0, len(columns))
-	for _, col := range columns {
-		if !col.Hidden {
-			ret = append(ret, col)
-		}
-	}
-	return ret
 }
 
 func (vw *validateWorker) newJobAdded(job *rowValidationJob) {
