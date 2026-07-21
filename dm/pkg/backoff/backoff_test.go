@@ -70,14 +70,14 @@ func TestExponentialBackoff(t *testing.T) {
 		Factor: factor,
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		expected := minT * time.Duration(math.Pow(factor, float64(i)))
 		require.Equal(t, expected, b.Duration())
 	}
 	b.Rollback()
 	require.Equal(t, 512*minT, b.Current())
 	b.Forward()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		require.Equal(t, maxT, b.Duration())
 	}
 	b.Reset()
@@ -123,7 +123,7 @@ func TestFixedBackoff(t *testing.T) {
 		Max:    maxT,
 		Factor: factor,
 	}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		require.Equal(t, maxT, b.Duration())
 	}
 }
@@ -163,13 +163,13 @@ func TestForward(t *testing.T) {
 		Max:    maxT,
 		Factor: factor,
 	}
-	for i := 0; i < n; i++ {
+	for range n {
 		b.Forward()
 	}
 	require.Equal(t, n, b.cwnd)
 	b.Reset()
 	require.Equal(t, 0, b.cwnd)
-	for i := 0; i < n; i++ {
+	for range n {
 		b.BoundaryForward()
 	}
 	require.Equal(t, 3, b.cwnd)
