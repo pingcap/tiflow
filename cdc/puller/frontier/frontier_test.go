@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/pingcap/tiflow/cdc/kv/regionlock"
@@ -383,8 +383,8 @@ func checkFrontier(t *testing.T, f Frontier) {
 		return true
 	})
 	require.Equal(t, len(tsInHeap), len(tsInList))
-	sort.Slice(tsInList, func(i, j int) bool { return tsInList[i] < tsInList[j] })
-	sort.Slice(tsInHeap, func(i, j int) bool { return tsInHeap[i] < tsInHeap[j] })
+	slices.Sort(tsInList)
+	slices.Sort(tsInHeap)
 	require.Equal(t, tsInHeap, tsInList)
 	require.Equal(t, tsInList[0], f.Frontier())
 }
@@ -507,7 +507,7 @@ func TestRandomMergeAndSplit(t *testing.T) {
 	frontier.Forward(1, tablepb.Span{StartKey: start, EndKey: end}, nextTs)
 	require.Equal(t, nextTs, frontier.Frontier())
 
-	for i := 0; i < 5000; i++ {
+	for range 5000 {
 		totalLockedRanges := rangelock.Len()
 		unchangedRegions := make([]lockedRegion, 0, totalLockedRanges)
 

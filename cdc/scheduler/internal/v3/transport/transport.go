@@ -100,7 +100,7 @@ func NewTransport(
 		ctx,
 		trans.selfTopic,
 		&schedulepb.Message{},
-		func(sender string, messageI interface{}) error {
+		func(sender string, messageI any) error {
 			message := messageI.(*schedulepb.Message)
 			trans.mu.Lock()
 			trans.mu.msgBuf = append(trans.mu.msgBuf, message)

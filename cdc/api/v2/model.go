@@ -162,7 +162,7 @@ func (d JSONDuration) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON unmarshal json value to wrapped duration
 func (d *JSONDuration) UnmarshalJSON(b []byte) error {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(b, &v); err != nil {
 		return err
 	}

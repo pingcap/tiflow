@@ -110,11 +110,9 @@ type mockDDLSink struct {
 }
 
 func (m *mockDDLSink) run(ctx context.Context) {
-	m.wg.Add(1)
-	go func() {
+	m.wg.Go(func() {
 		<-ctx.Done()
-		m.wg.Done()
-	}()
+	})
 }
 
 func (m *mockDDLSink) emitDDLEvent(_ context.Context, ddl *model.DDLEvent) (bool, error) {
@@ -684,7 +682,7 @@ func testChangefeedReleaseResource(
 }
 
 func TestBarrierAdvance(t *testing.T) {
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		globalVars, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 		ctx := context.Background()
 		if i == 1 {

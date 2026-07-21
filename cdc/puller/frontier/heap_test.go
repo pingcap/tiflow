@@ -27,7 +27,7 @@ func TestInsert(t *testing.T) {
 	var heap fibonacciHeap
 	target := uint64(15000)
 
-	for i := 0; i < 5000; i++ {
+	for range 5000 {
 		heap.Insert(uint64(10001) + target + 1)
 	}
 	heap.Insert(target)
