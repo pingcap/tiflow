@@ -38,20 +38,15 @@ func testChannelDelayer(t *testing.T, delayBy time.Duration, count int) {
 	delayer := NewChannelDelayer(delayBy, inCh, 1024, 16)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer close(inCh)
 
-		for i := 0; i < count; i++ {
+		for range count {
 			inCh <- time.Now()
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		counter := 0
 		for ts := range delayer.Out() {
 			require.Greater(t, time.Since(ts), delayBy)
@@ -59,7 +54,7 @@ func testChannelDelayer(t *testing.T, delayBy time.Duration, count int) {
 		}
 
 		require.Equal(t, count, counter)
-	}()
+	})
 
 	wg.Wait()
 	delayer.Close()

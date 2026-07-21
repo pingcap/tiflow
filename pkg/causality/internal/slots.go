@@ -35,7 +35,7 @@ type Slots struct {
 // NewSlots creates a new Slots.
 func NewSlots(numSlots uint64) *Slots {
 	slots := make([]slot, numSlots)
-	for i := uint64(0); i < numSlots; i++ {
+	for i := range numSlots {
 		slots[i].nodes = make(map[uint64]*Node, 8)
 	}
 	return &Slots{

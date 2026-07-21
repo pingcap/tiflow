@@ -61,7 +61,7 @@ func (h *SQLHelper) GetTable(tableName string) *Table {
 	return &Table{tableName: tableName, uniqueIndex: idxCol, helper: h}
 }
 
-func (t *Table) makeSQLRequest(requestType sqlRequestType, rowData map[string]interface{}) (*sqlRequest, error) {
+func (t *Table) makeSQLRequest(requestType sqlRequestType, rowData map[string]any) (*sqlRequest, error) {
 	if t.err != nil {
 		return nil, t.err
 	}
@@ -77,7 +77,7 @@ func (t *Table) makeSQLRequest(requestType sqlRequestType, rowData map[string]in
 }
 
 // Insert returns a Sendable object that represents an Insert clause
-func (t *Table) Insert(rowData map[string]interface{}) Sendable {
+func (t *Table) Insert(rowData map[string]any) Sendable {
 	basicReq, err := t.makeSQLRequest(sqlRequestTypeInsert, rowData)
 	if err != nil {
 		return &errorSender{err: err}
@@ -87,7 +87,7 @@ func (t *Table) Insert(rowData map[string]interface{}) Sendable {
 }
 
 // Upsert returns a Sendable object that represents a Replace Into clause
-func (t *Table) Upsert(rowData map[string]interface{}) Sendable {
+func (t *Table) Upsert(rowData map[string]any) Sendable {
 	basicReq, err := t.makeSQLRequest(sqlRequestTypeUpsert, rowData)
 	if err != nil {
 		return &errorSender{err: err}
@@ -97,7 +97,7 @@ func (t *Table) Upsert(rowData map[string]interface{}) Sendable {
 }
 
 // Delete returns a Sendable object that represents a Delete from clause
-func (t *Table) Delete(rowData map[string]interface{}) Sendable {
+func (t *Table) Delete(rowData map[string]any) Sendable {
 	basicReq, err := t.makeSQLRequest(sqlRequestTypeDelete, rowData)
 	if err != nil {
 		return &errorSender{err: err}
@@ -107,7 +107,7 @@ func (t *Table) Delete(rowData map[string]interface{}) Sendable {
 }
 
 type sqlRowContainer interface {
-	getData() map[string]interface{}
+	getData() map[string]any
 	getComparableKey() string
 	getTable() *Table
 }
@@ -127,12 +127,12 @@ const (
 
 type sqlRequest struct {
 	tableName   string
-	data        map[string]interface{}
-	result      map[string]interface{}
+	data        map[string]any
+	result      map[string]any
 	uniqueIndex []string
 	helper      *SQLHelper
 	requestType sqlRequestType
-	hasReadBack uint32
+	hasReadBack atomic.Uint32
 }
 
 // MarshalLogObjects helps printing the sqlRequest
@@ -146,9 +146,9 @@ func (s *sqlRequest) getPrimaryKeyTuple() string {
 	return makeColumnTuple(s.uniqueIndex)
 }
 
-func (s *sqlRequest) getWhereCondition() []interface{} {
+func (s *sqlRequest) getWhereCondition() []any {
 	builder := strings.Builder{}
-	args := make([]interface{}, 1, len(s.uniqueIndex)+1)
+	args := make([]any, 1, len(s.uniqueIndex)+1)
 	builder.WriteString(s.getPrimaryKeyTuple() + " = (")
 	for i, col := range s.uniqueIndex {
 		builder.WriteString("?")
@@ -168,7 +168,7 @@ func (s *sqlRequest) getComparableKey() string {
 		return s.uniqueIndex[0]
 	}
 
-	ret := make(map[string]interface{})
+	ret := make(map[string]any)
 	for k, v := range s.data {
 		for _, col := range s.uniqueIndex {
 			if k == col {
@@ -179,7 +179,7 @@ func (s *sqlRequest) getComparableKey() string {
 	return fmt.Sprintf("%v", ret)
 }
 
-func (s *sqlRequest) getData() map[string]interface{} {
+func (s *sqlRequest) getData() map[string]any {
 	return s.data
 }
 
@@ -221,7 +221,7 @@ type syncSQLRequest struct {
 }
 
 func (r *syncSQLRequest) Send() Awaitable {
-	atomic.StoreUint32(&r.hasReadBack, 0)
+	r.hasReadBack.Store(0)
 	var err error
 	switch r.requestType {
 	case sqlRequestTypeInsert:
@@ -261,7 +261,7 @@ func (r *syncSQLRequest) Send() Awaitable {
 			}
 		}
 
-		atomic.StoreUint32(&r.hasReadBack, 1)
+		r.hasReadBack.Store(1)
 	}()
 
 	if err != nil {
@@ -283,7 +283,7 @@ func (s *sqlRequest) insert(ctx context.Context) error {
 	}
 
 	keys := make([]string, len(s.data))
-	values := make([]interface{}, len(s.data))
+	values := make([]any, len(s.data))
 	i := 0
 	for k, v := range s.data {
 		keys[i] = k
@@ -304,7 +304,7 @@ func (s *sqlRequest) upsert(ctx context.Context) error {
 	db := sqlx.NewDb(s.helper.upstream, "mysql")
 
 	keys := make([]string, len(s.data))
-	values := make([]interface{}, len(s.data))
+	values := make([]any, len(s.data))
 	i := 0
 	for k, v := range s.data {
 		keys[i] = k
@@ -342,7 +342,7 @@ func (s *sqlRequest) delete(ctx context.Context) error {
 	return nil
 }
 
-func (s *sqlRequest) read(ctx context.Context) (map[string]interface{}, error) {
+func (s *sqlRequest) read(ctx context.Context) (map[string]any, error) {
 	db, err := sqlbuilder.New("mysql", s.helper.downstream)
 	if err != nil {
 		return nil, errors.AddStack(err)
@@ -369,7 +369,7 @@ func (s *sqlRequest) getBasicAwaitable() basicAwaitable {
 }
 
 func (s *sqlRequest) poll(ctx context.Context) (bool, error) {
-	if atomic.LoadUint32(&s.hasReadBack) == 0 {
+	if s.hasReadBack.Load() == 0 {
 		return false, nil
 	}
 	res, err := s.read(ctx)
@@ -421,14 +421,14 @@ func (s *sqlRequest) Check() error {
 	return errors.New("Check failed")
 }
 
-func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
+func rowsToMap(rows *sql.Rows) (map[string]any, error) {
 	colNames, err := rows.Columns()
 	if err != nil {
 		return nil, errors.AddStack(err)
 	}
 
-	colData := make([]interface{}, len(colNames))
-	colDataPtrs := make([]interface{}, len(colNames))
+	colData := make([]any, len(colNames))
+	colDataPtrs := make([]any, len(colNames))
 	for i := range colData {
 		colDataPtrs[i] = &colData[i]
 	}
@@ -438,8 +438,8 @@ func rowsToMap(rows *sql.Rows) (map[string]interface{}, error) {
 		return nil, errors.AddStack(err)
 	}
 
-	ret := make(map[string]interface{}, len(colNames))
-	for i := 0; i < len(colNames); i++ {
+	ret := make(map[string]any, len(colNames))
+	for i := range colNames {
 		ret[colNames[i]] = colData[i]
 	}
 	return ret, nil
@@ -465,7 +465,7 @@ func getUniqueIndexColumn(ctx context.Context, db sqlbuilder.Database, dbName st
 	return strings.Split(colName, " "), nil
 }
 
-func compareMaps(m1 map[string]interface{}, m2 map[string]interface{}) bool {
+func compareMaps(m1 map[string]any, m2 map[string]any) bool {
 	// TODO better comparator
 	if m2 == nil {
 		return false

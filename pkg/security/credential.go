@@ -54,7 +54,7 @@ func (s Credential) Value() (driver.Value, error) {
 }
 
 // Scan implements the sql.Scanner interface
-func (s *Credential) Scan(value interface{}) error {
+func (s *Credential) Scan(value any) error {
 	b, ok := value.([]byte)
 	if !ok {
 		return errors.New("type assertion to []byte failed")

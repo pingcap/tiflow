@@ -14,19 +14,18 @@
 package sortmap
 
 import (
+	"cmp"
 	"sort"
-
-	"golang.org/x/exp/constraints"
 )
 
 // Pair represents the KV pairs in the input map of Sort.
-type Pair[K constraints.Ordered, V any] struct {
+type Pair[K cmp.Ordered, V any] struct {
 	Key   K
 	Value V
 }
 
 // Sort converts an unordered golang map to a slice sorted by map key.
-func Sort[K constraints.Ordered, V any](m map[K]V) []Pair[K, V] {
+func Sort[K cmp.Ordered, V any](m map[K]V) []Pair[K, V] {
 	s := make([]Pair[K, V], 0, len(m))
 	for k, v := range m {
 		s = append(s, Pair[K, V]{k, v})

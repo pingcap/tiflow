@@ -15,6 +15,7 @@ package p2p
 
 import (
 	"context"
+	"maps"
 	"sync"
 	"time"
 
@@ -251,9 +252,7 @@ func (c *grpcMessageClient) runTx(ctx context.Context, stream MessageClientStrea
 func (c *grpcMessageClient) retrySending(ctx context.Context, stream MessageClientStream) error {
 	topicsCloned := make(map[string]*topicEntry)
 	c.topicMu.RLock()
-	for k, v := range c.topics {
-		topicsCloned[k] = v
-	}
+	maps.Copy(topicsCloned, c.topics)
 	c.topicMu.RUnlock()
 
 	batcher := c.newSenderFn(stream)
@@ -355,13 +354,13 @@ func (c *grpcMessageClient) runRx(ctx context.Context, stream MessageClientStrea
 // SendMessage sends a message. It will block if the client is not ready to
 // accept the message for now. Once the function returns without an error,
 // the client will try its best to send the message, until `Run` is canceled.
-func (c *grpcMessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+func (c *grpcMessageClient) SendMessage(ctx context.Context, topic Topic, value any) (seq Seq, ret error) {
 	return c.sendMessage(ctx, topic, value, false)
 }
 
 // TrySendMessage tries to send a message. It will return ErrPeerMessageSendTryAgain
 // if the client is not ready to accept the message.
-func (c *grpcMessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error) {
+func (c *grpcMessageClient) TrySendMessage(ctx context.Context, topic Topic, value any) (seq Seq, ret error) {
 	// FIXME (zixiong): This is a temporary way for testing client congestion.
 	// This failpoint will be removed once we abstract the MessageClient as an interface.
 	failpoint.Inject("ClientInjectSendMessageTryAgain", func() {
@@ -376,7 +375,7 @@ func (c *grpcMessageClient) TrySendMessage(ctx context.Context, topic Topic, val
 	return c.sendMessage(ctx, topic, value, true)
 }
 
-func (c *grpcMessageClient) sendMessage(ctx context.Context, topic Topic, value interface{}, nonblocking bool) (seq Seq, ret error) {
+func (c *grpcMessageClient) sendMessage(ctx context.Context, topic Topic, value any, nonblocking bool) (seq Seq, ret error) {
 	if c.isClosed.Load() {
 		return 0, cerrors.ErrPeerMessageClientClosed.GenWithStackByArgs()
 	}

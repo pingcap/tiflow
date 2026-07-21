@@ -48,7 +48,7 @@ func main() {
 	fmt.Println("proxy started")
 }
 
-func intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+func intercept(srv any, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	fmt.Println(info.FullMethod)
 	err := handler(srv, ss)
 	if err != nil {

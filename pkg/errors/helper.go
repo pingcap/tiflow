@@ -27,7 +27,7 @@ import (
 // as cause error.
 // If given `err` is nil, returns a nil error, which a the different behavior
 // against `Wrap` function in pingcap/errors.
-func WrapError(rfcError *errors.Error, err error, args ...interface{}) error {
+func WrapError(rfcError *errors.Error, err error, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -170,7 +170,7 @@ func IsCliUnprintableError(err error) bool {
 }
 
 // WrapChangefeedUnretryableErr wraps an error into ErrChangefeedUnRetryable.
-func WrapChangefeedUnretryableErr(err error, args ...interface{}) error {
+func WrapChangefeedUnretryableErr(err error, args ...any) error {
 	return WrapError(ErrChangefeedUnretryable, err, args...)
 }
 

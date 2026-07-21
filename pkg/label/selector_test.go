@@ -140,7 +140,6 @@ func TestSelectorMatches(t *testing.T) {
 	}
 
 	for idx, tc := range cases {
-		tc := tc
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.shouldMatch, tc.selector.Matches(tc.labels))
@@ -161,13 +160,11 @@ func TestSelectorRegexLazyCompile(t *testing.T) {
 	labelSetNotMatch := map[Key]Value{"tenant": "abcdef", "node_type": "2"}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			require.True(t, selector.Matches(labelSetMatch))
 			require.False(t, selector.Matches(labelSetNotMatch))
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -235,7 +232,6 @@ func TestSelectorValidate(t *testing.T) {
 	}
 
 	for idx, tc := range cases {
-		tc := tc
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
 			t.Parallel()
 			tc.checkErr(tc.selector.Validate())

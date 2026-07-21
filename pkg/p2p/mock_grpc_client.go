@@ -30,7 +30,7 @@ type mockSendMessageClient struct {
 	p2p.CDCPeerToPeer_SendMessageClient
 	ctx context.Context
 
-	msgCount int32
+	msgCount atomic.Int32
 	replyCh  chan *p2p.SendMessageResponse
 }
 
@@ -46,7 +46,7 @@ func (s *mockSendMessageClient) Send(packet *p2p.MessagePacket) error {
 	defer s.mu.Unlock()
 
 	args := s.Called(packet)
-	atomic.AddInt32(&s.msgCount, 1)
+	s.msgCount.Add(1)
 	return args.Error(0)
 }
 
