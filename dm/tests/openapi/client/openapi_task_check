@@ -385,6 +385,44 @@ def create_incremental_task_with_gtid_success(task_name,binlog_name1,binlog_pos1
     print("create_incremental_task_with_gtid_success resp=", resp.json())
     assert resp.status_code == 201
 
+def create_keep_meta_task_success(task_name, target_schema, binlog_name, binlog_pos, binlog_gtid):
+    task = {
+        "name": task_name,
+        "task_mode": "incremental",
+        "meta_schema": "dm_meta",
+        "enhance_online_schema_change": True,
+        "on_duplicate": "error",
+        "target_config": {
+            "host": "127.0.0.1",
+            "port": 4000,
+            "user": "root",
+            "password": "",
+        },
+        "table_migrate_rule": [
+            {
+                "source": {
+                    "source_name": SOURCE1_NAME,
+                    "schema": "openapi",
+                    "table": "keep_meta",
+                },
+                "target": {"schema": target_schema, "table": "keep_meta"},
+            },
+        ],
+        "source_config": {
+            "source_conf": [
+                {
+                    "source_name": SOURCE1_NAME,
+                    "binlog_name": binlog_name,
+                    "binlog_pos": int(binlog_pos),
+                    "binlog_gtid": binlog_gtid,
+                },
+            ],
+        },
+    }
+    resp = requests.post(url=API_ENDPOINT, json={"task": task})
+    print("create_keep_meta_task_success resp=", resp.json())
+    assert resp.status_code == 201
+
 def create_shard_task_success():
     task = {
         "name": SHARD_TASK_NAME,
@@ -630,6 +668,18 @@ def delete_task_with_force_success(task_name):
     resp = requests.delete(url=API_ENDPOINT + "/" + task_name + "?force=true")
     assert resp.status_code == 204
     print("delete_task_success")
+
+
+def delete_task_with_keep_meta_success(task_name):
+    resp = requests.delete(url=API_ENDPOINT + "/" + task_name + "?keep_meta=true")
+    assert resp.status_code == 204
+    print("delete_task_with_keep_meta_success")
+
+
+def delete_task_with_force_keep_meta_success(task_name):
+    resp = requests.delete(url=API_ENDPOINT + "/" + task_name + "?force=true&keep_meta=true")
+    assert resp.status_code == 204
+    print("delete_task_with_force_keep_meta_success")
 
 
 def get_task_status_failed(task_name):
@@ -1089,9 +1139,12 @@ if __name__ == "__main__":
         "create_dump_task_without_table_filter_success": create_dump_task_without_table_filter_success,
         "create_load_task_success": create_load_task_success,
         "create_incremental_task_with_gtid_success": create_incremental_task_with_gtid_success,
+        "create_keep_meta_task_success": create_keep_meta_task_success,
         "delete_task_failed": delete_task_failed,
         "delete_task_success": delete_task_success,
         "delete_task_with_force_success": delete_task_with_force_success,
+        "delete_task_with_keep_meta_success": delete_task_with_keep_meta_success,
+        "delete_task_with_force_keep_meta_success": delete_task_with_force_keep_meta_success,
         "start_task_success": start_task_success,
         "start_task_failed": start_task_failed,
         "start_task_with_condition": start_task_with_condition,
