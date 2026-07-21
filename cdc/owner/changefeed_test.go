@@ -201,7 +201,7 @@ func (m *mockScheduler) DrainCapture(_ model.CaptureID) (int, error) {
 }
 
 // Close closes the scheduler and releases resources.
-func (m *mockScheduler) Close(_ context.Context) {}
+func (m *mockScheduler) Close() {}
 
 func newMockDDLSink(_ model.ChangeFeedID, _ *model.ChangeFeedInfo, _ func(error), _ func(error)) DDLSink {
 	return &mockDDLSink{
