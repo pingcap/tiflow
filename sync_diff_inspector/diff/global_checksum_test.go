@@ -198,7 +198,7 @@ func TestGetSourceGlobalChecksumKeepsCheckpointOrder(t *testing.T) {
 	iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, nil)
 	require.NoError(t, err)
 
-	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "")
+	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "", 0, new(int64))
 	require.NoError(t, err)
 	require.Equal(t, int64(16), count)
 	require.Equal(t, uint64(10), checksum)
@@ -226,7 +226,7 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	iter, _, err := src.GetGlobalChecksumIterator(context.Background(), 0, &splitter.RangeInfo{ChunkRange: lastRange.Clone()})
 	require.NoError(t, err)
 
-	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "")
+	count, checksum, err := df.getSourceGlobalChecksum(context.Background(), src, 0, iter, state, "", 0, new(int64))
 	require.NoError(t, err)
 	require.Equal(t, int64(9), count)
 	require.Equal(t, uint64(12), checksum)
