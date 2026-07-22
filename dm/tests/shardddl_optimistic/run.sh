@@ -496,6 +496,7 @@ function run() {
 	DM_STOP_TASK_FOR_A_SOURCE
 	DM_UPDATE_BA_ROUTE
 	DM_CREATE_DROP_TABLE
+	DM_CHANGE_UTF_CHARSET
 }
 
 cleanup_data $shardddl
