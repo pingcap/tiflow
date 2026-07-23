@@ -1314,7 +1314,7 @@ func (s *Syncer) flushCheckPoints() error {
 	// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
 	// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
 	// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
-	if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
+	if isDownstreamExecutionError(err) {
 		s.tctx.L().Warn("error detected when executing SQL job, skip sync flush checkpoints",
 			zap.Stringer("checkpoint", s.checkpoint),
 			zap.Error(err))
@@ -1350,7 +1350,7 @@ func (s *Syncer) flushCheckPointsAsync(asyncFlushJob *job) {
 	// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
 	// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
 	// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
-	if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
+	if isDownstreamExecutionError(err) {
 		s.tctx.L().Warn("error detected when executing SQL job, skip async flush checkpoints",
 			zap.Stringer("checkpoint", s.checkpoint),
 			zap.Error(err))
@@ -1997,7 +1997,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 
 		// if any execute error, flush safemode exit point
-		if err2 = s.execError.Load(); err2 != nil && (terror.ErrDBExecuteFailed.Equal(err2) || terror.ErrDBUnExpect.Equal(err2)) {
+		if err2 = s.execError.Load(); isDownstreamExecutionError(err2) {
 			if err2 = s.checkpoint.FlushSafeModeExitPoint(s.tctx); err2 != nil {
 				s.tctx.L().Warn("failed to flush safe mode checkpoints when exit task", zap.Error(err2))
 			}
