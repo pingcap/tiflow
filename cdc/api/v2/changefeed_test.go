@@ -338,6 +338,44 @@ func TestGetChangeFeed(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, resp.ID, validID)
 	require.Nil(t, resp.Error)
+
+	// task_status should be returned for running changefeeds, including
+	// those in the warning state.
+	statusProvider.taskStatus = map[model.CaptureID]*model.TaskStatus{
+		"capture-1": {Tables: map[model.TableID]*model.TableReplicaInfo{
+			3508: {}, 3520: {},
+		}},
+	}
+	for _, tc := range []struct {
+		state          model.FeedState
+		wantTaskStatus bool
+	}{
+		{model.StateNormal, true},
+		{model.StateWarning, true},
+		{model.StateStopped, false},
+	} {
+		statusProvider.changefeedInfo = &model.ChangeFeedInfo{ID: validID, State: tc.state}
+		w = httptest.NewRecorder()
+		req, _ = http.NewRequestWithContext(
+			context.Background(),
+			cfInfo.method,
+			fmt.Sprintf(cfInfo.url, validID, "abc"),
+			nil,
+		)
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp = ChangeFeedInfo{}
+		err = json.NewDecoder(w.Body).Decode(&resp)
+		require.Nil(t, err)
+		require.Equal(t, tc.state, resp.State)
+		if tc.wantTaskStatus {
+			require.Len(t, resp.TaskStatus, 1, "state %s should return task_status", tc.state)
+			require.Equal(t, "capture-1", resp.TaskStatus[0].CaptureID)
+			require.ElementsMatch(t, []model.TableID{3508, 3520}, resp.TaskStatus[0].Tables)
+		} else {
+			require.Empty(t, resp.TaskStatus, "state %s should not return task_status", tc.state)
+		}
+	}
 }
 
 func TestUpdateChangefeed(t *testing.T) {

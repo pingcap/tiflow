@@ -210,7 +210,7 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 	}
 
 	taskStatus := make([]model.CaptureTaskStatus, 0)
-	if info.State == model.StateNormal {
+	if info.State.IsRunning() {
 		processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
 		if err != nil {
 			_ = c.Error(err)

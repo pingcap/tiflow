@@ -594,7 +594,7 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 	}
 
 	taskStatus := make([]model.CaptureTaskStatus, 0)
-	if cfInfo.State == model.StateNormal {
+	if cfInfo.State.IsRunning() {
 		processorInfos, err := h.capture.StatusProvider().GetAllTaskStatuses(
 			ctx,
 			changefeedID,
@@ -718,7 +718,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		return
 	}
 	taskStatus := make([]model.CaptureTaskStatus, 0)
-	if info.State == model.StateNormal {
+	if info.State.IsRunning() {
 		processorInfos, err := h.capture.StatusProvider().GetAllTaskStatuses(
 			ctx,
 			changefeedID,
