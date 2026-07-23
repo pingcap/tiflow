@@ -184,15 +184,6 @@ const (
       "check-balance-interval": 60000000000,
       "add-table-batch-size": 50
     },
-    "cdc-v2": {
-      "enable": false,
-      "meta-store": {
-        "uri": "",
-        "ssl-ca": "",
-        "ssl-cert": "",
-        "ssl-key": ""
-      }
-    },
     "puller": {
       "enable-resolved-ts-stuck-detection": false,
       "resolved-ts-stuck-interval": 300000000000,
