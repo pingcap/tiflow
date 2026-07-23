@@ -468,13 +468,10 @@ function DM_CHANGE_UTF_CHARSET_CASE() {
 	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2, 'b');"
 	run_sql_source2 "alter table ${shardddl1}.${tb1} character set utf8mb4 collate utf8mb4_bin;"
 	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3, 'c');"
-	run_sql_source2 "alter table ${shardddl1}.${tb2} character set utf8mb4 collate utf8mb4_bin;"
-	run_sql_source2 "insert into ${shardddl1}.${tb2} values(4, 'd');"
+	# left 1 shard table not finished. optimistic mode should not block data sync
 
-	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb};" "count(1): 4"
-	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
-		"show-ddl-locks" \
-		"no DDL lock exists" 1
+	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb};" "count(1): 3"
+	run_sql_tidb_with_retry "show create table ${shardddl}.${tb}" "CHARSET=utf8mb4"
 }
 
 function DM_CHANGE_UTF_CHARSET() {
