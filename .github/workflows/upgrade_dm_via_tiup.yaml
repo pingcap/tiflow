@@ -53,13 +53,13 @@ jobs:
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+          GOPATH=${GITHUB_WORKSPACE}/go docker compose up -d
 
       - name: Run test cases
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          docker-compose exec -T control bash -c "cd /go/src/github.com/pingcap/tiflow/dm && ./tests/tiup/upgrade-from-v1.sh"
+          docker compose exec -T control bash -c "cd /go/src/github.com/pingcap/tiflow/dm && ./tests/tiup/upgrade-from-v1.sh"
 
   from_v2:
     name: From V2
@@ -126,7 +126,7 @@ jobs:
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+          GOPATH=${GITHUB_WORKSPACE}/go docker compose up -d
 
       - name: Copy package files
         if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
@@ -141,7 +141,7 @@ jobs:
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          docker-compose exec -e ref=${{ github.ref }} -e id=${{ github.event.inputs.pr }} -T control bash -c "cd /go/src/github.com/pingcap/tiflow/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
+          docker compose exec -e ref=${{ github.ref }} -e id=${{ github.event.inputs.pr }} -T control bash -c "cd /go/src/github.com/pingcap/tiflow/dm && ./tests/tiup/upgrade-from-v2.sh ${{ matrix.previous_v2 }} nightly"
 
       # if above step is passed, logs will be removed by tiup dm destroy
       - name: Copy logs to hack permission
@@ -187,23 +187,23 @@ jobs:
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
           sed -i "s/tidb:v4.0.7/tidb:v3.0.19/g" docker-compose.yml
-          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+          GOPATH=${GITHUB_WORKSPACE}/go docker compose up -d
 
       - name: Run test cases before upgrade
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          docker-compose exec -T control bash -c "cd /go/src/github.com/pingcap/tiflow && ./dm/tests/tiup/upgrade-tidb.sh before_upgrade nightly"
+          docker compose exec -T control bash -c "cd /go/src/github.com/pingcap/tiflow && ./dm/tests/tiup/upgrade-tidb.sh before_upgrade nightly"
 
       - name: Upgrade TiDB
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
           sed -i "s/tidb:v3.0.19/tidb:v4.0.7/g" docker-compose.yml
-          GOPATH=${GITHUB_WORKSPACE}/go docker-compose up -d
+          GOPATH=${GITHUB_WORKSPACE}/go docker compose up -d
 
       - name: Run test cases after upgrade
         working-directory: ${{ env.working-directory }}
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
-          docker-compose exec -T control bash -c "source /root/.profile && cd /go/src/github.com/pingcap/tiflow && ./dm/tests/tiup/upgrade-tidb.sh after_upgrade nightly"
+          docker compose exec -T control bash -c "source /root/.profile && cd /go/src/github.com/pingcap/tiflow && ./dm/tests/tiup/upgrade-tidb.sh after_upgrade nightly"
