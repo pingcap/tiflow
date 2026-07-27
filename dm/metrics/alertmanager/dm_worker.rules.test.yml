@@ -1,0 +1,44 @@
+rule_files:
+  - dm_worker.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: master syncer binlog gap alerts for running tasks
+    interval: 1m
+    input_series:
+      - series: 'dm_syncer_binlog_file{instance="worker-1",job="dm_worker",node="master",source_id="mysql-01",task="test"}'
+        values: '12x11'
+      - series: 'dm_syncer_binlog_file{instance="worker-1",job="dm_worker",node="syncer",source_id="mysql-01",task="test"}'
+        values: '10x11'
+      - series: 'dm_worker_task_state{instance="worker-1",job="dm_worker",source_id="mysql-01",task="test",worker="worker-1"}'
+        values: '2x11'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DM_binlog_file_gap_between_master_syncer
+        exp_alerts:
+          - exp_labels:
+              env: ENV_LABELS_ENV
+              expr: '(dm_syncer_binlog_file{node="master"} - ON(instance, task, job) dm_syncer_binlog_file{node="syncer"} > 1) and ON(instance, task, job) (dm_worker_task_state == 2)'
+              instance: worker-1
+              job: dm_worker
+              level: critical
+              task: test
+            exp_annotations:
+              description: 'cluster: ENV_LABELS_ENV, instance: worker-1, task: test, values: 2'
+              summary: dm syncer binlog file not catch up master server exceed 10 min
+              value: '2'
+
+  - name: master syncer binlog gap ignores paused tasks
+    interval: 1m
+    input_series:
+      - series: 'dm_syncer_binlog_file{instance="worker-1",job="dm_worker",node="master",source_id="mysql-01",task="test"}'
+        values: '12x11'
+      - series: 'dm_syncer_binlog_file{instance="worker-1",job="dm_worker",node="syncer",source_id="mysql-01",task="test"}'
+        values: '10x11'
+      - series: 'dm_worker_task_state{instance="worker-1",job="dm_worker",source_id="mysql-01",task="test",worker="worker-1"}'
+        values: '3x11'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: DM_binlog_file_gap_between_master_syncer
+        exp_alerts: []
