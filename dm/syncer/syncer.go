@@ -521,9 +521,26 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		metricProxies.Init(s.cfg.MetricsFactory)
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
+	s.initSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
 
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
+}
+
+func (s *Syncer) initSyncerBinlogMetrics(checkpoint binlog.Location) {
+	s.metricsProxies.Metrics.BinlogSyncerPosGauge.Set(float64(checkpoint.Position.Pos))
+
+	index, err := utils.GetFilenameIndex(checkpoint.Position.Name)
+	if err != nil {
+		// An empty binlog filename is expected for a fresh or GTID-only checkpoint.
+		// Use NaN so the unknown file number is not exposed as a valid zero value.
+		s.metricsProxies.Metrics.BinlogSyncerFileGauge.Set(math.NaN())
+		if checkpoint.Position.Name != "" {
+			s.tctx.L().Warn("fail to get index number of checkpoint binlog file", log.ShortError(err))
+		}
+		return
+	}
+	s.metricsProxies.Metrics.BinlogSyncerFileGauge.Set(float64(index))
 }
 
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
