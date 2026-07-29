@@ -1829,6 +1829,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	// Init initializes metrics for tasks that do not enter Run. Refresh them
+	// here because Run may select a different checkpoint from start time or
+	// metadata, and GTID adjustment may further update the global checkpoint.
+	s.initSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
+
 	if fresh && config.HasLoad(s.cfg.Mode) {
 		delLoadTask = true
 		flushCheckpoint = true

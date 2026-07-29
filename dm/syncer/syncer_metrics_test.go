@@ -49,7 +49,7 @@ func TestInitSyncerBinlogMetrics(t *testing.T) {
 			expectedPos:  560567,
 		},
 		{
-			name:         "missing position",
+			name:         "fresh checkpoint with empty binlog filename",
 			checkpoint:   binlog.MustZeroLocation(mysql.MySQLFlavor),
 			expectedFile: math.NaN(),
 			expectedPos:  float64(binlog.MinPosition.Pos),
