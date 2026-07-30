@@ -32,12 +32,12 @@ import (
 type mockClientBatchSender struct {
 	mock.Mock
 
-	sendCnt int32 // atomic
+	sendCnt atomic.Int32 // atomic
 }
 
 func (s *mockClientBatchSender) Append(msg MessageEntry) error {
 	args := s.Called(msg)
-	atomic.AddInt32(&s.sendCnt, 1)
+	s.sendCnt.Add(1)
 	return args.Error(0)
 }
 
@@ -82,16 +82,16 @@ func TestMessageClientBasics(t *testing.T) {
 	connector := &mockClientConnector{}
 	grpcClient := &mockCDCPeerToPeerClient{}
 	client.connector = connector
-	var closed int32
+	var closed atomic.Int32
 	connector.On("Connect", mock.Anything).Return(
 		grpcClient,
 		func() {
-			require.Equal(t, int32(0), atomic.LoadInt32(&closed))
-			atomic.StoreInt32(&closed, 1)
+			require.Equal(t, int32(0), closed.Load())
+			closed.Store(1)
 		},
 		nil,
 	).Run(func(_ mock.Arguments) {
-		atomic.StoreInt32(&closed, 0)
+		closed.Store(0)
 	})
 
 	// Test point 1: Connecting to the server and sends the meta
@@ -113,17 +113,15 @@ func TestMessageClientBasics(t *testing.T) {
 	grpcStream.On("Recv").Return(nil, nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "", "", "node-2", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, "context canceled", err.Error())
-	}()
+	})
 
 	// wait for the stream meta to be received
 	require.Eventuallyf(t, func() bool {
-		return atomic.LoadInt32(&grpcStream.msgCount) > 0
+		return grpcStream.msgCount.Load() > 0
 	}, time.Second*1, time.Millisecond*10, "meta should have been received")
 
 	connector.AssertExpectations(t)
@@ -139,7 +137,7 @@ func TestMessageClientBasics(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), seq)
 	require.Eventuallyf(t, func() bool {
-		return atomic.LoadInt32(&sender.sendCnt) == 1
+		return sender.sendCnt.Load() == 1
 	}, time.Second*1, time.Millisecond*10, "message should have been received")
 	sender.AssertExpectations(t)
 
@@ -176,7 +174,7 @@ func TestMessageClientBasics(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(2), seq)
 	require.Eventuallyf(t, func() bool {
-		return atomic.LoadInt32(&sender.sendCnt) == 2
+		return sender.sendCnt.Load() == 2
 	}, time.Second*1, time.Millisecond*10, "message should have been received")
 	sender.AssertExpectations(t)
 
@@ -209,7 +207,7 @@ func TestMessageClientBasics(t *testing.T) {
 	}).Once()
 
 	// Resets the sentCnt
-	atomic.StoreInt32(&sender.sendCnt, 0)
+	sender.sendCnt.Store(0)
 	grpcStream.replyCh <- &p2p.SendMessageResponse{
 		ExitReason: p2p.ExitReason_OK,
 		Ack: []*p2p.Ack{{
@@ -219,7 +217,7 @@ func TestMessageClientBasics(t *testing.T) {
 	}
 	// We expect the message to be resent
 	require.Eventually(t, func() bool {
-		return atomic.LoadInt32(&sender.sendCnt) == 1
+		return sender.sendCnt.Load() == 1
 	}, time.Second*1, time.Millisecond*10, "message should have been resent")
 	sender.AssertExpectations(t)
 
@@ -263,13 +261,11 @@ func TestClientPermanentFailure(t *testing.T) {
 	}, nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx, "", "", "node-2", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrPeerMessageClientPermanentFail.*", err.Error())
-	}()
+	})
 
 	wg.Wait()
 
@@ -324,13 +320,11 @@ func TestClientSendAnomalies(t *testing.T) {
 	sender.On("Append", mock.Anything).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(runCtx, "", "", "node-2", &security.Credential{})
 		require.Error(t, err)
 		require.Regexp(t, ".*context canceled.*", err.Error())
-	}()
+	})
 
 	// Test point 1: ErrPeerMessageSendTryAgain
 	_, err := client.TrySendMessage(ctx, "test-topic", &testMessage{Value: 1})

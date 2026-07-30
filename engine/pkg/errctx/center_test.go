@@ -26,17 +26,14 @@ func TestErrCenterMultipleErrCtx(t *testing.T) {
 	center := NewErrCenter()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range 10 {
+		wg.Go(func() {
 			ctx, cancel := center.WithCancelOnFirstError(context.Background())
 			defer cancel()
 			<-ctx.Done()
 			require.Error(t, ctx.Err())
 			require.EqualError(t, ctx.Err(), "fake error")
-		}()
+		})
 	}
 
 	center.OnError(errors.New("fake error"))
@@ -53,15 +50,12 @@ func TestErrCenterSingleErrCtx(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range 10 {
+		wg.Go(func() {
 			<-ctx.Done()
 			require.Error(t, ctx.Err())
 			require.EqualError(t, ctx.Err(), "fake error")
-		}()
+		})
 	}
 
 	center.OnError(errors.New("fake error"))

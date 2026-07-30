@@ -14,6 +14,7 @@
 package rollback
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -53,8 +54,8 @@ func (h *FuncRollbackHolder) Add(fn FuncRollback) {
 func (h *FuncRollbackHolder) RollbackReverseOrder() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for i := len(h.fns) - 1; i >= 0; i-- {
-		fn := h.fns[i]
+	for _, fn := range slices.Backward(h.fns) {
+
 		log.L().Info("rolling back", zap.String("functon", fn.Name), zap.String("onwer", h.owner))
 		fn.Fn()
 	}

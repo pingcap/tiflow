@@ -30,10 +30,10 @@ type MessageClient interface {
 	Run(ctx context.Context, network string, addr string, receiverID NodeID, credential *security.Credential) (ret error)
 
 	// SendMessage sends a message of a given topic. It would block if the inner channel is congested.
-	SendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error)
+	SendMessage(ctx context.Context, topic Topic, value any) (seq Seq, ret error)
 
 	// TrySendMessage tries to send a message of a given topic. It will return an error if the inner channel is congested.
-	TrySendMessage(ctx context.Context, topic Topic, value interface{}) (seq Seq, ret error)
+	TrySendMessage(ctx context.Context, topic Topic, value any) (seq Seq, ret error)
 
 	// CurrentAck is used to query the latest sequence number for a topic that is acknowledged by the server.
 	// Note: currently only used for test.
@@ -87,7 +87,7 @@ func (c *localMessageClient) Run(
 	return nil
 }
 
-func (c *localMessageClient) SendMessage(ctx context.Context, topic Topic, value interface{}) (Seq, error) {
+func (c *localMessageClient) SendMessage(ctx context.Context, topic Topic, value any) (Seq, error) {
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()
@@ -98,7 +98,7 @@ func (c *localMessageClient) SendMessage(ctx context.Context, topic Topic, value
 	}
 }
 
-func (c *localMessageClient) TrySendMessage(ctx context.Context, topic Topic, value interface{}) (Seq, error) {
+func (c *localMessageClient) TrySendMessage(ctx context.Context, topic Topic, value any) (Seq, error) {
 	select {
 	case <-ctx.Done():
 		return 0, ctx.Err()

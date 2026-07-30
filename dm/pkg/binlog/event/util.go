@@ -111,7 +111,7 @@ func nullBytes(n int) []byte {
 // fullBytes returns a n-length full bytes slice (all bits are set).
 func fullBytes(n int) []byte {
 	buf := new(bytes.Buffer)
-	for i := 0; i < n; i++ {
+	for range n {
 		buf.WriteByte(0xff)
 	}
 	return buf.Bytes()
@@ -197,7 +197,7 @@ func combineHeaderPayload(buf *bytes.Buffer, header, postHeader, payload []byte)
 // ref: https://github.com/go-mysql-org/go-mysql/blob/88e9cd7f6643b246b4dcc0e3206e9a169dd0ac96/replication/row_event.go#L368
 // NOTE: we do not generate meaningful `meta` yet.
 // nolint:unparam
-func encodeColumnValue(v interface{}, tp byte, meta uint16) ([]byte, error) {
+func encodeColumnValue(v any, tp byte, meta uint16) ([]byte, error) {
 	var (
 		buf = new(bytes.Buffer)
 		err error
@@ -206,33 +206,33 @@ func encodeColumnValue(v interface{}, tp byte, meta uint16) ([]byte, error) {
 	case gmysql.MYSQL_TYPE_NULL:
 		return nil, nil
 	case gmysql.MYSQL_TYPE_LONG:
-		err = writeIntegerColumnValue(buf, v, reflect.TypeOf(int32(0)))
+		err = writeIntegerColumnValue(buf, v, reflect.TypeFor[int32]())
 	case gmysql.MYSQL_TYPE_TINY:
-		err = writeIntegerColumnValue(buf, v, reflect.TypeOf(int8(0)))
+		err = writeIntegerColumnValue(buf, v, reflect.TypeFor[int8]())
 	case gmysql.MYSQL_TYPE_SHORT:
-		err = writeIntegerColumnValue(buf, v, reflect.TypeOf(int16(0)))
+		err = writeIntegerColumnValue(buf, v, reflect.TypeFor[int16]())
 	case gmysql.MYSQL_TYPE_INT24:
-		err = writeIntegerColumnValue(buf, v, reflect.TypeOf(int32(0)))
+		err = writeIntegerColumnValue(buf, v, reflect.TypeFor[int32]())
 		if err == nil {
 			buf.Truncate(3)
 		}
 	case gmysql.MYSQL_TYPE_LONGLONG:
-		err = writeIntegerColumnValue(buf, v, reflect.TypeOf(int64(0)))
+		err = writeIntegerColumnValue(buf, v, reflect.TypeFor[int64]())
 	case gmysql.MYSQL_TYPE_FLOAT:
 		value, ok := v.(float32)
 		if !ok {
-			err = terror.ErrBinlogColumnTypeMisMatch.Generate(v, reflect.TypeOf(v), reflect.TypeOf(float32(0)))
+			err = terror.ErrBinlogColumnTypeMisMatch.Generate(v, reflect.TypeOf(v), reflect.TypeFor[float32]())
 		} else {
 			bits := math.Float32bits(value)
-			err = writeIntegerColumnValue(buf, bits, reflect.TypeOf(uint32(0)))
+			err = writeIntegerColumnValue(buf, bits, reflect.TypeFor[uint32]())
 		}
 	case gmysql.MYSQL_TYPE_DOUBLE:
 		value, ok := v.(float64)
 		if !ok {
-			err = terror.ErrBinlogColumnTypeMisMatch.Generate(v, reflect.TypeOf(v), reflect.TypeOf(float64(0)))
+			err = terror.ErrBinlogColumnTypeMisMatch.Generate(v, reflect.TypeOf(v), reflect.TypeFor[float64]())
 		} else {
 			bits := math.Float64bits(value)
-			err = writeIntegerColumnValue(buf, bits, reflect.TypeOf(uint64(0)))
+			err = writeIntegerColumnValue(buf, bits, reflect.TypeFor[uint64]())
 		}
 	case gmysql.MYSQL_TYPE_STRING:
 		err = writeStringColumnValue(buf, v)
@@ -252,7 +252,7 @@ func encodeColumnValue(v interface{}, tp byte, meta uint16) ([]byte, error) {
 }
 
 // writeIntegerColumnValue writes integer value to bytes buffer.
-func writeIntegerColumnValue(buf *bytes.Buffer, value interface{}, valueType reflect.Type) error {
+func writeIntegerColumnValue(buf *bytes.Buffer, value any, valueType reflect.Type) error {
 	if reflect.TypeOf(value) != valueType {
 		return terror.ErrBinlogColumnTypeMisMatch.Generate(value, reflect.TypeOf(value), valueType)
 	}
@@ -260,10 +260,10 @@ func writeIntegerColumnValue(buf *bytes.Buffer, value interface{}, valueType ref
 }
 
 // writeStringColumnValue writes string value to bytes buffer.
-func writeStringColumnValue(buf *bytes.Buffer, value interface{}) error {
+func writeStringColumnValue(buf *bytes.Buffer, value any) error {
 	str, ok := value.(string)
 	if !ok {
-		return terror.ErrBinlogColumnTypeMisMatch.Generate(value, reflect.TypeOf(value), reflect.TypeOf(""))
+		return terror.ErrBinlogColumnTypeMisMatch.Generate(value, reflect.TypeOf(value), reflect.TypeFor[string]())
 	}
 	var (
 		err    error

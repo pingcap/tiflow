@@ -78,22 +78,18 @@ func (s *messageRouterTestSuite) addServer(ctx context.Context, t *testing.T, id
 
 	s.messageRouter.AddPeer(id, addr)
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		defer grpcServer.Stop()
 		defer s.messageRouter.RemovePeer(id)
 		err := newServer.Run(ctx, nil)
 		if err != nil {
 			require.Regexp(t, ".*context canceled.*", err.Error())
 		}
-	}()
+	})
 }
 
 func (s *messageRouterTestSuite) close() {
@@ -123,7 +119,7 @@ func TestMessageRouterBasic(t *testing.T) {
 	require.Nilf(t, noClient, "no client should have been created")
 
 	var lastIndex [3]int64
-	mustAddHandler(ctx, t, suite.getServer("server-1"), "test-topic", &testTopicContent{}, func(senderID string, i interface{}) error {
+	mustAddHandler(ctx, t, suite.getServer("server-1"), "test-topic", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
 		content := i.(*testTopicContent)
@@ -132,7 +128,7 @@ func TestMessageRouterBasic(t *testing.T) {
 		return nil
 	})
 
-	mustAddHandler(ctx, t, suite.getServer("server-2"), "test-topic", &testTopicContent{}, func(senderID string, i interface{}) error {
+	mustAddHandler(ctx, t, suite.getServer("server-2"), "test-topic", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
 		content := i.(*testTopicContent)
@@ -141,7 +137,7 @@ func TestMessageRouterBasic(t *testing.T) {
 		return nil
 	})
 
-	mustAddHandler(ctx, t, suite.getServer("server-3"), "test-topic", &testTopicContent{}, func(senderID string, i interface{}) error {
+	mustAddHandler(ctx, t, suite.getServer("server-3"), "test-topic", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
 		content := i.(*testTopicContent)
@@ -151,7 +147,7 @@ func TestMessageRouterBasic(t *testing.T) {
 	})
 
 	var lastSeq [3]Seq
-	for i := 0; i < defaultMessageBatchSizeLarge; i++ {
+	for i := range defaultMessageBatchSizeLarge {
 		serverIdx := i % 3
 		serverID := fmt.Sprintf("server-%d", serverIdx+1)
 		Seq, err := suite.messageRouter.GetClient(serverID).SendMessage(ctx, "test-topic", &testTopicContent{int64(i/3) + 1})
@@ -197,7 +193,7 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 	suite.addServer(ctx, t, "server-2")
 
 	var lastIndex [3]int64
-	mustAddHandler(ctx, t, suite.getServer("server-1"), "test-topic", &testTopicContent{}, func(senderID string, i interface{}) error {
+	mustAddHandler(ctx, t, suite.getServer("server-1"), "test-topic", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
 		content := i.(*testTopicContent)
@@ -206,7 +202,7 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 		return nil
 	})
 
-	mustAddHandler(ctx, t, suite.getServer("server-2"), "test-topic", &testTopicContent{}, func(senderID string, i interface{}) error {
+	mustAddHandler(ctx, t, suite.getServer("server-2"), "test-topic", &testTopicContent{}, func(senderID string, i any) error {
 		require.Equal(t, "test-client-1", senderID)
 		require.IsType(t, &testTopicContent{}, i)
 		content := i.(*testTopicContent)
@@ -216,11 +212,9 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 	})
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		var lastSeq Seq
-		for i := 0; i < defaultMessageBatchSizeLarge; i++ {
+		for i := range defaultMessageBatchSizeLarge {
 			var err error
 			lastSeq, err = suite.messageRouter.GetClient("server-1").
 				SendMessage(ctx, "test-topic", &testTopicContent{int64(i + 1)})
@@ -233,14 +227,12 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 			}
 			return seq >= lastSeq
 		}, time.Second*10, time.Millisecond*20)
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		client := suite.messageRouter.GetClient("server-2")
 		require.NotNil(t, client)
-		for i := 0; i < defaultMessageBatchSizeSmall; i++ {
+		for i := range defaultMessageBatchSizeSmall {
 			var err error
 			_, err = client.SendMessage(ctx, "test-topic", &testTopicContent{int64(i + 1)})
 			require.NoError(t, err)
@@ -253,7 +245,7 @@ func TestMessageRouterRemovePeer(t *testing.T) {
 			return err != nil
 		}, time.Millisecond*500, time.Millisecond*50)
 		require.Regexp(t, ".*ErrPeerMessageClientClosed.*", err.Error())
-	}()
+	})
 
 	wg.Wait()
 	suite.close()

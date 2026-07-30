@@ -72,11 +72,11 @@ func run(host string, port string) {
 	}
 
 	var wg sync.WaitGroup
-	for k := 0; k < concurrency; k++ {
+	for k := range concurrency {
 		wg.Add(1)
 		go func(k int) {
 			defer wg.Done()
-			for i := 0; i < num; i++ {
+			for i := range num {
 				val := k*num + i
 				_, err = db.Exec(insertDML, val, val)
 				if err != nil {

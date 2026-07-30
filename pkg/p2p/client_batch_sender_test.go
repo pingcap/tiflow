@@ -14,7 +14,6 @@
 package p2p
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"testing"
@@ -25,8 +24,7 @@ import (
 )
 
 func TestClientBatchSenderMaxCount(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	grpcStream := newMockSendMessageClient(ctx)
 	sender := newClientBatchSender(grpcStream, 100, math.MaxInt64)
@@ -61,8 +59,7 @@ func TestClientBatchSenderMaxCount(t *testing.T) {
 }
 
 func TestClientBatchSenderMaxSize(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	grpcStream := newMockSendMessageClient(ctx)
 	sender := newClientBatchSender(grpcStream, math.MaxInt64, 1000)
@@ -100,8 +97,7 @@ func TestClientBatchSenderMaxSize(t *testing.T) {
 }
 
 func TestClientBatchSenderFlush(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	grpcStream := newMockSendMessageClient(ctx)
 	sender := newClientBatchSender(grpcStream, math.MaxInt64, 1000)

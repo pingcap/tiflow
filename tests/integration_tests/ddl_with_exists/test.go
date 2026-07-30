@@ -54,7 +54,7 @@ func main() {
 	db.SetMaxOpenConns(concurrency)
 
 	start := time.Now()
-	for i := 0; i < maxTableCnt; i++ {
+	for i := range maxTableCnt {
 		_, err := db.Exec(fmt.Sprintf(createTable, i))
 		if err != nil {
 			log.Fatal("create table failed:", i, ", err: ", err)
@@ -63,12 +63,10 @@ func main() {
 	log.Println("create table cost:", time.Since(start).Seconds(), "s")
 
 	var wg sync.WaitGroup
-	for i := 0; i < concurrency; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range concurrency {
+		wg.Go(func() {
 			log.Println("worker start:", i)
-			for j := 0; j < 20; j++ {
+			for range 20 {
 				idx := rand.Intn(maxTableCnt)
 				ddl := fmt.Sprintf(createTable, idx)
 				switch rand.Intn(5) {
@@ -88,7 +86,7 @@ func main() {
 				}
 			}
 			log.Println("worker exit:", i)
-		}()
+		})
 	}
 	wg.Wait()
 }

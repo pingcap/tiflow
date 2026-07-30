@@ -69,10 +69,7 @@ func NewChunkQueueLeastCapacity[T any](minCapacity int) *ChunkQueue[T] {
 		elementSize = 1
 	}
 
-	chunkLength := int(defaultSizePerChunk / elementSize)
-	if chunkLength < minimumChunkLen {
-		chunkLength = minimumChunkLen
-	}
+	chunkLength := max(int(defaultSizePerChunk/elementSize), minimumChunkLen)
 
 	q := &ChunkQueue[T]{
 		head:        0,
@@ -159,7 +156,7 @@ func (q *ChunkQueue[T]) addSpace(n int) {
 		q.adjustChunksArray(chunksNum)
 	}
 
-	for i := 0; i < chunksNum; i++ {
+	for range chunksNum {
 		c := q.chunkPool.Get().(*chunk[T])
 		c.queue = q
 		q.chunks[q.tail] = c
@@ -192,10 +189,7 @@ func (q *ChunkQueue[T]) adjustChunksArray(extend int) {
 		}
 	case extend < 0:
 		// for shrink, the new length is max(defaultLength, tail - head + 1)
-		newLen = used + 1
-		if newLen < defaultPitchArrayLen {
-			newLen = defaultPitchArrayLen
-		}
+		newLen = max(used+1, defaultPitchArrayLen)
 	}
 	if newLen != len(q.chunks) {
 		// If the length changed, allocate a new array and do copy
@@ -241,10 +235,7 @@ func (q *ChunkQueue[T]) PushMany(vals ...T) {
 
 	var addLen int
 	for n > 0 {
-		addLen = q.chunkLength - c.r
-		if addLen > n {
-			addLen = n
-		}
+		addLen = min(q.chunkLength-c.r, n)
 		copy(c.data[c.r:c.r+addLen], vals[cnt:cnt+addLen])
 		c.r += addLen
 		q.size += addLen
@@ -308,10 +299,7 @@ func (q *ChunkQueue[T]) PopMany(n int) ([]T, bool) {
 	cnt := 0
 	for i := q.head; i < q.tail && cnt < n; i++ {
 		c := q.chunks[i]
-		popLen := c.len()
-		if n-cnt < popLen {
-			popLen = n - cnt
-		}
+		popLen := min(n-cnt, c.len())
 		for j := 0; j < popLen; j++ {
 			res[cnt+j] = c.data[c.l+j]
 			c.data[c.l+j] = q.defaultValue

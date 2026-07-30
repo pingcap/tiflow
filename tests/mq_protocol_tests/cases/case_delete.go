@@ -49,9 +49,9 @@ func (c *DeleteCase) Run(ctx *framework.TaskContext) error {
 
 	// To wait on a batch of SQL requests, create a slice of Awaitables
 	reqs := make([]framework.Awaitable, 0)
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		// Only send, do not wait
-		req := table.Insert(map[string]interface{}{
+		req := table.Insert(map[string]any{
 			"id":    i,
 			"value": i,
 		}).Send()
@@ -64,8 +64,8 @@ func (c *DeleteCase) Run(ctx *framework.TaskContext) error {
 	}
 
 	deletes := make([]framework.Awaitable, 0, 1000)
-	for i := 0; i < 1000; i++ {
-		req := table.Delete(map[string]interface{}{
+	for i := range 1000 {
+		req := table.Delete(map[string]any{
 			"id": i,
 		}).Send()
 		deletes = append(deletes, req)

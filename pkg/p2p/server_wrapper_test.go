@@ -37,12 +37,12 @@ import (
 type mockGrpcService struct {
 	mock.Mock
 	t           *testing.T
-	streamCount int64
+	streamCount atomic.Int64
 }
 
 func (s *mockGrpcService) SendMessage(stream MessageServerStream) error {
-	atomic.AddInt64(&s.streamCount, 1)
-	defer atomic.AddInt64(&s.streamCount, -1)
+	s.streamCount.Add(1)
+	defer s.streamCount.Add(-1)
 
 	go func() {
 		for {
@@ -75,11 +75,9 @@ func newServerWrapperForTesting(t *testing.T) (server *ServerWrapper, newClient 
 	p2p.RegisterCDCPeerToPeerServer(grpcServer, server)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = grpcServer.Serve(lis)
-	}()
+	})
 
 	cancel = func() {
 		grpcServer.Stop()
@@ -138,7 +136,7 @@ func TestServerWrapperBasics(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	innerServer.AssertExpectations(t)
 
-	require.Equal(t, int64(1), atomic.LoadInt64(&innerServer.streamCount))
+	require.Equal(t, int64(1), innerServer.streamCount.Load())
 
 	serverWrapper.Reset(nil)
 	_, err = clientStream.Recv()

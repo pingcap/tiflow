@@ -43,7 +43,7 @@ func newConflictTestDriver(
 	})
 
 	workers := make([]*workerForTest, 0, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		id := int64(i)
 		workers = append(workers, newWorkerForTest(detector.GetOutChByCacheID(id)))
 	}

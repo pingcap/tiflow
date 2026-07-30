@@ -47,7 +47,7 @@ func TestChunkQueueCommon(t *testing.T) {
 	// PushMany & PopMany
 	elements := make([]int, 0, testCaseSize)
 	require.True(t, q.Empty())
-	for i := 0; i < testCaseSize; i++ {
+	for i := range testCaseSize {
 		elements = append(elements, i)
 	}
 	q.PushMany(elements...)
@@ -66,7 +66,7 @@ func TestChunkQueueCommon(t *testing.T) {
 	q.PushMany(elements...)
 	require.Equal(t, testCaseSize, q.Len())
 	require.False(t, q.Empty())
-	for j := 0; j < testCaseSize; j++ {
+	for range testCaseSize {
 		i := rand.Intn(testCaseSize)
 		v := q.Peek(i)
 		it := q.GetIterator(i)
@@ -89,7 +89,7 @@ func TestChunkQueueCommon(t *testing.T) {
 	require.True(t, ok)
 
 	// Pop one by one
-	for i := 0; i < testCaseSize; i++ {
+	for i := range testCaseSize {
 		h, ok := q.Head()
 		require.Equal(t, i, h)
 		require.True(t, ok)
@@ -161,7 +161,7 @@ func doRandomTest[T comparable](t *testing.T, getVal func() T) {
 	q := NewChunkQueue[T]()
 	slice := make([]T, 0, 100)
 	var val T
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		op := rand.Intn(4)
 		if i == 99 {
 			op = opPopAll
@@ -174,7 +174,7 @@ func doRandomTest[T comparable](t *testing.T, getVal func() T) {
 		case opPushMany:
 			n := rand.Intn(1024) + 1
 			vals := make([]T, n)
-			for j := 0; j < n; j++ {
+			for range n {
 				vals = append(vals, getVal())
 			}
 			q.PushMany(vals...)
@@ -201,14 +201,14 @@ func doRandomTest[T comparable](t *testing.T, getVal func() T) {
 				popSlice := slice[0:n]
 				slice = append(make([]T, 0, len(slice[n:])), slice[n:]...)
 
-				for i := 0; i < len(pops); i++ {
+				for i := range pops {
 					require.Equal(t, popSlice[i], pops[i])
 				}
 			}
 		case opPopAll:
 			pops := q.PopAll()
 			require.Equal(t, len(pops), len(slice))
-			for i := 0; i < len(pops); i++ {
+			for i := range pops {
 				require.Equal(t, slice[i], pops[i])
 			}
 			slice = slice[:0]
@@ -231,7 +231,7 @@ func TestExpand(t *testing.T) {
 	t.Parallel()
 	q := NewChunkQueue[int]()
 
-	for i := 0; i < testCaseSize; i++ {
+	for range testCaseSize {
 		q.Push(1)
 		require.Equal(t, 1, q.Len())
 		freeSpace := q.Cap() - q.Len()
@@ -248,7 +248,7 @@ func TestDequeueMany(t *testing.T) {
 
 	q := NewChunkQueue[int]()
 	x := testCaseSize
-	for v := 0; v < x; v++ {
+	for v := range x {
 		q.Push(v)
 	}
 	f := 0
@@ -280,7 +280,7 @@ func TestRange(t *testing.T) {
 	t.Parallel()
 
 	q := NewChunkQueue[int]()
-	for i := 0; i < testCaseSize; i++ {
+	for i := range testCaseSize {
 		q.Push(i)
 	}
 
@@ -329,7 +329,7 @@ func TestRangeAndPop(t *testing.T) {
 	t.Parallel()
 
 	q := NewChunkQueue[int]()
-	for i := 0; i < testCaseSize; i++ {
+	for i := range testCaseSize {
 		q.Push(i)
 	}
 
@@ -393,7 +393,7 @@ func TestChunkQueuePushMany(t *testing.T) {
 
 func prepareSlice(n int) []int {
 	data := make([]int, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		data = append(data, i)
 	}
 	return data
@@ -401,7 +401,7 @@ func prepareSlice(n int) []int {
 
 func prepareChunkQueue(n int) *ChunkQueue[int] {
 	q := NewChunkQueue[int]()
-	for i := 0; i < n; i++ {
+	for i := range n {
 		q.Push(i)
 	}
 	return q
@@ -488,7 +488,7 @@ func BenchmarkPopMany(b *testing.B) {
 	b.Run("PopMany-3rdPartyDeque", func(b *testing.B) {
 		x := b.N
 		q := deque.NewDeque()
-		for i := 0; i < x; i++ {
+		for i := range x {
 			q.Enqueue(i)
 		}
 		ls := []int{x / 5, x / 5, x / 5, x / 5, x - x/5*4}
@@ -542,7 +542,7 @@ func BenchmarkChunkQueueLoopPop(b *testing.B) {
 		q.RangeAndPop(func(val int) bool {
 			return val < 0
 		})
-		for i := 0; i < x; i++ {
+		for range x {
 			v, _ := q.Head()
 			if v < 0 {
 				break

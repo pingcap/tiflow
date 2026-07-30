@@ -24,7 +24,7 @@ type WorkerPool interface {
 	// RegisterEvent returns a handle that can be used to trigger the execution of `f`.
 	// `f` will be called with a context that is a child of the context with which Run is called.
 	// TODO more reasonable usage of contexts, potentially involving context merging.
-	RegisterEvent(f func(ctx context.Context, event interface{}) error) EventHandle
+	RegisterEvent(f func(ctx context.Context, event any) error) EventHandle
 
 	// Run runs the WorkerPool.
 	// Internally several Goroutines are spawned.
@@ -39,10 +39,10 @@ type EventHandle interface {
 	// Note: events are always processed in the order they are added.
 	// Unregistering the EventHandle MAY CAUSE EVENT LOSSES. But for an event lost, any event after it is guaranteed to be lost too.
 	// Cancelling `ctx` here will cancel the on-going or next execution of the event.
-	AddEvent(ctx context.Context, event interface{}) error
+	AddEvent(ctx context.Context, event any) error
 
 	// AddEvents is like AddEvent but retrieves a slice instead of an object.
-	AddEvents(ctx context.Context, events []interface{}) error
+	AddEvents(ctx context.Context, events []any) error
 
 	// SetTimer is used to provide a function that is periodic called, as long as the EventHandle has not been unregistered.
 	// The current implementation uses as the base clock source a ticker whose interval is the const workerPoolDefaultClockSourceInterval.

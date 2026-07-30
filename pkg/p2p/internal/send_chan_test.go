@@ -40,10 +40,8 @@ func TestSendChanBasics(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Runs the producers
-	for i := 0; i < numProducers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numProducers {
+		wg.Go(func() {
 			lastSeq := int64(0)
 			for j := 0; j < numMsgPerProducer; {
 				ok, seq := c.SendAsync(
@@ -59,13 +57,11 @@ func TestSendChanBasics(t *testing.T) {
 				require.Greater(t, seq, lastSeq)
 				lastSeq = seq
 			}
-		}()
+		})
 	}
 
 	// Runs the consumer
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		ticker := time.NewTicker(time.Millisecond * 10)
 
 		recvCount := 0
@@ -83,7 +79,7 @@ func TestSendChanBasics(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 	cancel()
@@ -101,12 +97,10 @@ func TestSendChanSendSync(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// Runs the producers
-	for i := 0; i < numProducers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numProducers {
+		wg.Go(func() {
 			lastSeq := int64(0)
-			for j := 0; j < numMsgPerProducerForSync; j++ {
+			for range numMsgPerProducerForSync {
 				seq, err := c.SendSync(
 					ctx,
 					"test-topic",
@@ -119,13 +113,11 @@ func TestSendChanSendSync(t *testing.T) {
 				require.Greater(t, seq, lastSeq)
 				lastSeq = seq
 			}
-		}()
+		})
 	}
 
 	// Runs the consumer
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		ticker := time.NewTicker(time.Millisecond * 10)
 
 		recvCount := 0
@@ -143,7 +135,7 @@ func TestSendChanSendSync(t *testing.T) {
 				return
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 	cancel()
@@ -155,9 +147,7 @@ func BenchmarkSendChanSendAsyncSPSC(b *testing.B) {
 	seq := atomic.NewInt64(0)
 	c := NewSendChan(defaultSendChanCap)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for j := 0; j < b.N; {
 			ok, _ := c.SendAsync("test-topic", []byte("test-value"), func() int64 {
 				return seq.Inc()
@@ -167,7 +157,7 @@ func BenchmarkSendChanSendAsyncSPSC(b *testing.B) {
 			}
 			j++
 		}
-	}()
+	})
 
 	recvCount := 0
 	dummyTicker := make(chan time.Time)
@@ -196,9 +186,7 @@ func BenchmarkSendChanSendSyncSPSC(b *testing.B) {
 	seq := atomic.NewInt64(0)
 	c := NewSendChan(defaultSendChanCap)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for j := 0; j < b.N; j++ {
 			_, _ = c.SendSync(
 				context.TODO(),
@@ -208,7 +196,7 @@ func BenchmarkSendChanSendSyncSPSC(b *testing.B) {
 					return seq.Inc()
 				})
 		}
-	}()
+	})
 
 	recvCount := 0
 	dummyTicker := make(chan time.Time)
@@ -235,10 +223,8 @@ func BenchmarkSendChanSendAsyncMPSC8(b *testing.B) {
 	seq := atomic.NewInt64(0)
 	c := NewSendChan(defaultSendChanCap)
 
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 8 {
+		wg.Go(func() {
 			for j := 0; j < b.N; {
 				ok, _ := c.SendAsync("test-topic", []byte("test-value"), func() int64 {
 					return seq.Inc()
@@ -248,7 +234,7 @@ func BenchmarkSendChanSendAsyncMPSC8(b *testing.B) {
 				}
 				j++
 			}
-		}()
+		})
 	}
 
 	recvCount := 0
@@ -277,10 +263,8 @@ func BenchmarkSendChanSendSyncMPSC8(b *testing.B) {
 	c := NewSendChan(defaultSendChanCap)
 	dummyCloseCh := make(chan struct{})
 
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 8 {
+		wg.Go(func() {
 			for j := 0; j < b.N; j++ {
 				_, _ = c.SendSync(
 					context.TODO(),
@@ -290,7 +274,7 @@ func BenchmarkSendChanSendSyncMPSC8(b *testing.B) {
 						return seq.Inc()
 					})
 			}
-		}()
+		})
 	}
 
 	recvCount := 0

@@ -14,7 +14,7 @@
 package framework
 
 // MqListener represents a callback function for listening on the MQ output
-type MqListener func(states interface{}, topic string, key []byte, value []byte) error
+type MqListener func(states any, topic string, key []byte, value []byte) error
 
 // Environment is an abstract of the CDC-Upstream-Downstream-MQ complex to be tested
 type Environment interface {
@@ -22,5 +22,5 @@ type Environment interface {
 	TearDown()
 	Reset()
 	RunTest(Task)
-	SetListener(states interface{}, listener MqListener)
+	SetListener(states any, listener MqListener)
 }

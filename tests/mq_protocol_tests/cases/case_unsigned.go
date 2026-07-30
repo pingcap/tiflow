@@ -61,7 +61,7 @@ func (s *UnsignedCase) Run(ctx *framework.TaskContext) error {
 
 	// Get a handle of an existing table
 	table := ctx.SQLHelper().GetTable("test")
-	return table.Insert(map[string]interface{}{
+	return table.Insert(map[string]any{
 		"id":       0,
 		"t_int":    0xFEEDBEEF,
 		"t_bigint": uint64(0xFEEDBEEFFEEDBEEF),

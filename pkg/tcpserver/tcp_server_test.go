@@ -51,20 +51,16 @@ func TestTCPServerInsecureHTTP1(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrTCPServerClosed.*", err.Error())
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		testWithHTTPWorkload(ctx, t, server, addr, &security.Credential{})
 		cancel()
-	}()
+	})
 
 	wg.Wait()
 }
@@ -88,20 +84,16 @@ func TestTCPServerTLSHTTP1(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrTCPServerClosed.*", err.Error())
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer cancel()
 		testWithHTTPWorkload(ctx, t, server, addr, makeCredential4Testing(t))
-	}()
+	})
 
 	wg.Wait()
 }
@@ -124,20 +116,16 @@ func TestTCPServerInsecureGrpc(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrTCPServerClosed.*", err.Error())
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		testWithGrpcWorkload(ctx, t, server, addr, &security.Credential{})
 		cancel()
-	}()
+	})
 
 	wg.Wait()
 }
@@ -161,20 +149,16 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrTCPServerClosed.*", err.Error())
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		testWithGrpcWorkload(ctx, t, server, addr, makeCredential4Testing(t))
 		cancel()
-	}()
+	})
 
 	wg.Wait()
 }
@@ -236,9 +220,7 @@ func testWithHTTPWorkload(_ context.Context, t *testing.T, server TCPServer, add
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := httpServer.Serve(server.HTTP1Listener())
 		if err != nil && err != http.ErrServerClosed {
 			require.FailNow(t,
@@ -246,7 +228,7 @@ func testWithHTTPWorkload(_ context.Context, t *testing.T, server TCPServer, add
 				"%d",
 				err.Error())
 		}
-	}()
+	})
 
 	scheme := "http"
 	if credentials.IsTLSEnabled() {
@@ -281,12 +263,10 @@ func testWithGrpcWorkload(ctx context.Context, t *testing.T, server TCPServer, a
 
 	var wg sync.WaitGroup
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := grpcServer.Serve(server.GrpcListener())
 		require.NoError(t, err)
-	}()
+	})
 
 	var conn *grpc.ClientConn
 	if credentials.IsTLSEnabled() {
@@ -305,7 +285,7 @@ func testWithGrpcWorkload(ctx context.Context, t *testing.T, server TCPServer, a
 
 	client := grpcTestingProto.NewTestServiceClient(conn)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		result, err := client.Ping(ctx, &grpcTestingProto.PingRequest{
 			Value: fmt.Sprintf("%d", i),
 		})
@@ -313,15 +293,13 @@ func testWithGrpcWorkload(ctx context.Context, t *testing.T, server TCPServer, a
 		require.Equal(t, fmt.Sprintf("%d", i), result.Value)
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer grpcServer.GracefulStop()
 
 		stream, err := client.PingStream(ctx)
 		require.NoError(t, err)
 
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			err := stream.Send(&grpcTestingProto.PingRequest{
 				Value: fmt.Sprintf("%d", i),
 			})
@@ -331,7 +309,7 @@ func testWithGrpcWorkload(ctx context.Context, t *testing.T, server TCPServer, a
 			require.NoError(t, err)
 			require.Equal(t, fmt.Sprintf("%d", i), received.Value)
 		}
-	}()
+	})
 
 	wg.Wait()
 }
@@ -348,13 +326,11 @@ func TestTcpServerClose(t *testing.T) {
 	require.NoError(t, err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.Run(ctx)
 		require.Error(t, err)
 		require.Regexp(t, ".*ErrTCPServerClosed.*", err.Error())
-	}()
+	})
 
 	httpServer := &http.Server{}
 	http.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
@@ -366,13 +342,11 @@ func TestTcpServerClose(t *testing.T) {
 		http.DefaultServeMux = http.NewServeMux()
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := httpServer.Serve(server.HTTP1Listener())
 		require.Error(t, err)
 		require.Regexp(t, ".*mux: server closed.*", err.Error())
-	}()
+	})
 
 	cli, err := httputil.NewClient(&security.Credential{})
 	require.NoError(t, err)
@@ -386,7 +360,7 @@ func TestTcpServerClose(t *testing.T) {
 	require.Equal(t, 200, resp.StatusCode)
 
 	// Close should be idempotent.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		err := server.Close()
 		require.NoError(t, err)
 	}

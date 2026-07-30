@@ -39,12 +39,10 @@ func TestStreamHandleSend(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		msg := <-sendCh
 		require.Equal(t, "test", msg.ErrorMessage)
-	}()
+	})
 
 	err := h.Send(ctx, proto.SendMessageResponse{
 		ErrorMessage: "test",
@@ -68,13 +66,11 @@ func TestStreamHandleCloseWhileSending(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := h.Send(ctx, proto.SendMessageResponse{})
 		require.Error(t, err)
 		require.Regexp(t, "ErrPeerMessageInternalSenderClosed", err.Error())
-	}()
+	})
 
 	time.Sleep(100 * time.Millisecond)
 	h.Close()

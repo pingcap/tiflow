@@ -64,7 +64,7 @@ func (s *masterServerConn) Close() error {
 	return nil
 }
 
-func (s *masterServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
+func (s *masterServerConn) sendRequest(ctx context.Context, req any) (any, error) {
 	switch x := req.(type) {
 	case *pb.RegisterExecutorRequest:
 		return s.server.RegisterExecutor(ctx, x)
@@ -127,7 +127,7 @@ func NewExecutorClient(conn Conn) pb.ExecutorServiceClient {
 	return &executorClient{conn}
 }
 
-func (s *executorServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
+func (s *executorServerConn) sendRequest(ctx context.Context, req any) (any, error) {
 	switch x := req.(type) {
 	case *pb.PreDispatchTaskRequest:
 		return s.server.PreDispatchTask(ctx, x)
@@ -180,7 +180,7 @@ func NewExecutorServer(addr string, server pb.ExecutorServiceServer) (GrpcServer
 // Conn is a simple interface that support send gRPC requests and closeable
 type Conn interface {
 	Close() error
-	sendRequest(ctx context.Context, req interface{}) (interface{}, error)
+	sendRequest(ctx context.Context, req any) (any, error)
 }
 
 // ResetGrpcCtx resets grpc servers

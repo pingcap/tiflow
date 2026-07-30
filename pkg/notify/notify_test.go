@@ -36,7 +36,7 @@ func TestNotifyHub(t *testing.T) {
 	require.Nil(t, err)
 	finishedCh := make(chan struct{})
 	go func() {
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			time.Sleep(time.Second)
 			notifier.Notify()
 		}
@@ -82,11 +82,11 @@ func TestContinusStop(t *testing.T) {
 	n := 50
 	receivers := make([]*Receiver, n)
 	var err error
-	for i := 0; i < n; i++ {
+	for i := range n {
 		receivers[i], err = notifier.NewReceiver(10 * time.Millisecond)
 		require.Nil(t, err)
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		i := i
 		go func() {
 			for {
@@ -98,7 +98,7 @@ func TestContinusStop(t *testing.T) {
 			}
 		}()
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		receivers[i].Stop()
 	}
 	<-ctx.Done()
@@ -122,9 +122,7 @@ func TestNotifierMultiple(t *testing.T) {
 	counter := atomic.NewInt32(0)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			_, ok := <-receiver.C
 			if !ok {
@@ -132,15 +130,13 @@ func TestNotifierMultiple(t *testing.T) {
 			}
 			counter.Add(1)
 		}
-	}()
+	})
 
 	receiver1, err := notifier.NewReceiver(time.Minute)
 	require.NoError(t, err)
 	counter1 := atomic.NewInt32(0)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			_, ok := <-receiver1.C
 			if !ok {
@@ -148,10 +144,10 @@ func TestNotifierMultiple(t *testing.T) {
 			}
 			counter1.Add(1)
 		}
-	}()
+	})
 
 	N := 5
-	for i := 0; i < N; i++ {
+	for range N {
 		notifier.Notify()
 		time.Sleep(time.Millisecond * 100)
 	}

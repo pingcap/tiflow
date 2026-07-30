@@ -39,7 +39,7 @@ type defaultPoolImpl struct {
 	// do not resize this slice after creating the pool
 	workers []*worker
 	// used to generate handler IDs, must be accessed atomically
-	nextHandlerID int64
+	nextHandlerID atomic.Int64
 }
 
 // NewDefaultWorkerPool creates a new WorkerPool that uses the default implementation
@@ -49,7 +49,7 @@ func NewDefaultWorkerPool(numWorkers int) WorkerPool {
 
 func newDefaultPoolImpl(hasher Hasher, numWorkers int) *defaultPoolImpl {
 	workers := make([]*worker, numWorkers)
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workers[i] = newWorker()
 	}
 	return &defaultPoolImpl{
@@ -75,11 +75,11 @@ func (p *defaultPoolImpl) Run(ctx context.Context) error {
 	return errg.Wait()
 }
 
-func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event interface{}) error) EventHandle {
+func (p *defaultPoolImpl) RegisterEvent(f func(ctx context.Context, event any) error) EventHandle {
 	handler := &defaultEventHandle{
 		f:     f,
 		errCh: make(chan error, 1),
-		id:    atomic.AddInt64(&p.nextHandlerID, 1) - 1,
+		id:    p.nextHandlerID.Add(1) - 1,
 	}
 
 	workerID := p.hasher.Hash(handler) % int64(len(p.workers))
@@ -99,7 +99,7 @@ const (
 
 type defaultEventHandle struct {
 	// the function to be run each time the event is triggered
-	f func(ctx context.Context, event interface{}) error
+	f func(ctx context.Context, event any) error
 	// must be accessed atomically
 	status handleStatus
 	// channel for the error returned by f
@@ -112,7 +112,7 @@ type defaultEventHandle struct {
 	id int64
 
 	// whether there is a valid timer handler, must be accessed atomically
-	hasTimer int32
+	hasTimer atomic.Int32
 	// the time when timer was triggered the last time
 	lastTimer time.Time
 	// minimum interval between two timer calls
@@ -121,12 +121,12 @@ type defaultEventHandle struct {
 	timerHandler func(ctx context.Context) error
 
 	// whether this is a valid errorHandler, must be accessed atomically
-	hasErrorHandler int32
+	hasErrorHandler atomic.Int32
 	// the error handler, called when the handle meets an error (which is returned by f)
 	errorHandler func(err error)
 }
 
-func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) error {
+func (h *defaultEventHandle) AddEvent(ctx context.Context, event any) error {
 	status := atomic.LoadInt32(&h.status)
 	if status != handleRunning {
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
@@ -149,7 +149,7 @@ func (h *defaultEventHandle) AddEvent(ctx context.Context, event interface{}) er
 	return nil
 }
 
-func (h *defaultEventHandle) AddEvents(ctx context.Context, events []interface{}) error {
+func (h *defaultEventHandle) AddEvents(ctx context.Context, events []any) error {
 	status := atomic.LoadInt32(&h.status)
 	if status != handleRunning {
 		return cerrors.ErrWorkerPoolHandleCancelled.GenWithStackByArgs()
@@ -180,7 +180,7 @@ func (h *defaultEventHandle) AddEvents(ctx context.Context, events []interface{}
 
 func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duration, f func(ctx context.Context) error) EventHandle {
 	// mark the timer handler function as invalid
-	atomic.StoreInt32(&h.hasTimer, 0)
+	h.hasTimer.Store(0)
 	// wait for `hasTimer` to take effect, otherwise we might have a data race, if there was a previous handler.
 	h.worker.synchronize()
 
@@ -189,7 +189,7 @@ func (h *defaultEventHandle) SetTimer(ctx context.Context, interval time.Duratio
 		return f(ctx)
 	}
 	// mark the timer handler function as valid
-	atomic.StoreInt32(&h.hasTimer, 1)
+	h.hasTimer.Store(1)
 
 	return h
 }
@@ -257,7 +257,7 @@ func (h *defaultEventHandle) GracefulUnregister(ctx context.Context, timeout tim
 func (h *defaultEventHandle) doCancel(err error) {
 	h.worker.removeHandle(h)
 
-	if atomic.LoadInt32(&h.hasErrorHandler) == 1 {
+	if h.hasErrorHandler.Load() == 1 {
 		h.errorHandler(err)
 	}
 
@@ -270,10 +270,10 @@ func (h *defaultEventHandle) ErrCh() <-chan error {
 }
 
 func (h *defaultEventHandle) OnExit(f func(err error)) EventHandle {
-	atomic.StoreInt32(&h.hasErrorHandler, 0)
+	h.hasErrorHandler.Store(0)
 	h.worker.synchronize()
 	h.errorHandler = f
-	atomic.StoreInt32(&h.hasErrorHandler, 1)
+	h.hasErrorHandler.Store(1)
 	return h
 }
 
@@ -295,7 +295,7 @@ func (h *defaultEventHandle) durationSinceLastTimer() time.Duration {
 }
 
 func (h *defaultEventHandle) doTimer(ctx context.Context) error {
-	if atomic.LoadInt32(&h.hasTimer) == 0 {
+	if h.hasTimer.Load() == 0 {
 		return nil
 	}
 

@@ -101,7 +101,7 @@ func (m *ackManager) Range(senderID NodeID, fn func(topic Topic, seq Seq) bool) 
 // RemoveTopic removes a topic for all nodes.
 // We do not support removing a topic from a specific node.
 func (m *ackManager) RemoveTopic(topic Topic) {
-	m.peers.Range(func(key, value interface{}) bool {
+	m.peers.Range(func(key, value any) bool {
 		ackList := value.(*peerAckList)
 		ackList.mu.Lock()
 		defer ackList.mu.Unlock()

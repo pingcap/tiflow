@@ -8,6 +8,7 @@ package seahash // import "blainsmith.com/go/seahash"
 
 import (
 	"encoding/binary"
+	"slices"
 )
 
 // Size of a SeaHash checksum in bytes.
@@ -151,9 +152,9 @@ func readInt(b []uint8) uint64 {
 	}
 
 	var x uint64
-	for i := len(b) - 1; i >= 0; i-- {
+	for _, v := range slices.Backward(b) {
 		x <<= 8
-		x |= uint64(b[i])
+		x |= uint64(v)
 	}
 	return x
 }

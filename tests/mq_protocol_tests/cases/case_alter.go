@@ -45,7 +45,7 @@ func (c *AlterCase) Run(ctx *framework.TaskContext) error {
 		return err
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		_, err := ctx.Upstream.ExecContext(ctx.Ctx, fmt.Sprintf("alter table test add column (value%d int)", i))
 		if err != nil {
 			return err
@@ -53,8 +53,8 @@ func (c *AlterCase) Run(ctx *framework.TaskContext) error {
 
 		table := ctx.SQLHelper().GetTable("test")
 		reqs := make([]framework.Awaitable, 0)
-		for j := 0; j < 1000; j++ {
-			rowData := make(map[string]interface{}, i+1)
+		for j := range 1000 {
+			rowData := make(map[string]any, i+1)
 			rowData["id"] = i*1000 + j
 			for k := 0; k <= i; k++ {
 				rowData[fmt.Sprintf("value%d", k)] = rand.Int31()

@@ -58,8 +58,8 @@ type Node struct {
 
 	// Following fields are used for notifying a node's dependers lock-free.
 	totalDependencies    int32
-	removedDependencies  int32
-	resolvedDependencies int32
+	removedDependencies  atomic.Int32
+	resolvedDependencies atomic.Int32
 	resolvedList         []int64
 
 	// Following fields are protected by `mu`.
@@ -103,14 +103,14 @@ func (n *Node) dependOn(dependencyNodes map[int64]*Node) {
 			// The target has already been assigned to a cache.
 			// In this case, record the cache ID in `resolvedList`, and this node
 			// probably can be sent to the same cache and executed sequentially.
-			resolvedDependencies = atomic.AddInt32(&n.resolvedDependencies, 1)
+			resolvedDependencies = n.resolvedDependencies.Add(1)
 			atomic.StoreInt64(&n.resolvedList[resolvedDependencies-1], target.assignedTo)
 		}
 
 		// Add the node to the target's dependers if the target has not been removed.
 		if target.removed {
 			// The target has already been removed.
-			atomic.AddInt32(&n.removedDependencies, 1)
+			n.removedDependencies.Add(1)
 		} else if _, exist := target.getOrCreateDependers().ReplaceOrInsert(n); exist {
 			// Should never depend on a target redundantly.
 			log.Panic("should never exist")
@@ -139,7 +139,7 @@ func (n *Node) remove() {
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
-			atomic.AddInt32(&node.removedDependencies, 1)
+			node.removedDependencies.Add(1)
 			node.OnNotified(node.maybeResolve)
 			return true
 		})
@@ -170,7 +170,7 @@ func (n *Node) tryAssignTo(cacheID int64) bool {
 	if n.dependers != nil {
 		// `mu` must be holded during accessing dependers.
 		n.dependers.Ascend(func(node *Node) bool {
-			resolvedDependencies := atomic.AddInt32(&node.resolvedDependencies, 1)
+			resolvedDependencies := node.resolvedDependencies.Add(1)
 			atomic.StoreInt64(&node.resolvedList[resolvedDependencies-1], n.assignedTo)
 			node.OnNotified(node.maybeResolve)
 			return true
@@ -209,13 +209,13 @@ func (n *Node) tryResolve() (int64, bool) {
 		return assignedToAny, true
 	}
 
-	removedDependencies := atomic.LoadInt32(&n.removedDependencies)
+	removedDependencies := n.removedDependencies.Load()
 	if removedDependencies == n.totalDependencies {
 		// All dependcies are removed, so assign the node to any cache is fine.
 		return assignedToAny, true
 	}
 
-	resolvedDependencies := atomic.LoadInt32(&n.resolvedDependencies)
+	resolvedDependencies := n.resolvedDependencies.Load()
 	if resolvedDependencies == n.totalDependencies {
 		firstDep := atomic.LoadInt64(&n.resolvedList[0])
 		hasDiffDep := false

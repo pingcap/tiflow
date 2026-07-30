@@ -40,7 +40,7 @@ func TestBasic(t *testing.T) {
 
 	var sum int32
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		finalI := i
 		err := pool.Go(ctx, func() {
@@ -70,7 +70,7 @@ func TestEventuallyRun(t *testing.T) {
 	pool := newDefaultAsyncPoolImpl(4)
 	errg.Go(func() error {
 		defer cancelLoop()
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			log.Info("running pool")
 			err := runForDuration(ctx, time.Millisecond*500, func(ctx context.Context) error {
 				return pool.Run(ctx)

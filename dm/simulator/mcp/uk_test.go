@@ -34,7 +34,7 @@ func (s *testUniqueKeySuite) TestUKClone() {
 	origUKCol2Value := "COL1"
 	originalUK := &UniqueKey{
 		rowID: -1,
-		value: map[string]interface{}{
+		value: map[string]any{
 			"col1": origUKCol1Value,
 			"col2": origUKCol2Value,
 		},
@@ -56,7 +56,7 @@ func (s *testUniqueKeySuite) TestUKClone() {
 func (s *testUniqueKeySuite) TestUKChangeBasic() {
 	col1Value := 111
 	col2Value := "aaa"
-	theValueMap := map[string]interface{}{
+	theValueMap := map[string]any{
 		"col1": col1Value,
 		"col2": col2Value,
 	}
@@ -79,7 +79,7 @@ func (s *testUniqueKeySuite) TestUKChangeBasic() {
 
 	newCol1Value := 333
 	newCol2Value := "ccc"
-	newValueMap := map[string]interface{}{
+	newValueMap := map[string]any{
 		"col1": newCol1Value,
 		"col2": newCol2Value,
 	}
@@ -102,13 +102,13 @@ func (s *testUniqueKeySuite) TestUKParallelChange() {
 	targetID := 100
 	workerCnt := 10
 	wg.Add(workerCnt)
-	for i := 0; i < workerCnt; i++ {
+	for range workerCnt {
 		go func() {
 			defer wg.Done()
 			<-pendingCh
 			for i := 1; i <= targetID; i++ {
 				theUK.SetRowID(i)
-				theUK.SetValue(map[string]interface{}{
+				theUK.SetValue(map[string]any{
 					"id": i,
 				})
 			}
@@ -127,14 +127,14 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 	col2Value := "aaa"
 	uk1 := &UniqueKey{
 		rowID: -1,
-		value: map[string]interface{}{
+		value: map[string]any{
 			"col1": col1Value,
 			"col2": col2Value,
 		},
 	}
 	uk2 := &UniqueKey{
 		rowID: 100,
-		value: map[string]interface{}{
+		value: map[string]any{
 			"col1": col1Value,
 			"col2": col2Value,
 		},
@@ -143,7 +143,7 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 	s.Equal(true, uk2.IsValueEqual(uk1), "uk2 should equal uk1 on value")
 	uk3 := &UniqueKey{
 		rowID: 100,
-		value: map[string]interface{}{
+		value: map[string]any{
 			"col1": col1Value,
 			"col2": "bbb",
 		},
@@ -152,7 +152,7 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 	s.Equal(false, uk3.IsValueEqual(uk1), "uk3 should not equal uk1 on value")
 	uk4 := &UniqueKey{
 		rowID: 100,
-		value: map[string]interface{}{
+		value: map[string]any{
 			"col3": 321,
 		},
 	}
@@ -160,7 +160,7 @@ func (s *testUniqueKeySuite) TestUKValueEqual() {
 	s.Equal(false, uk4.IsValueEqual(uk1), "uk4 should not equal uk1 on value")
 	uk5 := &UniqueKey{
 		rowID: 100,
-		value: map[string]interface{}{
+		value: map[string]any{
 			"col3": 321,
 			"col1": col1Value,
 			"col2": col2Value,

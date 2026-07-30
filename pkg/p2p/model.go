@@ -37,5 +37,5 @@ type MessageEntry = *proto.MessageEntry
 // RawMessageEntry is an alias for the protobuf-generated type for a message.
 type RawMessageEntry struct {
 	topic Topic
-	value interface{}
+	value any
 }

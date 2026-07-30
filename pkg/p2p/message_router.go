@@ -171,9 +171,7 @@ func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 			MessageClient: client,
 			cancelFn:      cancel,
 		}
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
+		m.wg.Go(func() {
 			defer cancel()
 			err := client.Run(ctx, "tcp", addr, target, m.credentials)
 			if err != nil {
@@ -198,7 +196,7 @@ func (m *messageRouterImpl) GetClient(target NodeID) MessageClient {
 			m.mu.Lock()
 			defer m.mu.Unlock()
 			delete(m.clients, target)
-		}()
+		})
 	}
 
 	m.clients[target] = cliWrapper

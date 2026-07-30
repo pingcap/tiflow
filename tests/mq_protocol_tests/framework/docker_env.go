@@ -121,7 +121,7 @@ func (e *DockerEnv) RunTest(task Task) {
 }
 
 // SetListener implements Environment. Currently unfinished, will be used to monitor Kafka output
-func (e *DockerEnv) SetListener(states interface{}, listener MqListener) {
+func (e *DockerEnv) SetListener(states any, listener MqListener) {
 	// TODO
 }
 

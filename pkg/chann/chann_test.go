@@ -131,22 +131,22 @@ func TestChan(t *testing.T) {
 			// ensure that we receive them non-corrupted in FIFO order.
 			c := New[int](Cap(chanCap))
 			go func() {
-				for i := 0; i < 100; i++ {
+				for i := range 100 {
 					c.In() <- i
 				}
 			}()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				v := <-c.Out()
 				require.Equalf(t, i, v, "chan[%d]", chanCap)
 			}
 
 			// Same, but using recv2.
 			go func() {
-				for i := 0; i < 100; i++ {
+				for i := range 100 {
 					c.In() <- i
 				}
 			}()
-			for i := 0; i < 100; i++ {
+			for i := range 100 {
 				v, ok := <-c.Out()
 				require.Truef(t, ok, "chan[%d]: receive failed, expected %v", chanCap, i)
 				require.Equalf(t, i, v, "chan[%d]", chanCap)
@@ -156,18 +156,18 @@ func TestChan(t *testing.T) {
 			// ensure that we receive what we send.
 			const P = 4
 			const L = 1000
-			for p := 0; p < P; p++ {
+			for range P {
 				go func() {
-					for i := 0; i < L; i++ {
+					for i := range L {
 						c.In() <- i
 					}
 				}()
 			}
 			done := New[map[int]int](Cap(0))
-			for p := 0; p < P; p++ {
+			for range P {
 				go func() {
 					recv := make(map[int]int)
-					for i := 0; i < L; i++ {
+					for range L {
 						v := <-c.Out()
 						recv[v] = recv[v] + 1
 					}
@@ -175,7 +175,7 @@ func TestChan(t *testing.T) {
 				}()
 			}
 			recv := make(map[int]int)
-			for p := 0; p < P; p++ {
+			for range P {
 				for k, v := range <-done.Out() {
 					recv[k] = recv[k] + v
 				}
@@ -242,7 +242,7 @@ const internalCacheSize = 16 + 1<<10
 func TestNonblockSelectRace(t *testing.T) {
 	n := 1000
 	done := New[bool](Cap(1))
-	for i := 0; i < n; i++ {
+	for range n {
 		c1 := New[int]()
 		c2 := New[int]()
 		// The input channel of an unbounded buffer have an internal
@@ -250,7 +250,7 @@ func TestNonblockSelectRace(t *testing.T) {
 		// queue both gets full, we are certain that once the next send
 		// is complete, the out will be available for sure hence the
 		// waiting time of a receive is bounded.
-		for i := 0; i < internalCacheSize; i++ {
+		for range internalCacheSize {
 			c1.In() <- 1
 		}
 		c1.In() <- 1
@@ -266,7 +266,7 @@ func TestNonblockSelectRace(t *testing.T) {
 			done.In() <- true
 		}()
 		// Same for c2
-		for i := 0; i < internalCacheSize; i++ {
+		for range internalCacheSize {
 			c2.In() <- 1
 		}
 		c2.In() <- 1
@@ -289,11 +289,11 @@ func TestNonblockSelectRace(t *testing.T) {
 func TestNonblockSelectRace2(t *testing.T) {
 	n := 1000
 	done := make(chan bool, 1)
-	for i := 0; i < n; i++ {
+	for range n {
 		c1 := New[int]()
 		c2 := New[int]()
 		// See TestNonblockSelectRace.
-		for i := 0; i < internalCacheSize; i++ {
+		for range internalCacheSize {
 			c1.In() <- 1
 		}
 		c1.In() <- 1
@@ -331,17 +331,15 @@ func TestUnboundedChann(t *testing.T) {
 		t.Run("interface{}", func(t *testing.T) {
 			t.Run("send", func(t *testing.T) {
 				// Ensure send to an unbounded channel does not block.
-				c := New[interface{}]()
+				c := New[any]()
 				blocked := false
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					select {
 					case c.In() <- true:
 					default:
 						blocked = true
 					}
-				}()
+				})
 				wg.Wait()
 				require.Falsef(t, blocked, "send op to an unbounded channel blocked")
 				c.Close()
@@ -350,23 +348,21 @@ func TestUnboundedChann(t *testing.T) {
 			t.Run("recv", func(t *testing.T) {
 				// Ensure that receive op from unbounded chan can happen on
 				// the same goroutine of send op.
-				c := New[interface{}]()
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				c := New[any]()
+				wg.Go(func() {
 					c.In() <- true
 					<-c.Out()
-				}()
+				})
 				wg.Wait()
 				c.Close()
 			})
 			t.Run("order", func(t *testing.T) {
 				// Ensure that the unbounded channel processes everything FIFO.
-				c := New[interface{}]()
-				for i := 0; i < 1<<11; i++ {
+				c := New[any]()
+				for i := range 1 << 11 {
 					c.In() <- i
 				}
-				for i := 0; i < 1<<11; i++ {
+				for i := range 1 << 11 {
 					val := <-c.Out()
 					require.Equalf(
 						t,
@@ -383,15 +379,13 @@ func TestUnboundedChann(t *testing.T) {
 				// Ensure send to an unbounded channel does not block.
 				c := New[struct{}]()
 				blocked := false
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					select {
 					case c.In() <- struct{}{}:
 					default:
 						blocked = true
 					}
-				}()
+				})
 				<-c.Out()
 				wg.Wait()
 				require.Falsef(t, blocked, "send op to an unbounded channel blocked")
@@ -402,23 +396,21 @@ func TestUnboundedChann(t *testing.T) {
 				// Ensure that receive op from unbounded chan can happen on
 				// the same goroutine of send op.
 				c := New[struct{}]()
-				wg.Add(1)
-				go func() {
-					defer wg.Done()
+				wg.Go(func() {
 					c.In() <- struct{}{}
 					<-c.Out()
-				}()
+				})
 				wg.Wait()
 				c.Close()
 			})
 			t.Run("order", func(t *testing.T) {
 				// Ensure that the unbounded channel processes everything FIFO.
 				c := New[struct{}]()
-				for i := 0; i < 1<<11; i++ {
+				for range 1 << 11 {
 					c.In() <- struct{}{}
 				}
 				n := 0
-				for i := 0; i < 1<<11; i++ {
+				for range 1 << 11 {
 					if _, ok := <-c.Out(); ok {
 						n++
 					}
@@ -433,7 +425,7 @@ func TestUnboundedChann(t *testing.T) {
 func TestUnboundedChannClose(t *testing.T) {
 	t.Run("close-status", func(t *testing.T) {
 		ch := New[any]()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			ch.In() <- 0
 		}
 		ch.Close()
@@ -455,7 +447,7 @@ func TestUnboundedChannClose(t *testing.T) {
 		n := 0
 		done := make(chan struct{})
 		ch := New[struct{}]()
-		for i := 0; i < N; i++ {
+		for range N {
 			ch.In() <- struct{}{}
 		}
 		go func() {
@@ -476,8 +468,8 @@ func TestUnboundedChannClose(t *testing.T) {
 		N := 10
 		n := 0
 		done := make(chan struct{})
-		ch := New[interface{}]()
-		for i := 0; i < N; i++ {
+		ch := New[any]()
+		for range N {
 			ch.In() <- true
 		}
 		go func() {
@@ -497,7 +489,7 @@ func TestUnboundedChannClose(t *testing.T) {
 func BenchmarkUnboundedChann(b *testing.B) {
 	b.Run("interface{}", func(b *testing.B) {
 		b.Run("sync", func(b *testing.B) {
-			c := New[interface{}]()
+			c := New[any]()
 			defer c.Close()
 			b.ResetTimer()
 			b.ReportAllocs()
@@ -507,7 +499,7 @@ func BenchmarkUnboundedChann(b *testing.B) {
 			}
 		})
 		b.Run("chann", func(b *testing.B) {
-			c := New[interface{}]()
+			c := New[any]()
 			defer c.Close()
 			b.ResetTimer()
 			b.ReportAllocs()

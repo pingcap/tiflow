@@ -33,7 +33,7 @@ func ExampleSum64() {
 func TestRandom(t *testing.T) {
 	expected := "d30e85ff891306b8"
 	str := []byte("abcdegfhijklmnabcdegfhijklmnabcdegfhijklmn")
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		r := rand.NewSource(int64(i))
 		s := str
 		h := New()

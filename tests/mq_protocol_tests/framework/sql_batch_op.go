@@ -32,8 +32,8 @@ const (
 
 type sqlAllAwaiter struct {
 	helper          *SQLHelper
-	data            map[interface{}]sqlRowContainer
-	retrievedValues []map[string]interface{}
+	data            map[any]sqlRowContainer
+	retrievedValues []map[string]any
 	table           *Table
 }
 
@@ -46,8 +46,8 @@ func All(helper *SQLHelper, awaitables []Awaitable) Awaitable {
 
 	ret := &sqlAllAwaiter{
 		helper:          helper,
-		data:            make(map[interface{}]sqlRowContainer, len(awaitables)),
-		retrievedValues: make([]map[string]interface{}, 0),
+		data:            make(map[any]sqlRowContainer, len(awaitables)),
+		retrievedValues: make([]map[string]any, 0),
 		table:           awaitables[0].(sqlRowContainer).getTable(),
 	}
 
@@ -71,8 +71,8 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 
 	batchSize := 0
 	counter := 0
-	indexValues := make([]interface{}, 0)
-	s.retrievedValues = make([]map[string]interface{}, 0)
+	indexValues := make([]any, 0)
+	s.retrievedValues = make([]map[string]any, 0)
 	for k, v := range s.data {
 		indexValues = append(indexValues, k)
 		batchSize++
@@ -101,7 +101,7 @@ func (s *sqlAllAwaiter) poll(ctx context.Context) (bool, error) {
 				s.retrievedValues = append(s.retrievedValues, m)
 			}
 			batchSize = 0
-			indexValues = make([]interface{}, 0)
+			indexValues = make([]any, 0)
 		}
 	}
 
@@ -130,7 +130,7 @@ func (s *sqlAllAwaiter) Check() error {
 	return nil
 }
 
-func normalizeKeys(key interface{}) interface{} {
+func normalizeKeys(key any) any {
 	switch key.(type) {
 	case int, int8, int16, int32, int64:
 		return reflect.ValueOf(key).Int()

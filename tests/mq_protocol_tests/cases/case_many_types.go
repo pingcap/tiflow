@@ -152,7 +152,7 @@ func (s *ManyTypesCase) Run(ctx *framework.TaskContext) error {
 
 	// Get a handle of an existing table
 	table := ctx.SQLHelper().GetTable("test")
-	data := map[string]interface{}{
+	data := map[string]any{
 		"id":          0,
 		"t_boolean":   true,
 		"t_bigint":    math.MaxInt64,

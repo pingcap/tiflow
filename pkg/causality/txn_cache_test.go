@@ -38,7 +38,7 @@ func TestBoundedWorker(t *testing.T) {
 		Size:          size,
 		BlockStrategy: BlockStrategyWaitAvailable,
 	})
-	for i := 0; i < size; i++ {
+	for range size {
 		// Add 10 events to the worker.
 		ok := worker.add(TxnWithNotifier[txnEvent]{
 			TxnEvent:        mockTxnEvent{},
@@ -66,7 +66,7 @@ func TestBoundedWorkerWithBlock(t *testing.T) {
 		Size:          size,
 		BlockStrategy: BlockStrategyWaitEmpty,
 	})
-	for i := 0; i < size; i++ {
+	for range size {
 		// Add 10 events to the worker.
 		ok := worker.add(TxnWithNotifier[txnEvent]{
 			TxnEvent:        mockTxnEvent{},
