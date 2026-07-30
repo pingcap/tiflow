@@ -19,6 +19,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/prometheus/client_golang/prometheus"
@@ -55,6 +56,15 @@ func TestInitSyncerBinlogMetrics(t *testing.T) {
 			expectedPos:  float64(binlog.MinPosition.Pos),
 		},
 		{
+			name: "checkpoint with malformed binlog filename",
+			checkpoint: binlog.NewLocation(mysql.Position{
+				Name: "not-a-binlog-name",
+				Pos:  123,
+			}, nil),
+			expectedFile: math.NaN(),
+			expectedPos:  123,
+		},
+		{
 			name: "GTID-only checkpoint",
 			checkpoint: binlog.NewLocation(
 				mysql.Position{},
@@ -70,6 +80,7 @@ func TestInitSyncerBinlogMetrics(t *testing.T) {
 			fileGauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: "syncer_binlog_file"})
 			posGauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: "syncer_binlog_pos"})
 			s := &Syncer{
+				tctx: tcontext.Background(),
 				metricsProxies: &metrics.Proxies{
 					Metrics: &metrics.Metrics{
 						BinlogSyncerFileGauge: fileGauge,
