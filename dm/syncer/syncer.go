@@ -521,13 +521,13 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		metricProxies.Init(s.cfg.MetricsFactory)
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
-	s.initSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
+	s.updateSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
 
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
 }
 
-func (s *Syncer) initSyncerBinlogMetrics(checkpoint binlog.Location) {
+func (s *Syncer) updateSyncerBinlogMetrics(checkpoint binlog.Location) {
 	s.metricsProxies.Metrics.BinlogSyncerPosGauge.Set(float64(checkpoint.Position.Pos))
 
 	index, err := utils.GetFilenameIndex(checkpoint.Position.Name)
@@ -1832,7 +1832,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	// Init initializes metrics for tasks that do not enter Run. Refresh them
 	// here because Run may select a different checkpoint from start time or
 	// metadata, and GTID adjustment may further update the global checkpoint.
-	s.initSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
+	s.updateSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
 
 	if fresh && config.HasLoad(s.cfg.Mode) {
 		delLoadTask = true
