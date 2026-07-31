@@ -41,9 +41,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tikv/pd/pkg/utils/tempurl"
+	"google.golang.org/grpc"
 )
 
 // some data for test.
@@ -549,6 +551,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	var createTaskResp openapi.Task
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
 	s.Equal(createTaskResp.Name, task.Name)
+	s.EqualValues(task.Timezone, createTaskResp.Timezone)
 
 	// create again will fail
 	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
@@ -564,6 +567,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
 	s.Equal(1, resultTaskList.Total)
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
+	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
 
 	// get detail
 	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
@@ -572,6 +576,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	var respTask openapi.Task
 	s.NoError(result.UnmarshalBodyToObject(&respTask))
 	s.Equal(task.Name, respTask.Name)
+	s.EqualValues(task.Timezone, respTask.Timezone)
 
 	// get not exist
 	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
@@ -1000,9 +1005,11 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	var createTaskResp openapi.OperateTaskResponse
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
 	s.Equal(createTaskResp.Task.Name, task.Name)
+	s.EqualValues(task.Timezone, createTaskResp.Task.Timezone)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
+	s.Equal(*task.Timezone, subTaskM[source1Name].Timezone)
 
 	// get task
 	task1URL := fmt.Sprintf("%s/%s", taskURL, task.Name)
@@ -1011,6 +1018,44 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(http.StatusOK, result.Code())
 	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
 	s.Equal(task1FromHTTP.Name, task.Name)
+	s.EqualValues(task.Timezone, task1FromHTTP.Timezone)
+
+	// changing timezone through PUT is rejected by the bottom update guard.
+	updatedTimezone := "UTC"
+	timezoneUpdateTask := task
+	timezoneUpdateTask.Timezone = &updatedTimezone
+	oldSubTaskCfg := subTaskM[source1Name]
+	syncUnit := syncer.NewSyncer(oldSubTaskCfg, nil, nil)
+	mockUpdateWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockUpdateWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *pb.CheckSubtasksCanUpdateRequest, _ ...grpc.CallOption) (*pb.CheckSubtasksCanUpdateResponse, error) {
+			newSubTaskCfg := config.NewSubTaskConfig()
+			decodeErr := newSubTaskCfg.Decode(req.SubtaskCfgTomlString, false)
+			s.NoError(decodeErr)
+			if decodeErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: decodeErr.Error()}, nil
+			}
+			s.Equal(updatedTimezone, newSubTaskCfg.Timezone)
+
+			guardErr := syncUnit.CheckCanUpdateCfg(newSubTaskCfg)
+			s.Error(guardErr)
+			resp := &pb.CheckSubtasksCanUpdateResponse{Success: guardErr == nil}
+			if guardErr != nil {
+				resp.Msg = guardErr.Error()
+			}
+			return resp, nil
+		},
+	)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockUpdateWorkerClient))
+	timezoneUpdateReq := openapi.UpdateTaskRequest{Task: timezoneUpdateTask}
+	result = testutil.NewRequest().Put(task1URL).WithJsonBody(timezoneUpdateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var timezoneUpdateErr openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&timezoneUpdateErr))
+	s.Equal(int(terror.ErrSchedulerSubTaskCfgUpdate.Code()), timezoneUpdateErr.ErrorCode)
+	s.Contains(timezoneUpdateErr.ErrorMsg, "fields that should not be changed")
+	storedSubTaskCfgs := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Equal(*task.Timezone, storedSubTaskCfgs[source1Name].Timezone)
 
 	// update a task
 	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
@@ -1032,6 +1077,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
 	s.Equal(1, resultTaskList.Total)
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
+	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
 
 	s.testImportTaskTemplate(&task, s1)
 

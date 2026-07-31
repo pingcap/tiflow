@@ -2049,6 +2049,18 @@ func TestCheckCanUpdateCfg(t *testing.T) {
 	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
 }
 
+func TestCheckCanUpdateCfgRejectsTimezoneChange(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.Timezone = "UTC"
+	syncer := NewSyncer(cfg, nil, nil)
+
+	newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+	newCfg.Timezone = "Asia/Shanghai"
+	err := syncer.CheckCanUpdateCfg(newCfg)
+	require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+	require.ErrorContains(t, err, "fields that should not be changed")
+}
+
 func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
 	cfg := genDefaultSubTaskConfig4Test()
 	syncer := NewSyncer(cfg, nil, nil)

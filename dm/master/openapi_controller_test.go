@@ -298,6 +298,9 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		res, err := server.createTask(ctx, createTaskReq)
 		s.Nil(err)
 		s.EqualValues(*s.testTask, res.Task)
+		subTaskCfgs := server.scheduler.GetSubTaskCfgsByTask(s.testTask.Name)
+		s.Len(subTaskCfgs, 1)
+		s.Equal(*s.testTask.Timezone, subTaskCfgs[s.testSource.SourceName].Timezone)
 	}
 
 	// update
@@ -468,6 +471,22 @@ func (s *OpenAPIControllerSuite) TestTaskController() {
 		s.EqualValues(task4, task3)
 		s.Equal(taskCfg4.String(), taskCfg3.String())
 	}
+}
+
+func (s *OpenAPIControllerSuite) TestCreateTaskRejectsInvalidTimezone() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	task := *s.testTask
+	invalidTimezone := "invalid/timezone"
+	task.Timezone = &invalidTimezone
+	res, err := server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
+	s.Nil(res)
+	s.True(terror.ErrConfigInvalidTimezone.Equal(err))
 }
 
 func (s *OpenAPIControllerSuite) TestTaskStatusSourceErrorFallback() {

@@ -566,6 +566,9 @@ type Task struct {
 
 	// migrate mode
 	TaskMode TaskTaskMode `json:"task_mode"`
+
+	// task time zone. If omitted or empty, use the downstream database time zone
+	Timezone *string `json:"timezone,omitempty"`
 }
 
 // Task_BinlogFilterRule defines model for Task.BinlogFilterRule.

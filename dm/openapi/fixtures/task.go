@@ -27,6 +27,7 @@ var (
 		"meta_schema": "dm_meta",
 		"name": "test",
 		"on_duplicate": "replace",
+		"timezone": "Asia/Shanghai",
 		"source_config": {
 		  "full_migrate_conf": {
 			"data_dir": "./exported_data",

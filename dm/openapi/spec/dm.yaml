@@ -1898,6 +1898,10 @@ components:
           example: "dm-meta"
           description: "downstream database for storing meta information"
           default: "dm-meta"
+        timezone:
+          type: string
+          example: "Asia/Shanghai"
+          description: "task time zone. If omitted or empty, use the downstream database time zone"
         enhance_online_schema_change:
           type: boolean
           example: true
