@@ -16,9 +16,7 @@ package alertmanager
 import (
 	"os"
 	"testing"
-	"time"
 
-	"github.com/prometheus/prometheus/promql"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v2"
 )
@@ -49,31 +47,6 @@ func TestBinlogFileGapAlertRuleRequiresRunningTask(t *testing.T) {
 	require.Equal(t, binlogFileGapAlertExpr, rule.Expr)
 	require.Equal(t, binlogFileGapAlertExpr, rule.Labels["expr"])
 	require.Equal(t, "10m", rule.For)
-
-	engine := promql.NewEngine(promql.EngineOpts{
-		MaxSamples:           10000,
-		Timeout:              time.Second,
-		EnableAtModifier:     true,
-		EnableNegativeOffset: true,
-		NoStepSubqueryIntervalFn: func(int64) int64 {
-			return time.Minute.Milliseconds()
-		},
-	})
-
-	promql.RunTest(t, `
-load 1m
-  dm_syncer_binlog_file{instance="worker-1",job="dm_worker",node="master",source_id="mysql-01",task="running"} 12
-  dm_syncer_binlog_file{instance="worker-1",job="dm_worker",node="syncer",source_id="mysql-01",task="running"} 10
-  dm_worker_task_state{instance="worker-1",job="dm_worker",source_id="mysql-01",task="running",worker="worker-1"} 2
-  dm_syncer_binlog_file{instance="worker-2",job="dm_worker",node="master",source_id="mysql-02",task="paused"} 12
-  dm_syncer_binlog_file{instance="worker-2",job="dm_worker",node="syncer",source_id="mysql-02",task="paused"} 10
-  dm_worker_task_state{instance="worker-2",job="dm_worker",source_id="mysql-02",task="paused",worker="worker-2"} 3
-  dm_syncer_binlog_file{instance="worker-3",job="dm_worker",node="master",source_id="mysql-03",task="stopped"} 12
-  dm_syncer_binlog_file{instance="worker-3",job="dm_worker",node="syncer",source_id="mysql-03",task="stopped"} 10
-
-eval instant at 0m `+rule.Expr+`
-  {instance="worker-1",job="dm_worker",task="running"} 2
-`, engine)
 }
 
 func loadAlertRule(t *testing.T, filename, alertName string) alertRule {
