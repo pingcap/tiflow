@@ -73,9 +73,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20260608025309-50b863799195
 	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
-	github.com/pingcap/tidb v1.1.0-beta.0.20260630134030-9a2b003a90fd
+	github.com/pingcap/tidb v1.1.0-beta.0.20260730162841-dc0024f088cb
 	github.com/pingcap/tidb-dashboard v0.0.0-20260603054940-9e92195886c3
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20260630134030-9a2b003a90fd
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20260730162841-dc0024f088cb
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
