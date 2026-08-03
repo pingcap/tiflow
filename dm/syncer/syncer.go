@@ -113,6 +113,19 @@ const (
 	waitComplete
 )
 
+// asyncDDLReconcileInfo describes a TiDB DDL whose submission result was
+// unknown because the SQL connection became invalid. It is retained across a
+// Pause/Resume so the resumed syncer can resolve the original TiDB job before
+// it considers re-executing the binlog DDL.
+type asyncDDLReconcileInfo struct {
+	ddls            []string
+	index           int
+	createTime      int64
+	startLocation   binlog.Location
+	currentLocation binlog.Location
+	resolved        bool
+}
+
 // Syncer can sync your MySQL data to another MySQL database.
 type Syncer struct {
 	sync.RWMutex
@@ -164,6 +177,9 @@ type Syncer struct {
 	waitXIDJob          atomic.Int64
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
+
+	asyncDDLReconcileMu sync.Mutex
+	asyncDDLReconcile   *asyncDDLReconcileInfo
 
 	tableRouter     *regexprrouter.RouteTable
 	binlogFilter    *bf.BinlogEvent
@@ -1262,6 +1278,9 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 		})
 		skipCheckFlush = true
 		err = s.flushCheckPoints()
+		if err == nil {
+			s.clearResolvedAsyncDDL(job.ddls, job.startLocation, job.currentLocation)
+		}
 		// nolint:nakedret
 		return
 	case flush:
@@ -1463,6 +1482,9 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		if !ok {
 			return
 		}
+		// err is shared only within one worker goroutine but must not leak from
+		// an earlier DDL into a reconciled DDL that does not call ExecuteSQL.
+		err = nil
 
 		// add this ddl ts beacause we start to exec this ddl.
 		s.updateReplicationJobTS(ddlJob, ddlJobIdx)
@@ -1502,6 +1524,11 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 				s.tctx.L().Info("skip save global point", zap.String("failpoint", "SkipSaveGlobalPoint"))
 				panic("SkipSaveGlobalPoint")
 			})
+		}
+		// A sharding operation can become ignorable after Pause. An unresolved
+		// async DDL is still a hard barrier, so reconcile it even in that case
+		// rather than advancing the checkpoint past an unknown downstream job.
+		if !ignore || s.getAsyncDDLReconcileInfo() != nil {
 			// set timezone
 			if ddlJob.timezone != "" {
 				s.timezoneLastTime = ddlJob.timezone
@@ -1522,33 +1549,56 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			setTimestampSQLDefault := "SET TIMESTAMP = DEFAULT"
 			ddlJob.ddls = append(ddlJob.ddls, setTimestampSQLDefault)
 
-			var affected int
-			var ddlCreateTime int64 = -1 // default when scan failed
-			row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
-			if err2 != nil {
-				s.tctx.L().Warn("selecting unix timestamp failed", zap.Error(err2))
-			} else {
-				for row.Next() {
-					err2 = row.Scan(&ddlCreateTime)
-					if err2 != nil {
-						s.tctx.L().Warn("getting ddlCreateTime failed", zap.Error(err2))
-					}
-				}
-				//nolint:sqlclosecheck
-				_ = row.Close()
-				_ = row.Err()
+			reconciled, reconcileErr := s.reconcileAsyncDDL(
+				s.syncCtx,
+				ddlJob.ddls,
+				ddlJob.startLocation,
+				ddlJob.currentLocation,
+				db,
+			)
+			if reconcileErr != nil {
+				err = terror.WithScope(reconcileErr, terror.ScopeDownstream)
+			} else if reconciled {
+				err = nil
 			}
-			affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
-			failpoint.Inject("TestHandleSpecialDDLError", func() {
-				err = mysql2.ErrInvalidConn
-				// simulate the value of affected along with the injected error due to the adding of SET SQL of timezone and timestamp
-				if affected == 0 {
-					affected++
+			if !ignore && !reconciled {
+				var affected int
+				var ddlCreateTime int64 = -1 // default when scan failed
+				row, err2 := db.QuerySQL(s.syncCtx, s.metricsProxies, "SELECT UNIX_TIMESTAMP()")
+				if err2 != nil {
+					s.tctx.L().Warn("selecting unix timestamp failed", zap.Error(err2))
+				} else {
+					for row.Next() {
+						err2 = row.Scan(&ddlCreateTime)
+						if err2 != nil {
+							s.tctx.L().Warn("getting ddlCreateTime failed", zap.Error(err2))
+						}
+					}
+					//nolint:sqlclosecheck
+					_ = row.Close()
+					_ = row.Err()
 				}
-			})
-			if err != nil {
-				err = s.handleSpecialDDLError(s.syncCtx, err, ddlJob.ddls, affected, db, ddlCreateTime)
-				err = terror.WithScope(err, terror.ScopeDownstream)
+				affected, err = db.ExecuteSQLWithIgnore(s.syncCtx, s.metricsProxies, errorutil.IsIgnorableMySQLDDLError, ddlJob.ddls)
+				failpoint.Inject("TestHandleSpecialDDLError", func() {
+					err = mysql2.ErrInvalidConn
+					// simulate the value of affected along with the injected error due to the adding of SET SQL of timezone and timestamp
+					if affected == 0 {
+						affected++
+					}
+				})
+				if err != nil {
+					err = s.handleSpecialDDLError(
+						s.syncCtx,
+						err,
+						ddlJob.ddls,
+						affected,
+						db,
+						ddlCreateTime,
+						ddlJob.startLocation,
+						ddlJob.currentLocation,
+					)
+					err = terror.WithScope(err, terror.ScopeDownstream)
+				}
 			}
 		}
 		failpoint.Label("bypass")
@@ -1669,6 +1719,14 @@ func (s *Syncer) syncDML() {
 
 func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 	defer s.runWg.Done()
+	// Capture the cancel functions for this run. Syncer can be resumed and its
+	// context fields replaced, so a late timeout must never cancel a later run.
+	runCancel := s.runCancel
+	forceStop := func() {
+		if runCancel != nil {
+			runCancel()
+		}
+	}
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		s.tctx.L().Info("incr maxPauseOrStopWaitTime time ")
 		defaultMaxPauseOrStopWaitTime = time.Minute * 10
@@ -1677,20 +1735,6 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 	case <-ctx.Done(): // hijack the root context from s.Run to wait for the transaction to end.
 		s.tctx.L().Info("received subtask's done, try graceful stop")
 		needToExitTime := time.Now()
-		s.waitTransactionLock.Lock()
-
-		failpoint.Inject("checkWaitDuration", func(_ failpoint.Value) {
-			s.isTransactionEnd = false
-		})
-		if s.isTransactionEnd {
-			s.waitXIDJob.Store(int64(waitComplete))
-			s.waitTransactionLock.Unlock()
-			s.tctx.L().Info("the last job is transaction end, done directly")
-			s.runCancel()
-			return
-		}
-		s.waitXIDJob.Store(int64(waiting))
-		s.waitTransactionLock.Unlock()
 		s.refreshCliArgs()
 
 		waitDuration := defaultMaxPauseOrStopWaitTime
@@ -1705,11 +1749,52 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		failpoint.Inject("recordAndIgnorePrepareTime", func() {
 			waitBeforeRunExitDurationForTest = waitDuration
 		})
-		if waitDuration.Seconds() <= 0 {
+		if waitDuration <= 0 {
 			s.tctx.L().Info("wait transaction end timeout, exit now")
-			s.runCancel()
+			forceStop()
 			return
 		}
+
+		// The transaction lock can be held while handleJob waits for an
+		// asynchronous DDL. Start the deadline before taking the lock so the
+		// timeout can cancel that DDL poller and break the wait cycle.
+		timeoutDone := make(chan struct{})
+		timer := time.AfterFunc(waitDuration, func() {
+			s.tctx.L().Info("wait transaction end timeout, exit now")
+			forceStop()
+			close(timeoutDone)
+		})
+		defer func() {
+			// If the callback is already running, wait for it to finish. Together
+			// with the captured cancel funcs above, this prevents a timeout from
+			// leaking into a subsequent Resume run.
+			if !timer.Stop() {
+				<-timeoutDone
+			}
+		}()
+
+		s.waitTransactionLock.Lock()
+		select {
+		case <-timeoutDone:
+			s.waitTransactionLock.Unlock()
+			return
+		default:
+		}
+
+		failpoint.Inject("checkWaitDuration", func(_ failpoint.Value) {
+			s.isTransactionEnd = false
+		})
+		if s.isTransactionEnd {
+			s.waitXIDJob.Store(int64(waitComplete))
+			s.waitTransactionLock.Unlock()
+			s.tctx.L().Info("the last job is transaction end, done directly")
+			if runCancel != nil {
+				runCancel()
+			}
+			return
+		}
+		s.waitXIDJob.Store(int64(waiting))
+		s.waitTransactionLock.Unlock()
 		failpoint.Inject("checkWaitDuration", func(val failpoint.Value) {
 			if testDuration, testError := time.ParseDuration(val.(string)); testError == nil {
 				if testDuration.Seconds() == waitDuration.Seconds() {
@@ -1724,9 +1809,7 @@ func (s *Syncer) waitBeforeRunExit(ctx context.Context) {
 		select {
 		case <-s.runCtx.Ctx.Done():
 			s.tctx.L().Info("syncer run exit so runCtx done")
-		case <-time.After(waitDuration):
-			s.tctx.L().Info("wait transaction end timeout, exit now")
-			s.runCancel()
+		case <-timeoutDone:
 		}
 	case <-s.runCtx.Ctx.Done(): // when no graceful stop, run ctx will canceled first.
 		s.tctx.L().Info("received ungraceful exit ctx, exit now")
@@ -1782,12 +1865,12 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	syncCtx, syncCancel := context.WithCancel(context.Background())
 	s.syncCtx, s.syncCancel = tcontext.NewContext(syncCtx, s.tctx.L()), syncCancel
 	defer func() {
-		s.runCancel()
+		runCancel()
 		s.closeJobChans()
 		s.checkpointFlushWorker.Close()
 		s.runWg.Wait()
-		// s.syncCancel won't be called when normal exit, this call just to follow the best practice of use context.
-		s.syncCancel()
+		// syncCancel won't be called when normal exit, this call just follows the best practice for using context.
+		syncCancel()
 	}()
 
 	// we should start this goroutine as soon as possible, because it's the only goroutine that cancel syncer.Run
