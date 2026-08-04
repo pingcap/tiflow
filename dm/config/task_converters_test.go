@@ -60,12 +60,14 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.From.Session = map[string]string{"time_zone": "UTC"}
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
 	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+		Session:  map[string]string{"time_zone": "UTC"},
 		Security: &security.Security{
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
@@ -82,6 +84,7 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	subTaskConfig := subTaskConfigList[0]
 	// check task name and mode
 	c.Assert(subTaskConfig.Name, check.Equals, task.Name)
+	c.Assert(subTaskConfig.Timezone, check.Equals, *task.Timezone)
 	// check task meta
 	c.Assert(subTaskConfig.MetaSchema, check.Equals, *task.MetaSchema)
 	c.Assert(subTaskConfig.Meta, check.IsNil)
@@ -93,8 +96,12 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.CaseSensitive, check.Equals, sourceCfg1.CaseSensitive)
 	// check from
 	c.Assert(subTaskConfig.From.Host, check.Equals, sourceCfg1.From.Host)
+	c.Assert(subTaskConfig.From.Session["time_zone"], check.Equals, *task.Timezone)
+	c.Assert(sourceCfg1.From.Session["time_zone"], check.Equals, "UTC")
 	// check to
 	c.Assert(subTaskConfig.To.Host, check.Equals, toDBCfg.Host)
+	c.Assert(subTaskConfig.To.Session["time_zone"], check.Equals, *task.Timezone)
+	c.Assert(toDBCfg.Session["time_zone"], check.Equals, "UTC")
 	// check dumpling loader syncer config
 	c.Assert(subTaskConfig.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
 	c.Assert(subTaskConfig.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
@@ -464,10 +471,33 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, taskCfg)
+	require.Equal(t, *task.Timezone, taskCfg.Timezone)
 	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, task1)
 	require.EqualValues(t, task1, &task)
+
+	configuredTimezone := task.Timezone
+	emptyTimezone := ""
+	for _, tc := range []struct {
+		name     string
+		timezone *string
+	}{
+		{name: "omitted", timezone: nil},
+		{name: "empty", timezone: &emptyTimezone},
+	} {
+		t.Run(tc.name+" timezone uses downstream default", func(t *testing.T) {
+			task.Timezone = tc.timezone
+			taskCfgWithoutTimezone, convertErr := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+			require.NoError(t, convertErr)
+			require.Empty(t, taskCfgWithoutTimezone.Timezone)
+
+			taskWithoutTimezone, convertErr := TaskConfigToOpenAPITask(taskCfgWithoutTimezone, sourceCfgMap)
+			require.NoError(t, convertErr)
+			require.Nil(t, taskWithoutTimezone.Timezone)
+		})
+	}
+	task.Timezone = configuredTimezone
 
 	// test update some fields in task
 	{

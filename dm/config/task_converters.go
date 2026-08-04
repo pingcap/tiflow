@@ -161,6 +161,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		// set task name and mode
 		subTaskCfg.Name = task.Name
 		subTaskCfg.Mode = string(task.TaskMode)
+		if task.Timezone != nil {
+			subTaskCfg.Timezone = *task.Timezone
+		}
 		// set task meta
 		subTaskCfg.MetaSchema = *task.MetaSchema
 		// add binlog meta
@@ -201,7 +204,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg.CaseSensitive = sourceCfgMap[sourceCfg.SourceName].CaseSensitive
 		// set source db config
 		subTaskCfg.SourceID = sourceCfg.SourceName
-		subTaskCfg.From = sourceCfgMap[sourceCfg.SourceName].From
+		subTaskCfg.From = *sourceCfgMap[sourceCfg.SourceName].From.Clone()
 		// set target db config
 		subTaskCfg.To = *toDBCfg.Clone()
 		// TODO ExprFilter
@@ -682,6 +685,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			User:     oneSubtaskConfig.To.User,
 			Password: oneSubtaskConfig.To.Password,
 		},
+	}
+	if oneSubtaskConfig.Timezone != "" {
+		timezone := oneSubtaskConfig.Timezone
+		task.Timezone = &timezone
 	}
 	if oneSubtaskConfig.ShardMode != "" {
 		taskShardMode := openapi.TaskShardMode(oneSubtaskConfig.ShardMode)
