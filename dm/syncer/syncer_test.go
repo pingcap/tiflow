@@ -2061,6 +2061,21 @@ func TestCheckCanUpdateCfgRejectsTimezoneChange(t *testing.T) {
 	require.ErrorContains(t, err, "fields that should not be changed")
 }
 
+func TestCheckCanUpdateCfgRejectsSafeModeChange(t *testing.T) {
+	for _, oldSafeMode := range []bool{false, true} {
+		cfg := genDefaultSubTaskConfig4Test()
+		cfg.SyncerConfig.SafeMode = oldSafeMode
+		syncer := NewSyncer(cfg, nil, nil)
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.SyncerConfig.SafeMode = !oldSafeMode
+
+		err = syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, "safe-mode")
+	}
+}
+
 func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
 	cfg := genDefaultSubTaskConfig4Test()
 	syncer := NewSyncer(cfg, nil, nil)

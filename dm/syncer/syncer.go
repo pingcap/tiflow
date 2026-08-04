@@ -3401,6 +3401,12 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	if err := config.CheckForeignKeyChecksSyncerOptions(newCfg.To.Session, newCfg.SyncerConfig); err != nil {
 		return err
 	}
+	if s.cfg.SyncerConfig.SafeMode != newCfg.SyncerConfig.SafeMode {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef(
+			"can't update safe-mode for syncer because it requires reinitialization, task: %s",
+			s.cfg.Name,
+		)
+	}
 	// can't update when in sharding merge
 	if s.cfg.ShardMode == config.ShardPessimistic {
 		_, tables := s.sgk.UnresolvedTables()

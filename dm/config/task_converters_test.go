@@ -109,6 +109,7 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
 	c.Assert(subTaskConfig.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
 	c.Assert(subTaskConfig.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTaskConfig.SyncerConfig.SafeMode, check.Equals, *task.SourceConfig.IncrMigrateConf.SafeMode)
 	// check route
 	c.Assert(subTaskConfig.RouteRules, check.HasLen, 1)
 	rule := subTaskConfig.RouteRules[0]
@@ -200,6 +201,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask1Config.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
 	c.Assert(subTask1Config.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
 	c.Assert(subTask1Config.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTask1Config.SyncerConfig.SafeMode, check.Equals, *task.SourceConfig.IncrMigrateConf.SafeMode)
 	// check route
 	c.Assert(subTask1Config.RouteRules, check.HasLen, 1)
 	rule := subTask1Config.RouteRules[0]
@@ -264,6 +266,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask2Config.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
 	c.Assert(subTask2Config.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
 	c.Assert(subTask2Config.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTask2Config.SyncerConfig.SafeMode, check.Equals, *task.SourceConfig.IncrMigrateConf.SafeMode)
 	// check route
 	c.Assert(subTask2Config.RouteRules, check.HasLen, 1)
 	rule = subTask2Config.RouteRules[0]
@@ -418,6 +421,43 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 	newTask := taskList[0]
 	require.Equal(t, *newTask.IgnoreCheckingItems, ignoreCheckingItems)
 	require.Equal(t, *newTask, task)
+}
+
+func TestOpenAPITaskSafeModeDefaults(t *testing.T) {
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+	sourceCfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	sourceName := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg.SourceID = sourceName
+	sourceCfgMap := map[string]*SourceConfig{sourceName: sourceCfg}
+	toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
+
+	safeModeFalse := false
+	safeModeTrue := true
+	testCases := []struct {
+		name     string
+		safeMode *bool
+		expected bool
+	}{
+		{name: "omitted", safeMode: nil, expected: false},
+		{name: "false", safeMode: &safeModeFalse, expected: false},
+		{name: "true", safeMode: &safeModeTrue, expected: true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			task.SourceConfig.IncrMigrateConf.SafeMode = testCase.safeMode
+			subTaskCfgs, convertErr := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+			require.NoError(t, convertErr)
+			require.Len(t, subTaskCfgs, 1)
+			require.Equal(t, testCase.expected, subTaskCfgs[0].SyncerConfig.SafeMode)
+
+			convertedTask := SubTaskConfigsToOpenAPITask(subTaskCfgs)
+			require.NotNil(t, convertedTask.SourceConfig.IncrMigrateConf.SafeMode)
+			require.Equal(t, testCase.expected, *convertedTask.SourceConfig.IncrMigrateConf.SafeMode)
+		})
+	}
 }
 
 func TestOpenAPITaskImportIntoMultiSourceRejected(t *testing.T) {

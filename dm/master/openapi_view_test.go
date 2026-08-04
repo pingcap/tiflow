@@ -552,6 +552,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
 	s.Equal(createTaskResp.Name, task.Name)
 	s.EqualValues(task.Timezone, createTaskResp.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, createTaskResp.SourceConfig.IncrMigrateConf.SafeMode)
 
 	// create again will fail
 	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
@@ -568,6 +569,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.Equal(1, resultTaskList.Total)
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
 	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, resultTaskList.Data[0].SourceConfig.IncrMigrateConf.SafeMode)
 
 	// get detail
 	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
@@ -577,6 +579,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&respTask))
 	s.Equal(task.Name, respTask.Name)
 	s.EqualValues(task.Timezone, respTask.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, respTask.SourceConfig.IncrMigrateConf.SafeMode)
 
 	// get not exist
 	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
@@ -591,6 +594,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.Equal(http.StatusOK, result.Code())
 	s.NoError(result.UnmarshalBodyToObject(&respTask))
 	s.Equal(task.Name, respTask.Name)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, respTask.SourceConfig.IncrMigrateConf.SafeMode)
 
 	// update not exist will fail
 	task.Name = "notexist"
@@ -1006,10 +1010,12 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
 	s.Equal(createTaskResp.Task.Name, task.Name)
 	s.EqualValues(task.Timezone, createTaskResp.Task.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, createTaskResp.Task.SourceConfig.IncrMigrateConf.SafeMode)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
 	s.Equal(*task.Timezone, subTaskM[source1Name].Timezone)
+	s.Equal(*task.SourceConfig.IncrMigrateConf.SafeMode, subTaskM[source1Name].SyncerConfig.SafeMode)
 
 	// get task
 	task1URL := fmt.Sprintf("%s/%s", taskURL, task.Name)
@@ -1019,6 +1025,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
 	s.Equal(task1FromHTTP.Name, task.Name)
 	s.EqualValues(task.Timezone, task1FromHTTP.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, task1FromHTTP.SourceConfig.IncrMigrateConf.SafeMode)
 
 	// changing timezone through PUT is rejected by the bottom update guard.
 	updatedTimezone := "UTC"
@@ -1057,6 +1064,43 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	storedSubTaskCfgs := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Equal(*task.Timezone, storedSubTaskCfgs[source1Name].Timezone)
 
+	// changing safe mode through PUT is rejected by the bottom update guard.
+	updatedSafeMode := !*task.SourceConfig.IncrMigrateConf.SafeMode
+	safeModeUpdateTask := task
+	incrMigrateConf := *task.SourceConfig.IncrMigrateConf
+	safeModeUpdateTask.SourceConfig.IncrMigrateConf = &incrMigrateConf
+	safeModeUpdateTask.SourceConfig.IncrMigrateConf.SafeMode = &updatedSafeMode
+	mockSafeModeUpdateWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockSafeModeUpdateWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *pb.CheckSubtasksCanUpdateRequest, _ ...grpc.CallOption) (*pb.CheckSubtasksCanUpdateResponse, error) {
+			newSubTaskCfg := config.NewSubTaskConfig()
+			decodeErr := newSubTaskCfg.Decode(req.SubtaskCfgTomlString, false)
+			s.NoError(decodeErr)
+			if decodeErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: decodeErr.Error()}, nil
+			}
+			s.Equal(updatedSafeMode, newSubTaskCfg.SyncerConfig.SafeMode)
+
+			guardErr := syncUnit.CheckCanUpdateCfg(newSubTaskCfg)
+			s.Error(guardErr)
+			resp := &pb.CheckSubtasksCanUpdateResponse{Success: guardErr == nil}
+			if guardErr != nil {
+				resp.Msg = guardErr.Error()
+			}
+			return resp, nil
+		},
+	)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockSafeModeUpdateWorkerClient))
+	safeModeUpdateReq := openapi.UpdateTaskRequest{Task: safeModeUpdateTask}
+	result = testutil.NewRequest().Put(task1URL).WithJsonBody(safeModeUpdateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var safeModeUpdateErr openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&safeModeUpdateErr))
+	s.Equal(int(terror.ErrSchedulerSubTaskCfgUpdate.Code()), safeModeUpdateErr.ErrorCode)
+	s.Contains(safeModeUpdateErr.ErrorMsg, "safe-mode")
+	storedSubTaskCfgs = s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Equal(*task.SourceConfig.IncrMigrateConf.SafeMode, storedSubTaskCfgs[source1Name].SyncerConfig.SafeMode)
+
 	// update a task
 	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
 	clone := task
@@ -1078,6 +1122,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(1, resultTaskList.Total)
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
 	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, resultTaskList.Data[0].SourceConfig.IncrMigrateConf.SafeMode)
 
 	s.testImportTaskTemplate(&task, s1)
 
