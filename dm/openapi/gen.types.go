@@ -686,12 +686,8 @@ type TaskIncrMigrateConf struct {
 	ReplThreads *int `json:"repl_threads,omitempty"`
 
 	// Whether to keep safe mode enabled during incremental replication.
-	// When omitted or false, this setting does not keep safe mode permanently enabled.
-	// DM still applies its existing initialization and checkpoint-recovery protection.
-	// A fresh initialization normally enables safe mode temporarily.
-	// When resuming from a retained checkpoint, safe mode may exit immediately or after the saved exit point is reached.
-	// If a start request also specifies `safe_mode_time_duration`, DM uses that existing one-time start behavior instead of this persistent setting for that start.
-	// Only use this field after all DM masters and workers are upgraded to a version that supports it.
+	// When false, DM may still enable it temporarily during initialization or checkpoint recovery.
+	// `safe_mode_time_duration` takes precedence when specified at task start.
 	SafeMode *bool `json:"safe_mode,omitempty"`
 }
 
