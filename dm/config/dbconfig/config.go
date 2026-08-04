@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tiflow/dm/config/security"
@@ -49,6 +50,14 @@ type RawDBConfig struct {
 	MaxIdleConns int
 	ReadTimeout  string
 	WriteTimeout string
+	// ConnMaxLifetime caps the total lifetime of a pooled connection.
+	// A zero (or negative) value means the process-wide default is used
+	// (see basedb.Apply). Set explicitly to override.
+	ConnMaxLifetime time.Duration
+	// ConnMaxIdleTime caps how long a connection may sit idle in the pool
+	// before being closed. A zero (or negative) value means the process-wide
+	// default is used (see basedb.Apply). Set explicitly to override.
+	ConnMaxIdleTime time.Duration
 }
 
 // SetReadTimeout set readTimeout for raw database config.
@@ -68,6 +77,18 @@ func (c *RawDBConfig) SetWriteTimeout(writeTimeout string) *RawDBConfig {
 // set value > 0 then `value` idle connections are retained.
 func (c *RawDBConfig) SetMaxIdleConns(value int) *RawDBConfig {
 	c.MaxIdleConns = value
+	return c
+}
+
+// SetConnMaxLifetime sets the maximum lifetime of a pooled connection.
+func (c *RawDBConfig) SetConnMaxLifetime(d time.Duration) *RawDBConfig {
+	c.ConnMaxLifetime = d
+	return c
+}
+
+// SetConnMaxIdleTime sets the maximum idle time of a pooled connection.
+func (c *RawDBConfig) SetConnMaxIdleTime(d time.Duration) *RawDBConfig {
+	c.ConnMaxIdleTime = d
 	return c
 }
 

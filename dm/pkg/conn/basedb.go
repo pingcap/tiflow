@@ -44,6 +44,20 @@ var customID int64
 
 var netTimeout = DefaultDBTimeout
 
+const (
+	// defaultConnMaxLifetime is the default maximum lifetime of a pooled
+	// database/sql connection. It is set well below any reasonable server-side
+	// `wait_timeout` (MySQL/TiDB default is 8h) and any typical stateful
+	// middlebox idle timeout, so the pool never hands out a connection whose
+	// peer has silently gone away (rolling restart, `wait_timeout` expiry,
+	// keepalive miss). See https://pkg.go.dev/database/sql#DB.SetConnMaxLifetime.
+	defaultConnMaxLifetime = 30 * time.Minute
+	// defaultConnMaxIdleTime bounds how long a connection may sit idle in the
+	// pool. It complements defaultConnMaxLifetime for connections that are
+	// used rarely. See https://pkg.go.dev/database/sql#DB.SetConnMaxIdleTime.
+	defaultConnMaxIdleTime = 5 * time.Minute
+)
+
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
 	Apply(config ScopedDBConfig) (*BaseDB, error)
@@ -148,6 +162,8 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 	}
 
 	var maxIdleConns int
+	connMaxLifetime := defaultConnMaxLifetime
+	connMaxIdleTime := defaultConnMaxIdleTime
 	rawCfg := config.RawDBCfg
 	if rawCfg != nil {
 		if rawCfg.ReadTimeout != "" {
@@ -157,6 +173,12 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 			dsn += fmt.Sprintf("&writeTimeout=%s", rawCfg.WriteTimeout)
 		}
 		maxIdleConns = rawCfg.MaxIdleConns
+		if rawCfg.ConnMaxLifetime > 0 {
+			connMaxLifetime = rawCfg.ConnMaxLifetime
+		}
+		if rawCfg.ConnMaxIdleTime > 0 {
+			connMaxIdleTime = rawCfg.ConnMaxIdleTime
+		}
 	}
 
 	var setFK bool
@@ -200,6 +222,14 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 	}
 
 	db.SetMaxIdleConns(maxIdleConns)
+	// Cap connection lifetime so the pool proactively closes and re-opens
+	// TCP connections before the server or any middlebox drops them.
+	// Without this, a pooled connection re-used after the peer has silently
+	// gone away surfaces as `mysql.ErrInvalidConn` on the next statement,
+	// which the DM retry classifier treats as unretryable and causes the
+	// syncer/loader/dumper unit to exit with an error.
+	db.SetConnMaxLifetime(connMaxLifetime)
+	db.SetConnMaxIdleTime(connMaxIdleTime)
 
 	return NewBaseDB(db, config.Scope, version, doFuncInClose), nil
 }
