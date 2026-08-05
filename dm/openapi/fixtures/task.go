@@ -42,7 +42,7 @@ var (
 			  "cert_allowed_cn": ["PD1", "PD2"]
 			}
 		  },
-		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
+		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32, "safe_mode": true },
 		  "source_conf": [{ "source_name": "mysql-replica-01" }]
 		},
 		"table_migrate_rule": [
@@ -127,7 +127,7 @@ var (
 			"import_mode": "logical",
 			"import_threads": 16
 		  },
-		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32 },
+		  "incr_migrate_conf": { "repl_batch": 200, "repl_threads": 32, "safe_mode": true },
 		  "source_conf": [
 			{
 			  "binlog_gtid": "",

@@ -1807,6 +1807,13 @@ components:
           type: integer
           description: incremental synchronization of batch execution sql quantities
           default: 100
+        safe_mode:
+          type: boolean
+          description: |-
+            Whether to keep safe mode enabled during incremental replication.
+            When false, DM may still enable it temporarily during initialization or checkpoint recovery.
+            `safe_mode_time_duration` takes precedence when specified at task start.
+          default: false
     TaskSourceConf:
       type: object
       properties:

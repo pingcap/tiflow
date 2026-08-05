@@ -281,6 +281,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 			if incrCfg.ReplBatch != nil {
 				subTaskCfg.SyncerConfig.Batch = *incrCfg.ReplBatch
 			}
+			if incrCfg.SafeMode != nil {
+				subTaskCfg.SyncerConfig.SafeMode = *incrCfg.SafeMode
+			}
 		}
 		subTaskCfg.ValidatorCfg = defaultValidatorConfig()
 		// set route,blockAllowList,filter config
@@ -582,6 +585,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	taskSourceConfig.IncrMigrateConf = &openapi.TaskIncrMigrateConf{
 		ReplBatch:   &oneSubtaskConfig.SyncerConfig.Batch,
 		ReplThreads: &oneSubtaskConfig.SyncerConfig.WorkerCount,
+		SafeMode:    &oneSubtaskConfig.SyncerConfig.SafeMode,
 	}
 	if oneSubtaskConfig.LoaderConfig.Security != nil {
 		var certAllowedCN []string

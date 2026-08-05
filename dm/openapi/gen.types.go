@@ -684,6 +684,11 @@ type TaskIncrMigrateConf struct {
 
 	// incremental task of concurrent
 	ReplThreads *int `json:"repl_threads,omitempty"`
+
+	// Whether to keep safe mode enabled during incremental replication.
+	// When false, DM may still enable it temporarily during initialization or checkpoint recovery.
+	// `safe_mode_time_duration` takes precedence when specified at task start.
+	SafeMode *bool `json:"safe_mode,omitempty"`
 }
 
 // task migrate targets
