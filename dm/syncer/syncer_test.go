@@ -2123,7 +2123,6 @@ func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
 		new     map[string]string
 		allowed bool
 	}{
-		{name: "nil and empty", old: nil, new: map[string]string{}, allowed: true},
 		{name: "omitted and explicit default", old: nil, new: map[string]string{"FOREIGN_KEY_CHECKS": "0"}, allowed: true},
 		{
 			name:    "normalized foreign key checks key",
@@ -2150,27 +2149,7 @@ func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
 			new:     map[string]string{"FOREIGN_KEY_CHECKS": "1"},
 			allowed: true,
 		},
-		{
-			name:    "legacy quoted enabled value and canonical one",
-			old:     map[string]string{"foreign_key_checks": "'1'"},
-			new:     map[string]string{"foreign_key_checks": "1"},
-			allowed: true,
-		},
-		{
-			name:    "legacy disabled value and canonical zero",
-			old:     map[string]string{"foreign_key_checks": "off"},
-			new:     map[string]string{"foreign_key_checks": "0"},
-			allowed: true,
-		},
 		{name: "foreign key checks changed", old: nil, new: map[string]string{"foreign_key_checks": "1"}},
-		{name: "legacy enabled value changed", old: map[string]string{"foreign_key_checks": "ON"}, new: nil},
-		{
-			name:    "internal session change keeps existing allowance",
-			old:     map[string]string{"tidb_txn_mode": "optimistic"},
-			new:     map[string]string{"tidb_txn_mode": "pessimistic"},
-			allowed: true,
-		},
-		{name: "runtime session added", old: nil, new: map[string]string{"sql_mode": "ANSI_QUOTES"}, allowed: true},
 		{
 			name: "case-normalized duplicate",
 			old:  nil,

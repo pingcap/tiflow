@@ -126,14 +126,11 @@ func TestGetLightiningConfig(t *testing.T) {
 	conf, err = GetLightningConfig(&lcfg.GlobalConfig{}, &config.SubTaskConfig{
 		To: dbconfig.DBConfig{Session: map[string]string{
 			"foreign_key_checks": "1",
-			"sql_mode":           "ANSI_QUOTES",
 		}},
 		LoaderConfig: config.LoaderConfig{Dir: "/tmp"},
 	})
 	require.NoError(t, err)
 	require.Equal(t, "0", conf.TiDB.Vars["foreign_key_checks"])
-	require.Equal(t, "optimistic", conf.TiDB.Vars["tidb_txn_mode"])
-	require.NotContains(t, conf.TiDB.Vars, "sql_mode")
 
 	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{

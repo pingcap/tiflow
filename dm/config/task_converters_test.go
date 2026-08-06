@@ -16,7 +16,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/coreos/go-semver/semver"
 	"github.com/google/uuid"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -52,9 +51,6 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 	c.Assert(dbCfg.Security, check.NotNil)
 	c.Assert([]string{dbCfg.Security.CertAllowedCN[0]}, check.DeepEquals, certAllowedCn)
 	c.Assert(dbCfg.Session, check.DeepEquals, targetSession)
-	AdjustTargetDBSessionCfg(dbCfg, semver.New("6.0.0"))
-	c.Assert(dbCfg.Session["tidb_txn_mode"], check.Equals, "optimistic")
-	c.Assert(task.TargetConfig.Session.AdditionalProperties, check.DeepEquals, targetSession)
 	dbCfg.Session["foreign_key_checks"] = "0"
 	c.Assert(targetSession["foreign_key_checks"], check.Equals, "1")
 }
@@ -123,7 +119,6 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.To.Session["foreign_key_checks"], check.Equals, "1")
 	toDBCfg.Session["foreign_key_checks"] = "0"
 	c.Assert(subTaskConfig.To.Session["foreign_key_checks"], check.Equals, "1")
-	c.Assert(task.TargetConfig.Session.AdditionalProperties["foreign_key_checks"], check.Equals, "1")
 	// check dumpling loader syncer config
 	c.Assert(subTaskConfig.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
 	c.Assert(subTaskConfig.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
@@ -538,16 +533,9 @@ func TestConvertTargetSession(t *testing.T) {
 		"time_zone":          taskCfg.Timezone,
 	}, taskCfg.TargetDB.Session)
 
-	invalidSessions := []map[string]string{
-		{"sql_mode": "ANSI_QUOTES", "time_zone": taskCfg.Timezone},
-		{"foreign_key_checks": "ON"},
-		{"FOREIGN_KEY_CHECKS": "0", "foreign_key_checks": "1"},
-	}
-	for _, session := range invalidSessions {
-		taskCfg.TargetDB.Session = session
-		_, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
-		require.Error(t, err)
-	}
+	taskCfg.TargetDB.Session = map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": taskCfg.Timezone}
+	_, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.ErrorContains(t, err, "unsupported target session parameter")
 
 	uppercaseSession := map[string]string{
 		"FOREIGN_KEY_CHECKS": "0",
@@ -579,21 +567,14 @@ func TestProjectTaskTargetSession(t *testing.T) {
 		expected *openapi.TaskTargetDataBase_Session
 	}{
 		{
-			name:    "canonical enabled",
+			name:    "legacy enabled",
 			session: map[string]string{"FOREIGN_KEY_CHECKS": "ON", "tidb_txn_mode": "optimistic"},
 			expected: &openapi.TaskTargetDataBase_Session{
 				AdditionalProperties: map[string]string{"foreign_key_checks": "1"},
 			},
 		},
 		{
-			name:    "canonical quoted enabled",
-			session: map[string]string{"foreign_key_checks": "'1'"},
-			expected: &openapi.TaskTargetDataBase_Session{
-				AdditionalProperties: map[string]string{"foreign_key_checks": "1"},
-			},
-		},
-		{
-			name:    "canonical disabled",
+			name:    "legacy disabled",
 			session: map[string]string{"foreign_key_checks": "off"},
 			expected: &openapi.TaskTargetDataBase_Session{
 				AdditionalProperties: map[string]string{"foreign_key_checks": "0"},

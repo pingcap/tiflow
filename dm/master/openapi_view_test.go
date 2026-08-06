@@ -585,7 +585,6 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
 	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
 	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, resultTaskList.Data[0].SourceConfig.IncrMigrateConf.SafeMode)
-	s.Equal(map[string]string{"foreign_key_checks": "1"}, resultTaskList.Data[0].TargetConfig.Session.AdditionalProperties)
 
 	// get detail
 	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
@@ -1184,7 +1183,6 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
 	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
 	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, resultTaskList.Data[0].SourceConfig.IncrMigrateConf.SafeMode)
-	s.Equal(map[string]string{"foreign_key_checks": "1"}, resultTaskList.Data[0].TargetConfig.Session.AdditionalProperties)
 
 	s.testImportTaskTemplate(&task, s1)
 

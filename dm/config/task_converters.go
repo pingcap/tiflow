@@ -730,8 +730,8 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	return &task
 }
 
-// projectTaskTargetSession exposes only the public key and canonicalizes legacy
-// values with the same effective semantics used by the runtime.
+// projectTaskTargetSession projects target session settings to OpenAPI.
+// It currently exposes only foreign_key_checks and normalizes legacy values to "0" or "1".
 func projectTaskTargetSession(session map[string]string) *openapi.TaskTargetDataBase_Session {
 	keys := make([]string, 0, 1)
 	for key := range session {
