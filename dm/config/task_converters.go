@@ -15,7 +15,6 @@ package config
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -726,33 +725,18 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			CertAllowedCn:  &certAllowedCN,
 		}
 	}
-	task.TargetConfig.Session = projectTaskTargetSession(oneSubtaskConfig.To.Session)
+	task.TargetConfig.Session = projectTargetSession(oneSubtaskConfig.To.Session)
 	return &task
 }
 
-// projectTaskTargetSession projects target session settings to OpenAPI.
-// It currently exposes only foreign_key_checks and normalizes legacy values to "0" or "1".
-func projectTaskTargetSession(session map[string]string) *openapi.TaskTargetDataBase_Session {
-	keys := make([]string, 0, 1)
-	for key := range session {
-		if strings.EqualFold(key, "foreign_key_checks") {
-			keys = append(keys, key)
-		}
-	}
-	if len(keys) == 0 {
+// projectTargetSession projects target session settings to OpenAPI.
+func projectTargetSession(session map[string]string) *openapi.TaskTargetDataBase_Session {
+	normalized, _ := NormalizeTargetSession(session)
+	if len(normalized) == 0 {
 		return nil
 	}
-	sort.Strings(keys)
-	if _, ok := session["foreign_key_checks"]; ok {
-		keys[0] = "foreign_key_checks"
-	}
-
-	value := "0"
-	if IsForeignKeyChecksEnabled(map[string]string{"foreign_key_checks": session[keys[0]]}) {
-		value = "1"
-	}
 	return &openapi.TaskTargetDataBase_Session{
-		AdditionalProperties: map[string]string{"foreign_key_checks": value},
+		AdditionalProperties: normalized,
 	}
 }
 

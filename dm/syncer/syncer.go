@@ -3458,22 +3458,10 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 // OpenAPI. Other entries may be derived at runtime, such as sql_mode in createDBs,
 // and must keep the update compatibility behavior that predates this API field.
 func targetForeignKeyChecksEqual(oldSession, newSession map[string]string) bool {
-	valid := func(session map[string]string) bool {
-		found := false
-		for key := range session {
-			if !strings.EqualFold(key, "foreign_key_checks") {
-				continue
-			}
-			if found {
-				return false
-			}
-			found = true
-		}
-		return true
-	}
-
-	return valid(oldSession) && valid(newSession) &&
-		config.IsForeignKeyChecksEnabled(oldSession) == config.IsForeignKeyChecksEnabled(newSession)
+	oldNormalized, oldHasDuplicate := config.NormalizeTargetSession(oldSession)
+	newNormalized, newHasDuplicate := config.NormalizeTargetSession(newSession)
+	return !oldHasDuplicate && !newHasDuplicate &&
+		config.IsForeignKeyChecksEnabled(oldNormalized) == config.IsForeignKeyChecksEnabled(newNormalized)
 }
 
 // Update implements Unit.Update

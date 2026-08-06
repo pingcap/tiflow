@@ -560,7 +560,7 @@ func TestConvertTargetSession(t *testing.T) {
 	require.ErrorContains(t, err, "unsupported target session parameter")
 }
 
-func TestProjectTaskTargetSession(t *testing.T) {
+func TestProjectTargetSession(t *testing.T) {
 	testCases := []struct {
 		name     string
 		session  map[string]string
@@ -585,7 +585,7 @@ func TestProjectTaskTargetSession(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			actual := projectTaskTargetSession(testCase.session)
+			actual := projectTargetSession(testCase.session)
 			require.Equal(t, testCase.expected, actual)
 			if actual != nil {
 				actual.AdditionalProperties["foreign_key_checks"] = "changed"
