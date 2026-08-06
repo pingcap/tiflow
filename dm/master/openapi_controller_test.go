@@ -763,6 +763,23 @@ func (s *OpenAPIControllerSuite) TestDeleteTaskKeepMeta() {
 	assertMeta(keepMetaTask, true)
 }
 
+func (s *OpenAPIControllerSuite) TestCreateTaskRejectsInvalidTargetSession() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	task := *s.testTask
+	task.TargetConfig.Session = &openapi.TaskTargetDataBase_Session{
+		AdditionalProperties: map[string]string{"sql_mode": "ANSI_QUOTES"},
+	}
+	_, err := server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
+	s.ErrorContains(err, "unsupported target session parameter")
+	s.Empty(server.scheduler.GetSubTaskCfgsByTask(task.Name))
+}
+
 func (s *OpenAPIControllerSuite) TestTaskControllerWithInvalidTask() {
 	ctx, cancel := context.WithCancel(context.Background())
 	server := setupTestServer(ctx, s.T())

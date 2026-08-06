@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -357,6 +358,12 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *dbconfig.DBConfig {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+	}
+	if task.TargetConfig.Session != nil {
+		toDBCfg.Session = make(map[string]string, len(task.TargetConfig.Session.AdditionalProperties))
+		for key, value := range task.TargetConfig.Session.AdditionalProperties {
+			toDBCfg.Session[key] = value
+		}
 	}
 	if task.TargetConfig.Security != nil {
 		var certAllowedCN []string
@@ -719,11 +726,53 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			CertAllowedCn:  &certAllowedCN,
 		}
 	}
+	task.TargetConfig.Session = projectTaskTargetSession(oneSubtaskConfig.To.Session)
 	return &task
+}
+
+// projectTaskTargetSession exposes only the public key and canonicalizes legacy
+// values with the same effective semantics used by the runtime.
+func projectTaskTargetSession(session map[string]string) *openapi.TaskTargetDataBase_Session {
+	keys := make([]string, 0, 1)
+	for key := range session {
+		if strings.EqualFold(key, "foreign_key_checks") {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	sort.Strings(keys)
+	if _, ok := session["foreign_key_checks"]; ok {
+		keys[0] = "foreign_key_checks"
+	}
+
+	value := "0"
+	if IsForeignKeyChecksEnabled(map[string]string{"foreign_key_checks": session[keys[0]]}) {
+		value = "1"
+	}
+	return &openapi.TaskTargetDataBase_Session{
+		AdditionalProperties: map[string]string{"foreign_key_checks": value},
+	}
 }
 
 // TaskConfigToOpenAPITask converts TaskConfig to an openapi task.
 func TaskConfigToOpenAPITask(c *TaskConfig, sourceCfgMap map[string]*SourceConfig) (*openapi.Task, error) {
+	if c.TargetDB != nil {
+		publicTargetSession := make(map[string]string, len(c.TargetDB.Session))
+		for key, value := range c.TargetDB.Session {
+			// time_zone is managed by the task-level timezone field and may be
+			// injected into database sessions during config adjustment.
+			if strings.EqualFold(key, "time_zone") {
+				continue
+			}
+			publicTargetSession[key] = value
+		}
+		if _, err := openapi.NormalizeTaskTargetSession(publicTargetSession); err != nil {
+			return nil, err
+		}
+	}
+
 	cfgs := make(map[string]dbconfig.DBConfig)
 	for _, source := range c.MySQLInstances {
 		if cfg, ok := sourceCfgMap[source.SourceID]; ok {
@@ -761,6 +810,9 @@ func TaskConfigToOpenAPITask(c *TaskConfig, sourceCfgMap map[string]*SourceConfi
 
 // OpenAPITaskToTaskConfig converts an openapi task to TaskConfig.
 func OpenAPITaskToTaskConfig(task *openapi.Task, sourceCfgMap map[string]*SourceConfig) (*TaskConfig, error) {
+	if err := task.Adjust(); err != nil {
+		return nil, err
+	}
 	toDBCfg := GetTargetDBCfgFromOpenAPITask(task)
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(task, toDBCfg, sourceCfgMap)
 	if err != nil {

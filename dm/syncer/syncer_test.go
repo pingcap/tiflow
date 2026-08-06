@@ -2116,6 +2116,89 @@ func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T
 	require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
 }
 
+func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
+	testCases := []struct {
+		name    string
+		old     map[string]string
+		new     map[string]string
+		allowed bool
+	}{
+		{name: "nil and empty", old: nil, new: map[string]string{}, allowed: true},
+		{name: "omitted and explicit default", old: nil, new: map[string]string{"FOREIGN_KEY_CHECKS": "0"}, allowed: true},
+		{
+			name:    "normalized foreign key checks key",
+			old:     map[string]string{"foreign_key_checks": "0"},
+			new:     map[string]string{"FOREIGN_KEY_CHECKS": "0"},
+			allowed: true,
+		},
+		{
+			name: "runtime derived session difference",
+			old: map[string]string{
+				"foreign_key_checks": "1",
+				"sql_mode":           "ANSI_QUOTES",
+				"tidb_txn_mode":      "optimistic",
+			},
+			new: map[string]string{
+				"foreign_key_checks": "1",
+				"tidb_txn_mode":      "optimistic",
+			},
+			allowed: true,
+		},
+		{
+			name:    "legacy enabled value and canonical one",
+			old:     map[string]string{"foreign_key_checks": "ON"},
+			new:     map[string]string{"FOREIGN_KEY_CHECKS": "1"},
+			allowed: true,
+		},
+		{
+			name:    "legacy quoted enabled value and canonical one",
+			old:     map[string]string{"foreign_key_checks": "'1'"},
+			new:     map[string]string{"foreign_key_checks": "1"},
+			allowed: true,
+		},
+		{
+			name:    "legacy disabled value and canonical zero",
+			old:     map[string]string{"foreign_key_checks": "off"},
+			new:     map[string]string{"foreign_key_checks": "0"},
+			allowed: true,
+		},
+		{name: "foreign key checks changed", old: nil, new: map[string]string{"foreign_key_checks": "1"}},
+		{name: "legacy enabled value changed", old: map[string]string{"foreign_key_checks": "ON"}, new: nil},
+		{
+			name:    "internal session change keeps existing allowance",
+			old:     map[string]string{"tidb_txn_mode": "optimistic"},
+			new:     map[string]string{"tidb_txn_mode": "pessimistic"},
+			allowed: true,
+		},
+		{name: "runtime session added", old: nil, new: map[string]string{"sql_mode": "ANSI_QUOTES"}, allowed: true},
+		{
+			name: "case-normalized duplicate",
+			old:  nil,
+			new:  map[string]string{"FOREIGN_KEY_CHECKS": "0", "foreign_key_checks": "0"},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			oldCfg := genDefaultSubTaskConfig4Test()
+			oldCfg.SyncerConfig.WorkerCount = 1
+			oldCfg.To.Session = testCase.old
+			syncer := NewSyncer(oldCfg, nil, nil)
+
+			newCfg, err := oldCfg.Clone()
+			require.NoError(t, err)
+			newCfg.To.Session = testCase.new
+			err = syncer.CheckCanUpdateCfg(newCfg)
+			if testCase.allowed {
+				require.NoError(t, err)
+				return
+			}
+			require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+			require.ErrorContains(t, err, "target database session")
+		})
+	}
+}
+
 func TestUpdateRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
 	cfg := genDefaultSubTaskConfig4Test()
 	syncer := NewSyncer(cfg, nil, nil)

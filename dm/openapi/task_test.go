@@ -14,6 +14,7 @@
 package openapi
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/pingcap/check"
@@ -50,4 +51,102 @@ func (t *taskSuite) TestTaskAdjust(c *check.C) {
 	invalidTimezone := "invalid/timezone"
 	task5 := &Task{OnDuplicate: TaskOnDuplicateError, Timezone: &invalidTimezone}
 	c.Assert(terror.ErrConfigInvalidTimezone.Equal(task5.Adjust()), check.IsTrue)
+}
+
+func (t *taskSuite) TestTaskTargetSession(c *check.C) {
+	input := map[string]string{"FOREIGN_KEY_CHECKS": "1"}
+	task := &Task{
+		TargetConfig: TaskTargetDataBase{
+			Session: &TaskTargetDataBase_Session{AdditionalProperties: input},
+		},
+	}
+	c.Assert(task.Adjust(), check.IsNil)
+	c.Assert(task.TargetConfig.Session.AdditionalProperties, check.DeepEquals, map[string]string{
+		"foreign_key_checks": "1",
+	})
+	c.Assert(input, check.DeepEquals, map[string]string{"FOREIGN_KEY_CHECKS": "1"})
+	task.TargetConfig.Session.AdditionalProperties["foreign_key_checks"] = "0"
+	c.Assert(input["FOREIGN_KEY_CHECKS"], check.Equals, "1")
+	normalizedDefault, err := NormalizeTaskTargetSession(map[string]string{"foreign_key_checks": "0"})
+	c.Assert(err, check.IsNil)
+	c.Assert(normalizedDefault, check.DeepEquals, map[string]string{"foreign_key_checks": "0"})
+
+	emptyTask := &Task{
+		TargetConfig: TaskTargetDataBase{
+			Session: &TaskTargetDataBase_Session{AdditionalProperties: map[string]string{}},
+		},
+	}
+	c.Assert(emptyTask.Adjust(), check.IsNil)
+	c.Assert(emptyTask.TargetConfig.Session, check.IsNil)
+
+	testCases := []struct {
+		name       string
+		session    map[string]string
+		errMessage string
+	}{
+		{
+			name:       "unsupported key",
+			session:    map[string]string{"sql_mode": "ANSI_QUOTES"},
+			errMessage: `unsupported target session parameter "sql_mode"`,
+		},
+		{
+			name: "case-normalized duplicate",
+			session: map[string]string{
+				"FOREIGN_KEY_CHECKS": "0",
+				"foreign_key_checks": "1",
+			},
+			errMessage: `target session parameter "foreign_key_checks" is duplicated after case normalization`,
+		},
+		{
+			name:       "empty value",
+			session:    map[string]string{"foreign_key_checks": ""},
+			errMessage: `target session parameter "foreign_key_checks" must be the exact string "0" or "1"`,
+		},
+		{
+			name:       "boolean word value",
+			session:    map[string]string{"foreign_key_checks": "true"},
+			errMessage: `target session parameter "foreign_key_checks" must be the exact string "0" or "1"`,
+		},
+		{
+			name:       "on value",
+			session:    map[string]string{"foreign_key_checks": "on"},
+			errMessage: `target session parameter "foreign_key_checks" must be the exact string "0" or "1"`,
+		},
+		{
+			name:       "value whitespace",
+			session:    map[string]string{"foreign_key_checks": "1 "},
+			errMessage: `target session parameter "foreign_key_checks" must be the exact string "0" or "1"`,
+		},
+		{
+			name:       "key whitespace",
+			session:    map[string]string{" foreign_key_checks": "1"},
+			errMessage: `unsupported target session parameter " foreign_key_checks"`,
+		},
+		{
+			name: "deterministic first error",
+			session: map[string]string{
+				"z_session": "1",
+				"a_session": "1",
+			},
+			errMessage: `unsupported target session parameter "a_session"`,
+		},
+	}
+	for _, testCase := range testCases {
+		c.Log(testCase.name)
+		invalidTask := &Task{
+			TargetConfig: TaskTargetDataBase{
+				Session: &TaskTargetDataBase_Session{AdditionalProperties: testCase.session},
+			},
+		}
+		err := invalidTask.Adjust()
+		c.Assert(err, check.ErrorMatches, testCase.errMessage)
+	}
+
+	var jsonTask Task
+	c.Assert(jsonTask.FromJSON([]byte(`{"target_config":{"session":{"foreign_key_checks":1}}}`)), check.ErrorMatches, ".*cannot unmarshal number.*")
+	c.Assert(jsonTask.FromJSON([]byte(`{"target_config":{"session":{"foreign_key_checks":true}}}`)), check.ErrorMatches, ".*cannot unmarshal bool.*")
+	c.Assert(jsonTask.FromJSON([]byte(`{"target_config":{"session":{"foreign_key_checks":null}}}`)), check.IsNil)
+	err = jsonTask.Adjust()
+	c.Assert(err, check.NotNil)
+	c.Assert(strings.Contains(err.Error(), `must be the exact string "0" or "1"`), check.Equals, true)
 }

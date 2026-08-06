@@ -774,8 +774,16 @@ type TaskTargetDataBase struct {
 	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
 	Security *Security `json:"security"`
 
+	// downstream database session parameters for incremental replication. Currently only foreign_key_checks is supported, with a value of "0" or "1"; keys are case-insensitive. If omitted, DM uses foreign_key_checks="0"
+	Session *TaskTargetDataBase_Session `json:"session,omitempty"`
+
 	// source username
 	User string `json:"user"`
+}
+
+// downstream database session parameters for incremental replication. Currently only foreign_key_checks is supported, with a value of "0" or "1"; keys are case-insensitive. If omitted, DM uses foreign_key_checks="0"
+type TaskTargetDataBase_Session struct {
+	AdditionalProperties map[string]string `json:"-"`
 }
 
 // TaskTemplateRequest defines model for TaskTemplateRequest.
@@ -1016,6 +1024,59 @@ func (a *Task_BinlogFilterRule) UnmarshalJSON(b []byte) error {
 
 // Override default JSON handling for Task_BinlogFilterRule to handle AdditionalProperties
 func (a Task_BinlogFilterRule) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for TaskTargetDataBase_Session. Returns the specified
+// element and whether it was found
+func (a TaskTargetDataBase_Session) Get(fieldName string) (value string, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for TaskTargetDataBase_Session
+func (a *TaskTargetDataBase_Session) Set(fieldName string, value string) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]string)
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for TaskTargetDataBase_Session to handle AdditionalProperties
+func (a *TaskTargetDataBase_Session) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]string)
+		for fieldName, fieldBuf := range object {
+			var fieldVal string
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for TaskTargetDataBase_Session to handle AdditionalProperties
+func (a TaskTargetDataBase_Session) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
