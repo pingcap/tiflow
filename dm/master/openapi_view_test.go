@@ -18,6 +18,7 @@ package master
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -544,20 +545,30 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	task.TargetConfig.Port = dbCfg.Port
 	task.TargetConfig.User = dbCfg.User
 	task.TargetConfig.Password = dbCfg.Password
-	task.TargetConfig.Session = &openapi.TaskTargetDataBase_Session{
-		AdditionalProperties: map[string]string{"FOREIGN_KEY_CHECKS": "1"},
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
 	}
 
-	invalidTask := task
-	invalidTask.Name += "-invalid-session"
-	invalidTask.TargetConfig.Session = &openapi.TaskTargetDataBase_Session{
-		AdditionalProperties: map[string]string{"sql_mode": "ANSI_QUOTES"},
+	invalidTaskJSON, err := task.ToJSON()
+	s.NoError(err)
+	var invalidTask map[string]any
+	s.NoError(json.Unmarshal(invalidTaskJSON, &invalidTask))
+	targetConfig, ok := invalidTask["target_config"].(map[string]any)
+	s.Require().True(ok)
+	invalidSessions := []struct {
+		name    string
+		session map[string]string
+	}{
+		{name: "unsupported-key", session: map[string]string{"FOREIGN_KEY_CHECKS": "1"}},
+		{name: "unsupported-value", session: map[string]string{"foreign_key_checks": "on"}},
 	}
-	result = testutil.NewRequest().Post(url).WithJsonBody(invalidTask).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-	s.Equal(http.StatusBadRequest, result.Code())
-	var invalidErrResp openapi.ErrorWithMessage
-	s.NoError(result.UnmarshalBodyToObject(&invalidErrResp))
-	s.Contains(invalidErrResp.ErrorMsg, "unsupported target session parameter")
+	for _, testCase := range invalidSessions {
+		invalidTask["name"] = task.Name + "-" + testCase.name
+		targetConfig["session"] = testCase.session
+		result = testutil.NewRequest().Post(url).WithJsonBody(invalidTask).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+		s.Equal(http.StatusBadRequest, result.Code())
+	}
 
 	// create one
 	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
@@ -567,7 +578,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.Equal(createTaskResp.Name, task.Name)
 	s.EqualValues(task.Timezone, createTaskResp.Timezone)
 	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, createTaskResp.SourceConfig.IncrMigrateConf.SafeMode)
-	s.Equal(map[string]string{"foreign_key_checks": "1"}, createTaskResp.TargetConfig.Session.AdditionalProperties)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *createTaskResp.TargetConfig.Session.ForeignKeyChecks)
 
 	// create again will fail
 	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
@@ -595,7 +606,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.Equal(task.Name, respTask.Name)
 	s.EqualValues(task.Timezone, respTask.Timezone)
 	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, respTask.SourceConfig.IncrMigrateConf.SafeMode)
-	s.Equal(map[string]string{"foreign_key_checks": "1"}, respTask.TargetConfig.Session.AdditionalProperties)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *respTask.TargetConfig.Session.ForeignKeyChecks)
 
 	// get not exist
 	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
@@ -1019,8 +1030,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	task.TargetConfig.Port = dbCfg.Port
 	task.TargetConfig.User = dbCfg.User
 	task.TargetConfig.Password = dbCfg.Password
-	task.TargetConfig.Session = &openapi.TaskTargetDataBase_Session{
-		AdditionalProperties: map[string]string{"FOREIGN_KEY_CHECKS": "1"},
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
 	}
 
 	// create task
@@ -1032,7 +1044,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(createTaskResp.Task.Name, task.Name)
 	s.EqualValues(task.Timezone, createTaskResp.Task.Timezone)
 	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, createTaskResp.Task.SourceConfig.IncrMigrateConf.SafeMode)
-	s.Equal(map[string]string{"foreign_key_checks": "1"}, createTaskResp.Task.TargetConfig.Session.AdditionalProperties)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *createTaskResp.Task.TargetConfig.Session.ForeignKeyChecks)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
@@ -1049,7 +1061,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(task1FromHTTP.Name, task.Name)
 	s.EqualValues(task.Timezone, task1FromHTTP.Timezone)
 	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, task1FromHTTP.SourceConfig.IncrMigrateConf.SafeMode)
-	s.Equal(map[string]string{"foreign_key_checks": "1"}, task1FromHTTP.TargetConfig.Session.AdditionalProperties)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *task1FromHTTP.TargetConfig.Session.ForeignKeyChecks)
 
 	// changing timezone through PUT is rejected by the bottom update guard.
 	updatedTimezone := "UTC"
@@ -1127,8 +1139,9 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 
 	// changing target session through PUT is rejected by the bottom update guard.
 	sessionUpdateTask := task
-	sessionUpdateTask.TargetConfig.Session = &openapi.TaskTargetDataBase_Session{
-		AdditionalProperties: map[string]string{"foreign_key_checks": "0"},
+	disabledForeignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN0
+	sessionUpdateTask.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &disabledForeignKeyChecks,
 	}
 	mockSessionUpdateWorkerClient := pbmock.NewMockWorkerClient(ctrl)
 	mockSessionUpdateWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1157,7 +1170,7 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	var sessionUpdateErr openapi.ErrorWithMessage
 	s.NoError(result.UnmarshalBodyToObject(&sessionUpdateErr))
 	s.Equal(int(terror.ErrSchedulerSubTaskCfgUpdate.Code()), sessionUpdateErr.ErrorCode)
-	s.Contains(sessionUpdateErr.ErrorMsg, "target database session")
+	s.Contains(sessionUpdateErr.ErrorMsg, "foreign_key_checks")
 	storedSubTaskCfgs = s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Equal("1", storedSubTaskCfgs[source1Name].To.Session["foreign_key_checks"])
 

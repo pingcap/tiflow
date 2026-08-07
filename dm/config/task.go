@@ -421,47 +421,15 @@ type SyncerConfig struct {
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
 }
 
-const foreignKeyChecksSessionKey = "foreign_key_checks"
-
-func normalizeForeignKeyChecksValue(value string) string {
-	if variable.TiDBOptOn(strings.Trim(value, " '\"")) {
-		return "1"
-	}
-	return "0"
-}
-
 // IsForeignKeyChecksEnabled reports whether the downstream session keeps FK checks on.
 func IsForeignKeyChecksEnabled(session map[string]string) bool {
 	for key, value := range session {
-		if strings.EqualFold(key, foreignKeyChecksSessionKey) {
-			return normalizeForeignKeyChecksValue(value) == "1"
+		if strings.EqualFold(key, "foreign_key_checks") {
+			trimmed := strings.Trim(value, " '\"")
+			return variable.TiDBOptOn(trimmed)
 		}
 	}
 	return false
-}
-
-// NormalizeTargetSession returns the target session settings exposed by OpenAPI
-// in their canonical representation. It currently projects only foreign_key_checks
-// and reports whether that key occurs more than once after case normalization.
-// The result remains deterministic for duplicate keys so legacy tasks stay readable.
-func NormalizeTargetSession(session map[string]string) (normalized map[string]string, hasDuplicate bool) {
-	keys := make([]string, 0, 1)
-	for key := range session {
-		if strings.EqualFold(key, foreignKeyChecksSessionKey) {
-			keys = append(keys, key)
-		}
-	}
-	if len(keys) == 0 {
-		return nil, false
-	}
-
-	sort.Strings(keys)
-	if _, ok := session[foreignKeyChecksSessionKey]; ok {
-		keys[0] = foreignKeyChecksSessionKey
-	}
-	return map[string]string{
-		foreignKeyChecksSessionKey: normalizeForeignKeyChecksValue(session[keys[0]]),
-	}, len(keys) > 1
 }
 
 // CheckForeignKeyChecksSyncerOptions rejects syncer options that change DML statement boundaries.

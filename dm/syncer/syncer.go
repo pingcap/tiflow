@@ -3417,8 +3417,11 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	if err := s.checkForeignKeyCausalityConfigUpdate(newCfg); err != nil {
 		return err
 	}
-	if !targetForeignKeyChecksEqual(s.cfg.To.Session, newCfg.To.Session) {
-		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because target database session contains fields that should not be changed, task: %s", s.cfg.Name)
+	if config.IsForeignKeyChecksEnabled(s.cfg.To.Session) != config.IsForeignKeyChecksEnabled(newCfg.To.Session) {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef(
+			"can't update foreign_key_checks for syncer because it requires reinitialization, task: %s",
+			s.cfg.Name,
+		)
 	}
 
 	oldCfg, err := s.cfg.Clone()
@@ -3452,16 +3455,6 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil
-}
-
-// targetForeignKeyChecksEqual compares the only target session parameter exposed by
-// OpenAPI. Other entries may be derived at runtime, such as sql_mode in createDBs,
-// and must keep the update compatibility behavior that predates this API field.
-func targetForeignKeyChecksEqual(oldSession, newSession map[string]string) bool {
-	oldNormalized, oldHasDuplicate := config.NormalizeTargetSession(oldSession)
-	newNormalized, newHasDuplicate := config.NormalizeTargetSession(newSession)
-	return !oldHasDuplicate && !newHasDuplicate &&
-		config.IsForeignKeyChecksEnabled(oldNormalized) == config.IsForeignKeyChecksEnabled(newNormalized)
 }
 
 // Update implements Unit.Update

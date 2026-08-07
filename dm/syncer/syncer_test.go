@@ -2125,12 +2125,6 @@ func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
 	}{
 		{name: "omitted and explicit default", old: nil, new: map[string]string{"FOREIGN_KEY_CHECKS": "0"}, allowed: true},
 		{
-			name:    "normalized foreign key checks key",
-			old:     map[string]string{"foreign_key_checks": "0"},
-			new:     map[string]string{"FOREIGN_KEY_CHECKS": "0"},
-			allowed: true,
-		},
-		{
 			name: "runtime derived session difference",
 			old: map[string]string{
 				"foreign_key_checks": "1",
@@ -2150,11 +2144,6 @@ func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
 			allowed: true,
 		},
 		{name: "foreign key checks changed", old: nil, new: map[string]string{"foreign_key_checks": "1"}},
-		{
-			name: "case-normalized duplicate",
-			old:  nil,
-			new:  map[string]string{"FOREIGN_KEY_CHECKS": "0", "foreign_key_checks": "0"},
-		},
 	}
 
 	for _, testCase := range testCases {
@@ -2173,7 +2162,7 @@ func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
 				return
 			}
 			require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
-			require.ErrorContains(t, err, "target database session")
+			require.ErrorContains(t, err, "foreign_key_checks")
 		})
 	}
 }
