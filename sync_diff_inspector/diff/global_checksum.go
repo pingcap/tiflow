@@ -15,6 +15,7 @@ package diff
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -128,6 +129,11 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			return errors.Trace(err)
 		}
 
+		// upChunks/downChunks may be estimates (limit iterator) or exact (random
+		// iterator). Seed the bar with the estimate and let the producers grow it
+		// as real chunks appear; we correct it to the exact total at the end.
+		est := int64(upChunks + downChunks)
+		var produced int64
 		progress.StartTable(progressID, upChunks+downChunks, false)
 		eg, egCtx := errgroup.WithContext(ctx)
 		flushDone := make(chan struct{})
@@ -153,6 +159,8 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				upIter,
 				checkpointState.Upstream,
 				progressID,
+				est,
+				&produced,
 			)
 			return err
 		})
@@ -164,6 +172,8 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				downIter,
 				checkpointState.Downstream,
 				progressID,
+				est,
+				&produced,
 			)
 			return err
 		})
@@ -196,7 +206,14 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 				zap.Uint64("downstream checksum", downChecksum),
 			)
 		}
-		progress.UpdateTotal(progressID, 0, true)
+		// Correct the (possibly estimated) total to the exact produced count and
+		// freeze it; the trailing Inc then trips the table-complete condition.
+		producedExact := atomic.LoadInt64(&produced)
+		curTotal := est
+		if producedExact > curTotal {
+			curTotal = producedExact
+		}
+		progress.UpdateTotal(progressID, int(producedExact-curTotal), true)
 		progress.Inc(progressID)
 		df.report.ClearTableMeetError(schema, table)
 		df.report.SetTableDataCheckResult(schema, table, equal, 0, 0, upCount, downCount, chunkID)
@@ -211,11 +228,19 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 	return nil
 }
 
+// produceChecksumTasks pulls chunks from iter and feeds them to taskCh. It also
+// keeps the progress-bar denominator ahead of the real chunk count: total is
+// seeded with an estimate (est), and once the number of produced chunks exceeds
+// that estimate we grow the total so the bar never overflows. produced is shared
+// across the upstream and downstream producers, hence the atomic access.
 func produceChecksumTasks(
 	ctx context.Context,
 	iter splitter.ChunkIterator,
 	tableIndex int,
 	taskCh chan<- checksumTask,
+	progressID string,
+	est int64,
+	produced *int64,
 ) error {
 	seq := 0
 	for {
@@ -229,6 +254,11 @@ func produceChecksumTasks(
 			return ctx.Err()
 		case taskCh <- checksumTask{seq: seq, rangeInfo: &splitter.RangeInfo{ChunkRange: chunkRange}}:
 			seq++
+			if progressID != "" {
+				if n := atomic.AddInt64(produced, 1); n > est {
+					progress.UpdateTotal(progressID, 1, false)
+				}
+			}
 		}
 	}
 }
@@ -331,6 +361,8 @@ func (df *Diff) getSourceGlobalChecksum(
 	iter splitter.ChunkIterator,
 	state *checkpoints.ChecksumSourceState,
 	progressID string,
+	est int64,
+	produced *int64,
 ) (int64, uint64, error) {
 	if state.Done {
 		return state.Count, state.Checksum, nil
@@ -347,7 +379,7 @@ func (df *Diff) getSourceGlobalChecksum(
 	eg, egCtx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		defer close(taskCh)
-		return produceChecksumTasks(egCtx, iter, tableIndex, taskCh)
+		return produceChecksumTasks(egCtx, iter, tableIndex, taskCh, progressID, est, produced)
 	})
 
 	for range concurrency {

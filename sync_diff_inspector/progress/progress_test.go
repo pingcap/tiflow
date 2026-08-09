@@ -106,3 +106,33 @@ func TestAllSuccess(t *testing.T) {
 		"You can view the comparison details through './output_dir/sync_diff_inspector.log'\n\n",
 	)
 }
+
+// TestProgressEstimateClampAndMarker verifies that an underestimated, not-yet
+// finalized total (as produced by the limit iterator) never overflows the bar
+// and is rendered with the "~" estimation marker. Before clamping, driving the
+// progress past the total made strings.Repeat receive a negative count and
+// panic the serve goroutine; the test completing at all proves the clamp.
+func TestProgressEstimateClampAndMarker(t *testing.T) {
+	p := newTableProgressPrinter(1, 0)
+	p.RegisterTable("t", false, false, common.AllTableExistFlag)
+	// Seed with a deliberate under-estimate (2) that is not finalized.
+	p.StartTable("t", 2, false)
+
+	buffer := new(bytes.Buffer)
+	p.SetOutput(buffer)
+
+	// Drive progress well past the estimate without finalizing the total.
+	for i := 0; i < 10; i++ {
+		p.Inc("t")
+	}
+	time.Sleep(300 * time.Millisecond)
+	p.Close()
+
+	out := buffer.String()
+	// The figures are marked as estimated while the total keeps growing.
+	require.Contains(t, out, "~")
+	// The percentage is clamped to 100% and never overflows it.
+	require.Contains(t, out, "100%")
+	require.NotContains(t, out, "101%")
+	require.NotContains(t, out, "200%")
+}

@@ -755,9 +755,15 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 
 func createFakeResultForCount(t *testing.T, count int) {
 	if count > 0 {
-		// generate fake result for get the row count of this table
+		// Fake the row count for the random iterator (exact COUNT(*)) and the
+		// estimated row count for the limit iterator (statistics, no scan). Each
+		// iterator only triggers its own failpoint, so enabling both is safe.
 		testfailpoint.Enable(t,
 			"github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount",
+			fmt.Sprintf("return(%d)", count),
+		)
+		testfailpoint.Enable(t,
+			"github.com/pingcap/tiflow/sync_diff_inspector/splitter/getEstimatedRowCount",
 			fmt.Sprintf("return(%d)", count),
 		)
 	}
@@ -873,6 +879,76 @@ func TestLimitSpliter(t *testing.T) {
 	for i, bound := range chunk.Bounds {
 		require.Equal(t, bounds1[i].Upper, bound.Lower)
 	}
+}
+
+func TestLimitIteratorUsesEstimateNotCount(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), primary key(`a`, `b`))"
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
+	require.NoError(t, err)
+	tableDiff := &common.TableDiff{
+		Schema:    "test",
+		Table:     "test",
+		Info:      tableInfo,
+		ChunkSize: 1000,
+	}
+
+	// The limit iterator must read an estimated row count from statistics, never
+	// a COUNT(*) full-table scan. Expect exactly the estimate query and return
+	// 5000 rows; a COUNT(*) would not match this expectation and fail the test.
+	mock.ExpectQuery("SELECT TABLE_ROWS FROM information_schema.tables").
+		WithArgs("test", "test").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_ROWS"}).AddRow(5000))
+	// First limit SELECT returns no rows, yielding a single tail chunk.
+	mock.ExpectQuery("SELECT `a`,.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
+
+	iter, err := NewLimitIterator(ctx, "", tableDiff, db)
+	require.NoError(t, err)
+	// ceil(5000 / 1000) = 5 estimated chunks.
+	require.Equal(t, 5, iter.Len())
+
+	c, err := iter.Next()
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestLimitIteratorEstimateUnavailableFallsBackToDynamic(t *testing.T) {
+	ctx := context.Background()
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	createTableSQL := "create table `test`.`test`(`a` int, `b` varchar(10), primary key(`a`, `b`))"
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
+	require.NoError(t, err)
+	tableDiff := &common.TableDiff{
+		Schema:    "test",
+		Table:     "test",
+		Info:      tableInfo,
+		ChunkSize: 1000,
+	}
+
+	// A NULL estimate (unanalyzed table) must not error; the iterator falls back
+	// to a dynamic total (Len() == 0) instead of scanning the table.
+	mock.ExpectQuery("SELECT TABLE_ROWS FROM information_schema.tables").
+		WithArgs("test", "test").
+		WillReturnRows(sqlmock.NewRows([]string{"TABLE_ROWS"}).AddRow(nil))
+	mock.ExpectQuery("SELECT `a`,.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
+
+	iter, err := NewLimitIterator(ctx, "", tableDiff, db)
+	require.NoError(t, err)
+	require.Equal(t, 0, iter.Len())
+
+	// Drain the (async) producer so its limit SELECT runs before we assert.
+	c, err := iter.Next()
+	require.NoError(t, err)
+	require.NotNil(t, c)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func createFakeResultForLimitSplit(t *testing.T, mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
