@@ -33,6 +33,7 @@ jobs:
         if: ${{ github.event.inputs.pr != '' }}
         uses: actions/checkout@v6
         with:
+          repository: pingcap/tiflow
           ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Set DOCKER_HOST
