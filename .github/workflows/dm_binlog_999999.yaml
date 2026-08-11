@@ -64,7 +64,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl
           sudo docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
-          curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
+          curl --fail --location --retry 3 --output tidb-nightly-linux-amd64.tar.gz \
+            https://download.pingcap.com/tidb-nightly-linux-amd64.tar.gz
+          tar xzf tidb-nightly-linux-amd64.tar.gz
           mv tidb-nightly-linux-amd64/bin/tidb-server bin/
           curl -O https://dl.min.io/server/minio/release/linux-amd64/minio
           chmod +x minio
