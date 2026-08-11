@@ -51,6 +51,10 @@ jobs:
         with:
           go-version-file: 'go/src/github.com/pingcap/tiflow/go.mod'
 
+      - name: Build sync-diff-inspector
+        working-directory: ${{ env.working-directory }}
+        run: make sync-diff-inspector
+
       - name: Setup containers
         working-directory: ${{ env.working-directory }}
         run: |
@@ -93,6 +97,10 @@ jobs:
           repository: pingcap/tiflow
           path: go/src/github.com/pingcap/tiflow
           ref: refs/pull/${{ github.event.inputs.pr }}/head
+
+      - name: Build sync-diff-inspector
+        working-directory: ${{ env.working-directory }}
+        run: make sync-diff-inspector
 
       - name: Build
         if: ${{ github.ref != 'refs/heads/master' || github.event.inputs.pr != '' }}
@@ -193,6 +201,10 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go/src/github.com/pingcap/tiflow/go.mod'
+
+      - name: Build sync-diff-inspector
+        working-directory: ${{ env.working-directory }}
+        run: make sync-diff-inspector
 
       # TODO: support more versions
       - name: Setup containers
