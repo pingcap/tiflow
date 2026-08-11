@@ -3439,6 +3439,12 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	if err := s.checkForeignKeyCausalityConfigUpdate(newCfg); err != nil {
 		return err
 	}
+	if config.IsForeignKeyChecksEnabled(s.cfg.To.Session) != config.IsForeignKeyChecksEnabled(newCfg.To.Session) {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef(
+			"can't update foreign_key_checks for syncer because it requires reinitialization, task: %s",
+			s.cfg.Name,
+		)
+	}
 
 	oldCfg, err := s.cfg.Clone()
 	if err != nil {

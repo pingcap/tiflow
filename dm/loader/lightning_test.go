@@ -123,6 +123,15 @@ func TestGetLightiningConfig(t *testing.T) {
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
 
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{}, &config.SubTaskConfig{
+		To: dbconfig.DBConfig{Session: map[string]string{
+			"foreign_key_checks": "1",
+		}},
+		LoaderConfig: config.LoaderConfig{Dir: "/tmp"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "0", conf.TiDB.Vars["foreign_key_checks"])
+
 	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{
 			Name: "job123",

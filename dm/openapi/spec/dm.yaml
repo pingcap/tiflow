@@ -1662,11 +1662,30 @@ components:
         security:
           $ref: "#/components/schemas/Security"
           description: "downstram database ssl config"
+        session:
+          $ref: "#/components/schemas/TaskTargetSession"
       required:
         - "host"
         - "port"
         - "user"
         - "password"
+    TaskTargetSession:
+      description: >-
+        Downstream database session parameters for incremental replication.
+        Only use this field after all DM masters are upgraded, because older
+        versions ignore it.
+      type: object
+      additionalProperties: false
+      properties:
+        foreign_key_checks:
+          type: string
+          enum:
+            - "0"
+            - "1"
+          description: >-
+            Whether foreign key checks are enabled during incremental replication.
+            If omitted, DM uses "0". This setting cannot be changed through task
+            updates.
     TaskBinLogFilterRule:
       description: "Filtering rules at binlog level"
       type: object

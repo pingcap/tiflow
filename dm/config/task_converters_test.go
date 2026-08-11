@@ -30,6 +30,7 @@ import (
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 	certAllowedCn := []string{"test"}
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
 	task := &openapi.Task{
 		TargetConfig: openapi.TaskTargetDataBase{
 			Host:     "root",
@@ -37,6 +38,9 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 			Port:     4000,
 			User:     "root",
 			Security: &openapi.Security{CertAllowedCn: &certAllowedCn},
+			Session: &openapi.TaskTargetSession{
+				ForeignKeyChecks: &foreignKeyChecks,
+			},
 		},
 	}
 	dbCfg := GetTargetDBCfgFromOpenAPITask(task)
@@ -46,6 +50,9 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 	c.Assert(dbCfg.User, check.Equals, task.TargetConfig.User)
 	c.Assert(dbCfg.Security, check.NotNil)
 	c.Assert([]string{dbCfg.Security.CertAllowedCN[0]}, check.DeepEquals, certAllowedCn)
+	c.Assert(dbCfg.Session, check.DeepEquals, map[string]string{"foreign_key_checks": "1"})
+	dbCfg.Session["foreign_key_checks"] = "0"
+	c.Assert(*task.TargetConfig.Session.ForeignKeyChecks, check.Equals, openapi.TaskTargetSessionForeignKeyChecksN1)
 }
 
 func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
@@ -56,6 +63,10 @@ func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
@@ -67,7 +78,10 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
-		Session:  map[string]string{"time_zone": "UTC"},
+		Session: map[string]string{
+			"foreign_key_checks": "1",
+			"time_zone":          "UTC",
+		},
 		Security: &security.Security{
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
@@ -102,6 +116,9 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.To.Host, check.Equals, toDBCfg.Host)
 	c.Assert(subTaskConfig.To.Session["time_zone"], check.Equals, *task.Timezone)
 	c.Assert(toDBCfg.Session["time_zone"], check.Equals, "UTC")
+	c.Assert(subTaskConfig.To.Session["foreign_key_checks"], check.Equals, "1")
+	toDBCfg.Session["foreign_key_checks"] = "0"
+	c.Assert(subTaskConfig.To.Session["foreign_key_checks"], check.Equals, "1")
 	// check dumpling loader syncer config
 	c.Assert(subTaskConfig.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
 	c.Assert(subTaskConfig.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
@@ -298,26 +315,21 @@ func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
 func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
-	toDBCfg := &dbconfig.DBConfig{
-		Host:     task.TargetConfig.Host,
-		Port:     task.TargetConfig.Port,
-		User:     task.TargetConfig.User,
-		Password: task.TargetConfig.Password,
-		Security: &security.Security{
-			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
-			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
-			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
-		},
-	}
+	toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	c.Assert(err, check.IsNil)
 	c.Assert(subTaskConfigList, check.HasLen, 1)
+	subTaskConfigList[0].To.Session["tidb_txn_mode"] = "optimistic"
+	subTaskConfigList[0].To.Session["time_zone"] = "UTC"
 
 	// prepare sub task config
 	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
@@ -327,6 +339,10 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
+	c.Assert(*newTask.TargetConfig.Session.ForeignKeyChecks, check.Equals, openapi.TaskTargetSessionForeignKeyChecksN1)
+	*newTask.TargetConfig.Session.ForeignKeyChecks = openapi.TaskTargetSessionForeignKeyChecksN0
+	c.Assert(subTaskConfigList[0].To.Session["foreign_key_checks"], check.Equals, "1")
+	*newTask.TargetConfig.Session.ForeignKeyChecks = openapi.TaskTargetSessionForeignKeyChecksN1
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -495,6 +511,65 @@ func TestOpenAPITaskImportIntoMultiSourceRejected(t *testing.T) {
 
 	_, err = OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	require.ErrorContains(t, err, "import-into mode does not support sharding")
+}
+
+func TestConvertTargetSession(t *testing.T) {
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+	sourceCfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	sourceName := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg.SourceID = sourceName
+	sourceCfgMap := map[string]*SourceConfig{sourceName: sourceCfg}
+
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
+	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"foreign_key_checks": "1",
+		"time_zone":          taskCfg.Timezone,
+	}, taskCfg.TargetDB.Session)
+
+	legacySession := map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": taskCfg.Timezone}
+	taskCfg.TargetDB.Session = legacySession
+	converted, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Nil(t, converted.TargetConfig.Session)
+	require.Equal(t, map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": taskCfg.Timezone}, legacySession)
+
+	uppercaseSession := map[string]string{
+		"FOREIGN_KEY_CHECKS": "0",
+		"sql_mode":           "ANSI_QUOTES",
+		"time_zone":          taskCfg.Timezone,
+	}
+	taskCfg.TargetDB.Session = uppercaseSession
+	converted, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, openapi.TaskTargetSessionForeignKeyChecksN0, *converted.TargetConfig.Session.ForeignKeyChecks)
+	require.Equal(t, taskCfg.Timezone, *converted.Timezone)
+	require.Equal(t, map[string]string{
+		"FOREIGN_KEY_CHECKS": "0",
+		"sql_mode":           "ANSI_QUOTES",
+		"time_zone":          taskCfg.Timezone,
+	}, uppercaseSession)
+	*converted.TargetConfig.Session.ForeignKeyChecks = openapi.TaskTargetSessionForeignKeyChecksN1
+	require.Equal(t, "0", uppercaseSession["FOREIGN_KEY_CHECKS"])
+}
+
+func TestProjectTargetSession(t *testing.T) {
+	enabled := projectTargetSession(map[string]string{
+		"FOREIGN_KEY_CHECKS": "ON",
+		"tidb_txn_mode":      "optimistic",
+	})
+	require.Equal(t, openapi.TaskTargetSessionForeignKeyChecksN1, *enabled.ForeignKeyChecks)
+
+	disabled := projectTargetSession(map[string]string{"foreign_key_checks": "off"})
+	require.Equal(t, openapi.TaskTargetSessionForeignKeyChecksN0, *disabled.ForeignKeyChecks)
+
+	require.Nil(t, projectTargetSession(map[string]string{"tidb_txn_mode": "optimistic"}))
 }
 
 func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {

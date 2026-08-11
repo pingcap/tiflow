@@ -91,6 +91,13 @@ const (
 	TaskStageStopped TaskStage = "Stopped"
 )
 
+// Defines values for TaskTargetSessionForeignKeyChecks.
+const (
+	TaskTargetSessionForeignKeyChecksN0 TaskTargetSessionForeignKeyChecks = "0"
+
+	TaskTargetSessionForeignKeyChecksN1 TaskTargetSessionForeignKeyChecks = "1"
+)
+
 // AlertManagerTopology defines model for AlertManagerTopology.
 type AlertManagerTopology struct {
 	Host string `json:"host"`
@@ -774,9 +781,21 @@ type TaskTargetDataBase struct {
 	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
 	Security *Security `json:"security"`
 
+	// Downstream database session parameters for incremental replication. Only use this field after all DM masters are upgraded, because older versions ignore it.
+	Session *TaskTargetSession `json:"session,omitempty"`
+
 	// source username
 	User string `json:"user"`
 }
+
+// Downstream database session parameters for incremental replication. Only use this field after all DM masters are upgraded, because older versions ignore it.
+type TaskTargetSession struct {
+	// Whether foreign key checks are enabled during incremental replication. If omitted, DM uses "0". This setting cannot be changed through task updates.
+	ForeignKeyChecks *TaskTargetSessionForeignKeyChecks `json:"foreign_key_checks,omitempty"`
+}
+
+// Whether foreign key checks are enabled during incremental replication. If omitted, DM uses "0". This setting cannot be changed through task updates.
+type TaskTargetSessionForeignKeyChecks string
 
 // TaskTemplateRequest defines model for TaskTemplateRequest.
 type TaskTemplateRequest struct {

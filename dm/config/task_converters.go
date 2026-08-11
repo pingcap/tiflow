@@ -358,6 +358,11 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *dbconfig.DBConfig {
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
 	}
+	if task.TargetConfig.Session != nil && task.TargetConfig.Session.ForeignKeyChecks != nil {
+		toDBCfg.Session = map[string]string{
+			"foreign_key_checks": string(*task.TargetConfig.Session.ForeignKeyChecks),
+		}
+	}
 	if task.TargetConfig.Security != nil {
 		var certAllowedCN []string
 		if task.TargetConfig.Security.CertAllowedCn != nil {
@@ -719,7 +724,24 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			CertAllowedCn:  &certAllowedCN,
 		}
 	}
+	task.TargetConfig.Session = projectTargetSession(oneSubtaskConfig.To.Session)
 	return &task
+}
+
+// projectTargetSession currently exposes only foreign_key_checks and normalizes
+// its value to "0" or "1".
+func projectTargetSession(session map[string]string) *openapi.TaskTargetSession {
+	for key := range session {
+		if !strings.EqualFold(key, "foreign_key_checks") {
+			continue
+		}
+		value := openapi.TaskTargetSessionForeignKeyChecksN0
+		if IsForeignKeyChecksEnabled(session) {
+			value = openapi.TaskTargetSessionForeignKeyChecksN1
+		}
+		return &openapi.TaskTargetSession{ForeignKeyChecks: &value}
+	}
+	return nil
 }
 
 // TaskConfigToOpenAPITask converts TaskConfig to an openapi task.
