@@ -8,6 +8,15 @@ import (
 	"fmt"
 )
 
+// Defines values for OperateTaskTableStructureRequestSchemaSource.
+const (
+	OperateTaskTableStructureRequestSchemaSourceDownstream OperateTaskTableStructureRequestSchemaSource = "downstream"
+
+	OperateTaskTableStructureRequestSchemaSourceSql OperateTaskTableStructureRequestSchemaSource = "sql"
+
+	OperateTaskTableStructureRequestSchemaSourceUpstream OperateTaskTableStructureRequestSchemaSource = "upstream"
+)
+
 // Defines values for TaskOnDuplicate.
 const (
 	TaskOnDuplicateError TaskOnDuplicate = "error"
@@ -299,17 +308,23 @@ type OperateTaskResponse struct {
 	Task Task `json:"task"`
 }
 
-// action to operate table request
+// request to replace a task table schema
 type OperateTaskTableStructureRequest struct {
-	// Writes the schema to the checkpoint so that DM can load it after restarting the task
+	// Compatibility field. The schema is always written to the checkpoint, even when false
 	Flush *bool `json:"flush,omitempty"`
 
-	// sql you want to operate
-	SqlContent string `json:"sql_content"`
+	// `sql` uses `sql_content`; `upstream` reads the source table; `downstream` reads the routed target table
+	SchemaSource *OperateTaskTableStructureRequestSchemaSource `json:"schema_source,omitempty"`
 
-	// Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode
+	// CREATE TABLE statement required when `schema_source` is `sql`; omit otherwise
+	SqlContent *string `json:"sql_content,omitempty"`
+
+	// Whether to update optimistic sharding metadata. Ignored outside optimistic mode
 	Sync *bool `json:"sync,omitempty"`
 }
+
+// `sql` uses `sql_content`; `upstream` reads the source table; `downstream` reads the routed target table
+type OperateTaskTableStructureRequestSchemaSource string
 
 // PrometheusTopology defines model for PrometheusTopology.
 type PrometheusTopology struct {

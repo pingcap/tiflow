@@ -2346,22 +2346,29 @@ components:
       required:
         - "task"
     OperateTaskTableStructureRequest:
-      description: action to operate table request
+      description: request to replace a task table schema
       type: object
       properties:
+        schema_source:
+          type: string
+          enum:
+            - sql
+            - upstream
+            - downstream
+          default: sql
+          description: "`sql` uses `sql_content`; `upstream` reads the source table; `downstream` reads the routed target table"
         sql_content:
           type: string
           example: "CREATE TABLE `t1` ( `c1` int(11) DEFAULT NULL, `c2` int(11) DEFAULT NULL, `c3` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-          description: "sql you want to operate"
+          description: "CREATE TABLE statement required when `schema_source` is `sql`; omit otherwise"
         flush:
           type: boolean
           default: true
-          description: "Writes the schema to the checkpoint so that DM can load it after restarting the task"
+          description: "Compatibility field. The schema is always written to the checkpoint, even when false"
         sync:
           type: boolean
-          description: "Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode"
-      required:
-        - "sql_content"
+          default: true
+          description: "Whether to update optimistic sharding metadata. Ignored outside optimistic mode"
     OperateTaskResponse:
       type: object
       properties: 

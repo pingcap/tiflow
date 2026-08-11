@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"strconv"
+	"strings"
 
 	ginmiddleware "github.com/deepmap/oapi-codegen/pkg/gin-middleware"
 	"github.com/gin-gonic/gin"
@@ -735,6 +736,59 @@ func (s *Server) DMAPIDeleteTableStructure(c *gin.Context, taskName string, sour
 	c.Status(http.StatusNoContent)
 }
 
+func newOperateWorkerSchemaRequest(
+	taskName, sourceName, schemaName, tableName string,
+	req openapi.OperateTaskTableStructureRequest,
+) (*pb.OperateWorkerSchemaRequest, error) {
+	opReq := &pb.OperateWorkerSchemaRequest{
+		Op:       pb.SchemaOp_SetSchema,
+		Task:     taskName,
+		Source:   sourceName,
+		Database: schemaName,
+		Table:    tableName,
+		Sync:     true,
+		Flush:    true,
+	}
+	schemaSource := openapi.OperateTaskTableStructureRequestSchemaSourceSql
+	if req.SchemaSource != nil {
+		schemaSource = *req.SchemaSource
+	}
+	switch schemaSource {
+	case openapi.OperateTaskTableStructureRequestSchemaSourceSql:
+		if req.SqlContent == nil || strings.TrimSpace(*req.SqlContent) == "" {
+			return nil, terror.ErrOpenAPICommonError.New(
+				"`sql_content` must be provided and non-empty when `schema_source` is `sql`",
+			)
+		}
+		opReq.Schema = *req.SqlContent
+	case openapi.OperateTaskTableStructureRequestSchemaSourceUpstream:
+		if req.SqlContent != nil {
+			return nil, terror.ErrOpenAPICommonError.New(
+				"`sql_content` must be omitted when `schema_source` is `upstream`",
+			)
+		}
+		opReq.FromSource = true
+	case openapi.OperateTaskTableStructureRequestSchemaSourceDownstream:
+		if req.SqlContent != nil {
+			return nil, terror.ErrOpenAPICommonError.New(
+				"`sql_content` must be omitted when `schema_source` is `downstream`",
+			)
+		}
+		opReq.FromTarget = true
+	default:
+		return nil, terror.ErrOpenAPICommonError.New(
+			"`schema_source` must be one of `sql`, `upstream`, or `downstream`",
+		)
+	}
+	if req.Sync != nil {
+		opReq.Sync = *req.Sync
+	}
+	if req.Flush != nil {
+		opReq.Flush = *req.Flush
+	}
+	return opReq, nil
+}
+
 // DMAPIOperateTableStructure operate task source table structure url is: (PUT /api/v1/tasks/{task-name}/sources/{source-name}/schemas/{schema-name}/{table-name}).
 func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sourceName string, schemaName string, tableName string) {
 	var req openapi.OperateTaskTableStructureRequest
@@ -742,26 +796,15 @@ func (s *Server) DMAPIOperateTableStructure(c *gin.Context, taskName string, sou
 		_ = c.Error(err)
 		return
 	}
+	opReq, err := newOperateWorkerSchemaRequest(taskName, sourceName, schemaName, tableName, req)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
 	worker := s.scheduler.GetWorkerBySource(sourceName)
 	if worker == nil {
 		_ = c.Error(terror.ErrWorkerNoStart)
 		return
-	}
-	opReq := &pb.OperateWorkerSchemaRequest{
-		Op:       pb.SchemaOp_SetSchema,
-		Task:     taskName,
-		Source:   sourceName,
-		Database: schemaName,
-		Table:    tableName,
-		Schema:   req.SqlContent,
-		Sync:     *req.Sync,
-		Flush:    *req.Flush,
-	}
-	if req.Sync != nil {
-		opReq.Sync = *req.Sync
-	}
-	if req.Flush != nil {
-		opReq.Flush = *req.Flush
 	}
 	workerReq := workerrpc.Request{Type: workerrpc.CmdOperateSchema, OperateSchema: opReq}
 	newCtx := c.Request.Context()
