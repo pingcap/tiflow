@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/dm/checker"
@@ -38,6 +39,8 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 )
+
+var openAPIDeleteTaskDownstreamTimeout = 10 * time.Second
 
 // nolint:unparam
 func (s *Server) getClusterInfo(ctx context.Context) (*openapi.GetClusterInfoResponse, error) {
@@ -431,7 +434,7 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	return res, s.scheduler.UpdateSubTasks(ctx, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
-func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) error {
+func (s *Server) deleteTask(ctx context.Context, taskName string, force, keepMeta bool) error {
 	// check if there is running task
 	var task *openapi.Task
 	var err error
@@ -454,41 +457,61 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 		}
 	}
 
-	// remove meta
-	release, err := s.scheduler.AcquireSubtaskLatch(taskName)
-	if err != nil {
-		return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
-	}
-	defer release()
+	if !keepMeta {
+		// remove meta
+		release, err := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err != nil {
+			return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
+		}
+		released := false
+		defer func() {
+			if !released {
+				release()
+			}
+		}()
 
-	ignoreCannotConnectError := func(err error) bool {
-		if err == nil {
-			return true
-		}
-		if force && strings.Contains(err.Error(), "connect: connection refused") {
-			log.L().Warn("connect downstream error when fore delete task", zap.Error(err))
-			return true
-		}
-		return false
-	}
-
-	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	if adjustErr := AdjustTargetDBSessionCfg(ctx, toDBCfg); adjustErr != nil {
-		if !ignoreCannotConnectError(adjustErr) {
-			return adjustErr
-		}
-	}
-	metaSchema := *task.MetaSchema
-	err = s.removeMetaData(ctx, taskName, metaSchema, toDBCfg)
-	if err != nil {
-		if !ignoreCannotConnectError(err) {
+		metaSchema := *task.MetaSchema
+		if err = s.removeInternalMetaData(taskName); err != nil {
 			return terror.Annotate(err, "while removing metadata")
 		}
+
+		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+		// Bound the entire downstream cleanup flow, not just the initial connection setup.
+		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, openAPIDeleteTaskDownstreamTimeout)
+		defer cleanupCancel()
+		if adjustErr := AdjustTargetDBSessionCfgWithTimeout(cleanupCtx, toDBCfg, openAPIDeleteTaskDownstreamTimeout); adjustErr != nil {
+			log.L().Warn("skip downstream metadata cleanup when deleting task", zap.String("task", taskName), zap.Error(adjustErr))
+		} else if err = s.removeDownstreamMetaData(cleanupCtx, taskName, metaSchema, toDBCfg, openAPIDeleteTaskDownstreamTimeout); err != nil {
+			log.L().Warn("failed to remove downstream metadata when deleting task", zap.String("task", taskName), zap.Error(err))
+		}
+		release()
+		released = true
 	}
-	release()
+
 	sourceNameList := s.getTaskSourceNameList(taskName)
 	// delete subtask on worker
-	return s.scheduler.RemoveSubTasks(taskName, sourceNameList...)
+	if err := s.scheduler.RemoveSubTasks(taskName, sourceNameList...); err != nil {
+		return err
+	}
+	if keepMeta {
+		deleteReq := &pb.OperateTaskRequest{
+			Name:    taskName,
+			Op:      pb.TaskOp_Delete,
+			Sources: sourceNameList,
+		}
+		workerResponses := s.getSourceRespsAfterOperation(ctx, taskName, sourceNameList, []string{}, deleteReq)
+		for _, response := range workerResponses {
+			if !response.Result {
+				log.L().Warn("failed to confirm subtask removal before optimistic metadata cleanup",
+					zap.String("task", taskName),
+					zap.String("source", response.Source),
+					zap.String("worker", response.Worker),
+					zap.String("message", response.Msg))
+			}
+		}
+		s.removeOptimisticMetaData(taskName, nil)
+	}
+	return nil
 }
 
 func (s *Server) getTask(ctx context.Context, taskName string, req openapi.DMAPIGetTaskParams) (*openapi.Task, error) {
@@ -530,6 +553,15 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		}
 		errorMsg = fmt.Sprintf("%s.", errorMsg)
 		return errorMsg
+	}
+
+	formatProcessErrors := func(errors []*pb.ProcessError) string {
+		var builder strings.Builder
+		for _, err := range errors {
+			builder.WriteString(handleProcessError(err))
+			builder.WriteByte('\n')
+		}
+		return builder.String()
 	}
 
 	for _, workerStatus := range workerStatusList {
@@ -615,10 +647,10 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 		}
 		// add error if some error happens
 		if subTaskStatus.Result != nil && len(subTaskStatus.Result.Errors) > 0 {
-			var errorMsgs string
-			for _, err := range subTaskStatus.Result.Errors {
-				errorMsgs += fmt.Sprintf("%s\n", handleProcessError(err))
-			}
+			errorMsgs := formatProcessErrors(subTaskStatus.Result.Errors)
+			openapiSubTaskStatus.ErrorMsg = &errorMsgs
+		} else if sourceResult := workerStatus.SourceStatus.GetResult(); sourceResult != nil && len(sourceResult.Errors) > 0 {
+			errorMsgs := formatProcessErrors(sourceResult.Errors)
 			openapiSubTaskStatus.ErrorMsg = &errorMsgs
 		}
 		subTaskStatusList = append(subTaskStatusList, openapiSubTaskStatus)

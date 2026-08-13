@@ -100,7 +100,6 @@ select get_format(TIMESTAMP, 'eur') as a;
 select get_format(DATE, 'TEST') as a;
 select str_to_date('15-01-2001 12:59:59', GET_FORMAT(DATE,'USA'));
 
-explain select makedate(1997,1), addtime("31.12.97 11.59.59.999999 PM", "1 1.1.1.000002"),subtime("31.12.97 11.59.59.999999 PM", "1 1.1.1.000002"),timediff("01.01.97 11:59:59.000001 PM","31.12.95 11:59:59.000002 PM"),cast(str_to_date("15-01-2001 12:59:59", "%d-%m-%Y %H:%i:%S") as TIME), maketime(23,11,12),microsecond("1997-12-31 23:59:59.000001");
 
 #
 # Test of date_format()
@@ -323,8 +322,10 @@ SELECT b, b = '20161213',
 SELECT b, b IN ('20161213'), b in ('20161213', 0) FROM t7;
 
 #Uses datatype TIME
+--sorted_result
 SELECT b, b = '121314',
        CASE b WHEN '121314' then 'found' ELSE 'not found' END FROM t8;
+--sorted_result
 SELECT b, b in ('121314'), b in ('121314', 0) FROM t8;
 
 #DROP TABLE t1, t2, t3;

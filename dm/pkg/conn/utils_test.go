@@ -67,9 +67,10 @@ func TestGetMasterStatus(t *testing.T) {
 
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	baseDB := NewBaseDBForTest(db)
 
 	cases := []struct {
+		version        string
+		stmt           string
 		rows           *sqlmock.Rows
 		binlogName     string
 		pos            uint64
@@ -79,8 +80,10 @@ func TestGetMasterStatus(t *testing.T) {
 		err            error
 		flavor         string
 	}{
-		// For MySQL
+		// For MySQL 8.4
 		{
+			"8.4.8",
+			"SHOW BINARY LOG STATUS",
 			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
 				AddRow("ON.000001", 4822, "", "", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46"),
 			"ON.000001",
@@ -91,8 +94,24 @@ func TestGetMasterStatus(t *testing.T) {
 			nil,
 			gmysql.MySQLFlavor,
 		},
-		// test unit64 position for MySQL
+		// For MySQL 8.0
 		{
+			"8.0.45",
+			"SHOW MASTER STATUS",
+			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
+				AddRow("ON.000001", 4822, "", "", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46"),
+			"ON.000001",
+			4822,
+			"",
+			"",
+			"85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46",
+			nil,
+			gmysql.MySQLFlavor,
+		},
+		// test unit64 position for MySQL 8.0
+		{
+			"8.0.45",
+			"SHOW MASTER STATUS",
 			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB", "Executed_Gtid_Set"}).
 				AddRow("ON.000002", 429496729500, "", "", "85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-500"),
 			"ON.000002",
@@ -105,6 +124,8 @@ func TestGetMasterStatus(t *testing.T) {
 		},
 		// For MariaDB
 		{
+			"10.4.7-MariaDB",
+			"SHOW MASTER STATUS",
 			sqlmock.NewRows([]string{"File", "Position", "Binlog_Do_DB", "Binlog_Ignore_DB"}).
 				AddRow("mariadb-bin.000016", 475, "", ""),
 			"mariadb-bin.000016",
@@ -117,7 +138,7 @@ func TestGetMasterStatus(t *testing.T) {
 		},
 	}
 	for _, ca := range cases {
-		mock.ExpectQuery("SHOW MASTER STATUS").WillReturnRows(ca.rows)
+		mock.ExpectQuery(ca.stmt).WillReturnRows(ca.rows)
 		// For MariaDB
 		if ca.flavor == gmysql.MariaDBFlavor {
 			mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'gtid_binlog_pos'").WillReturnRows(
@@ -125,6 +146,7 @@ func TestGetMasterStatus(t *testing.T) {
 					AddRow("gtid_binlog_pos", "0-1-2"),
 			)
 		}
+		baseDB := NewBaseDBForTestWithVersion(db, ca.version)
 		binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err := GetMasterStatus(tctx, baseDB, ca.flavor)
 		require.IsType(t, uint64(0), pos)
 		require.NoError(t, err)

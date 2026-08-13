@@ -21,7 +21,7 @@ function run() {
 
 	cd $WORK_DIR
 
-	TOPIC_NAME="dispatcher-test"
+	TOPIC_NAME="dispatcher-test-$RANDOM"
 
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --loglevel "info"
 
@@ -42,8 +42,10 @@ function run() {
 	run_sql "DROP DATABASE if exists dispatcher;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE DATABASE dispatcher;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "CREATE TABLE dispatcher.index (a int primary key, b int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "CREATE TABLE dispatcher.columns (id int primary key, col1 int);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "INSERT INTO dispatcher.index values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO dispatcher.columns values (1, 2);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "failed" "ErrDispatcherFailed"
 
@@ -53,7 +55,7 @@ function run() {
 
 	ensure $MAX_RETRIES check_changefeed_state http://${UP_PD_HOST_1}:${UP_PD_PORT_1} $changefeed_id "normal" "null" ""
 
-	cdc_kafka_consumer --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?" --config="$CUR/conf/new_changefeed.toml" 2>&1 &
+	cdc_kafka_consumer --log-level="debug" --upstream-uri $SINK_URI --downstream-uri="mysql://root@127.0.0.1:3306/?safe-mode=true&batch-dml-enable=false" --upstream-tidb-dsn="root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/?" --config="$CUR/conf/new_changefeed.toml" 2>&1 &
 
 	run_sql "INSERT INTO dispatcher.index values (2, 3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "INSERT INTO dispatcher.index values (3, 4);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
@@ -61,6 +63,13 @@ function run() {
 	run_sql "UPDATE dispatcher.index set b = 5 where a = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "UPDATE dispatcher.index set b = 6 where a = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	run_sql "DELETE FROM dispatcher.index where a = 3;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+
+	# make sure send rows into same partition
+	run_sql "INSERT INTO dispatcher.columns values (2, 3);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "INSERT INTO dispatcher.columns values (4, 5);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "UPDATE dispatcher.columns set col1 = 3 where id = 1;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "UPDATE dispatcher.columns set CoL1 = 4 where ID = 2;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
+	run_sql "DELETE FROM dispatcher.columns where Id = 4;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 
 	run_sql "CREATE TABLE test.finish_mark (a int primary key);" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 

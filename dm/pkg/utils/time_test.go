@@ -15,6 +15,7 @@ package utils
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -25,6 +26,42 @@ func TestParseStartTime(t *testing.T) {
 	require.NoError(t, err)
 	_, err = ParseStartTime("2006-01-02 15:04:05")
 	require.NoError(t, err)
-	_, err = ParseStartTime("15:04:05")
-	require.Error(t, err)
+	_, err = ParseStartTime("2006-01-02T15:04:05+08:00")
+	require.NoError(t, err)
+	_, err = ParseStartTime("2006-01-02 15:04:05+08:00")
+	require.NoError(t, err)
+	_, err = ParseStartTime("2006-01-02T15:04:05+0800")
+	require.NoError(t, err)
+	_, err = ParseStartTime("2006-01-02 15:04:05+0800")
+	require.NoError(t, err)
+	_, err = ParseStartTime("2006-01-02T15:04:05Z")
+	require.NoError(t, err)
+
+	for _, invalid := range []string{
+		"15:04:05",
+		"2006/01/02 15:04:05",
+		"20060102 150405",
+		"2006-01-02",
+		"2006-01-02 15:04:05.123",
+	} {
+		_, err = ParseStartTime(invalid)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "unsupported start-time format")
+	}
+}
+
+func TestParseStartTimeInLoc(t *testing.T) {
+	upstreamTZ := time.UTC
+
+	legacy, err := ParseStartTimeInLoc("2026-04-17 08:00:00", upstreamTZ)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 4, 17, 8, 0, 0, 0, time.UTC).Unix(), legacy.Unix())
+
+	absolute, err := ParseStartTimeInLoc("2026-04-17T08:00:00+08:00", upstreamTZ)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 4, 17, 0, 0, 0, 0, time.UTC).Unix(), absolute.Unix())
+
+	absoluteWithoutColon, err := ParseStartTimeInLoc("2026-04-17T08:00:00+0800", upstreamTZ)
+	require.NoError(t, err)
+	require.Equal(t, time.Date(2026, 4, 17, 0, 0, 0, 0, time.UTC).Unix(), absoluteWithoutColon.Unix())
 }

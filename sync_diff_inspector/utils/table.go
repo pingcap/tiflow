@@ -27,11 +27,11 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	_ "github.com/pingcap/tidb/pkg/planner/core" // to setup expression.EvalSimpleAst for in core_init
 	"github.com/pingcap/tidb/pkg/types"
-	"github.com/pingcap/tidb/pkg/util/collate"
+	_ "github.com/pingcap/tidb/pkg/types/parser_driver" // for parser driver
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/mock"
 )
@@ -40,10 +40,6 @@ const (
 	annotationClusteredReplaceString    = "${1} /*T![clustered_index] CLUSTERED */${2}\n"
 	annotationNonClusteredReplaceString = "${1} /*T![clustered_index] NONCLUSTERED */${2}\n"
 )
-
-func init() {
-	collate.SetNewCollationEnabledForTest(false)
-}
 
 // addClusteredAnnotation add the `/*T![clustered_index] NONCLUSTERED */` for primary key of create table info
 // In the older version, the create table info hasn't `/*T![clustered_index] NONCLUSTERED */`,
@@ -197,7 +193,6 @@ func GetTableInfo(
 // GetTableInfoBySQL gets the table info from SQL.
 // Here we didn't use dbutiltest.GetTableInfoBySQL because it use buildTableInfoWithCheck internally,
 // and the check itself may cause errors in some integration tests.
-// See https://github.com/pingcap/tidb-tools/blob/37c2dad9218826a114e3389ac1209367715383ea/pkg/dbutil/table.go#L156-L162
 func GetTableInfoBySQL(createTableSQL string, parser2 *parser.Parser) (table *model.TableInfo, err error) {
 	stmt, err := parser2.ParseOneStmt(createTableSQL, "", "")
 	if err != nil {

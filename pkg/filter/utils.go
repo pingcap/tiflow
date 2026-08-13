@@ -15,6 +15,7 @@ package filter
 
 import (
 	"fmt"
+	"strings"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	tifilter "github.com/pingcap/tidb/pkg/util/filter"
@@ -26,12 +27,20 @@ import (
 
 // isSysSchema returns true if the given schema is a system schema
 func isSysSchema(db string) bool {
+	// tidb has motified the IsSystemSchema function to accept lowercase
+	// string only in this PR: https://github.com/pingcap/tidb/pull/62657 .
+	// So we should convert the db parameter to lowercase here
+	db = strings.ToLower(db)
+
 	switch db {
 	// TiCDCSystemSchema is used by TiCDC only.
 	// Tables in TiCDCSystemSchema should not be replicated by cdc.
 	case TiCDCSystemSchema:
 		return true
 	case LightningTaskInfoSchema:
+		return true
+	// TODO: skip workload schema, ref https://github.com/pingcap/tiflow/issues/12084 .
+	case TiDBWorkloadSchema:
 		return true
 	default:
 		return tifilter.IsSystemSchema(db)

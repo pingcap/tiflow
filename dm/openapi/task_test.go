@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pingcap/check"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
 
 var _ = check.Suite(&taskSuite{})
@@ -29,13 +30,24 @@ func TestTask(t *testing.T) {
 
 func (t *taskSuite) TestTaskAdjust(c *check.C) {
 	meta := "test"
+	timezone := "Asia/Shanghai"
 	// test no error
-	task1 := &Task{MetaSchema: &meta, OnDuplicate: TaskOnDuplicateError}
+	task1 := &Task{MetaSchema: &meta, OnDuplicate: TaskOnDuplicateError, Timezone: &timezone}
 	c.Assert(task1.Adjust(), check.IsNil)
 	c.Assert(*task1.MetaSchema, check.Equals, meta)
+	c.Assert(*task1.Timezone, check.Equals, timezone)
 
 	// test default meta
 	task3 := &Task{OnDuplicate: TaskOnDuplicateError}
 	c.Assert(task3.Adjust(), check.IsNil)
 	c.Assert(*task3.MetaSchema, check.Equals, defaultMetaSchema)
+
+	// an explicit empty timezone keeps the downstream database default.
+	emptyTimezone := ""
+	task4 := &Task{OnDuplicate: TaskOnDuplicateError, Timezone: &emptyTimezone}
+	c.Assert(task4.Adjust(), check.IsNil)
+
+	invalidTimezone := "invalid/timezone"
+	task5 := &Task{OnDuplicate: TaskOnDuplicateError, Timezone: &invalidTimezone}
+	c.Assert(terror.ErrConfigInvalidTimezone.Equal(task5.Adjust()), check.IsTrue)
 }

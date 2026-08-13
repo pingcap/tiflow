@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	tiflowdbutil "github.com/pingcap/tiflow/pkg/dbutil"
 	"go.uber.org/zap"
 )
 
@@ -313,7 +314,7 @@ func (s *bucketSpliter) split(
 	s.limits = limits
 	s.collation = collation
 
-	buckets, err := dbutil.GetBucketsInfo(context.Background(), s.table.Conn, s.table.Schema, s.table.Table, s.table.info)
+	buckets, err := tiflowdbutil.GetBucketsInfo(context.Background(), s.table.Conn, s.table.Schema, s.table.Table, s.table.info)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}

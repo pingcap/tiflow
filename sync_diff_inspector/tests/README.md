@@ -21,7 +21,7 @@ This folder contains all tests which relies on external service such as TiDB.
 
 3. The user executing the tests must have permission to create the folder
 
-   `/tmp/tidb_tools_test`. All test artifacts will be written into this folder.
+   `/tmp/sync_diff_inspector_test`. All test artifacts will be written into this folder.
 
 ## Running
 

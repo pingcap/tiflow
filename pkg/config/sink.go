@@ -238,7 +238,6 @@ func (s *SinkConfig) ShouldSendAllBootstrapAtStart() bool {
 		return false
 	}
 	should := s.ShouldSendBootstrapMsg() && util.GetOrZero(s.SendAllBootstrapAtStart)
-	log.Info("should send all bootstrap at start", zap.Bool("should", should))
 	return should
 }
 
@@ -260,6 +259,8 @@ type CSVConfig struct {
 	OutputOldValue bool `toml:"output-old-value" json:"output-old-value"`
 	// output handle key
 	OutputHandleKey bool `toml:"output-handle-key" json:"output-handle-key"`
+	// output field header
+	OutputFieldHeader bool `toml:"output-field-header" json:"output-field-header"`
 }
 
 func (c *CSVConfig) validateAndAdjust() error {
@@ -843,10 +844,6 @@ func (s *SinkConfig) validateAndAdjustSinkURI(sinkURI *url.URL) error {
 		return err
 	}
 
-	log.Info("succeed to parse parameter from sink uri",
-		zap.String("protocol", util.GetOrZero(s.Protocol)),
-		zap.String("txnAtomicity", string(util.GetOrZero(s.TxnAtomicity))))
-
 	// Check that protocol config is compatible with the scheme.
 	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) && s.Protocol != nil {
 		return cerror.ErrSinkURIInvalid.GenWithStackByArgs(fmt.Sprintf("protocol %s "+
@@ -946,7 +943,10 @@ func (s *SinkConfig) CheckCompatibilityWithSinkURI(
 ) error {
 	sinkURI, err := url.Parse(sinkURIStr)
 	if err != nil {
-		return cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(sinkURIStr))
 	}
 
 	cfgParamsChanged := s.Protocol != oldSinkConfig.Protocol ||

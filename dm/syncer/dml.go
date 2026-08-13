@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"encoding/binary"
+	"strings"
 
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -26,7 +27,6 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
@@ -131,7 +131,6 @@ func adjustValueFromBinlogData(
 // nolint:dupl
 func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*sqlmodel.RowChange, error) {
 	var (
-		tableID         = utils.GenTableID(param.targetTable)
 		originalDataSeq = param.originalData
 		ti              = param.sourceTableInfo
 		extendData      = param.extendData
@@ -139,15 +138,17 @@ func (s *Syncer) genAndFilterInsertDMLs(tctx *tcontext.Context, param *genDMLPar
 	)
 
 	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
-	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
+	downstreamTableInfo, err := s.prepareDownStreamTableInfo(tctx, param.sourceTable, param.targetTable, ti)
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		originalDataSeq = extendData
 	}
 
+	causalityKeySourceTable := s.causalityKeySourceTableNameForRowChange(param.sourceTable)
 RowLoop:
 	for _, data := range originalDataSeq {
 		originalValue, err := adjustValueFromBinlogData(data, ti)
@@ -155,8 +156,12 @@ RowLoop:
 			return nil, err
 		}
 
+		filterRow, err := rowForExpressionFilter(s.sessCtx, originalValue, ti.Columns, filterExprs)
+		if err != nil {
+			return nil, err
+		}
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(s.sessCtx, originalValue, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
 			if err != nil {
 				return nil, err
 			}
@@ -173,9 +178,11 @@ RowLoop:
 			originalValue,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
+		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -190,7 +197,6 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	newValueFilters []expression.Expression,
 ) ([]*sqlmodel.RowChange, error) {
 	var (
-		tableID      = utils.GenTableID(param.targetTable)
 		originalData = param.originalData
 		ti           = param.sourceTableInfo
 		extendData   = param.extendData
@@ -198,15 +204,17 @@ func (s *Syncer) genAndFilterUpdateDMLs(
 	)
 
 	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
-	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
+	downstreamTableInfo, err := s.prepareDownStreamTableInfo(tctx, param.sourceTable, param.targetTable, ti)
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		originalData = extendData
 	}
 
+	causalityKeySourceTable := s.causalityKeySourceTableNameForRowChange(param.sourceTable)
 RowLoop:
 	for i := 0; i < len(originalData); i += 2 {
 		oriOldData := originalData[i]
@@ -225,14 +233,22 @@ RowLoop:
 			return nil, err
 		}
 
+		oldFilterRow, err := rowForExpressionFilter(s.sessCtx, oriOldValues, ti.Columns, oldValueFilters)
+		if err != nil {
+			return nil, err
+		}
+		newFilterRow, err := rowForExpressionFilter(s.sessCtx, oriChangedValues, ti.Columns, newValueFilters)
+		if err != nil {
+			return nil, err
+		}
 		for j := range oldValueFilters {
 			// AND logic
 			oldExpr, newExpr := oldValueFilters[j], newValueFilters[j]
-			skip1, err := SkipDMLByExpression(s.sessCtx, oriOldValues, oldExpr, ti.Columns)
+			skip1, err := SkipDMLByExpression(s.sessCtx, oldFilterRow, oldExpr)
 			if err != nil {
 				return nil, err
 			}
-			skip2, err := SkipDMLByExpression(s.sessCtx, oriChangedValues, newExpr, ti.Columns)
+			skip2, err := SkipDMLByExpression(s.sessCtx, newFilterRow, newExpr)
 			if err != nil {
 				return nil, err
 			}
@@ -250,9 +266,11 @@ RowLoop:
 			oriChangedValues,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
+		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
@@ -262,7 +280,6 @@ RowLoop:
 // nolint:dupl
 func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLParam, filterExprs []expression.Expression) ([]*sqlmodel.RowChange, error) {
 	var (
-		tableID    = utils.GenTableID(param.targetTable)
 		dataSeq    = param.originalData
 		ti         = param.sourceTableInfo
 		extendData = param.extendData
@@ -270,15 +287,17 @@ func (s *Syncer) genAndFilterDeleteDMLs(tctx *tcontext.Context, param *genDMLPar
 	)
 
 	// if downstream pk/uk(not null) exits, then use downstream pk/uk(not null)
-	downstreamTableInfo, err := s.schemaTracker.GetDownStreamTableInfo(tctx, tableID, ti)
+	downstreamTableInfo, err := s.prepareDownStreamTableInfo(tctx, param.sourceTable, param.targetTable, ti)
 	if err != nil {
 		return nil, err
 	}
+	whereHandle := downstreamTableInfo.WhereHandle(param.sourceTable, param.sourceTableInfo)
 
 	if extendData != nil {
 		dataSeq = extendData
 	}
 
+	causalityKeySourceTable := s.causalityKeySourceTableNameForRowChange(param.sourceTable)
 RowLoop:
 	for _, data := range dataSeq {
 		value, err := adjustValueFromBinlogData(data, ti)
@@ -286,8 +305,12 @@ RowLoop:
 			return nil, err
 		}
 
+		filterRow, err := rowForExpressionFilter(s.sessCtx, value, ti.Columns, filterExprs)
+		if err != nil {
+			return nil, err
+		}
 		for _, expr := range filterExprs {
-			skip, err := SkipDMLByExpression(s.sessCtx, value, expr, ti.Columns)
+			skip, err := SkipDMLByExpression(s.sessCtx, filterRow, expr)
 			if err != nil {
 				return nil, err
 			}
@@ -304,13 +327,25 @@ RowLoop:
 			nil,
 			param.sourceTableInfo,
 			downstreamTableInfo.TableInfo,
-			s.sessCtx,
+			s.causalityCtx,
 		)
-		rowChange.SetWhereHandle(downstreamTableInfo.WhereHandle)
+		rowChange.SetWhereHandle(whereHandle)
+		rowChange.SetCausalityKeySourceTable(causalityKeySourceTable)
+		rowChange.SetForeignKeyRelations(downstreamTableInfo.ForeignKeyRelations)
 		dmls = append(dmls, rowChange)
 	}
 
 	return dmls, nil
+}
+
+func (s *Syncer) causalityKeySourceTableNameForRowChange(sourceTable *filter.Table) *cdcmodel.TableName {
+	if !s.needForeignKeyCausality() || s.cfg.CaseSensitive {
+		return nil
+	}
+	return &cdcmodel.TableName{
+		Schema: strings.ToLower(sourceTable.Schema),
+		Table:  strings.ToLower(sourceTable.Name),
+	}
 }
 
 func castUnsigned(data interface{}, ft *types.FieldType) interface{} {
@@ -419,10 +454,12 @@ func genDMLsWithSameTable(op sqlmodel.DMLType, jobs []*job) ([]string, [][]inter
 	if op == sqlmodel.DMLUpdate {
 		for i, j := range jobs {
 			if j.safeMode {
-				query, arg := j.dml.GenSQL(sqlmodel.DMLDelete)
-				queries = append(queries, query)
-				args = append(args, arg)
-				query, arg = j.dml.GenSQL(sqlmodel.DMLReplace)
+				if j.dml.IsPrimaryOrUniqueKeyUpdated() {
+					query, arg := j.dml.GenSQL(sqlmodel.DMLDelete)
+					queries = append(queries, query)
+					args = append(args, arg)
+				}
+				query, arg := j.dml.GenSQL(sqlmodel.DMLReplace)
 				queries = append(queries, query)
 				args = append(args, arg)
 				continue

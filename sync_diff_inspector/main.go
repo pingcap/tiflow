@@ -18,14 +18,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/parser/charset"
-	"github.com/pingcap/tidb/pkg/util"
+	"github.com/pingcap/tidb/pkg/util/collate"
+	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/diff"
 	flag "github.com/spf13/pflag"
@@ -33,18 +32,7 @@ import (
 )
 
 func init() {
-	c := &charset.Charset{
-		Name:             "gbk",
-		DefaultCollation: "gbk_chinese_ci",
-		Collations:       map[string]*charset.Collation{},
-		Maxlen:           2,
-	}
-	charset.AddCharset(c)
-	for _, coll := range charset.GetSupportedCollations() {
-		if strings.EqualFold(coll.CharsetName, c.Name) {
-			charset.AddCollation(coll)
-		}
-	}
+	collate.SetNewCollationEnabledForTest(false)
 }
 
 func main() {
@@ -61,7 +49,7 @@ func main() {
 	}
 
 	if cfg.PrintVersion {
-		fmt.Print(util.GetRawInfo("sync_diff_inspector"))
+		fmt.Print(version.GetRawInfo())
 		return
 	}
 
@@ -84,7 +72,7 @@ func main() {
 	}
 	log.ReplaceGlobals(lg, p)
 
-	util.PrintInfo("sync_diff_inspector")
+	version.LogVersionInfo("sync_diff_inspector")
 
 	// Initial config
 	err = cfg.Init()
@@ -136,6 +124,9 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		log.Info("Check table data only, skip struct check")
 	}
 	if !cfg.CheckStructOnly {
+		// Only enable new collation for data comparison.
+		collate.SetNewCollationEnabledForTest(true)
+
 		err = d.Equal(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table data: %s, please check log info in %s for full details\n",

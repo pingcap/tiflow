@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/session"
+	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/store/mockstore"
 	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/types"
@@ -270,7 +271,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	ticonfig.UpdateGlobal(func(conf *ticonfig.Config) {
 		// we can update the tidb config here
 	})
-	session.SetSchemaLease(time.Second)
+	vardef.SetSchemaLease(time.Second)
 	session.DisableStats4Test()
 	domain, err := session.BootstrapSession(store)
 	require.Nil(t, err)

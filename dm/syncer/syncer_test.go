@@ -31,6 +31,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
+	pclog "github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/infoschema"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -62,6 +63,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 var _ = check.Suite(&testSyncerSuite{})
@@ -217,6 +219,38 @@ func (s *testSyncerSuite) resetEventsGenerator(c *check.C) {
 
 func (s *testSyncerSuite) TearDownSuite(c *check.C) {
 	os.RemoveAll(s.cfg.Dir)
+}
+
+func (s *testSyncerSuite) TestSampleUnhandledEvents(c *check.C) {
+	core, logs := observer.New(zap.WarnLevel)
+	restoreGlobal := pclog.ReplaceGlobals(zap.New(core), nil)
+	defer restoreGlobal()
+
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+
+	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event", &replication.QueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
+
+	entries := logs.All()
+	c.Assert(entries, check.HasLen, 2)
+
+	seen := make(map[string][]map[string]interface{}, len(entries))
+	for _, entry := range entries {
+		seen[entry.Message] = append(seen[entry.Message], entry.ContextMap())
+	}
+
+	c.Assert(seen["unhandled event"], check.HasLen, 1)
+	c.Assert(seen["unhandled event"][0]["type"], check.Equals, "*replication.RowsQueryEvent")
+	c.Assert(seen["unhandled event from transaction payload"], check.HasLen, 1)
+	c.Assert(seen["unhandled event from transaction payload"][0]["type"], check.Equals, "*replication.QueryEvent")
+
+	syncer.recordUnhandledEvent("unhandled event", &replication.RowsQueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event", &replication.QueryEvent{})
+	syncer.recordUnhandledEvent("unhandled event from transaction payload", &replication.QueryEvent{})
+	c.Assert(logs.All(), check.HasLen, 2)
 }
 
 func mockGetServerUnixTS(mock sqlmock.Sqlmock) {
@@ -1410,7 +1444,9 @@ func (s *testSyncerSuite) TestTrackDDL(c *check.C) {
 		c.Assert(err, check.IsNil)
 		ca.callback()
 
+		syncer.foreignKeyRouteTopologyChecked = true
 		c.Assert(syncer.trackDDL(testDB, ddlInfo, ec), check.IsNil)
+		c.Assert(syncer.foreignKeyRouteTopologyChecked, check.Equals, false)
 		syncer.schemaTracker.Reset()
 		c.Assert(mock.ExpectationsWereMet(), check.IsNil)
 		c.Assert(checkPointMock.ExpectationsWereMet(), check.IsNil)
@@ -1680,7 +1716,9 @@ func TestTrackDownstreamTableWontOverwrite(t *testing.T) {
 	ti, err := syncer.getTableInfo(tctx, upTable, downTable)
 	require.NoError(t, err)
 	require.Len(t, ti.Columns, 2)
+	syncer.foreignKeyRouteTopologyChecked = true
 	require.NoError(t, syncer.trackTableInfoFromDownstream(tctx, upTable, downTable))
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
 	newTi, err := syncer.getTableInfo(tctx, upTable, downTable)
 	require.NoError(t, err)
 	require.Equal(t, ti, newTi)
@@ -1820,6 +1858,49 @@ func genDefaultSubTaskConfig4Test() *config.SubTaskConfig {
 	cfg.From.Adjust()
 	cfg.To.Adjust()
 	return cfg
+}
+
+func cloneSubTaskConfigForSyncerTest(t *testing.T, cfg *config.SubTaskConfig) *config.SubTaskConfig {
+	t.Helper()
+	cloned, err := cfg.Clone()
+	require.NoError(t, err)
+	return cloned
+}
+
+func TestHandleRotateEventUpdatesGlobalCheckpoint(t *testing.T) {
+	tctx := tcontext.Background()
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := &Syncer{cfg: cfg}
+	syncer.checkpoint = NewRemoteCheckPoint(tctx, cfg, nil, "test")
+	oldLocation := binlog.Location{
+		Position: mysql.Position{
+			Name: "mysql-bin.000001",
+			Pos:  123,
+		},
+	}
+	syncer.checkpoint.SaveGlobalPoint(oldLocation)
+	newLocation := binlog.Location{
+		Position: mysql.Position{
+			Name: "mysql-bin.000003",
+			Pos:  binlog.FileHeaderLen,
+		},
+	}
+	eventHeader := &replication.EventHeader{
+		Timestamp: 1,
+		LogPos:    uint32(newLocation.Position.Pos),
+		EventType: replication.ROTATE_EVENT,
+	}
+	rotateEvent := &replication.RotateEvent{
+		NextLogName: []byte(newLocation.Position.Name),
+		Position:    uint64(newLocation.Position.Pos),
+	}
+	ec := eventContext{
+		tctx:        tctx,
+		header:      eventHeader,
+		endLocation: newLocation,
+	}
+	require.NoError(t, syncer.handleRotateEvent(rotateEvent, ec))
+	require.Equal(t, newLocation, syncer.checkpoint.GlobalPoint())
 }
 
 func TestWaitBeforeRunExit(t *testing.T) {
@@ -1966,4 +2047,660 @@ func TestCheckCanUpdateCfg(t *testing.T) {
 	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
 	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
 	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+}
+
+func TestCheckCanUpdateCfgRejectsTimezoneChange(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.Timezone = "UTC"
+	syncer := NewSyncer(cfg, nil, nil)
+
+	newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+	newCfg.Timezone = "Asia/Shanghai"
+	err := syncer.CheckCanUpdateCfg(newCfg)
+	require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+	require.ErrorContains(t, err, "fields that should not be changed")
+}
+
+func TestCheckCanUpdateCfgRejectsSafeModeChange(t *testing.T) {
+	for _, oldSafeMode := range []bool{false, true} {
+		cfg := genDefaultSubTaskConfig4Test()
+		cfg.SyncerConfig.SafeMode = oldSafeMode
+		syncer := NewSyncer(cfg, nil, nil)
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.SyncerConfig.SafeMode = !oldSafeMode
+
+		err = syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, "safe-mode")
+	}
+}
+
+func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	cases := []struct {
+		name string
+		set  func(*config.SyncerConfig)
+	}{
+		{
+			name: "compact",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.Compact = true
+			},
+		},
+		{
+			name: "multiple-rows",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.MultipleRows = true
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		tc.set(&newCfg.SyncerConfig)
+
+		err = syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrConfigUnsupportedForeignKeyChecksOption.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, tc.name)
+	}
+
+	newCfg, err := cfg.Clone()
+	require.NoError(t, err)
+	newCfg.To.Session = map[string]string{"foreign_key_checks": "0"}
+	newCfg.SyncerConfig.Compact = true
+	newCfg.SyncerConfig.MultipleRows = true
+	require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
+}
+
+func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
+	testCases := []struct {
+		name    string
+		old     map[string]string
+		new     map[string]string
+		allowed bool
+	}{
+		{name: "omitted and explicit default", old: nil, new: map[string]string{"FOREIGN_KEY_CHECKS": "0"}, allowed: true},
+		{
+			name: "runtime derived session difference",
+			old: map[string]string{
+				"foreign_key_checks": "1",
+				"sql_mode":           "ANSI_QUOTES",
+				"tidb_txn_mode":      "optimistic",
+			},
+			new: map[string]string{
+				"foreign_key_checks": "1",
+				"tidb_txn_mode":      "optimistic",
+			},
+			allowed: true,
+		},
+		{
+			name:    "legacy enabled value and canonical one",
+			old:     map[string]string{"foreign_key_checks": "ON"},
+			new:     map[string]string{"FOREIGN_KEY_CHECKS": "1"},
+			allowed: true,
+		},
+		{name: "foreign key checks changed", old: nil, new: map[string]string{"foreign_key_checks": "1"}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			oldCfg := genDefaultSubTaskConfig4Test()
+			oldCfg.SyncerConfig.WorkerCount = 1
+			oldCfg.To.Session = testCase.old
+			syncer := NewSyncer(oldCfg, nil, nil)
+
+			newCfg, err := oldCfg.Clone()
+			require.NoError(t, err)
+			newCfg.To.Session = testCase.new
+			err = syncer.CheckCanUpdateCfg(newCfg)
+			if testCase.allowed {
+				require.NoError(t, err)
+				return
+			}
+			require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+			require.ErrorContains(t, err, "foreign_key_checks")
+		})
+	}
+}
+
+func TestUpdateRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	cases := []struct {
+		name string
+		set  func(*config.SyncerConfig)
+	}{
+		{
+			name: "compact",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.Compact = true
+			},
+		},
+		{
+			name: "multiple-rows",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.MultipleRows = true
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		tc.set(&newCfg.SyncerConfig)
+
+		err = syncer.Update(context.Background(), newCfg)
+		require.Truef(t, terror.ErrConfigUnsupportedForeignKeyChecksOption.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, tc.name)
+	}
+}
+
+func TestInitRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(*config.SyncerConfig)
+	}{
+		{
+			name: "compact",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.Compact = true
+			},
+		},
+		{
+			name: "multiple-rows",
+			set: func(syncerCfg *config.SyncerConfig) {
+				syncerCfg.MultipleRows = true
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		cfg := genDefaultSubTaskConfig4Test()
+		cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		tc.set(&cfg.SyncerConfig)
+
+		syncer := NewSyncer(cfg, nil, nil)
+		err := syncer.Init(context.Background())
+		require.Truef(t, terror.ErrConfigUnsupportedForeignKeyChecksOption.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, tc.name)
+	}
+}
+
+func TestUpdateClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+	syncer.foreignKeyRouteTopologyChecked = true
+
+	newCfg, err := cfg.Clone()
+	require.NoError(t, err)
+	newCfg.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "db", Action: bf.Ignore}}
+
+	require.NoError(t, syncer.Update(context.Background(), newCfg))
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
+}
+
+func TestOperateSchemaSetSchemaClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.foreignKeyRouteTopologyChecked = true
+	syncer.exprFilterGroup = NewExprFilterGroup(tcontext.Background(), utils.NewSessionCtx(nil), nil)
+	require.NoError(t, syncer.genRouter())
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	syncer.fromDB = &dbconn.UpStreamConn{BaseDB: conn.NewBaseDBForTest(db)}
+
+	checkPointDB, checkPointMock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer checkPointDB.Close()
+	checkPointDBConn, err := checkPointDB.Conn(context.Background())
+	require.NoError(t, err)
+	syncer.checkpoint.(*RemoteCheckPoint).dbConn = dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(checkPointDBConn, &retry.FiniteRetryStrategy{}))
+
+	mock.ExpectQuery("SHOW VARIABLES LIKE 'sql_mode'").WillReturnRows(
+		sqlmock.NewRows([]string{"Variable_name", "Value"}).AddRow("sql_mode", ""))
+	checkPointMock.ExpectBegin()
+	checkPointMock.ExpectExec(".*INSERT INTO .* VALUES.* ON DUPLICATE KEY UPDATE.*").WillReturnResult(sqlmock.NewResult(0, 1))
+	checkPointMock.ExpectCommit()
+
+	_, err = syncer.OperateSchema(context.Background(), &pb.OperateWorkerSchemaRequest{
+		Op:       pb.SchemaOp_SetSchema,
+		Database: "db",
+		Table:    "child",
+		Schema:   "create table child(id int primary key, parent_id int, constraint fk_child_parent foreign key (parent_id) references parent(id))",
+	})
+	require.NoError(t, err)
+	require.False(t, syncer.foreignKeyRouteTopologyChecked)
+	require.NoError(t, mock.ExpectationsWereMet())
+	require.NoError(t, checkPointMock.ExpectationsWereMet())
+}
+
+func TestCheckCanUpdateCfgFKHotUpdateGuardRejects(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+	cfg.WorkerCount = 4
+	syncer := NewSyncer(cfg, nil, nil)
+
+	cases := []struct {
+		name   string
+		field  string
+		mutate func(*config.SubTaskConfig)
+	}{
+		{
+			name:  "route rules",
+			field: "route rules",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.RouteRules = []*router.TableRule{{
+					SchemaPattern: "db",
+					TablePattern:  "parent",
+					TargetSchema:  "db_r",
+					TargetTable:   "parent_r",
+				}}
+			},
+		},
+		{
+			name:  "block-allow-list",
+			field: "block-allow-list",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.BAList = &filter.Rules{DoDBs: []string{"db"}}
+			},
+		},
+		{
+			name:  "black-white-list",
+			field: "black-white-list",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.BWList = &filter.Rules{DoDBs: []string{"db"}}
+			},
+		},
+		{
+			name:  "binlog filter rules",
+			field: "binlog filter rules",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.FilterRules = []*bf.BinlogEventRule{{
+					SchemaPattern: "db",
+					TablePattern:  "child",
+					Events:        []bf.EventType{bf.InsertEvent},
+					Action:        bf.Ignore,
+				}}
+			},
+		},
+		{
+			name:  "case-sensitive",
+			field: "case-sensitive",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.CaseSensitive = !newCfg.CaseSensitive
+			},
+		},
+		{
+			name:  "disable foreign_key_checks",
+			field: "foreign_key_checks",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.To.Session = map[string]string{"foreign_key_checks": "0"}
+			},
+		},
+		{
+			name:  "worker-count",
+			field: "worker-count",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.WorkerCount = 8
+			},
+		},
+		{
+			name:  "leave foreign key causality by worker-count",
+			field: "worker-count",
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.WorkerCount = 1
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+			tc.mutate(newCfg)
+
+			err := syncer.CheckCanUpdateCfg(newCfg)
+			require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+			require.ErrorContains(t, err, tc.field)
+			require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
+		})
+	}
+
+	t.Run("enable foreign key causality", func(t *testing.T) {
+		oldCfg := genDefaultSubTaskConfig4Test()
+		oldCfg.To.Session = map[string]string{"foreign_key_checks": "0"}
+		oldCfg.WorkerCount = 4
+		syncer := NewSyncer(oldCfg, nil, nil)
+
+		newCfg := cloneSubTaskConfigForSyncerTest(t, oldCfg)
+		newCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+
+		err := syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, "foreign_key_checks")
+		require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
+	})
+
+	t.Run("enable foreign key causality by worker-count", func(t *testing.T) {
+		oldCfg := genDefaultSubTaskConfig4Test()
+		oldCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		oldCfg.WorkerCount = 1
+		syncer := NewSyncer(oldCfg, nil, nil)
+
+		newCfg := cloneSubTaskConfigForSyncerTest(t, oldCfg)
+		newCfg.WorkerCount = 4
+
+		err := syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, "worker-count")
+		require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
+	})
+
+	t.Run("case-sensitive true rejects case-only changes", func(t *testing.T) {
+		baseCfg := genDefaultSubTaskConfig4Test()
+		baseCfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+		baseCfg.WorkerCount = 4
+		baseCfg.CaseSensitive = true
+		baseCfg.RouteRules = []*router.TableRule{{
+			SchemaPattern: "SourceDB",
+			TablePattern:  "Child",
+			TargetSchema:  "TargetDB",
+			TargetTable:   "ChildR",
+		}}
+		baseCfg.BAList = &filter.Rules{
+			DoDBs:    []string{"SourceDB"},
+			DoTables: []*filter.Table{{Schema: "SourceDB", Name: "Child"}},
+		}
+		baseCfg.BWList = &filter.Rules{
+			IgnoreDBs:    []string{"ArchiveDB"},
+			IgnoreTables: []*filter.Table{{Schema: "ArchiveDB", Name: "Ignored"}},
+		}
+		baseCfg.FilterRules = []*bf.BinlogEventRule{{
+			SchemaPattern: "SourceDB",
+			TablePattern:  "Child",
+			Events:        []bf.EventType{bf.InsertEvent},
+			Action:        bf.Ignore,
+		}}
+
+		cases := []struct {
+			name   string
+			field  string
+			mutate func(*config.SubTaskConfig)
+		}{
+			{
+				name:  "route rules",
+				field: "route rules",
+				mutate: func(newCfg *config.SubTaskConfig) {
+					newCfg.RouteRules[0].SchemaPattern = "sourcedb"
+				},
+			},
+			{
+				name:  "block-allow-list",
+				field: "block-allow-list",
+				mutate: func(newCfg *config.SubTaskConfig) {
+					newCfg.BAList.DoDBs[0] = "sourcedb"
+				},
+			},
+			{
+				name:  "black-white-list",
+				field: "black-white-list",
+				mutate: func(newCfg *config.SubTaskConfig) {
+					newCfg.BWList.IgnoreTables[0].Schema = "archivedb"
+				},
+			},
+			{
+				name:  "binlog filter rules",
+				field: "binlog filter rules",
+				mutate: func(newCfg *config.SubTaskConfig) {
+					newCfg.FilterRules[0].TablePattern = "child"
+				},
+			},
+		}
+
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				oldCfg := cloneSubTaskConfigForSyncerTest(t, baseCfg)
+				syncer := NewSyncer(oldCfg, nil, nil)
+				newCfg := cloneSubTaskConfigForSyncerTest(t, baseCfg)
+				tc.mutate(newCfg)
+
+				err := syncer.CheckCanUpdateCfg(newCfg)
+				require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+				require.ErrorContains(t, err, tc.field)
+				require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
+			})
+		}
+	})
+}
+
+func TestCheckCanUpdateCfgFKHotUpdateGuardAllows(t *testing.T) {
+	cases := []struct {
+		name   string
+		setup  func(*config.SubTaskConfig)
+		mutate func(*config.SubTaskConfig)
+	}{
+		{
+			name: "empty route and filter config in foreign key causality",
+			setup: func(cfg *config.SubTaskConfig) {
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.WorkerCount = 4
+			},
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.RouteRules = []*router.TableRule{}
+				newCfg.BAList = &filter.Rules{}
+				newCfg.BWList = &filter.Rules{}
+				newCfg.FilterRules = []*bf.BinlogEventRule{}
+			},
+		},
+		{
+			name: "case-insensitive runtime normalization in foreign key causality",
+			setup: func(cfg *config.SubTaskConfig) {
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.WorkerCount = 4
+				cfg.CaseSensitive = false
+				cfg.RouteRules = []*router.TableRule{{
+					SchemaPattern: "SourceDB",
+					TablePattern:  "Child",
+					TargetSchema:  "TargetDB",
+					TargetTable:   "ChildR",
+				}}
+				cfg.BAList = &filter.Rules{
+					DoDBs:    []string{"SourceDB"},
+					DoTables: []*filter.Table{{Schema: "SourceDB", Name: "Child"}},
+				}
+				cfg.BWList = &filter.Rules{
+					IgnoreDBs:    []string{"ArchiveDB"},
+					IgnoreTables: []*filter.Table{{Schema: "ArchiveDB", Name: "Ignored"}},
+				}
+				cfg.FilterRules = []*bf.BinlogEventRule{{
+					SchemaPattern: "SourceDB",
+					TablePattern:  "Child",
+					Events:        []bf.EventType{bf.EventType(strings.ToUpper(string(bf.InsertEvent)))},
+					SQLPattern:    []string{"ALTER"},
+					Action:        bf.Ignore,
+				}}
+			},
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.RouteRules[0].SchemaPattern = "sourcedb"
+				newCfg.RouteRules[0].TablePattern = "child"
+				newCfg.BAList.DoDBs[0] = "sourcedb"
+				newCfg.BAList.DoTables[0].Schema = "sourcedb"
+				newCfg.BAList.DoTables[0].Name = "child"
+				newCfg.BWList.IgnoreDBs[0] = "archivedb"
+				newCfg.BWList.IgnoreTables[0].Schema = "archivedb"
+				newCfg.BWList.IgnoreTables[0].Name = "ignored"
+				newCfg.FilterRules[0].SchemaPattern = "sourcedb"
+				newCfg.FilterRules[0].TablePattern = "child"
+				newCfg.FilterRules[0].Events = []bf.EventType{bf.InsertEvent}
+			},
+		},
+		{
+			name: "foreign_key_checks off",
+			setup: func(cfg *config.SubTaskConfig) {
+				cfg.To.Session = map[string]string{"foreign_key_checks": "0"}
+				cfg.WorkerCount = 4
+			},
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.RouteRules = []*router.TableRule{{
+					SchemaPattern: "db",
+					TablePattern:  "parent",
+					TargetSchema:  "db_r",
+					TargetTable:   "parent_r",
+				}}
+				newCfg.BAList = &filter.Rules{DoDBs: []string{"db"}}
+				newCfg.BWList = &filter.Rules{IgnoreDBs: []string{"archive"}}
+				newCfg.FilterRules = []*bf.BinlogEventRule{{
+					SchemaPattern: "db",
+					TablePattern:  "parent",
+					Events:        []bf.EventType{bf.DeleteEvent},
+					Action:        bf.Ignore,
+				}}
+				newCfg.CaseSensitive = !newCfg.CaseSensitive
+				newCfg.WorkerCount = 8
+			},
+		},
+		{
+			name: "foreign_key_checks on with single worker",
+			setup: func(cfg *config.SubTaskConfig) {
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.WorkerCount = 1
+			},
+			mutate: func(newCfg *config.SubTaskConfig) {
+				newCfg.RouteRules = []*router.TableRule{{
+					SchemaPattern: "db",
+					TablePattern:  "child",
+					TargetSchema:  "db_r",
+					TargetTable:   "child_r",
+				}}
+				newCfg.BAList = &filter.Rules{DoDBs: []string{"db"}}
+				newCfg.BWList = &filter.Rules{IgnoreDBs: []string{"archive"}}
+				newCfg.FilterRules = []*bf.BinlogEventRule{{
+					SchemaPattern: "db",
+					TablePattern:  "child",
+					Events:        []bf.EventType{bf.UpdateEvent},
+					Action:        bf.Ignore,
+				}}
+				newCfg.CaseSensitive = !newCfg.CaseSensitive
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := genDefaultSubTaskConfig4Test()
+			tc.setup(cfg)
+			newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+			syncer := NewSyncer(cloneSubTaskConfigForSyncerTest(t, cfg), nil, nil)
+			tc.mutate(newCfg)
+
+			require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
+		})
+	}
+}
+
+func TestUpdateFKHotUpdateGuardRejects(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+	cfg.WorkerCount = 4
+	cfg.RouteRules = []*router.TableRule{{
+		SchemaPattern: "db",
+		TablePattern:  "parent",
+		TargetSchema:  "db_r",
+		TargetTable:   "parent_r",
+	}}
+	cfg.BAList = &filter.Rules{DoTables: []*filter.Table{{Schema: "db", Name: "parent"}}}
+	cfg.FilterRules = []*bf.BinlogEventRule{{
+		SchemaPattern: "db",
+		TablePattern:  "parent",
+		Events:        []bf.EventType{bf.DeleteEvent},
+		Action:        bf.Ignore,
+	}}
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+
+	var err error
+	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
+	require.NoError(t, err)
+	syncer.baList, err = filter.New(cfg.CaseSensitive, cfg.BAList)
+	require.NoError(t, err)
+	syncer.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
+	require.NoError(t, err)
+
+	newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+	newCfg.RouteRules = []*router.TableRule{{
+		SchemaPattern: "db",
+		TablePattern:  "child",
+		TargetSchema:  "db_r",
+		TargetTable:   "child_r",
+	}}
+
+	err = syncer.Update(context.Background(), newCfg)
+	require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+	require.ErrorContains(t, err, "route rules")
+	require.ErrorContains(t, err, "foreign_key_checks=1 and worker-count>1")
+
+	targetSchema, targetTable, err := syncer.tableRouter.Route("db", "parent")
+	require.NoError(t, err)
+	require.Equal(t, "db_r", targetSchema)
+	require.Equal(t, "parent_r", targetTable)
+	require.False(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "parent"}))
+	require.True(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "child"}))
+	skipped, err := syncer.skipByFilter(&filter.Table{Schema: "db", Name: "parent"}, bf.DeleteEvent, "")
+	require.NoError(t, err)
+	require.True(t, skipped)
+	skipped, err = syncer.skipByFilter(&filter.Table{Schema: "db", Name: "child"}, bf.InsertEvent, "")
+	require.NoError(t, err)
+	require.False(t, skipped)
+}
+
+func TestUpdateFKHotUpdateGuardAllows(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.To.Session = map[string]string{"foreign_key_checks": "0"}
+	cfg.WorkerCount = 4
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+
+	newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+	newCfg.RouteRules = []*router.TableRule{{
+		SchemaPattern: "db",
+		TablePattern:  "child",
+		TargetSchema:  "db_r",
+		TargetTable:   "child_r",
+	}}
+	newCfg.BAList = &filter.Rules{DoTables: []*filter.Table{{Schema: "db", Name: "child"}}}
+	newCfg.FilterRules = []*bf.BinlogEventRule{{
+		SchemaPattern: "db",
+		TablePattern:  "child",
+		Events:        []bf.EventType{bf.UpdateEvent},
+		Action:        bf.Ignore,
+	}}
+	newCfg.CaseSensitive = !cfg.CaseSensitive
+
+	require.NoError(t, syncer.Update(context.Background(), newCfg))
+	require.Equal(t, newCfg.RouteRules, syncer.cfg.RouteRules)
+	require.Equal(t, newCfg.BAList, syncer.cfg.BAList)
+	require.Equal(t, newCfg.FilterRules, syncer.cfg.FilterRules)
+	require.Equal(t, newCfg.CaseSensitive, syncer.cfg.CaseSensitive)
+
+	targetSchema, targetTable, err := syncer.tableRouter.Route("db", "child")
+	require.NoError(t, err)
+	require.Equal(t, "db_r", targetSchema)
+	require.Equal(t, "child_r", targetTable)
+
+	require.False(t, syncer.skipByTable(&filter.Table{Schema: "db", Name: "child"}))
+	require.True(t, syncer.skipByTable(&filter.Table{Schema: "other", Name: "child"}))
+
+	skipped, err := syncer.skipByFilter(&filter.Table{Schema: "db", Name: "child"}, bf.UpdateEvent, "")
+	require.NoError(t, err)
+	require.True(t, skipped)
+	skipped, err = syncer.skipByFilter(&filter.Table{Schema: "db", Name: "child"}, bf.InsertEvent, "")
+	require.NoError(t, err)
+	require.False(t, skipped)
 }

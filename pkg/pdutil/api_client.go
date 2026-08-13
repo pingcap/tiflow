@@ -343,12 +343,12 @@ func (pc *pdAPIClient) listGcServiceSafePoint(
 
 // CollectMemberEndpoints return all members' endpoint
 func (pc *pdAPIClient) CollectMemberEndpoints(ctx context.Context) ([]string, error) {
-	members, err := pc.grpcClient.GetAllMembers(ctx)
+	resp, err := pc.grpcClient.GetAllMembers(ctx)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	result := make([]string, 0, len(members))
-	for _, m := range members {
+	result := make([]string, 0, len(resp.Members))
+	for _, m := range resp.Members {
 		clientUrls := m.GetClientUrls()
 		if len(clientUrls) > 0 {
 			result = append(result, clientUrls[0])

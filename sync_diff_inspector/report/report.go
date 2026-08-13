@@ -105,6 +105,7 @@ func (r *Report) LoadReport(reportInfo *Report) {
 			r.TableResults[schema][table] = result
 		}
 	}
+	r.refreshResult()
 }
 
 func (r *Report) getSortedTables() [][]string {
@@ -369,6 +370,21 @@ func (r *Report) SetTableMeetError(schema, table string, err error) {
 	r.Result = Error
 }
 
+// ClearTableMeetError resets any previous error for the given table and recomputes
+// the aggregate report result.
+func (r *Report) ClearTableMeetError(schema, table string) {
+	r.Lock()
+	defer r.Unlock()
+	if _, ok := r.TableResults[schema]; !ok {
+		return
+	}
+	if _, ok := r.TableResults[schema][table]; !ok {
+		return
+	}
+	r.TableResults[schema][table].MeetError = nil
+	r.refreshResultLocked()
+}
+
 // GetSnapshot get the snapshot of the current state of the report, then we can restart the
 // sync-diff and get the correct report state.
 func (r *Report) GetSnapshot(chunkID *chunk.CID, schema, table string) (*Report, error) {
@@ -419,4 +435,25 @@ func (r *Report) GetSnapshot(chunkID *chunk.CID, schema, table string) (*Report,
 
 		task: task,
 	}, nil
+}
+
+func (r *Report) refreshResult() {
+	r.Lock()
+	defer r.Unlock()
+	r.refreshResultLocked()
+}
+
+func (r *Report) refreshResultLocked() {
+	r.Result = Pass
+	for _, tableMap := range r.TableResults {
+		for _, result := range tableMap {
+			if result.MeetError != nil {
+				r.Result = Error
+				return
+			}
+			if (!result.StructEqual || !result.DataEqual) && common.AllTableExist(result.TableLack) {
+				r.Result = Fail
+			}
+		}
+	}
 }

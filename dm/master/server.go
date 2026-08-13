@@ -664,17 +664,21 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
 
 	if req.Op == pb.TaskOp_Delete {
-		// delete meta data for optimist
-		if len(req.Sources) == 0 {
-			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
-		} else {
-			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
-		}
-		if err2 != nil {
-			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
-		}
+		s.removeOptimisticMetaData(req.Name, req.Sources)
 	}
 	return resp, nil
+}
+
+func (s *Server) removeOptimisticMetaData(taskName string, sources []string) {
+	var err error
+	if len(sources) == 0 {
+		err = s.optimist.RemoveMetaDataWithTask(taskName)
+	} else {
+		err = s.optimist.RemoveMetaDataWithTaskAndSources(taskName, sources...)
+	}
+	if err != nil {
+		log.L().Error("failed to delete metadata for task", zap.String("task name", taskName), log.ShortError(err))
+	}
 }
 
 // GetSubTaskCfg implements MasterServer.GetSubTaskCfg.
@@ -1201,10 +1205,16 @@ func (s *Server) getStatusFromWorkers(
 					workerStatus = &pb.QueryStatusResponse{
 						Result:       false,
 						Msg:          err.Error(),
-						SourceStatus: &pb.SourceStatus{},
+						SourceStatus: &pb.SourceStatus{Worker: w.BaseInfo().Name},
 					}
 				} else {
 					workerStatus = resp.QueryStatus
+					if workerStatus.SourceStatus == nil {
+						workerStatus.SourceStatus = &pb.SourceStatus{}
+					}
+					if workerStatus.SourceStatus.Worker == "" {
+						workerStatus.SourceStatus.Worker = w.BaseInfo().Name
+					}
 				}
 				workerStatus.SourceStatus.Source = sourceID
 				setWorkerResp(workerStatus)
@@ -1428,6 +1438,10 @@ func GetLatestMeta(ctx context.Context, flavor string, dbConfig *dbconfig.DBConf
 }
 
 func AdjustTargetDBSessionCfg(ctx context.Context, dbConfig *dbconfig.DBConfig) error {
+	return AdjustTargetDBSessionCfgWithTimeout(ctx, dbConfig, conn.DefaultDBTimeout)
+}
+
+func AdjustTargetDBSessionCfgWithTimeout(ctx context.Context, dbConfig *dbconfig.DBConfig, timeout time.Duration) error {
 	cfg := *dbConfig
 	if len(cfg.Password) > 0 {
 		cfg.Password = utils.DecryptOrPlaintext(cfg.Password)
@@ -1437,7 +1451,7 @@ func AdjustTargetDBSessionCfg(ctx context.Context, dbConfig *dbconfig.DBConfig) 
 		failpoint.Return(nil)
 	})
 
-	toDB, err := conn.GetDownstreamDB(&cfg)
+	toDB, err := conn.GetDownstreamDBWithTimeout(&cfg, timeout)
 	if err != nil {
 		return err
 	}
@@ -1768,11 +1782,30 @@ func withHost(addr string) string {
 }
 
 func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string, toDBCfg *dbconfig.DBConfig) error {
+	return s.removeMetaDataWithTimeout(ctx, taskName, metaSchema, toDBCfg, conn.DefaultDBTimeout)
+}
+
+func (s *Server) removeMetaDataWithTimeout(
+	ctx context.Context,
+	taskName,
+	metaSchema string,
+	toDBCfg *dbconfig.DBConfig,
+	dbTimeout time.Duration,
+) error {
 	failpoint.Inject("MockSkipRemoveMetaData", func() {
 		failpoint.Return(nil)
 	})
 	toDBCfg.Adjust()
 
+	err := s.removeInternalMetaData(taskName)
+	if err != nil {
+		return err
+	}
+
+	return s.removeDownstreamMetaData(ctx, taskName, metaSchema, toDBCfg, dbTimeout)
+}
+
+func (s *Server) removeInternalMetaData(taskName string) error {
 	// clear shard meta data for pessimistic/optimist
 	err := s.pessimist.RemoveMetaData(taskName)
 	if err != nil {
@@ -1786,9 +1819,36 @@ func (s *Server) removeMetaData(ctx context.Context, taskName, metaSchema string
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+func (s *Server) removeDownstreamMetaData(
+	ctx context.Context,
+	taskName,
+	metaSchema string,
+	toDBCfg *dbconfig.DBConfig,
+	dbTimeout time.Duration,
+) error {
+	failpoint.Inject("MockRemoveDownstreamMetaDataError", func() {
+		failpoint.Return(terror.WithScope(
+			terror.ErrDBDriverError.Generate("mock remove downstream metadata failed"),
+			terror.ScopeDownstream,
+		))
+	})
+	failpoint.Inject("MockBlockOnDownstreamMetaDataCleanup", func(val failpoint.Value) {
+		wait := time.Duration(val.(int)) * time.Millisecond
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			failpoint.Return(ctx.Err())
+		case <-timer.C:
+			failpoint.Return(nil)
+		}
+	})
 
 	// set up db and clear meta data in downstream db
-	baseDB, err := conn.GetDownstreamDB(toDBCfg)
+	baseDB, err := conn.GetDownstreamDBWithTimeout(toDBCfg, dbTimeout)
 	if err != nil {
 		return terror.WithScope(err, terror.ScopeDownstream)
 	}
@@ -2798,7 +2858,7 @@ func (s *Server) checkStartValidationParams(
 	startTime := req.GetStartTimeValue()
 	if startTime != "" {
 		if _, err := utils.ParseStartTime(startTime); err != nil {
-			return "start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'", false
+			return fmt.Sprintf("start-time should be in the format like %s", utils.StartTimeFormatHint), false
 		}
 	}
 

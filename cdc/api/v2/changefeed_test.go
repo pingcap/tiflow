@@ -81,9 +81,10 @@ func TestCreateChangefeed(t *testing.T) {
 	// Mock UpstreamDownstreamNotSame check
 	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
 	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
-	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
-		return 0, false, nil
-	})
+	check.SetGetClusterIDBySinkURIFnForTest(
+		func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
+			return 0, false, nil
+		})
 
 	// case 1: json format mismatches with the spec.
 	errConfig := struct {
@@ -359,9 +360,10 @@ func TestUpdateChangefeed(t *testing.T) {
 	// Mock UpstreamDownstreamNotSame check
 	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
 	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
-	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
-		return 0, false, nil
-	})
+	check.SetGetClusterIDBySinkURIFnForTest(
+		func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
+			return 0, false, nil
+		})
 
 	// case 1 invalid id
 	invalidID := "Invalid_#"
@@ -772,9 +774,10 @@ func TestResumeChangefeed(t *testing.T) {
 	// Mock UpstreamDownstreamNotSame check
 	oldGetClusterID := check.GetGetClusterIDBySinkURIFn()
 	defer func() { check.SetGetClusterIDBySinkURIFnForTest(oldGetClusterID) }()
-	check.SetGetClusterIDBySinkURIFnForTest(func(_ context.Context, _ string) (uint64, bool, error) {
-		return 0, false, nil
-	})
+	check.SetGetClusterIDBySinkURIFnForTest(
+		func(_ context.Context, _ string, _ model.ChangeFeedID, _ *config.ReplicaConfig) (uint64, bool, error) {
+			return 0, false, nil
+		})
 
 	// case 1: invalid changefeed id
 	w := httptest.NewRecorder()

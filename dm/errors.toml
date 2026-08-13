@@ -34,6 +34,12 @@ description = ""
 workaround = ""
 tags = ["not-set", "high"]
 
+[error.DM-database-10007]
+message = "execute statement failed: begin"
+description = ""
+workaround = ""
+tags = ["not-set", "high"]
+
 [error.DM-functional-11001]
 message = "parse mydumper metadata error: %s, metadata: %s"
 description = ""
@@ -1129,7 +1135,7 @@ tags = ["internal", "medium"]
 [error.DM-config-20053]
 message = "invalid load mode '%s'"
 description = ""
-workaround = "Please choose a valid value in ['logical', 'physical']"
+workaround = "Please choose a valid value in ['logical', 'physical', 'import-into']"
 tags = ["internal", "medium"]
 
 [error.DM-config-20054]
@@ -1215,6 +1221,24 @@ message = "invalid secret key path or content: %v"
 description = ""
 workaround = "Please check whether the path is valid, and has required permission to read the file, and the key is correct."
 tags = ["internal", "high"]
+
+[error.DM-config-20068]
+message = "import-into mode does not support sharding (multi-source) scenario"
+description = ""
+workaround = "Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'."
+tags = ["internal", "high"]
+
+[error.DM-config-20069]
+message = "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'"
+description = ""
+workaround = "Please use a shared storage URI like s3://bucket/path"
+tags = ["internal", "high"]
+
+[error.DM-config-20070]
+message = "`%s` is not supported when foreign_key_checks=1"
+description = ""
+workaround = "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
+tags = ["internal", "medium"]
 
 [error.DM-binlog-op-22001]
 message = ""
@@ -2155,7 +2179,7 @@ tags = ["internal", "high"]
 [error.DM-sync-unit-36067]
 message = "parse DDL: %s"
 description = ""
-workaround = "Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
+workaround = "Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl-operations. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
 tags = ["internal", "high"]
 
 [error.DM-sync-unit-36068]

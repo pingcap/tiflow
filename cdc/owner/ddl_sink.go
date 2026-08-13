@@ -173,7 +173,12 @@ func (s *ddlSinkImpl) retrySinkAction(ctx context.Context, name string, action f
 			zap.Bool("retryable", isRetryable),
 			zap.Error(err))
 
-		s.sink = nil
+		if s.sink != nil {
+			s.sink.Close()
+			s.sink = nil
+			log.Info("close the ddl sink, rebuild it when trying again",
+				zap.String("namespace", s.changefeedID.Namespace), zap.String("changefeed", s.changefeedID.ID))
+		}
 		if isRetryable {
 			s.reportWarning(err)
 		} else {
@@ -199,7 +204,7 @@ func (s *ddlSinkImpl) observedRetrySinkAction(ctx context.Context, name string, 
 	defer ticker.Stop()
 	for {
 		select {
-		case err := <-errCh:
+		case err = <-errCh:
 			return err
 		case <-ticker.C:
 			log.Info("owner ddl sink performs an action too long",
@@ -244,7 +249,7 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 		if err = s.makeSinkReady(ctx); err == nil {
 			err = s.sink.WriteDDLEvent(ctx, ddl)
 			failpoint.Inject("InjectChangefeedDDLError", func() {
-				err = cerror.ErrExecDDLFailed.GenWithStackByArgs()
+				err = cerror.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
 			})
 		}
 		if err != nil {

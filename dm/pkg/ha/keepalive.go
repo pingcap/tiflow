@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
@@ -136,6 +137,9 @@ func KeepAlive(ctx context.Context, cli *clientv3.Client, workerName string, kee
 	for {
 		select {
 		case _, ok := <-ch:
+			failpoint.Inject("InterruptKeepAlive", func(_ failpoint.Value) {
+				failpoint.Return(terror.ErrHAFailKeepalive.Generate("injected by failpoint InterruptKeepAlive"))
+			})
 			if !ok {
 				log.L().Info("keep alive channel is closed")
 				return nil

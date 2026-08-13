@@ -24,7 +24,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -64,7 +64,7 @@ type Writer struct {
 	ongoingFilePath string
 	bw              *pioutil.PageWriter
 	uint64buf       []byte
-	storage         storage.ExternalStorage
+	storage         storeapi.Storage
 	sync.RWMutex
 	uuidGenerator uuid.Generator
 	allocator     *fsutil.FileAllocator
@@ -83,7 +83,7 @@ func NewFileWriter(
 		return nil, errors.WrapError(errors.ErrRedoConfigInvalid, err)
 	}
 
-	var extStorage storage.ExternalStorage
+	var extStorage storeapi.Storage
 	if cfg.UseExternalStorage {
 		var err error
 		extStorage, err = redo.InitExternalStorage(ctx, *cfg.URI)

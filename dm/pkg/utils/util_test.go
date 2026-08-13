@@ -23,6 +23,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tiflow/dm/pkg/cancelcause"
 	"github.com/stretchr/testify/require"
 )
 
@@ -168,6 +169,7 @@ func TestWrapSchemesForInitialCluster(t *testing.T) {
 func TestIsContextCanceledError(t *testing.T) {
 	t.Parallel()
 	require.True(t, IsContextCanceledError(context.Canceled))
+	require.True(t, IsContextCanceledError(cancelcause.WorkerFailoverCause()))
 	require.False(t, IsContextCanceledError(context.DeadlineExceeded))
 	require.False(t, IsContextCanceledError(errors.New("another error")))
 }

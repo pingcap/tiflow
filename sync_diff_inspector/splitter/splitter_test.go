@@ -20,9 +20,14 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
+	ttypes "github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -48,7 +53,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("a", "0", "10", true, true).CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("a", "0", "10", true, true).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{"5", "7"},
 				{"g", "n"},
@@ -69,7 +74,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`, `a`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true).CopyAndUpdate("a", "0", "10", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true).CopyAndUpdate("a", "0", "10", true, true),
 			[][]string{
 				{"g", "n"},
 				{"5", "7"},
@@ -90,7 +95,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{"g", "n"},
 			},
@@ -110,7 +115,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			2,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{"g"},
 			},
@@ -127,7 +132,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 		{
 			"create table `test`.`test`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`b`))",
 			3,
-			chunk.NewChunkRange().CopyAndUpdate("b", "a", "z", true, true),
+			chunk.NewChunkRange(nil).CopyAndUpdate("b", "a", "z", true, true),
 			[][]string{
 				{},
 			},
@@ -146,7 +151,7 @@ func TestSplitRangeByRandom(t *testing.T) {
 
 		splitCols, err := GetSplitFields(tableInfo, nil)
 		require.NoError(t, err)
-		createFakeResultForRandomSplit(mock, 0, testCase.randomValues)
+		createFakeResultForRandomSplit(t, mock, 0, testCase.randomValues)
 		chunks, err := splitRangeByRandom(context.Background(), db, testCase.originChunk, testCase.splitCount, "test", "test", splitCols, "", "")
 		require.NoError(t, err)
 		for j, chunk := range chunks {
@@ -335,7 +340,7 @@ func TestRandomSpliter(t *testing.T) {
 			ChunkSize:           5,
 		}
 
-		createFakeResultForRandomSplit(mock, testCase.count, testCase.randomValues)
+		createFakeResultForRandomSplit(t, mock, testCase.count, testCase.randomValues)
 
 		iter, err := NewRandomIterator(ctx, "", tableDiff, db)
 		require.NoError(t, err)
@@ -368,7 +373,7 @@ func TestRandomSpliter(t *testing.T) {
 		ChunkSize: 5,
 	}
 
-	createFakeResultForRandomSplit(mock, testCases[0].count, testCases[0].randomValues)
+	createFakeResultForRandomSplit(t, mock, testCases[0].count, testCases[0].randomValues)
 
 	iter, err := NewRandomIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
@@ -386,7 +391,7 @@ func TestRandomSpliter(t *testing.T) {
 		ChunkRange: chunk,
 	}
 
-	createFakeResultForRandomSplit(mock, testCases[0].count, testCases[0].randomValues)
+	createFakeResultForRandomSplit(t, mock, testCases[0].count, testCases[0].randomValues)
 
 	iter, err = NewRandomIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo)
 	require.NoError(t, err)
@@ -402,8 +407,8 @@ func TestRandomSpliter(t *testing.T) {
 	require.Equal(t, chunk.Index.ChunkIndex, chunkID1.ChunkIndex+1)
 }
 
-func createFakeResultForRandomSplit(mock sqlmock.Sqlmock, count int, randomValues [][]string) {
-	createFakeResultForCount(mock, count)
+func createFakeResultForRandomSplit(t *testing.T, mock sqlmock.Sqlmock, count int, randomValues [][]string) {
+	createFakeResultForCount(t, count)
 	if randomValues == nil {
 		return
 	}
@@ -688,8 +693,7 @@ func TestBucketSpliter(t *testing.T) {
 	db, mock, err = sqlmock.New()
 	require.NoError(t, err)
 	createFakeResultForBucketSplit(mock, nil, nil)
-	createFakeResultForCount(mock, 64)
-	createFakeResultForRandom(mock, testCases[0].aRandomValues[stopJ:], testCases[0].bRandomValues[stopJ:])
+	createFakeResultForRandom(mock, testCases[0].aRandomValues[stopJ-1:], testCases[0].bRandomValues[stopJ-1:])
 	iter, err = NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, rangeInfo, utils.NewWorkerPool(1, "bucketIter"))
 	require.NoError(t, err)
 	chunk, err = iter.Next()
@@ -698,6 +702,20 @@ func TestBucketSpliter(t *testing.T) {
 	for i, bound := range chunk.Bounds {
 		require.Equal(t, bounds1[i].Upper, bound.Lower)
 	}
+	for {
+		c, err := iter.Next()
+		require.NoError(t, err)
+		if c == nil {
+			break
+		}
+	}
+	iter.Close()
+
+	// Mock column a is ignored.
+	tableDiff.Info, _ = utils.ResetColumns(tableInfo, []string{"a"})
+	createFakeResultForBucketSplit(mock, testCases[0].aRandomValues, testCases[0].bRandomValues)
+	_, err = NewBucketIterator(ctx, "", tableDiff, db)
+	require.Error(t, err)
 }
 
 func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandomValues []interface{}) {
@@ -713,20 +731,35 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 	*/
 
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
+	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	for i := 0; i < 5; i++ {
-		statsRows.AddRow("test", "test", "PRIMARY", 1, (i+1)*64, (i+1)*64, 1, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+		// Encode index bounds as real encoded keys: PRIMARY(a, b) where both a and b are integers.
+		lowerA, lowerB := i*64, i*12
+		upperA, upperB := (i+1)*64-1, (i+1)*12-1
+
+		lowerDatums := []ttypes.Datum{ttypes.NewIntDatum(int64(lowerA)), ttypes.NewStringDatum(fmt.Sprintf("%d", lowerB))}
+		upperDatums := []ttypes.Datum{ttypes.NewIntDatum(int64(upperA)), ttypes.NewStringDatum(fmt.Sprintf("%d", upperB))}
+
+		lowerEncoded, _ := codec.EncodeKey(time.UTC, nil, lowerDatums...)
+		upperEncoded, _ := codec.EncodeKey(time.UTC, nil, upperDatums...)
+
+		statsRows.AddRow(1, 1, i, (i+1)*64, lowerEncoded, upperEncoded)
 	}
-	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
 
 	createFakeResultForRandom(mock, aRandomValues, bRandomValues)
 }
 
-func createFakeResultForCount(mock sqlmock.Sqlmock, count int) {
+func createFakeResultForCount(t *testing.T, count int) {
 	if count > 0 {
 		// generate fake result for get the row count of this table
-		countRows := sqlmock.NewRows([]string{"cnt"}).AddRow(count)
-		mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
+		testfailpoint.Enable(t,
+			"github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount",
+			fmt.Sprintf("return(%d)", count),
+		)
 	}
 }
 
@@ -786,7 +819,7 @@ func TestLimitSpliter(t *testing.T) {
 		require.NoError(t, err)
 		defer db.Close()
 
-		createFakeResultForLimitSplit(mock, testCase.limitAValues, testCase.limitBValues, true)
+		createFakeResultForLimitSplit(t, mock, testCase.limitAValues, testCase.limitBValues, true)
 
 		iter, err := NewLimitIterator(ctx, "", tableDiff, db)
 		require.NoError(t, err)
@@ -811,7 +844,7 @@ func TestLimitSpliter(t *testing.T) {
 
 	// Test Checkpoint
 	stopJ := 2
-	createFakeResultForLimitSplit(mock2, testCases[0].limitAValues[:stopJ], testCases[0].limitBValues[:stopJ], true)
+	createFakeResultForLimitSplit(t, mock2, testCases[0].limitAValues[:stopJ], testCases[0].limitBValues[:stopJ], true)
 	iter, err := NewLimitIterator(ctx, "", tableDiff, db2)
 	require.NoError(t, err)
 	j := 0
@@ -831,7 +864,7 @@ func TestLimitSpliter(t *testing.T) {
 	require.NoError(t, err)
 	defer db3.Close()
 
-	createFakeResultForLimitSplit(mock3, testCases[0].limitAValues[stopJ:], testCases[0].limitBValues[stopJ:], true)
+	createFakeResultForLimitSplit(t, mock3, testCases[0].limitAValues[stopJ:], testCases[0].limitBValues[stopJ:], true)
 	iter, err = NewLimitIteratorWithCheckpoint(ctx, "", tableDiff, db3, rangeInfo)
 	require.NoError(t, err)
 	chunk, err = iter.Next()
@@ -842,7 +875,9 @@ func TestLimitSpliter(t *testing.T) {
 	}
 }
 
-func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
+func createFakeResultForLimitSplit(t *testing.T, mock sqlmock.Sqlmock, aValues []string, bValues []string, needEnd bool) {
+	createFakeResultForCount(t, len(aValues))
+
 	for i, a := range aValues {
 		limitRows := sqlmock.NewRows([]string{"a", "b"})
 		limitRows.AddRow(a, bValues[i])
@@ -856,7 +891,7 @@ func createFakeResultForLimitSplit(mock sqlmock.Sqlmock, aValues []string, bValu
 
 func TestRangeInfo(t *testing.T) {
 	rangeInfo := &RangeInfo{
-		ChunkRange: chunk.NewChunkRange(),
+		ChunkRange: chunk.NewChunkRange(chunk.GenFakeTableInfo("a")),
 		IndexID:    2,
 		ProgressID: "324312",
 	}
@@ -894,10 +929,13 @@ func TestChunkSize(t *testing.T) {
 	}
 
 	// test bucket splitter chunksize
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
+	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	// Notice, use wrong Bound to kill bucket producer
-	statsRows.AddRow("test", "test", "PRIMARY", 1, 0, 1000000000, 1, "(1, 2, wrong!)", "(2, 3, wrong!)")
-	mock.ExpectQuery("SHOW STATS_BUCKETS").WillReturnRows(statsRows)
+	statsRows.AddRow(1, 1, 0, 1000000000, "(1, 2, wrong!)", "(2, 3, wrong!)")
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
 
 	bucketIter, err := NewBucketIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
@@ -910,12 +948,12 @@ func TestChunkSize(t *testing.T) {
 
 	// test random splitter chunksize
 	// chunkNum is only 1, so don't need randomValues
-	createFakeResultForRandomSplit(mock, 1000, nil)
+	createFakeResultForRandomSplit(t, mock, 1000, nil)
 	randomIter, err := NewRandomIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
 	require.Equal(t, randomIter.chunkSize, int64(50000))
 
-	createFakeResultForRandomSplit(mock, 1000000000, [][]string{
+	createFakeResultForRandomSplit(t, mock, 1000000000, [][]string{
 		{"1", "2", "3", "4", "5"},
 		{"a", "b", "c", "d", "e"},
 	})
@@ -934,14 +972,144 @@ func TestChunkSize(t *testing.T) {
 		ChunkSize: 0,
 	}
 	// no index
-	createFakeResultForRandomSplit(mock, 1000, nil)
+	createFakeResultForRandomSplit(t, mock, 1000, nil)
 	randomIter, err = NewRandomIterator(ctx, "", tableDiffNoIndex, db)
 	require.NoError(t, err)
 	require.Equal(t, randomIter.chunkSize, int64(1001))
 
 	// test limit splitter chunksize
-	createFakeResultForCount(mock, 1000)
+	createFakeResultForCount(t, 1000)
 	mock.ExpectQuery("SELECT `a`,.*limit 50000.*").WillReturnRows(sqlmock.NewRows([]string{"a", "b"}))
 	_, err = NewLimitIterator(ctx, "", tableDiff, db)
 	require.NoError(t, err)
+}
+
+func TestBucketSpliterHint(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	testCases := []struct {
+		tableSQL      string
+		indexCount    int
+		expectColumns []ast.CIStr
+	}{
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
+			0,
+			[]ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`))",
+			0,
+			[]ast.CIStr{ast.NewCIStr("c")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
+			1,
+			[]ast.CIStr{ast.NewCIStr("b")},
+		},
+	}
+
+	for _, tc := range testCases {
+		tableInfo, err := utils.GetTableInfoBySQL(tc.tableSQL, parser.New())
+		require.NoError(t, err)
+
+		tableDiff := &common.TableDiff{
+			Schema: "test",
+			Table:  "test",
+			Info:   tableInfo,
+		}
+
+		createFakeResultForBucketIterator(mock, tc.indexCount)
+
+		iter, err := NewBucketIteratorWithCheckpoint(ctx, "", tableDiff, db, nil, utils.NewWorkerPool(1, "bucketIter"))
+		require.NoError(t, err)
+		chunk, err := iter.Next()
+		require.NoError(t, err)
+		require.Equal(t, tc.expectColumns, chunk.IndexColumnNames)
+	}
+}
+
+func TestRandomSpliterHint(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	testCases := []struct {
+		tableSQL      string
+		expectColumns []ast.CIStr
+	}{
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`a`, `b`), unique key i1(`c`))",
+			[]ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, unique key i1(`c`), key i2(`b`))",
+			[]ast.CIStr{ast.NewCIStr("c")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, key i2(`b`))",
+			[]ast.CIStr{ast.NewCIStr("b")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int, primary key(`b`, `a`), unique key i1(`c`))",
+			[]ast.CIStr{ast.NewCIStr("b"), ast.NewCIStr("a")},
+		},
+		{
+			"create table `test`.`test`(`a` int, `b` int, `c` int)",
+			nil,
+		},
+	}
+
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(320)")
+
+	for _, tc := range testCases {
+		tableInfo, err := utils.GetTableInfoBySQL(tc.tableSQL, parser.New())
+		require.NoError(t, err)
+
+		for _, tableRange := range []string{"", "c > 100"} {
+			tableDiff := &common.TableDiff{
+				Schema: "test",
+				Table:  "test",
+				Info:   tableInfo,
+				Range:  tableRange,
+			}
+
+			iter, err := NewRandomIteratorWithCheckpoint(ctx, "", tableDiff, db, nil)
+			require.NoError(t, err)
+			chunk, err := iter.Next()
+			require.NoError(t, err)
+			require.Equal(t, tc.expectColumns, chunk.IndexColumnNames)
+		}
+	}
+}
+
+func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
+	/*
+		+---------+----------+-----------+-------+-------------+-------------+
+		| hist_id | is_index | bucket_id | count | lower_bound | upper_bound |
+		+---------+----------+-----------+-------+-------------+-------------+
+		| 1       |        1 |         0 |    64 | (0, 0)      | (63, 11)    |
+		| 1       |        1 |         1 |   128 | (64, 12)    | (127, 23)   |
+		| 1       |        1 |         2 |   192 | (128, 24)   | (191, 35)   |
+		| 1       |        1 |         3 |   256 | (192, 36)   | (255, 47)   |
+		| 1       |        1 |         4 |   320 | (256, 48)   | (319, 59)   |
+		+---------+----------+-----------+-------+-------------+-------------+
+	*/
+	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	for i := range []string{"PRIMARY", "i1", "i2", "i3", "i4"} {
+		histID := int64(i + 1) // hist_id starts from 1
+		for j := 0; j < 5; j++ {
+			statsRows.AddRow(1, histID, j, (j+1)*64, fmt.Sprintf("(%d, %d)", j*64, j*12), fmt.Sprintf("(%d, %d)", (j+1)*64-1, (j+1)*12-1))
+		}
+	}
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
+
+	for range indexCount {
+		mock.ExpectQuery("SELECT COUNT\\(DISTINCT *").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
+	}
 }

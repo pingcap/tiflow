@@ -51,6 +51,14 @@ func (t *testConfig) TestTaskCliArgsVerify(c *check.C) {
 	c.Assert(rightStartTime.Verify(), check.IsNil)
 	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05"}
 	c.Assert(rightStartTime.Verify(), check.IsNil)
+	rightStartTime = TaskCliArgs{StartTime: "2006-01-02T15:04:05+08:00"}
+	c.Assert(rightStartTime.Verify(), check.IsNil)
+	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05+08:00"}
+	c.Assert(rightStartTime.Verify(), check.IsNil)
+	rightStartTime = TaskCliArgs{StartTime: "2006-01-02T15:04:05+0800"}
+	c.Assert(rightStartTime.Verify(), check.IsNil)
+	rightStartTime = TaskCliArgs{StartTime: "2006-01-02 15:04:05+0800"}
+	c.Assert(rightStartTime.Verify(), check.IsNil)
 	wrongStartTime := TaskCliArgs{StartTime: "15:04:05"}
 	c.Assert(wrongStartTime.Verify(), check.NotNil)
 

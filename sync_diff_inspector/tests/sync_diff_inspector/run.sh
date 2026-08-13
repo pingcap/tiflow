@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 # check mysql status
 check_db_status "${MYSQL_HOST}" "${MYSQL_PORT}" mysql "."
 
-BASE_DIR=/tmp/tidb_tools_test/sync_diff_inspector
+BASE_DIR=/tmp/sync_diff_inspector_test/sync_diff_inspector
 OUT_DIR=$BASE_DIR/output
 
 mkdir -p $OUT_DIR || true
@@ -55,6 +55,13 @@ rm -rf $OUT_DIR/*
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_mysql.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config_base_mysql_.toml
 sync_diff_inspector --config=./config_base_mysql_.toml #> $OUT_DIR/diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
+rm -rf $OUT_DIR/*
+
+# sync diff mysql-mysql with splitter-strategy=limit
+sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_base_mysql_limit.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config_base_mysql_limit_.toml
+sync_diff_inspector --config=./config_base_mysql_limit_.toml #> $OUT_DIR/diff.output
+check_contains "check pass!!!" $OUT_DIR/sync_diff.log
+check_contains "choose limit splitter" $OUT_DIR/sync_diff.log
 rm -rf $OUT_DIR/*
 
 for script in ./*/run.sh; do

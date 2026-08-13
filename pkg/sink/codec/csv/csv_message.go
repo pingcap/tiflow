@@ -100,7 +100,8 @@ func newCSVMessage(config *common.Config) *csvMessage {
 // Col2: Table name, the name of the source table.
 // Col3: Schema name, the name of the source schema.
 // Col4: Commit TS, the commit-ts of the source txn (optional).
-// Col5-n: one or more columns that represent the data to be changed.
+// Column 5: The is-update column only exists when the value of output-old-value is true.(optional)
+// Col6-n: one or more columns that represent the data to be changed.
 func (c *csvMessage) encode() []byte {
 	strBuilder := new(strings.Builder)
 	if c.opType == operationUpdate && c.config.OutputOldValue && len(c.preColumns) != 0 {
@@ -116,7 +117,7 @@ func (c *csvMessage) encode() []byte {
 		c.encodeMeta(c.opType.String(), strBuilder)
 		c.encodeColumns(c.columns, strBuilder)
 	}
-	return []byte(strBuilder.String())
+	return common.UnsafeStringToBytes(strBuilder.String())
 }
 
 func (c *csvMessage) encodeMeta(opType string, b *strings.Builder) {
@@ -485,4 +486,33 @@ func csvColumns2RowChangeColumns(csvConfig *common.Config, csvCols []any, ticols
 	}
 
 	return cols, nil
+}
+
+// The header should contain the name corresponding to the file record field,
+// and should have the same number as the record field.
+// | ticdc-meta$operation | ticdc-meta$table | ticdc-meta$schema | ticdc-meta$commit-ts | ticdc-meta$is-update | col1 | col2 | ... |
+func encodeHeader(config *common.Config, colNames []string) []byte {
+	if !config.CSVOutputFieldHeader {
+		return nil
+	}
+	strBuilder := new(strings.Builder)
+	strBuilder.WriteString("ticdc-meta$operation")
+	strBuilder.WriteString(config.Delimiter)
+	strBuilder.WriteString("ticdc-meta$table")
+	strBuilder.WriteString(config.Delimiter)
+	strBuilder.WriteString("ticdc-meta$schema")
+	if config.IncludeCommitTs {
+		strBuilder.WriteString(config.Delimiter)
+		strBuilder.WriteString("ticdc-meta$commit-ts")
+	}
+	if config.OutputOldValue {
+		strBuilder.WriteString(config.Delimiter)
+		strBuilder.WriteString("ticdc-meta$is-update")
+	}
+	for _, name := range colNames {
+		strBuilder.WriteString(config.Delimiter)
+		strBuilder.WriteString(name)
+	}
+	strBuilder.WriteString(config.Terminator)
+	return common.UnsafeStringToBytes(strBuilder.String())
 }

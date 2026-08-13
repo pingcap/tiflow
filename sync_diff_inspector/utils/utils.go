@@ -29,7 +29,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"go.uber.org/zap"
@@ -151,7 +155,7 @@ func GetColumnsFromIndex(index *model.IndexInfo, tableInfo *model.TableInfo) []*
 //
 //	e.g. SELECT /*!40001 SQL_NO_CACHE */ `a`, `b` FROM `schema`.`table` WHERE %s ORDER BY `a`.
 func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, collation string) (string, []*model.ColumnInfo) {
-	orderKeys, orderKeyCols := dbutil.SelectUniqueOrderKey(tableInfo)
+	_, orderByCols := dbutil.SelectUniqueOrderKey(tableInfo)
 
 	columnNames := make([]string, 0, len(tableInfo.Columns))
 	for _, col := range tableInfo.Columns {
@@ -169,19 +173,20 @@ func GetTableRowsQueryFormat(schema, table string, tableInfo *model.TableInfo, c
 		}
 		columnNames = append(columnNames, name)
 	}
+
 	columns := strings.Join(columnNames, ", ")
-	if collation != "" {
-		collation = fmt.Sprintf(" COLLATE '%s'", collation)
-	}
+	query := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %%s ORDER BY %s",
+		columns, dbutil.TableName(schema, table), BuildOrderByClause(orderByCols, collation))
 
-	for i, key := range orderKeys {
-		orderKeys[i] = dbutil.ColumnName(key)
-	}
+	return query, orderByCols
+}
 
-	query := fmt.Sprintf("SELECT /*!40001 SQL_NO_CACHE */ %s FROM %s WHERE %%s ORDER BY %s%s",
-		columns, dbutil.TableName(schema, table), strings.Join(orderKeys, ","), collation)
-
-	return query, orderKeyCols
+// escapeString escapes special characters in the given string
+func escapeString(bs []byte) string {
+	s := string(bs)
+	s = strings.Replace(s, "\\", "\\\\", -1)
+	s = strings.Replace(s, "'", "\\'", -1)
+	return s
 }
 
 // GenerateReplaceDML returns the insert SQL for the specific row values.
@@ -203,7 +208,7 @@ func GenerateReplaceDML(data map[string]*dbutil.ColumnData, table *model.TableIn
 			if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 				values = append(values, fmt.Sprintf("x'%x'", data[col.Name.O].Data))
 			} else {
-				values = append(values, fmt.Sprintf("'%s'", strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
+				values = append(values, fmt.Sprintf("'%s'", escapeString(data[col.Name.O].Data)))
 			}
 		} else {
 			values = append(values, string(data[col.Name.O].Data))
@@ -240,7 +245,7 @@ func GenerateReplaceDMLWithAnnotation(source, target map[string]*dbutil.ColumnDa
 				if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 					value1 = fmt.Sprintf("x'%x'", data1.Data)
 				} else {
-					value1 = fmt.Sprintf("'%s'", strings.Replace(string(data1.Data), "'", "\\'", -1))
+					value1 = fmt.Sprintf("'%s'", escapeString(data1.Data))
 				}
 			} else {
 				value1 = string(data1.Data)
@@ -265,7 +270,7 @@ func GenerateReplaceDMLWithAnnotation(source, target map[string]*dbutil.ColumnDa
 				if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 					values2 = append(values2, fmt.Sprintf("x'%x'", data1.Data))
 				} else {
-					values2 = append(values2, fmt.Sprintf("'%s'", strings.Replace(string(data2.Data), "'", "\\'", -1)))
+					values2 = append(values2, fmt.Sprintf("'%s'", escapeString(data2.Data)))
 				}
 			} else {
 				values2 = append(values2, string(data2.Data))
@@ -305,7 +310,7 @@ func GenerateDeleteDML(data map[string]*dbutil.ColumnData, table *model.TableInf
 			if IsBlobType(col.FieldType.GetType()) || IsBinaryColumn(col) {
 				kvs = append(kvs, fmt.Sprintf("%s = x'%x'", dbutil.ColumnName(col.Name.O), data[col.Name.O].Data))
 			} else {
-				kvs = append(kvs, fmt.Sprintf("%s = '%s'", dbutil.ColumnName(col.Name.O), strings.Replace(string(data[col.Name.O].Data), "'", "\\'", -1)))
+				kvs = append(kvs, fmt.Sprintf("%s = '%s'", dbutil.ColumnName(col.Name.O), escapeString(data[col.Name.O].Data)))
 			}
 		} else {
 			kvs = append(kvs, fmt.Sprintf("%s = %s", dbutil.ColumnName(col.Name.O), string(data[col.Name.O].Data)))
@@ -371,16 +376,45 @@ func sameProperties(c1, c2 *model.ColumnInfo) bool {
 	}
 }
 
-// CompareStruct compare tables' columns and indices from upstream and downstream.
+// equalFK checks whether 2 foreign keys are equal.
+// As different FK doesn't affect data checking, we just compare the names directly
+// rather than fetching the detailed table info.
+func equalFK(fk1, fk2 *model.FKInfo) bool {
+	// Not use reflect.DeepEqual to do case-insensitive comparison.
+	if fk1.RefSchema.L != fk2.RefSchema.L ||
+		fk1.RefTable.L != fk2.RefTable.L ||
+		fk1.OnDelete != fk2.OnDelete ||
+		fk1.OnUpdate != fk2.OnUpdate ||
+		len(fk1.Cols) != len(fk2.Cols) ||
+		len(fk1.RefCols) != len(fk2.RefCols) {
+		return false
+	}
+
+	for i := range fk1.Cols {
+		if fk1.Cols[i].L != fk2.Cols[i].L {
+			return false
+		}
+	}
+
+	for i := range fk1.RefCols {
+		if fk1.RefCols[i].L != fk2.RefCols[i].L {
+			return false
+		}
+	}
+
+	return true
+}
+
+// CompareStruct compare tables' structure from upstream and downstream.
 // There are 2 return values:
 //
-//	isEqual	: result of comparing tables' columns and indices
-//	isPanic	: the differences of tables' struct can not be ignored. Need to skip data comparing.
-func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo) (isEqual bool, isPanic bool) {
+//	isEqual	: result of comparing tables' structure
+//	isSkip	: if the differences of tables' structure can not be ignored, need to skip data comparing.
+func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *model.TableInfo) (isEqual bool, isSkip bool) {
 	// compare columns
 	for _, upstreamTableInfo := range upstreamTableInfos {
+		// Skip comparison when the numbers of columns are different.
 		if len(upstreamTableInfo.Columns) != len(downstreamTableInfo.Columns) {
-			// the numbers of each columns are different, don't compare data
 			log.Error("column num not equal",
 				zap.String("upstream table", upstreamTableInfo.Name.O),
 				zap.Int("column num", len(upstreamTableInfo.Columns)),
@@ -390,9 +424,9 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 			return false, true
 		}
 
+		// Skip comparison when column names are different.
 		for i, column := range upstreamTableInfo.Columns {
 			if column.Name.O != downstreamTableInfo.Columns[i].Name.O {
-				// names are different, panic!
 				log.Error("column name not equal",
 					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("column name", column.Name.O),
@@ -402,8 +436,8 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 				return false, true
 			}
 
+			// Skip comparison when column types are different.
 			if !isCompatible(column.GetType(), downstreamTableInfo.Columns[i].GetType()) {
-				// column types are different, panic!
 				log.Error("column type not compatible",
 					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("column name", column.Name.O),
@@ -415,8 +449,8 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 				return false, true
 			}
 
+			// Skip comparison when column properties are different.
 			if !sameProperties(column, downstreamTableInfo.Columns[i]) {
-				// column properties are different, panic!
 				log.Error("column properties not compatible",
 					zap.String("upstream table", upstreamTableInfo.Name.O),
 					zap.String("column name", column.Name.O),
@@ -430,7 +464,44 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 		}
 	}
 
-	// compare indices
+	// Compare foreign key.
+	// As MySQL and TiDB has different behavior on naming, we just compare
+	// the count and the definition one by one without considering the name.
+	fkEqual := true
+	for _, upstreamTableInfo := range upstreamTableInfos {
+		upstreamFKs := upstreamTableInfo.ForeignKeys
+		downstreamFKs := downstreamTableInfo.ForeignKeys
+		if len(upstreamFKs) != len(downstreamFKs) {
+			log.Warn("Upstream and downstream have different count of foreign keys",
+				zap.String("upstream table", upstreamTableInfo.Name.O),
+				zap.Int("upstream count", len(upstreamFKs)),
+				zap.String("downstream table", downstreamTableInfo.Name.O),
+				zap.Int("downstream count", len(downstreamFKs)),
+			)
+			fkEqual = false
+			break
+		}
+
+		for i, upFK := range upstreamFKs {
+			downFK := downstreamFKs[i]
+			if !equalFK(upFK, downFK) {
+				log.Warn("Upstream and downstream have different foreign keys",
+					zap.String("upstream table", upstreamTableInfo.Name.O),
+					zap.String("upstream FK", upFK.Name.O),
+					zap.String("downstream table", downstreamTableInfo.Name.O),
+					zap.String("downstream FK", downFK.Name.O),
+				)
+				fkEqual = false
+				break
+			}
+		}
+
+		if !fkEqual {
+			break
+		}
+	}
+
+	// Compare indices and remove the different ones from table info.
 	deleteIndicesSet := make(map[string]struct{})
 	unilateralIndicesSet := make(map[string]struct{})
 	downstreamIndicesMap := make(map[string]*struct {
@@ -521,7 +592,9 @@ func CompareStruct(upstreamTableInfos []*model.TableInfo, downstreamTableInfo *m
 
 	}
 
-	return len(deleteIndicesSet) == 0, false
+	// Any deleted index, unilateral index, or different FK means the
+	// table structures are different. But this won't affect data checking.
+	return len(deleteIndicesSet) == 0 && len(unilateralIndicesSet) == 0 && fkEqual, false
 }
 
 // NeedQuotes determines whether an escape character is required for `'`.
@@ -529,19 +602,30 @@ func NeedQuotes(tp byte) bool {
 	return !(dbutil.IsNumberType(tp) || dbutil.IsFloatType(tp))
 }
 
-// CompareData compare two row datas.
-// equal = true: map1 = map2
+// CompareData compares two rows of data.
+// equal = true: map1 = map2.
 // equal = false:
-//  1. cmp = 0: map1 and map2 have the same orderkeycolumns, but other columns are in difference.
-//  2. cmp = -1: map1 < map2 (by comparing the orderkeycolumns)
-//  3. cmp = 1: map1 > map2
-func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo) (equal bool, cmp int32, err error) {
+//  1. cmp = 0: map1 and map2 have identical order key columns, but other columns differ.
+//  2. cmp = -1: map1 is less than map2 (based on order key columns).
+//  3. cmp = 1: map1 is greater than map2 (based on order key columns).
+//
+// If a case-insensitive collation is specified in the row iterator,
+// the cmp comparison should also be performed in a case-insensitive manner.
+func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns []*model.ColumnInfo, collation string) (equal bool, cmp int, err error) {
 	var (
 		data1, data2 *dbutil.ColumnData
 		str1, str2   string
 		key          string
 		ok           bool
 	)
+
+	if collation == "" {
+		collation = "utf8mb4_bin"
+	}
+	collator := collate.GetCollator(collation)
+
+	// For string comparison, ctx is not used, so just create a dummy context.
+	dummyCtx := types.Context{}
 
 	equal = true
 
@@ -627,17 +711,15 @@ func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns
 		}
 
 		if NeedQuotes(col.FieldType.GetType()) {
-			strData1 := string(data1.Data)
-			strData2 := string(data2.Data)
-
-			if len(strData1) == len(strData2) && strData1 == strData2 {
-				continue
+			strData1 := types.NewCollationStringDatum(string(data1.Data), collation)
+			strData2 := types.NewCollationStringDatum(string(data2.Data), collation)
+			cmp, err = strData1.Compare(dummyCtx, &strData2, collator)
+			if err != nil {
+				return false, 0, errors.Trace(err)
 			}
 
-			if strData1 < strData2 {
-				cmp = -1
-			} else {
-				cmp = 1
+			if cmp == 0 {
+				continue
 			}
 			break
 		} else if data1.IsNull || data2.IsNull {
@@ -776,7 +858,11 @@ func GetTableSize(ctx context.Context, db *sql.DB, schemaName, tableName string)
 }
 
 // GetCountAndMD5Checksum returns checksum code and count of some data by given condition
-func GetCountAndMD5Checksum(ctx context.Context, db *sql.DB, schemaName, tableName string, tbInfo *model.TableInfo, limitRange string, args []interface{}) (int64, uint64, error) {
+func GetCountAndMD5Checksum(
+	ctx context.Context,
+	db *sql.DB, schemaName, tableName string,
+	tbInfo *model.TableInfo, limitRange string, indexHint string, args []any,
+) (int64, uint64, error) {
 	/*
 		calculate MD5 checksum and count example:
 		mysql> SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', `id`, `name`, CONCAT(ISNULL(`id`), ISNULL(`name`)))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM `a`.`t`;
@@ -806,8 +892,15 @@ func GetCountAndMD5Checksum(ctx context.Context, db *sql.DB, schemaName, tableNa
 		columnIsNull = append(columnIsNull, fmt.Sprintf("ISNULL(%s)", name))
 	}
 
-	query := fmt.Sprintf("SELECT COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM %s WHERE %s;",
-		strings.Join(columnNames, ", "), strings.Join(columnIsNull, ", "), strings.Join(columnNames, ", "), strings.Join(columnIsNull, ", "), dbutil.TableName(schemaName, tableName), limitRange)
+	query := fmt.Sprintf("SELECT %s COUNT(*) as CNT, BIT_XOR(CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 1, 16), 16, 10) AS UNSIGNED) ^ CAST(CONV(SUBSTRING(MD5(CONCAT_WS(',', %s, CONCAT(%s))), 17, 16), 16, 10) AS UNSIGNED)) as CHECKSUM FROM %s WHERE %s;",
+		indexHint,
+		strings.Join(columnNames, ", "),
+		strings.Join(columnIsNull, ", "),
+		strings.Join(columnNames, ", "),
+		strings.Join(columnIsNull, ", "),
+		dbutil.TableName(schemaName, tableName),
+		limitRange,
+	)
 	log.Debug("count and checksum", zap.String("sql", query), zap.Reflect("args", args))
 
 	var count sql.NullInt64
@@ -826,7 +919,11 @@ func GetCountAndMD5Checksum(ctx context.Context, db *sql.DB, schemaName, tableNa
 }
 
 // GetRandomValues returns some random values. Different from /pkg/dbutil.GetRandomValues, it returns multi-columns at the same time.
-func GetRandomValues(ctx context.Context, db *sql.DB, schema, table string, columns []*model.ColumnInfo, num int, limitRange string, limitArgs []interface{}, collation string) ([][]string, error) {
+func GetRandomValues(
+	ctx context.Context,
+	db *sql.DB, schema, table string, columns []*model.ColumnInfo,
+	num int, limitRange string, limitArgs []any, collation string,
+) ([][]string, error) {
 	/*
 		example: there is one index consists of `id`, `a`, `b`.
 		mysql> SELECT `id`, `a`, `b` FROM (SELECT `id`, `a`, `b`, rand() rand_value FROM `test`.`test`  WHERE `id` COLLATE "latin1_bin" > 0 AND `id` COLLATE "latin1_bin" < 100 ORDER BY rand_value LIMIT 5) rand_tmp ORDER BY `id` COLLATE "latin1_bin";
@@ -843,17 +940,13 @@ func GetRandomValues(ctx context.Context, db *sql.DB, schema, table string, colu
 		limitRange = "TRUE"
 	}
 
-	if collation != "" {
-		collation = fmt.Sprintf(" COLLATE '%s'", collation)
-	}
-
 	columnNames := make([]string, 0, len(columns))
 	for _, col := range columns {
 		columnNames = append(columnNames, dbutil.ColumnName(col.Name.O))
 	}
 
-	query := fmt.Sprintf("SELECT %[1]s FROM (SELECT %[1]s, rand() rand_value FROM %[2]s WHERE %[3]s ORDER BY rand_value LIMIT %[4]d)rand_tmp ORDER BY %[1]s%[5]s",
-		strings.Join(columnNames, ", "), dbutil.TableName(schema, table), limitRange, num, collation)
+	query := fmt.Sprintf("SELECT %[1]s FROM (SELECT %[1]s, rand() rand_value FROM %[2]s WHERE %[3]s ORDER BY rand_value LIMIT %[4]d)rand_tmp ORDER BY %[5]s",
+		strings.Join(columnNames, ", "), dbutil.TableName(schema, table), limitRange, num, BuildOrderByClause(columns, collation))
 	log.Debug("get random values", zap.String("sql", query), zap.Reflect("args", limitArgs))
 
 	rows, err := db.QueryContext(ctx, query, limitArgs...)
@@ -1057,4 +1150,41 @@ func IsRangeTrivial(rangeCond string) bool {
 func IsBinaryColumn(col *model.ColumnInfo) bool {
 	// varbinary or binary
 	return (col.GetType() == mysql.TypeVarchar || col.GetType() == mysql.TypeString) && mysql.HasBinaryFlag(col.GetFlag())
+}
+
+// IsIndexMatchingColumns checks if the given index matches the provided columns.
+// It uses the number of columns and their names to do the check.
+func IsIndexMatchingColumns(index *model.IndexInfo, columnNames []pmodel.CIStr) bool {
+	if len(index.Columns) != len(columnNames) {
+		return false
+	}
+	for i, col := range index.Columns {
+		if col.Name.L != columnNames[i].L {
+			return false
+		}
+	}
+	return true
+}
+
+// GetColumnNames extract column names from column infos
+func GetColumnNames(columns []*model.ColumnInfo) []pmodel.CIStr {
+	columnNames := make([]pmodel.CIStr, 0, len(columns))
+	for _, c := range columns {
+		columnNames = append(columnNames, c.Name)
+	}
+	return columnNames
+}
+
+// BuildOrderByClause build order by clause by giving columns and collation
+func BuildOrderByClause(cols []*model.ColumnInfo, collation string) string {
+	orderByFields := make([]string, len(cols))
+	for i, ordreByCol := range cols {
+		column_name := dbutil.ColumnName(ordreByCol.Name.O)
+		if collation != "" && cols[i].FieldType.GetCharset() != charset.CharsetBin {
+			column_name = fmt.Sprintf("%s COLLATE '%s'", column_name, collation)
+		}
+		orderByFields[i] = column_name
+	}
+
+	return strings.Join(orderByFields, ",")
 }

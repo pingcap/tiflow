@@ -38,6 +38,8 @@ import (
 const (
 	// defaultPartitionNum specifies the default number of partitions when we create the topic.
 	defaultPartitionNum = 3
+	// defaultProducerMaxRetry specifies the default retry count for Kafka producer.
+	defaultProducerMaxRetry = 5
 
 	// the `max-message-bytes` is set equal to topic's `max.message.bytes`, and is used to check
 	// whether the message is larger than the max size limit. It's found some message pass the message
@@ -115,6 +117,7 @@ type urlConfig struct {
 	ReplicationFactor            *int16  `form:"replication-factor"`
 	KafkaVersion                 *string `form:"kafka-version"`
 	MaxMessageBytes              *int    `form:"max-message-bytes"`
+	MaxRetry                     *int    `form:"max-retry"`
 	Compression                  *string `form:"compression"`
 	KafkaClientID                *string `form:"kafka-client-id"`
 	AutoCreateTopic              *bool   `form:"auto-create-topic"`
@@ -153,6 +156,7 @@ type Options struct {
 	IsAssignedVersion bool
 	RequestVersion    int16
 	MaxMessageBytes   int
+	MaxRetry          int
 	Compression       string
 	ClientID          string
 	RequiredAcks      RequiredAcks
@@ -184,6 +188,7 @@ func NewOptions() *Options {
 		Credential:         &security.Credential{},
 		InsecureSkipVerify: false,
 		SASL:               &security.SASL{},
+		MaxRetry:           defaultProducerMaxRetry,
 		AutoCreate:         true,
 		DialTimeout:        10 * time.Second,
 		WriteTimeout:       10 * time.Second,
@@ -253,6 +258,12 @@ func (o *Options) Apply(changefeedID model.ChangeFeedID,
 
 	if urlParameter.MaxMessageBytes != nil {
 		o.MaxMessageBytes = *urlParameter.MaxMessageBytes
+	}
+
+	if urlParameter.MaxRetry != nil {
+		if *urlParameter.MaxRetry >= 0 {
+			o.MaxRetry = *urlParameter.MaxRetry
+		}
 	}
 
 	if urlParameter.Compression != nil {

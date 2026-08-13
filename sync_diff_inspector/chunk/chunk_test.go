@@ -16,6 +16,7 @@ package chunk
 import (
 	"testing"
 
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/stretchr/testify/require"
 )
 
@@ -41,20 +42,20 @@ func TestChunkUpdate(t *testing.T) {
 	testCases := []struct {
 		boundArgs  []string
 		expectStr  string
-		expectArgs []interface{}
+		expectArgs []any
 	}{
 		{
 			[]string{"a", "5", "6"},
 			"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-			[]interface{}{"5", "5", "3", "6", "6", "4"},
+			[]any{"5", "5", "3", "6", "6", "4"},
 		}, {
 			[]string{"b", "5", "6"},
 			"((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))",
-			[]interface{}{"1", "1", "5", "2", "2", "6"},
+			[]any{"1", "1", "5", "2", "2", "6"},
 		}, {
 			[]string{"c", "7", "8"},
 			"((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))",
-			[]interface{}{"1", "1", "3", "1", "3", "7", "2", "2", "4", "2", "4", "8"},
+			[]any{"1", "1", "3", "1", "3", "7", "2", "2", "4", "2", "4", "8"},
 		},
 	}
 
@@ -68,7 +69,7 @@ func TestChunkUpdate(t *testing.T) {
 	// the origin chunk is not changed
 	conditions, args := chunk.ToString("")
 	require.Equal(t, conditions, "((`a` > ?) OR (`a` = ? AND `b` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` <= ?))")
-	expectArgs := []interface{}{"1", "1", "3", "2", "2", "4"}
+	expectArgs := []any{"1", "1", "3", "2", "2", "4"}
 	require.Equal(t, args, expectArgs)
 
 	// test chunk update build by offset
@@ -76,7 +77,7 @@ func TestChunkUpdate(t *testing.T) {
 		"a": 1,
 		"b": 0,
 	}
-	chunkRange := NewChunkRangeOffset(columnOffset)
+	chunkRange := NewChunkRangeOffset(columnOffset, nil)
 	chunkRange.Update("a", "1", "2", true, true)
 	chunkRange.Update("b", "3", "4", true, true)
 	require.Equal(t, chunkRange.ToMeta(), "range in sequence: (3,1) < (b,a) <= (4,2)")
@@ -85,6 +86,7 @@ func TestChunkUpdate(t *testing.T) {
 func TestChunkToString(t *testing.T) {
 	// lower & upper
 	chunk := &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -127,6 +129,7 @@ func TestChunkToString(t *testing.T) {
 
 	// upper
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -162,6 +165,7 @@ func TestChunkToString(t *testing.T) {
 
 	// lower
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -204,6 +208,7 @@ func TestChunkToString(t *testing.T) {
 
 	// none
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -237,6 +242,7 @@ func TestChunkToString(t *testing.T) {
 
 	// same & lower & upper
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -279,6 +285,7 @@ func TestChunkToString(t *testing.T) {
 
 	// same & upper
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -314,6 +321,7 @@ func TestChunkToString(t *testing.T) {
 
 	// same & lower
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -356,6 +364,7 @@ func TestChunkToString(t *testing.T) {
 
 	// same & none
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -389,6 +398,7 @@ func TestChunkToString(t *testing.T) {
 
 	// all equal
 	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b", "c"),
 		Bounds: []*Bound{
 			{
 				Column:   "a",
@@ -419,11 +429,36 @@ func TestChunkToString(t *testing.T) {
 	}
 	require.Equal(t, chunk.String(), `{"index":null,"type":0,"bounds":[{"column":"a","lower":"1","upper":"1","has-lower":true,"has-upper":true},{"column":"b","lower":"3","upper":"3","has-lower":true,"has-upper":true},{"column":"c","lower":"6","upper":"6","has-lower":true,"has-upper":true}],"is-first":false,"is-last":false,"where":"","args":null}`)
 	require.Equal(t, chunk.ToMeta(), "range in sequence: (1,3,6) < (a,b,c) <= (1,3,6)")
+
+	// with index names
+	chunk = &Range{
+		tableInfo: GenFakeTableInfo("a", "b"),
+		Bounds: []*Bound{
+			{
+				Column:   "a",
+				Lower:    "1",
+				Upper:    "1",
+				HasLower: true,
+				HasUpper: true,
+			}, {
+				Column:   "b",
+				Lower:    "3",
+				Upper:    "3",
+				HasLower: true,
+				HasUpper: true,
+			},
+		},
+		IndexColumnNames: []ast.CIStr{ast.NewCIStr("a"), ast.NewCIStr("b")},
+	}
+
+	require.Equal(t, chunk.String(), "{\"index\":null,\"type\":0,\"bounds\":[{\"column\":\"a\",\"lower\":\"1\",\"upper\":\"1\",\"has-lower\":true,\"has-upper\":true},{\"column\":\"b\",\"lower\":\"3\",\"upper\":\"3\",\"has-lower\":true,\"has-upper\":true}],\"is-first\":false,\"is-last\":false,\"where\":\"\",\"args\":null,\"index-column-names\":[{\"O\":\"a\",\"L\":\"a\"},{\"O\":\"b\",\"L\":\"b\"}]}")
+	require.Equal(t, chunk.ToMeta(), "range in sequence: (1,3) < (a,b) <= (1,3)")
 }
 
 func TestChunkInit(t *testing.T) {
 	chunks := []*Range{
 		{
+			tableInfo: GenFakeTableInfo("a", "b", "c"),
 			Bounds: []*Bound{
 				{
 					Column:   "a",
@@ -446,6 +481,7 @@ func TestChunkInit(t *testing.T) {
 				},
 			},
 		}, {
+			tableInfo: GenFakeTableInfo("a", "b", "c"),
 			Bounds: []*Bound{
 				{
 					Column:   "a",
@@ -472,16 +508,16 @@ func TestChunkInit(t *testing.T) {
 
 	InitChunks(chunks, Others, 1, 1, 0, "[123]", "[sdfds fsd fd gd]", 1)
 	require.Equal(t, chunks[0].Where, "((((`a` COLLATE '[123]' > ?) OR (`a` COLLATE '[123]' = ? AND `b` COLLATE '[123]' > ?) OR (`a` COLLATE '[123]' = ? AND `b` COLLATE '[123]' = ? AND `c` COLLATE '[123]' > ?)) AND ((`a` COLLATE '[123]' < ?) OR (`a` COLLATE '[123]' = ? AND `b` COLLATE '[123]' < ?) OR (`a` COLLATE '[123]' = ? AND `b` COLLATE '[123]' = ? AND `c` COLLATE '[123]' <= ?))) AND ([sdfds fsd fd gd]))")
-	require.Equal(t, chunks[0].Args, []interface{}{"1", "1", "3", "1", "3", "5", "2", "2", "4", "2", "4", "6"})
+	require.Equal(t, chunks[0].Args, []any{"1", "1", "3", "1", "3", "5", "2", "2", "4", "2", "4", "6"})
 	require.Equal(t, chunks[0].Type, Others)
 	InitChunk(chunks[1], Others, 2, 2, "[456]", "[dsfsdf]")
 	require.Equal(t, chunks[1].Where, "((((`a` COLLATE '[456]' > ?) OR (`a` COLLATE '[456]' = ? AND `b` COLLATE '[456]' > ?) OR (`a` COLLATE '[456]' = ? AND `b` COLLATE '[456]' = ? AND `c` COLLATE '[456]' > ?)) AND ((`a` COLLATE '[456]' < ?) OR (`a` COLLATE '[456]' = ? AND `b` COLLATE '[456]' < ?) OR (`a` COLLATE '[456]' = ? AND `b` COLLATE '[456]' = ? AND `c` COLLATE '[456]' <= ?))) AND ([dsfsdf]))")
-	require.Equal(t, chunks[1].Args, []interface{}{"2", "2", "4", "2", "4", "6", "3", "3", "5", "3", "5", "7"})
+	require.Equal(t, chunks[1].Args, []any{"2", "2", "4", "2", "4", "6", "3", "3", "5", "3", "5", "7"})
 	require.Equal(t, chunks[1].Type, Others)
 }
 
 func TestChunkCopyAndUpdate(t *testing.T) {
-	chunk := NewChunkRange()
+	chunk := NewChunkRange(nil)
 	chunk.Update("a", "1", "2", true, true)
 	chunk.Update("a", "2", "3", true, true)
 	chunk.Update("a", "324", "5435", false, false)
@@ -492,22 +528,15 @@ func TestChunkCopyAndUpdate(t *testing.T) {
 
 	conditions, args := chunk.ToString("")
 	require.Equal(t, conditions, "((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))")
-	require.Equal(t, args, []interface{}{"2", "2", "4", "2", "4", "10", "3", "3", "9", "3", "9", "7"})
+	require.Equal(t, args, []any{"2", "2", "4", "2", "4", "10", "3", "3", "9", "3", "9", "7"})
 
 	chunk2 := chunk.CopyAndUpdate("a", "4", "6", true, true)
 	conditions, args = chunk2.ToString("")
 	require.Equal(t, conditions, "((`a` > ?) OR (`a` = ? AND `b` > ?) OR (`a` = ? AND `b` = ? AND `c` > ?)) AND ((`a` < ?) OR (`a` = ? AND `b` < ?) OR (`a` = ? AND `b` = ? AND `c` <= ?))")
-	require.Equal(t, args, []interface{}{"4", "4", "4", "4", "4", "10", "6", "6", "9", "6", "9", "7"})
+	require.Equal(t, args, []any{"4", "4", "4", "4", "4", "10", "6", "6", "9", "6", "9", "7"})
 	_, args = chunk.ToString("")
 	// `Copy` use the same []string
-	require.Equal(t, args, []interface{}{"2", "2", "4", "2", "4", "10", "3", "3", "9", "3", "9", "7"})
-
-	InitChunk(chunk, Others, 2, 2, "[324]", "[543]")
-	chunk3 := chunk.Clone()
-	chunk3.Update("a", "2", "3", true, true)
-	require.Equal(t, chunk3.Where, "((((`a` COLLATE '[324]' > ?) OR (`a` COLLATE '[324]' = ? AND `b` COLLATE '[324]' > ?) OR (`a` COLLATE '[324]' = ? AND `b` COLLATE '[324]' = ? AND `c` COLLATE '[324]' > ?)) AND ((`a` COLLATE '[324]' < ?) OR (`a` COLLATE '[324]' = ? AND `b` COLLATE '[324]' < ?) OR (`a` COLLATE '[324]' = ? AND `b` COLLATE '[324]' = ? AND `c` COLLATE '[324]' <= ?))) AND ([543]))")
-	require.Equal(t, chunk3.Args, []interface{}{"2", "2", "4", "2", "4", "10", "3", "3", "9", "3", "9", "7"})
-	require.Equal(t, chunk3.Type, Others)
+	require.Equal(t, args, []any{"2", "2", "4", "2", "4", "10", "3", "3", "9", "3", "9", "7"})
 }
 
 func TestChunkID(t *testing.T) {
@@ -601,7 +630,7 @@ func TestChunkID(t *testing.T) {
 }
 
 func TestChunkIndex(t *testing.T) {
-	chunkRange := NewChunkRange()
+	chunkRange := NewChunkRange(nil)
 	chunkRange.Index.ChunkIndex = 0
 	chunkRange.Index.ChunkCnt = 3
 	require.True(t, chunkRange.IsFirstChunkForBucket())

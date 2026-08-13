@@ -97,6 +97,10 @@ target-table = "t2"
 
 	target-check-tables = ["schema*.table*", "!c.*", "test2.t2"]
 
+	# Optional. When both source and target snapshots are set to "auto",
+	# restrict syncpoint lookup to this TiCDC changefeed.
+	# syncpoint-changefeed = "namespace/changefeed-id"
+
 	target-configs = ["config1"]
 
 ######################### Table config #########################

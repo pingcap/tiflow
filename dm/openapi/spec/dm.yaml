@@ -549,6 +549,19 @@ paths:
           schema:
             type: boolean
             example: true
+        - name: "keep_meta"
+          in: query
+          required: false
+          description: |-
+            Whether to keep downstream checkpoints and resumable internal metadata when deleting the task.
+            Optimistic shard DDL metadata is always removed.
+            With force=true, only already-persisted checkpoint state is retained; deletion does not flush the latest checkpoint.
+            Stop the task and wait for the stop operation to complete before deleting it when the latest checkpoint must be retained.
+            Only use keep_meta=true after all DM masters are upgraded, because older versions ignore unknown query parameters.
+          schema:
+            type: boolean
+            default: false
+            example: true
       responses:
         "204":
           description: "success"
@@ -1649,11 +1662,30 @@ components:
         security:
           $ref: "#/components/schemas/Security"
           description: "downstram database ssl config"
+        session:
+          $ref: "#/components/schemas/TaskTargetSession"
       required:
         - "host"
         - "port"
         - "user"
         - "password"
+    TaskTargetSession:
+      description: >-
+        Downstream database session parameters for incremental replication.
+        Only use this field after all DM masters are upgraded, because older
+        versions ignore it.
+      type: object
+      additionalProperties: false
+      properties:
+        foreign_key_checks:
+          type: string
+          enum:
+            - "0"
+            - "1"
+          description: >-
+            Whether foreign key checks are enabled during incremental replication.
+            If omitted, DM uses "0". This setting cannot be changed through task
+            updates.
     TaskBinLogFilterRule:
       description: "Filtering rules at binlog level"
       type: object
@@ -1703,7 +1735,12 @@ components:
         data_dir:
           type: string
           example: "./exported_data"
-          description: "storage dir name"
+          description: |-
+            Storage directory for full import.
+
+            Notes:
+            - When `import_mode` is `import-into`, this must be a shared storage URI (for example, `s3://bucket/prefix`).
+            - Local filesystem paths (for example, `/data/...` or `./exported_data`) are rejected when `import_mode` is `import-into`.
         consistency:
           type: string
           example: "auto"
@@ -1711,10 +1748,20 @@ components:
         import_mode:
           type: string
           example: "logical"
-          description: "to control import mode of full import"
+          description: |-
+            Import mode of full import.
+
+            Notes:
+            - `import-into` does not support sharding / multi-source tasks (for example, when `task.shard_mode` is set, or `source_config.source_conf` contains multiple sources).
+            - `import-into` requires `data_dir` to be a shared storage URI (for example, `s3://bucket/prefix`).
+
+            Validation failures (error message may be returned):
+            - `import-into` + sharding/multi-source: "import-into mode does not support sharding"
+            - `import-into` + local `data_dir`: "import-into mode requires shared storage"
           enum:
             - "logical"
             - "physical"
+            - "import-into"
         sorting_dir:
           type: string
           example: "./sort_dir"
@@ -1779,6 +1826,13 @@ components:
           type: integer
           description: incremental synchronization of batch execution sql quantities
           default: 100
+        safe_mode:
+          type: boolean
+          description: |-
+            Whether to keep safe mode enabled during incremental replication.
+            When false, DM may still enable it temporarily during initialization or checkpoint recovery.
+            `safe_mode_time_duration` takes precedence when specified at task start.
+          default: false
     TaskSourceConf:
       type: object
       properties:
@@ -1870,6 +1924,10 @@ components:
           example: "dm-meta"
           description: "downstream database for storing meta information"
           default: "dm-meta"
+        timezone:
+          type: string
+          example: "Asia/Shanghai"
+          description: "task time zone. If omitted or empty, use the downstream database time zone"
         enhance_online_schema_change:
           type: boolean
           example: true
@@ -2265,8 +2323,8 @@ components:
           $ref: "#/components/schemas/SourceNameList"
         start_time:
           type: string
-          example: "2006-01-02 15:04:05"
-          description: task start time
+          example: "2006-01-02T15:04:05+08:00"
+          description: task start time. Prefer RFC3339-like values with timezone offset (`+08:00` or `+0800`). Legacy values without timezone are interpreted in upstream timezone.
         safe_mode_time_duration:
           type: string
           example: "10s"

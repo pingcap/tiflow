@@ -15,6 +15,7 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -22,11 +23,15 @@ import (
 
 	gstorage "cloud.google.com/go/storage"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/bloberror"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/pingcap/errors"
+	"github.com/aws/smithy-go"
+	perrors "github.com/pingcap/errors"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
-	bstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/objstore/objectio"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 )
 
 // AdjustPath adjust rawURL, add uniqueId as path suffix, returns a new path.
@@ -37,9 +42,9 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" || uniqueID == "" {
 		return rawURL, nil
 	}
-	u, err := bstorage.ParseRawURL(rawURL)
+	u, err := objstore.ParseRawURL(rawURL)
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", perrors.Trace(err)
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
@@ -65,9 +70,9 @@ func TrimPath(rawURL string, uniqueID string) (string, error) {
 	if rawURL == "" || uniqueID == "" {
 		return rawURL, nil
 	}
-	u, err := bstorage.ParseRawURL(rawURL)
+	u, err := objstore.ParseRawURL(rawURL)
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", perrors.Trace(err)
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
@@ -84,7 +89,7 @@ func IsS3Path(rawURL string) bool {
 	if rawURL == "" {
 		return false
 	}
-	u, err := bstorage.ParseRawURL(rawURL)
+	u, err := objstore.ParseRawURL(rawURL)
 	if err != nil {
 		return false
 	}
@@ -96,7 +101,7 @@ func IsLocalDiskPath(rawURL string) bool {
 	if rawURL == "" {
 		return false
 	}
-	u, err := bstorage.ParseRawURL(rawURL)
+	u, err := objstore.ParseRawURL(rawURL)
 	if err != nil {
 		return false
 	}
@@ -104,16 +109,16 @@ func IsLocalDiskPath(rawURL string) bool {
 }
 
 // CreateStorage creates ExternalStore.
-func CreateStorage(ctx context.Context, path string) (bstorage.ExternalStorage, error) {
-	backend, err := bstorage.ParseBackend(path, nil)
+func CreateStorage(ctx context.Context, path string) (storeapi.Storage, error) {
+	backend, err := objstore.ParseBackend(path, nil)
 	if err != nil {
 		return nil, err
 	}
-	return bstorage.New(ctx, backend, &bstorage.ExternalStorageOptions{})
+	return objstore.New(ctx, backend, &storeapi.Options{})
 }
 
 // CollectDirFiles gets files in dir.
-func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalStorage) (map[string]struct{}, error) {
+func CollectDirFiles(ctx context.Context, dir string, storage storeapi.Storage) (map[string]struct{}, error) {
 	var err error
 	if storage == nil {
 		storage, err = CreateStorage(ctx, dir)
@@ -123,7 +128,7 @@ func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalS
 	}
 	files := make(map[string]struct{})
 
-	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
+	err = storage.WalkDir(ctx, &storeapi.WalkOption{}, func(filePath string, size int64) error {
 		name := path.Base(filePath)
 		files[name] = struct{}{}
 		return nil
@@ -133,7 +138,7 @@ func CollectDirFiles(ctx context.Context, dir string, storage bstorage.ExternalS
 }
 
 // RemoveAll remove files in dir.
-func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage) error {
+func RemoveAll(ctx context.Context, dir string, storage storeapi.Storage) error {
 	var err error
 	var backend *backuppb.StorageBackend
 	if storage == nil {
@@ -141,16 +146,16 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 		if err != nil {
 			return err
 		}
-		backend, err = bstorage.ParseBackend(dir, nil)
+		backend, err = objstore.ParseBackend(dir, nil)
 		if err != nil {
 			return err
 		}
 	}
 
-	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
+	err = storage.WalkDir(ctx, &storeapi.WalkOption{}, func(filePath string, size int64) error {
 		err2 := storage.DeleteFile(ctx, filePath)
 		// ignore not exist error when we delete files and backend is gcs/azure blob storage
-		if backend != nil && backend.GetGcs() != nil && errors.Cause(err2) == gstorage.ErrObjectNotExist {
+		if backend != nil && backend.GetGcs() != nil && perrors.Cause(err2) == gstorage.ErrObjectNotExist {
 			return nil
 		}
 		if backend != nil && backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err2, bloberror.BlobNotFound) {
@@ -161,7 +166,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 	if err == nil {
 		err = storage.DeleteFile(ctx, "")
 		// ignore not exist error when we delete files and backend is gcs/azure blob storage
-		if backend != nil && backend.GetGcs() != nil && errors.Cause(err) == gstorage.ErrObjectNotExist {
+		if backend != nil && backend.GetGcs() != nil && perrors.Cause(err) == gstorage.ErrObjectNotExist {
 			return nil
 		}
 		if backend != nil && backend.GetAzureBlobStorage() != nil && bloberror.HasCode(err, bloberror.BlobNotFound) {
@@ -171,7 +176,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 	return err
 }
 
-func ReadFile(ctx context.Context, dir, fileName string, storage bstorage.ExternalStorage) ([]byte, error) {
+func ReadFile(ctx context.Context, dir, fileName string, storage storeapi.Storage) ([]byte, error) {
 	var err error
 	if storage == nil {
 		storage, err = CreateStorage(ctx, dir)
@@ -182,7 +187,7 @@ func ReadFile(ctx context.Context, dir, fileName string, storage bstorage.Extern
 	return storage.ReadFile(ctx, fileName)
 }
 
-func OpenFile(ctx context.Context, dir, fileName string, storage bstorage.ExternalStorage) (bstorage.ExternalFileReader, error) {
+func OpenFile(ctx context.Context, dir, fileName string, storage storeapi.Storage) (objectio.Reader, error) {
 	var err error
 	if storage == nil {
 		storage, err = CreateStorage(ctx, dir)
@@ -197,13 +202,32 @@ func IsNotExistError(err error) bool {
 	if err == nil {
 		return false
 	}
-	err = errors.Cause(err)
+	err = perrors.Cause(err)
 	if os.IsNotExist(err) {
 		return true
 	}
 	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
+			return true
+		}
+	}
+	var noSuchBucket *types.NoSuchBucket
+	if errors.As(err, &noSuchBucket) {
+		return true
+	}
+	var noSuchKey *types.NoSuchKey
+	if errors.As(err, &noSuchKey) {
+		return true
+	}
+	var notFound *types.NotFound
+	if errors.As(err, &notFound) {
+		return true
+	}
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchBucket", "NoSuchKey", "NotFound":
 			return true
 		}
 	}

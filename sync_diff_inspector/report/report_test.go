@@ -16,6 +16,7 @@ package report
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path"
@@ -114,13 +115,19 @@ func TestReport(t *testing.T) {
 	report.SetTableDataCheckResult("test", "tbl", true, 100, 200, 222, 222, &chunk.CID{1, 1, 1, 1, 2})
 	report.SetTableMeetError("test", "tbl", errors.New("eeee"))
 
-	newReport := NewReport(task)
-	newReport.LoadReport(report)
+	payload, err := json.Marshal(report)
+	require.NoError(t, err)
 
-	require.Equal(t, newReport.TotalSize, int64(579))
+	var persisted Report
+	require.NoError(t, json.Unmarshal(payload, &persisted))
+
+	newReport := NewReport(task)
+	newReport.LoadReport(&persisted)
+
+	require.Equal(t, newReport.TotalSize, int64(0))
 	result, ok := newReport.TableResults["test"]["tbl"]
 	require.True(t, ok)
-	require.Equal(t, result.MeetError.Error(), "eeee")
+	require.Nil(t, result.MeetError)
 	require.True(t, result.DataEqual)
 	require.True(t, result.StructEqual)
 
@@ -523,4 +530,37 @@ func TestCommitSummary(t *testing.T) {
 	file.Close()
 	err = os.Remove(filename)
 	require.NoError(t, err)
+}
+
+func TestLoadReportRecomputesResultFromSerializedTableResults(t *testing.T) {
+	report := NewReport(task)
+	createTableSQL := "create table `test`.`tbl`(`a` int primary key, `b` int)"
+	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
+	require.NoError(t, err)
+
+	tableDiffs := []*common.TableDiff{{
+		Schema: "test",
+		Table:  "tbl",
+		Info:   tableInfo,
+	}}
+	report.Init(tableDiffs, nil, nil)
+	report.SetTableStructCheckResult("test", "tbl", true, false, common.AllTableExistFlag)
+	report.SetTableDataCheckResult("test", "tbl", false, 1, 0, 10, 11, &chunk.CID{0, 0, 0, 0, 1})
+	report.SetTableMeetError("test", "tbl", errors.New("transient"))
+
+	payload, err := json.Marshal(report)
+	require.NoError(t, err)
+
+	var loaded Report
+	require.NoError(t, json.Unmarshal(payload, &loaded))
+	require.Empty(t, loaded.Result)
+	require.Nil(t, loaded.TableResults["test"]["tbl"].MeetError)
+
+	resumed := NewReport(task)
+	resumed.Init(tableDiffs, nil, nil)
+	resumed.LoadReport(&loaded)
+
+	require.Equal(t, Fail, resumed.Result)
+	require.Nil(t, resumed.TableResults["test"]["tbl"].MeetError)
+	require.False(t, resumed.TableResults["test"]["tbl"].DataEqual)
 }

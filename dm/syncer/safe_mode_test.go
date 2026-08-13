@@ -70,6 +70,7 @@ func TestEnableSafeModeInitializationPhase(t *testing.T) {
 	// test enable by task cliArgs (disable is tested in it test)
 	duration, err := time.ParseDuration("2s")
 	require.NoError(t, err)
+	s.cfg.SafeMode = true // task cliArgs take precedence over persistent safe mode
 	s.cliArgs = &config.TaskCliArgs{SafeModeDuration: duration.String()}
 	s.enableSafeModeInitializationPhase(s.tctx)
 	require.True(t, s.safeMode.Enable())

@@ -54,11 +54,7 @@ function incremental_data_2() {
 }
 
 function run() {
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
-
-	# clean unistore data
-	rm -rf /tmp/tidb
+	cleanup_downstream_cluster
 
 	# start a TiDB with small txn-total-size-limit
 	run_tidb_server 4000 $TIDB_PASSWORD $cur/conf/tidb-config-small-txn.toml
@@ -77,7 +73,7 @@ function run() {
 	echo "finish prepare_data"
 
 	# we will check metrics, so don't clean metrics
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/loader/DontUnregister=return();github.com/pingcap/tiflow/dm/syncer/IOTotalBytes=return("uuid")'
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/dumpling/SleepBeforeDumplingClose=return(10);github.com/pingcap/tiflow/dm/loader/DontUnregister=return();github.com/pingcap/tiflow/dm/syncer/IOTotalBytes=return("uuid")'
 
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -148,18 +144,18 @@ function run() {
 		"query-status test" \
 		'"synced": true' 1
 
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	cleanup_tidb_server
 	# now worker will process some binlog events, save table checkpoint and meet downstream error
 	echo "start incremental_data_2"
 	incremental_data_2
 	echo "finish incremental_data_2"
-	sleep 30
+	sleep 75
 
 	resume_num=$(grep 'unit process error' $WORK_DIR/worker1/log/dm-worker.log | wc -l)
 	echo "resume_num: $resume_num"
-	# because we check auto resume every 5 seconds...
-	[ $resume_num -ge 4 ]
+	# at least 2 retries over 75 seconds because we check auto resume every 5 seconds
+	# and it can take up to 30 seconds for connection refused retries to be spent
+	[ $resume_num -ge 2 ]
 	folder_size=$(du -d0 $WORK_DIR/worker1/ --exclude="$WORK_DIR/worker1/log" | cut -f1)
 	echo "folder_size: $folder_size"
 	# less than 10M
@@ -169,13 +165,16 @@ function run() {
 
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" "stop-task test"
 
-	killall tidb-server 2>/dev/null || true
-	killall tikv-server 2>/dev/null || true
-	killall pd-server 2>/dev/null || true
-
-	run_downstream_cluster $WORK_DIR
-	# wait TiKV init
-	sleep 5
+	cleanup_downstream_cluster
+	if [ "${NEXT_GEN:-}" != "1" ]; then
+		# Classic: need full PD+TiKV cluster for Phase 2 physical import.
+		# run_downstream_cluster starts TiDB on port 4000 internally.
+		run_downstream_cluster $WORK_DIR
+		sleep 5
+	else
+		# Next-gen: PD/TiKV/SYSTEM TiDB still running, just restart user TiDB.
+		run_tidb_server 4000 $TIDB_PASSWORD
+	fi
 
 	run_sql_source1 "ALTER TABLE many_tables_db.t1 DROP x;"
 	run_sql_source1 "ALTER TABLE many_tables_db.t2 DROP x;"
@@ -183,13 +182,18 @@ function run() {
 	# check merge shard tables from one source and change UK
 	run_sql_tidb "CREATE TABLE merge_many_tables_db.t(i INT, j INT, UNIQUE KEY(i,j), c1 VARCHAR(20), c2 VARCHAR(20), c3 VARCHAR(20), c4 VARCHAR(20), c5 VARCHAR(20), c6 VARCHAR(20), c7 VARCHAR(20), c8 VARCHAR(20), c9 VARCHAR(20), c10 VARCHAR(20), c11 VARCHAR(20), c12 VARCHAR(20), c13 VARCHAR(20));;"
 
-	dmctl_start_task_standalone $cur/conf/dm-task-2.yaml
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		# Use import-into mode with existing MinIO for S3 storage.
+		S3_DIR="s3://next-gen-test/many_tables_dump?endpoint=http://${MINIO_ADDR}\&access_key=${MINIO_ACCESS_KEY}\&secret_access_key=${MINIO_SECRET_KEY}\&force_path_style=true"
+		cp $cur/conf/dm-task-2-nextgen.yaml $WORK_DIR/dm-task-2.yaml
+		sed -i "s#dir: placeholder#dir: $S3_DIR#g" $WORK_DIR/dm-task-2.yaml
+		dmctl_start_task_standalone $WORK_DIR/dm-task-2.yaml
+	else
+		dmctl_start_task_standalone $cur/conf/dm-task-2.yaml
+	fi
 	run_sql_tidb_with_retry_times "select count(*) from merge_many_tables_db.t;" "count(*): 6002" 60
 
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
-	rm -rf /tmp/tidb || true
+	cleanup_downstream_cluster
 	run_tidb_server 4000 $TIDB_PASSWORD
 }
 

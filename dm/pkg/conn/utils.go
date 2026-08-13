@@ -108,8 +108,14 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		gtidStr        string
 		err            error
 	)
+
+	statusQuery := `SHOW MASTER STATUS`
+	if db.needsModernTerminology() {
+		statusQuery = `SHOW BINARY LOG STATUS`
+	}
+
 	// need REPLICATION SLAVE privilege
-	rows, err := db.QueryContext(ctx, `SHOW MASTER STATUS`)
+	rows, err := db.QueryContext(ctx, statusQuery)
 	if err != nil {
 		err = terror.DBErrorAdapt(err, db.Scope, terror.ErrDBDriverError)
 		return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
@@ -118,15 +124,15 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 
 	// Show an example.
 	/*
-		MySQL [test]> SHOW MASTER STATUS;
+		For MySQL 8.0, SHOW MASTER STATUS:
 		+-----------+----------+--------------+------------------+--------------------------------------------+
 		| File      | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                          |
 		+-----------+----------+--------------+------------------+--------------------------------------------+
-		| ON.000001 |     4822 |              |                  | 85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46
+		| ON.000001 |     4822 |              |                  | 85ab69d1-b21f-11e6-9c5e-64006a8978d2:1-46  |
 		+-----------+----------+--------------+------------------+--------------------------------------------+
 	*/
 	/*
-		For MariaDB,SHOW MASTER STATUS:
+		For MariaDB, SHOW MASTER STATUS:
 		+--------------------+----------+--------------+------------------+
 		| File               | Position | Binlog_Do_DB | Binlog_Ignore_DB |
 		+--------------------+----------+--------------+------------------+
@@ -138,6 +144,15 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 		+--------------------------+
 		| 0-1-2                    |
 		+--------------------------+
+	*/
+	/*
+		For MySQL 8.4, SHOW BINARY LOG STATUS:
+		mysql-8.4.7 [test]> SHOW BINARY LOG STATUS;
+		+---------------+----------+--------------+------------------+------------------------------------------+
+		| File          | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set                        |
+		+---------------+----------+--------------+------------------+------------------------------------------+
+		| binlog.000002 |      824 |              |                  | 8c09d5cd-bf08-11f0-b990-266b682f348f:1-3 |
+		+---------------+----------+--------------+------------------+------------------------------------------+
 	*/
 
 	var rowsResult [][]string
@@ -153,7 +168,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 			err = terror.ErrNoMasterStatus.Generate()
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		case len(rowsResult[0]) != 5:
-			ctx.L().DPanic("The number of columns that SHOW MASTER STATUS returns for MySQL is not equal to 5, will not use the retrieved information")
+			ctx.L().DPanic("The number of columns that SHOW MASTER STATUS or SHOW BINARY LOG STATUS returns for MySQL is not equal to 5, will not use the retrieved information")
 			err = terror.ErrIncorrectReturnColumnsNum.Generate()
 			return binlogName, pos, binlogDoDB, binlogIgnoreDB, gtidStr, err
 		default:
@@ -206,7 +221,7 @@ func GetMasterStatus(ctx *tcontext.Context, db *BaseDB, flavor string) (
 	}
 
 	if len(rowsResult) > 1 {
-		ctx.L().Warn("SHOW MASTER STATUS returns more than one row, will only use first row")
+		ctx.L().Warn("SHOW MASTER STATUS or SHOW BINARY LOG STATUS returns more than one row, will only use first row")
 	}
 	if rows.Close() != nil {
 		err = terror.DBErrorAdapt(rows.Err(), db.Scope, terror.ErrDBDriverError)

@@ -14,6 +14,8 @@
 package syncer
 
 import (
+	"strings"
+
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -136,7 +138,7 @@ func (s *Syncer) skipByTable(table *filter.Table) bool {
 // * any schema of table names is system schema.
 // * any table name doesn't pass block-allow list.
 func skipByTable(baList *filter.Filter, table *filter.Table) bool {
-	if filter.IsSystemSchema(table.Schema) {
+	if filter.IsSystemSchema(strings.ToLower(table.Schema)) {
 		return true
 	}
 	tables := baList.Apply([]*filter.Table{table})

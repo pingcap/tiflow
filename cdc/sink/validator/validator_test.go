@@ -27,9 +27,10 @@ func TestPreCheckSinkURI(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		uri  string
-		err  string
+		name        string
+		uri         string
+		err         string
+		notContains string
 	}{
 		{
 			name: "valid domain MySQL URI",
@@ -76,6 +77,12 @@ func TestPreCheckSinkURI(t *testing.T) {
 			uri:  "kafka://3333:10:9:101::204:9092/topic1",
 			err:  "sink uri host is not valid IPv6 address",
 		},
+		{
+			name:        "invalid escaped URI masks password",
+			uri:         "mysql://root:verysecure@127.0.0.1/%zz",
+			err:         `parse "<invalid uri>"`,
+			notContains: "verysecure",
+		},
 	}
 
 	for _, tt := range tests {
@@ -85,6 +92,9 @@ func TestPreCheckSinkURI(t *testing.T) {
 			_, err := preCheckSinkURI(test.uri)
 			if test.err != "" {
 				require.Contains(t, err.Error(), test.err)
+				if test.notContains != "" {
+					require.NotContains(t, err.Error(), test.notContains)
+				}
 			} else {
 				require.NoError(t, err)
 			}
@@ -126,4 +136,12 @@ func TestValidateSink(t *testing.T) {
 		t, err.Error(),
 		"sink uri scheme is not supported with syncpoint enabled",
 	)
+	require.NotContains(t, err.Error(), "verysecure")
+	require.NotContains(t, err.Error(), "sasl-password=verysecure")
+
+	sinkURI = "kafka://127.0.0.1:9092/topic?sasl-password=verysecure"
+	err = Validate(ctx, model.DefaultChangeFeedID("test"), sinkURI, replicateConfig, nil)
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), "sasl-password=xxxxx")
+	require.NotContains(t, err.Error(), "verysecure")
 }

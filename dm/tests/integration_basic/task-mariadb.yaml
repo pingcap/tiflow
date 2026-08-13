@@ -1,0 +1,19 @@
+---
+name: "mariadb-to-tidb"
+task-mode: all
+
+target-database:
+  host: "127.0.0.1"
+  port: 4000
+  user: "root"
+
+mysql-instances:
+  - source-id: "mariadb-source-01"
+    filter-rules: ["test"]
+
+filters:
+  test:
+    schema-pattern: "test*"
+    table-pattern: "*"
+    events: ["all"]
+    action: Do

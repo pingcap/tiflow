@@ -18,14 +18,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path"
+	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 
 	grpcTesting "github.com/grpc-ecosystem/go-grpc-middleware/testing"
 	grpcTestingProto "github.com/grpc-ecosystem/go-grpc-middleware/testing/testproto"
-	"github.com/integralist/go-findroot/find"
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
@@ -179,16 +180,47 @@ func TestTCPServerTLSGrpc(t *testing.T) {
 }
 
 func makeCredential4Testing(t *testing.T) *security.Credential {
-	stat, err := find.Repo()
-	require.NoError(t, err)
-
-	tlsPath := fmt.Sprintf("%s/tests/integration_tests/_certificates/", stat.Path)
+	t.Helper()
+	tlsPath := findTLSPath(t)
 	return &security.Credential{
-		CAPath:        path.Join(tlsPath, "ca.pem"),
-		CertPath:      path.Join(tlsPath, "server.pem"),
-		KeyPath:       path.Join(tlsPath, "server-key.pem"),
+		CAPath:        filepath.Join(tlsPath, "ca.pem"),
+		CertPath:      filepath.Join(tlsPath, "server.pem"),
+		KeyPath:       filepath.Join(tlsPath, "server-key.pem"),
 		CertAllowedCN: nil,
 	}
+}
+
+func findTLSPath(t *testing.T) string {
+	t.Helper()
+
+	const maxDepth = 10
+	const caPemRel = "tests/integration_tests/_certificates/ca.pem"
+
+	var candidates []string
+	if _, file, _, ok := runtime.Caller(0); ok {
+		candidates = append(candidates, filepath.Dir(file))
+	}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, wd)
+	}
+
+	for _, base := range candidates {
+		dir := base
+		for i := 0; i < maxDepth && dir != "." && dir != string(filepath.Separator); i++ {
+			caPath := filepath.Join(dir, caPemRel)
+			if _, err := os.Stat(caPath); err == nil {
+				return filepath.Dir(caPath)
+			}
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+	}
+
+	require.FailNow(t, "cannot find test TLS certificates", caPemRel)
+	return ""
 }
 
 func testWithHTTPWorkload(_ context.Context, t *testing.T, server TCPServer, addr string, credentials *security.Credential) {

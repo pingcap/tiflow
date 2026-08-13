@@ -1,0 +1,38 @@
+# Repository Guidelines
+
+## Project Structure & Module Organization
+This guide targets DM contributions in the TiFlow monorepo. Core DM code lives in `dm/`, shared libraries commonly touched by DM live in `pkg/`, and DM binaries are launched from `cmd/dm-master`, `cmd/dm-worker`, `cmd/dm-ctl`, and `cmd/dm-syncer`. Integration and compatibility cases live in `dm/tests/`; reusable helpers are under `dm/tests/_utils/`. The DM web UI is in `dm/ui/`. `sync_diff_inspector/` is also relevant because DM integration tests depend on it.
+
+## Build, Test, and Development Commands
+Run `make help` for the full target list. Common DM commands:
+
+- `make dm`: build `dm-master`, `dm-worker`, `dmctl`, and `dm-syncer` into `bin/`.
+- `make dm_unit_test`: run all DM Go unit tests with race detection.
+- `make dm_unit_test_pkg PKG=github.com/pingcap/tiflow/dm/master`: run one package locally.
+- `make dm_integration_test_build`: build the `.test` binaries required by `dm/tests/`.
+- `make dm_integration_test CASE=sharding`: run one DM integration case.
+- `npm --prefix dm/ui run lint`, `npm --prefix dm/ui run type-check`, `npm --prefix dm/ui run build`: validate the DM web UI.
+
+Before DM integration tests, make sure `bin/tidb-server`, `mysql`, and `bin/minio` are available; Python requirements from `dm/tests/requirements.txt` will be installed automatically.
+
+## Coding Style & Naming Conventions
+Go is the primary language. Follow [Go Code Review Comments](https://github.com/golang/go/wiki/CodeReviewComments) and keep Go files tab-indented as defined in `.editorconfig`. Run `make fmt` before sending changes; it applies `gci`, `gofumports`, `shfmt`, and repository checks. Keep unit tests in `*_test.go`. Name shell cases by directory, for example `dm/tests/sharding/run.sh`. Do not hand-edit generated outputs; regenerate with `make go-generate`, `make generate-protobuf`, or `make dm_generate_openapi` when relevant.
+
+## Testing Guidelines
+Add unit tests for package-level logic and integration cases for end-to-end replication behavior. New DM shell cases should be added under `dm/tests/<case>/run.sh` and registered in `dm/tests/run_group.sh`. Coverage artifacts are written to `/tmp/dm_test`. If a change affects compatibility behavior, use the existing compatibility workflow instead of only adding a unit test.
+
+## Commit & Pull Request Guidelines
+Use the repository commit style from [CONTRIBUTING.md](CONTRIBUTING.md) and existing history: `<subsystem>(ticdc|dm|engine|all): <what changed>` for TiCDC, DM, engine, or shared code, and `sync-diff-inspector: <what changed>` for sync-diff-inspector changes. Match the scope to the code you touch, for example `worker(dm): improve retry logging` for DM-only changes, `capture(ticdc): add comment for variable declaration` for TiCDC changes, and `sync-diff-inspector: update splitter behavior` for sync-diff-inspector changes. Keep the subject within 70 characters and explain the reason in the body.
+
+PR descriptions MUST follow [.github/pull_request_template.md](.github/pull_request_template.md). If you create a PR with GitHub CLI, start from the template with `gh pr create -T .github/pull_request_template.md`, then fill in the fields. Do not replace the template with an informal summary.
+
+Before reporting that a PR is ready or updated, re-read the published PR body and verify it still contains:
+
+- `### What problem does this PR solve?`
+- one line starting with `Issue Number:`. Prefer `Issue Number: close #12345` or `Issue Number: ref #12345`; use `Issue Number: None` only for test-only or housekeeping PRs with no issue.
+- `### What is changed and how it works?`
+- `### Check List`, with at least one applicable test category kept and the exact commands or CI jobs used for verification.
+- `#### Questions`, explicitly answering compatibility/performance impact and documentation impact.
+- `### Release note` with a fenced `release-note` block containing the release note or `None`.
+
+DM fixes and features are expected to include tests.

@@ -26,6 +26,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 )
 
 func TestVerifyCreateChangefeedConfig(t *testing.T) {
@@ -34,6 +35,8 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
 	helper.Tk().MustExec("use test;")
+	job := helper.DDL2Job("create table t1(id int primary key, name varchar(255));")
+	require.NotNil(t, job)
 	storage := helper.Storage()
 	provider := mock_owner.NewMockStatusProvider(gomock.NewController(t))
 	cfg := &ChangefeedConfig{}
@@ -95,21 +98,29 @@ func TestVerifyCreateChangefeedConfig(t *testing.T) {
 	cfg.StartTs = 0
 	// use blackhole to workaround
 	cfg.SinkURI = "blackhole://127.0.0.1:9092/test?protocol=avro"
-	cfg.ReplicaConfig.ForceReplicate = false
 	provider.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
 	require.NoError(t, err)
-
-	cfg.ReplicaConfig.ForceReplicate = true
-	provider.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
-	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
-	require.Error(t, cerror.ErrOldValueNotEnabled, err)
 
 	// invalid start-ts, in the future
 	cfg.StartTs = 1000000000000000000
 	provider.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
 	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
-	require.Error(t, cerror.ErrAPIInvalidParam, err)
+	require.ErrorIs(t, err, cerror.ErrAPIInvalidParam)
+
+	commitTs := job.BinlogInfo.FinishedTS
+	pdClient.timestamp = oracle.ExtractPhysical(commitTs)
+	pdClient.logicTime = oracle.ExtractLogical(commitTs)
+	cfg.StartTs = commitTs
+	cfg.TargetTs = commitTs + 1
+	// invalid dispatcher partition
+	cfg.SinkURI = "kafka://127.0.0.1:9092/test?protocol=simple"
+	cfg.ReplicaConfig.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"*.*"}, PartitionRule: "columns", Columns: []string{"id.name"}},
+	}
+	provider.EXPECT().IsChangefeedExists(gomock.Any(), gomock.Any()).Return(false, nil)
+	_, err = h.verifyCreateChangefeedConfig(ctx, cfg, pdClient, provider, "en", storage)
+	require.ErrorIs(t, err, cerror.ErrDispatcherFailed)
 }
 
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {
@@ -121,6 +132,8 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	oldUpInfo := &model.UpstreamInfo{}
 	helper := entry.NewSchemaTestHelper(t)
 	helper.Tk().MustExec("use test;")
+	job := helper.DDL2Job("create table t1(id int primary key, name varchar(255));")
+	require.NotNil(t, job)
 	storage := helper.Storage()
 	h := &APIV2HelpersImpl{}
 	newCfInfo, newUpInfo, err := h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
@@ -161,4 +174,15 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	cfg.TargetTs = 9
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
 	require.NotNil(t, err)
+
+	commitTs := job.BinlogInfo.FinishedTS
+	cfg.TargetTs = commitTs + 1
+	// invalid dispatcher partition
+	cfg.SinkURI = "kafka://127.0.0.1:9092/test?protocol=simple"
+	cfg.ReplicaConfig.Sink.DispatchRules = []*DispatchRule{
+		{Matcher: []string{"*.*"}, PartitionRule: "columns", Columns: []string{"id.name"}},
+	}
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, commitTs)
+	require.ErrorIs(t, err, cerror.ErrChangefeedUpdateRefused)
+	require.ErrorContains(t, err, string(cerror.ErrDispatcherFailed.RFCCode()))
 }

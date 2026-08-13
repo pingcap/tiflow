@@ -48,7 +48,7 @@ func (t *TaskCliArgs) Decode(data []byte) error {
 func (t *TaskCliArgs) Verify() error {
 	if t.StartTime != "" {
 		if _, err := utils.ParseStartTime(t.StartTime); err != nil {
-			return terror.Annotate(err, "error while parse start-time, expected in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'")
+			return terror.Annotatef(err, "error while parse start-time, expected in the format like %s", utils.StartTimeFormatHint)
 		}
 	}
 

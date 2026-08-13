@@ -98,9 +98,10 @@ function test_privilege_precheck() {
 		"\"msg\": \"pre-check is passed. \"" 1
 	run_sql_tidb "drop user 'test1'@'%';"
 
-	# success: all privileges
+	# success: sufficient privileges (avoid GRANT ALL which fails on next-gen TiDB
+	# due to missing SHUTDOWN/CONFIG privileges)
 	run_sql_tidb "create user 'test1'@'%' identified by '123456';"
-	run_sql_tidb "grant all privileges on *.* to 'test1'@'%';"
+	run_sql_tidb "grant select, create, insert, update, delete, alter, drop, index, create view on *.* to 'test1'@'%';"
 	run_sql_tidb "flush privileges;"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $cur/conf/task-priv.yaml" \

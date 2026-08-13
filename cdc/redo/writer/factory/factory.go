@@ -17,7 +17,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/cdc/redo/writer/blackhole"
 	"github.com/pingcap/tiflow/cdc/redo/writer/file"
@@ -30,7 +30,7 @@ import (
 func NewRedoLogWriter(
 	ctx context.Context, lwCfg *writer.LogWriterConfig,
 ) (writer.RedoLogWriter, error) {
-	uri, err := storage.ParseRawURL(lwCfg.Storage)
+	uri, err := objstore.ParseRawURL(lwCfg.Storage)
 	if err != nil {
 		return nil, err
 	}

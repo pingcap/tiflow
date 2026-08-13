@@ -18,6 +18,7 @@ package master
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -41,9 +42,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tikv/pd/pkg/utils/tempurl"
+	"google.golang.org/grpc"
 )
 
 // some data for test.
@@ -542,6 +545,30 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	task.TargetConfig.Port = dbCfg.Port
 	task.TargetConfig.User = dbCfg.User
 	task.TargetConfig.Password = dbCfg.Password
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
+
+	invalidTaskJSON, err := task.ToJSON()
+	s.NoError(err)
+	var invalidTask map[string]any
+	s.NoError(json.Unmarshal(invalidTaskJSON, &invalidTask))
+	targetConfig, ok := invalidTask["target_config"].(map[string]any)
+	s.Require().True(ok)
+	invalidSessions := []struct {
+		name    string
+		session map[string]string
+	}{
+		{name: "unsupported-key", session: map[string]string{"FOREIGN_KEY_CHECKS": "1"}},
+		{name: "unsupported-value", session: map[string]string{"foreign_key_checks": "on"}},
+	}
+	for _, testCase := range invalidSessions {
+		invalidTask["name"] = task.Name + "-" + testCase.name
+		targetConfig["session"] = testCase.session
+		result = testutil.NewRequest().Post(url).WithJsonBody(invalidTask).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+		s.Equal(http.StatusBadRequest, result.Code())
+	}
 
 	// create one
 	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
@@ -549,6 +576,9 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	var createTaskResp openapi.Task
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
 	s.Equal(createTaskResp.Name, task.Name)
+	s.EqualValues(task.Timezone, createTaskResp.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, createTaskResp.SourceConfig.IncrMigrateConf.SafeMode)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *createTaskResp.TargetConfig.Session.ForeignKeyChecks)
 
 	// create again will fail
 	result = testutil.NewRequest().Post(url).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
@@ -564,6 +594,8 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
 	s.Equal(1, resultTaskList.Total)
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
+	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, resultTaskList.Data[0].SourceConfig.IncrMigrateConf.SafeMode)
 
 	// get detail
 	oneURL := fmt.Sprintf("%s/%s", url, task.Name)
@@ -572,6 +604,9 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	var respTask openapi.Task
 	s.NoError(result.UnmarshalBodyToObject(&respTask))
 	s.Equal(task.Name, respTask.Name)
+	s.EqualValues(task.Timezone, respTask.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, respTask.SourceConfig.IncrMigrateConf.SafeMode)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *respTask.TargetConfig.Session.ForeignKeyChecks)
 
 	// get not exist
 	notExistURL := fmt.Sprintf("%s/%s", url, "notexist")
@@ -586,6 +621,7 @@ func (s *OpenAPIViewSuite) TestTaskTemplatesAPI() {
 	s.Equal(http.StatusOK, result.Code())
 	s.NoError(result.UnmarshalBodyToObject(&respTask))
 	s.Equal(task.Name, respTask.Name)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, respTask.SourceConfig.IncrMigrateConf.SafeMode)
 
 	// update not exist will fail
 	task.Name = "notexist"
@@ -706,7 +742,8 @@ func (s *OpenAPIViewSuite) TestSourceAPI() {
 	s.NoError(err)
 	tableName := "CHARACTER_SETS"
 	mockDB.ExpectQuery("SHOW FULL TABLES IN `information_schema` WHERE Table_Type != 'VIEW';").WillReturnRows(
-		sqlmock.NewRows([]string{"Tables_in_information_schema", "Table_type"}).AddRow(tableName, "BASE TABLE"))
+		sqlmock.NewRows([]string{"Tables_in_information_schema", "Table_type", "Auto_partition", "Table_group"}).
+			AddRow(tableName, "BASE TABLE", "NO", "single_tg"))
 	tableURL := fmt.Sprintf("%s/%s/schemas/%s", baseURL, source1.SourceName, schemaName)
 	result = testutil.NewRequest().Get(tableURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
@@ -986,11 +1023,17 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	s.NoError(err)
+	replThreads := 1
+	task.SourceConfig.IncrMigrateConf.ReplThreads = &replThreads
 	// use a valid target db
 	task.TargetConfig.Host = dbCfg.Host
 	task.TargetConfig.Port = dbCfg.Port
 	task.TargetConfig.User = dbCfg.User
 	task.TargetConfig.Password = dbCfg.Password
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
 
 	// create task
 	createTaskReq := openapi.CreateTaskRequest{Task: task}
@@ -999,9 +1042,15 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	var createTaskResp openapi.OperateTaskResponse
 	s.NoError(result.UnmarshalBodyToObject(&createTaskResp))
 	s.Equal(createTaskResp.Task.Name, task.Name)
+	s.EqualValues(task.Timezone, createTaskResp.Task.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, createTaskResp.Task.SourceConfig.IncrMigrateConf.SafeMode)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *createTaskResp.Task.TargetConfig.Session.ForeignKeyChecks)
 	subTaskM := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
 	s.Len(subTaskM, 1)
 	s.Equal(task.Name, subTaskM[source1Name].Name)
+	s.Equal(*task.Timezone, subTaskM[source1Name].Timezone)
+	s.Equal(*task.SourceConfig.IncrMigrateConf.SafeMode, subTaskM[source1Name].SyncerConfig.SafeMode)
+	s.Equal("1", subTaskM[source1Name].To.Session["foreign_key_checks"])
 
 	// get task
 	task1URL := fmt.Sprintf("%s/%s", taskURL, task.Name)
@@ -1010,6 +1059,120 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.Equal(http.StatusOK, result.Code())
 	s.NoError(result.UnmarshalBodyToObject(&task1FromHTTP))
 	s.Equal(task1FromHTTP.Name, task.Name)
+	s.EqualValues(task.Timezone, task1FromHTTP.Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, task1FromHTTP.SourceConfig.IncrMigrateConf.SafeMode)
+	s.Equal(openapi.TaskTargetSessionForeignKeyChecksN1, *task1FromHTTP.TargetConfig.Session.ForeignKeyChecks)
+
+	// changing timezone through PUT is rejected by the bottom update guard.
+	updatedTimezone := "UTC"
+	timezoneUpdateTask := task
+	timezoneUpdateTask.Timezone = &updatedTimezone
+	oldSubTaskCfg := subTaskM[source1Name]
+	syncUnit := syncer.NewSyncer(oldSubTaskCfg, nil, nil)
+	mockUpdateWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockUpdateWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *pb.CheckSubtasksCanUpdateRequest, _ ...grpc.CallOption) (*pb.CheckSubtasksCanUpdateResponse, error) {
+			newSubTaskCfg := config.NewSubTaskConfig()
+			decodeErr := newSubTaskCfg.Decode(req.SubtaskCfgTomlString, false)
+			s.NoError(decodeErr)
+			if decodeErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: decodeErr.Error()}, nil
+			}
+			s.Equal(updatedTimezone, newSubTaskCfg.Timezone)
+
+			guardErr := syncUnit.CheckCanUpdateCfg(newSubTaskCfg)
+			s.Error(guardErr)
+			resp := &pb.CheckSubtasksCanUpdateResponse{Success: guardErr == nil}
+			if guardErr != nil {
+				resp.Msg = guardErr.Error()
+			}
+			return resp, nil
+		},
+	)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockUpdateWorkerClient))
+	timezoneUpdateReq := openapi.UpdateTaskRequest{Task: timezoneUpdateTask}
+	result = testutil.NewRequest().Put(task1URL).WithJsonBody(timezoneUpdateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var timezoneUpdateErr openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&timezoneUpdateErr))
+	s.Equal(int(terror.ErrSchedulerSubTaskCfgUpdate.Code()), timezoneUpdateErr.ErrorCode)
+	s.Contains(timezoneUpdateErr.ErrorMsg, "fields that should not be changed")
+	storedSubTaskCfgs := s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Equal(*task.Timezone, storedSubTaskCfgs[source1Name].Timezone)
+
+	// changing safe mode through PUT is rejected by the bottom update guard.
+	updatedSafeMode := !*task.SourceConfig.IncrMigrateConf.SafeMode
+	safeModeUpdateTask := task
+	incrMigrateConf := *task.SourceConfig.IncrMigrateConf
+	safeModeUpdateTask.SourceConfig.IncrMigrateConf = &incrMigrateConf
+	safeModeUpdateTask.SourceConfig.IncrMigrateConf.SafeMode = &updatedSafeMode
+	mockSafeModeUpdateWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockSafeModeUpdateWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *pb.CheckSubtasksCanUpdateRequest, _ ...grpc.CallOption) (*pb.CheckSubtasksCanUpdateResponse, error) {
+			newSubTaskCfg := config.NewSubTaskConfig()
+			decodeErr := newSubTaskCfg.Decode(req.SubtaskCfgTomlString, false)
+			s.NoError(decodeErr)
+			if decodeErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: decodeErr.Error()}, nil
+			}
+			s.Equal(updatedSafeMode, newSubTaskCfg.SyncerConfig.SafeMode)
+
+			guardErr := syncUnit.CheckCanUpdateCfg(newSubTaskCfg)
+			s.Error(guardErr)
+			resp := &pb.CheckSubtasksCanUpdateResponse{Success: guardErr == nil}
+			if guardErr != nil {
+				resp.Msg = guardErr.Error()
+			}
+			return resp, nil
+		},
+	)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockSafeModeUpdateWorkerClient))
+	safeModeUpdateReq := openapi.UpdateTaskRequest{Task: safeModeUpdateTask}
+	result = testutil.NewRequest().Put(task1URL).WithJsonBody(safeModeUpdateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var safeModeUpdateErr openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&safeModeUpdateErr))
+	s.Equal(int(terror.ErrSchedulerSubTaskCfgUpdate.Code()), safeModeUpdateErr.ErrorCode)
+	s.Contains(safeModeUpdateErr.ErrorMsg, "safe-mode")
+	storedSubTaskCfgs = s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Equal(*task.SourceConfig.IncrMigrateConf.SafeMode, storedSubTaskCfgs[source1Name].SyncerConfig.SafeMode)
+
+	// changing target session through PUT is rejected by the bottom update guard.
+	sessionUpdateTask := task
+	disabledForeignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN0
+	sessionUpdateTask.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &disabledForeignKeyChecks,
+	}
+	mockSessionUpdateWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockSessionUpdateWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *pb.CheckSubtasksCanUpdateRequest, _ ...grpc.CallOption) (*pb.CheckSubtasksCanUpdateResponse, error) {
+			newSubTaskCfg := config.NewSubTaskConfig()
+			decodeErr := newSubTaskCfg.Decode(req.SubtaskCfgTomlString, false)
+			s.NoError(decodeErr)
+			if decodeErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: decodeErr.Error()}, nil
+			}
+			s.Equal("0", newSubTaskCfg.To.Session["foreign_key_checks"])
+
+			guardErr := syncUnit.CheckCanUpdateCfg(newSubTaskCfg)
+			s.Error(guardErr)
+			resp := &pb.CheckSubtasksCanUpdateResponse{Success: guardErr == nil}
+			if guardErr != nil {
+				resp.Msg = guardErr.Error()
+			}
+			return resp, nil
+		},
+	)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockSessionUpdateWorkerClient))
+	sessionUpdateReq := openapi.UpdateTaskRequest{Task: sessionUpdateTask}
+	result = testutil.NewRequest().Put(task1URL).WithJsonBody(sessionUpdateReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusBadRequest, result.Code())
+	var sessionUpdateErr openapi.ErrorWithMessage
+	s.NoError(result.UnmarshalBodyToObject(&sessionUpdateErr))
+	s.Equal(int(terror.ErrSchedulerSubTaskCfgUpdate.Code()), sessionUpdateErr.ErrorCode)
+	s.Contains(sessionUpdateErr.ErrorMsg, "foreign_key_checks")
+	storedSubTaskCfgs = s1.scheduler.GetSubTaskCfgsByTask(task.Name)
+	s.Equal("1", storedSubTaskCfgs[source1Name].To.Session["foreign_key_checks"])
 
 	// update a task
 	s.NoError(failpoint.Enable("github.com/pingcap/tiflow/dm/master/scheduler/operateCheckSubtasksCanUpdate", `return("success")`))
@@ -1031,6 +1194,8 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 	s.NoError(result.UnmarshalBodyToObject(&resultTaskList))
 	s.Equal(1, resultTaskList.Total)
 	s.Equal(task.Name, resultTaskList.Data[0].Name)
+	s.EqualValues(task.Timezone, resultTaskList.Data[0].Timezone)
+	s.EqualValues(task.SourceConfig.IncrMigrateConf.SafeMode, resultTaskList.Data[0].SourceConfig.IncrMigrateConf.SafeMode)
 
 	s.testImportTaskTemplate(&task, s1)
 

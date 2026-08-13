@@ -226,6 +226,11 @@ error = '''
 cannot find mysql.tidb_ddl_job schema
 '''
 
+["CDC:ErrDDLStateNotFound"]
+error = '''
+DDL state not found %s
+'''
+
 ["CDC:ErrDDLUnsupportType"]
 error = '''
 unsupport ddl type %s, query %s
@@ -236,9 +241,19 @@ error = '''
 unflatten datume data
 '''
 
+["CDC:ErrDebeziumEmptyValueMessage"]
+error = '''
+debezium value should not be empty
+'''
+
 ["CDC:ErrDebeziumEncodeFailed"]
 error = '''
 debezium encode failed
+'''
+
+["CDC:ErrDebeziumInvalidMessage"]
+error = '''
+debezium invalid message format, %s
 '''
 
 ["CDC:ErrDecodeFailed"]
@@ -313,7 +328,7 @@ exchange partition failed, %s
 
 ["CDC:ErrExecDDLFailed"]
 error = '''
-exec DDL failed
+exec DDL failed %s
 '''
 
 ["CDC:ErrExpressionColumnNotFound"]
@@ -538,7 +553,7 @@ maxwell invalid data
 
 ["CDC:ErrMessageTooLarge"]
 error = '''
-message is too large
+message is too large. table:%s, length:%d, maxMessageBytes:%d
 '''
 
 ["CDC:ErrMetaListDatabases"]
@@ -614,11 +629,6 @@ error = '''
 ["CDC:ErrNotOwner"]
 error = '''
 this capture is not a owner
-'''
-
-["CDC:ErrOldValueNotEnabled"]
-error = '''
-old value is not enabled
 '''
 
 ["CDC:ErrOpenProtocolCodecInvalidData"]

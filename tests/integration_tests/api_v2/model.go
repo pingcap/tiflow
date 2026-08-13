@@ -171,8 +171,8 @@ type ReplicaConfig struct {
 	EnableSyncPoint       *bool  `json:"enable_sync_point,omitempty"`
 	BDRMode               *bool  `json:"bdr_mode,omitempty"`
 
-	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty" swaggertype:"string"`
-	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty" swaggertype:"string"`
+	SyncPointInterval  *JSONDuration `json:"sync_point_interval,omitempty"`
+	SyncPointRetention *JSONDuration `json:"sync_point_retention,omitempty"`
 
 	Filter     *FilterConfig              `json:"filter"`
 	Mounter    *MounterConfig             `json:"mounter"`
@@ -253,6 +253,8 @@ type DispatchRule struct {
 	Matcher       []string `json:"matcher,omitempty"`
 	PartitionRule string   `json:"partition"`
 	TopicRule     string   `json:"topic"`
+	IndexName     string   `json:"index,omitempty"`
+	Columns       []string `json:"columns,omitempty"`
 }
 
 // ColumnSelector represents a column selector for a table.

@@ -17,9 +17,9 @@ import (
 	"testing"
 
 	"github.com/pingcap/errors"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
@@ -44,6 +44,52 @@ func TestSetLightningConfig(t *testing.T) {
 	require.Equal(t, stCfg.LoaderConfig.PoolSize, cfg.App.RegionConcurrency)
 }
 
+func TestMakeGlobalConfigKeepsSourceDirForAllImportModes(t *testing.T) {
+	t.Parallel()
+
+	dataDir := "s3://bucket/prefix/path?region=us-west-2&external-id=dump&role-arn=arn:aws:iam::123:role/dm&external_id=import&endpoint=https%3A%2F%2F127.0.0.1%3A9000&provider=aws"
+
+	stCfg := &config.SubTaskConfig{
+		LoaderConfig: config.LoaderConfig{
+			Dir:        dataDir,
+			ImportMode: config.LoadModeImportInto,
+		},
+	}
+	cfg := MakeGlobalConfig(stCfg)
+	require.Equal(t, lcfg.BackendImportInto, cfg.TikvImporter.Backend)
+	require.Equal(t, dataDir, cfg.Mydumper.SourceDir)
+	require.Equal(t, dataDir, stCfg.LoaderConfig.Dir)
+
+	stCfg.LoaderConfig.ImportMode = config.LoadModeLogical
+	cfg = MakeGlobalConfig(stCfg)
+	require.Equal(t, lcfg.BackendTiDB, cfg.TikvImporter.Backend)
+	require.Equal(t, dataDir, cfg.Mydumper.SourceDir)
+
+	stCfg.LoaderConfig.ImportMode = config.LoadModePhysical
+	cfg = MakeGlobalConfig(stCfg)
+	require.Equal(t, lcfg.BackendLocal, cfg.TikvImporter.Backend)
+	require.Equal(t, dataDir, cfg.Mydumper.SourceDir)
+}
+
+func TestEnableImportIntoCompatibilityConfig(t *testing.T) {
+	t.Parallel()
+
+	cfg := lcfg.NewConfig()
+	cfg.TikvImporter.Backend = lcfg.BackendImportInto
+	enableImportIntoCompatibilityConfig(cfg)
+	require.True(t, cfg.TikvImporter.StripS3ExternalIDForImportSQL)
+
+	cfg = lcfg.NewConfig()
+	cfg.TikvImporter.Backend = lcfg.BackendTiDB
+	enableImportIntoCompatibilityConfig(cfg)
+	require.False(t, cfg.TikvImporter.StripS3ExternalIDForImportSQL)
+
+	cfg = lcfg.NewConfig()
+	cfg.TikvImporter.Backend = lcfg.BackendLocal
+	enableImportIntoCompatibilityConfig(cfg)
+	require.False(t, cfg.TikvImporter.StripS3ExternalIDForImportSQL)
+}
+
 func TestConvertLightningError(t *testing.T) {
 	t.Parallel()
 
@@ -59,7 +105,7 @@ func TestGetLightiningConfig(t *testing.T) {
 	conf, err := GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{
 			Name:       "job123",
-			ExtStorage: &storage.LocalStorage{},
+			ExtStorage: &objstore.LocalStorage{},
 			LoaderConfig: config.LoaderConfig{
 				RangeConcurrency: 32,
 				CompressKVPairs:  "gzip",
@@ -76,6 +122,15 @@ func TestGetLightiningConfig(t *testing.T) {
 	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
+
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{}, &config.SubTaskConfig{
+		To: dbconfig.DBConfig{Session: map[string]string{
+			"foreign_key_checks": "1",
+		}},
+		LoaderConfig: config.LoaderConfig{Dir: "/tmp"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "0", conf.TiDB.Vars["foreign_key_checks"])
 
 	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{

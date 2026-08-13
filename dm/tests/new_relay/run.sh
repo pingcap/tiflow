@@ -181,9 +181,8 @@ function test_cant_dail_downstream() {
 	echo "kill dm-worker1"
 	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	# kill downstream TiDB (on next-gen, preserve SYSTEM TiDB)
+	cleanup_tidb_server
 
 	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
@@ -359,7 +358,13 @@ function test_relay_operations() {
 		"export configs to directory .* succeed" 1
 
 	# check configs
-	sed '/password/d' /tmp/configs/tasks/test.yaml | diff $cur/configs/tasks/test.yaml - || exit 1
+	# Write normalized copies outside /tmp/configs/ so config import
+	# doesn't pick them up as task configs.
+	cp /tmp/configs/tasks/test.yaml /tmp/exported_task.normalized
+	cp $cur/configs/tasks/test.yaml /tmp/expected_task.normalized
+	normalize_session_block /tmp/exported_task.normalized
+	normalize_session_block /tmp/expected_task.normalized
+	sed '/password/d' /tmp/exported_task.normalized | diff /tmp/expected_task.normalized - || exit 1
 	sed '/password/d' /tmp/configs/sources/mysql-replica-01.yaml | diff -I '^case-sensitive' $cur/configs/sources/mysql-replica-01.yaml - || exit 1
 	diff <(jq --sort-keys . /tmp/configs/relay_workers.json) <(jq --sort-keys . $cur/configs/relay_workers.json) || exit 1
 
@@ -387,6 +392,12 @@ function test_relay_operations() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	# On next-gen, the exported config has "session: {}" (no tidb_txn_mode)
+	# which config import rejects. Patch it to match what DM expects.
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		sed -i 's/^  session: {}$/  session:\n    tidb_txn_mode: optimistic/' /tmp/configs/tasks/test.yaml
+	fi
 
 	# import configs
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

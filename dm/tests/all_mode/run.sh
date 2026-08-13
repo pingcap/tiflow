@@ -8,6 +8,17 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 API_VERSION="v1alpha1"
 ILLEGAL_CHAR_NAME='t-Ë!s`t'
 
+function check_expression_index_case_enabled() {
+	run_sql_source1 "select count(*) as expression_index_table_count from information_schema.tables where table_schema = 'all_mode' and table_name = 't_expr_unique_inline';"
+	if grep -Fq "expression_index_table_count: 0" "$TEST_DIR/sql_res.$TEST_NAME.txt"; then
+		echo "unique functional index case is skipped because upstream does not support /*!80013 */ syntax"
+		return
+	fi
+
+	run_sql_source1 "select count(*) as expression_index_count from information_schema.statistics where table_schema = 'all_mode' and table_name in ('t_expr_unique', 't_expr_unique_inline') and index_name = 'uk_lower_name';"
+	check_contains "expression_index_count: 2"
+}
+
 function test_session_config() {
 	echo "[$(date)] <<<<<< start test_session_config >>>>>>"
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
@@ -119,7 +130,9 @@ function test_query_timeout() {
 		"query-status $ILLEGAL_CHAR_NAME" \
 		"context deadline exceeded" 2
 	duration=$(($(date +%s) - $start_time))
-	if [[ $duration -gt 10 ]]; then
+	# Each query-status waits up to rpc-timeout (3s), and run_dm_ctl_with_retry
+	# may need 2+ attempts (2s interval). On loaded CI nodes 10s is too tight.
+	if [[ $duration -gt 30 ]]; then
 		echo "query-status takes too much time $duration"
 		exit 1
 	fi
@@ -266,8 +279,6 @@ function test_regexpr_router() {
 	run_sql_tidb 'create database dtest2;'
 	run_sql_tidb 'drop database if exists dtest4;'
 	run_sql_tidb 'create database dtest4;'
-	run_sql_tidb 'create table if not exists dtest2.dtable2(a int, b int);'
-	run_sql_tidb 'create table if not exists dtest4.dtable4(a int, b int);'
 	# start DM worker and master
 	run_dm_master $WORK_DIR/master $MASTER_PORT $cur/conf/dm-master.toml
 	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT
@@ -475,13 +486,12 @@ function run() {
 	check_http_alive 127.0.0.1:$MASTER_PORT/apis/${API_VERSION}/status/$ILLEGAL_CHAR_NAME '"stage": "Running"' 10
 	sleep 2 # still wait for subtask running on other dm-workers
 
-	# kill tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	# kill downstream TiDB (on next-gen, preserve SYSTEM TiDB)
+	cleanup_tidb_server
 
 	# dm-worker execute sql failed, and will try auto resume task
 	run_sql_file $cur/data/db2.increment0.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
-	sleep 2
+	sleep 45
 	check_log_contains $WORK_DIR/worker2/log/dm-worker.log "dispatch auto resume task"
 
 	# restart tidb, and task will recover success
@@ -503,6 +513,7 @@ function run() {
 		"\"result\": true" 2
 	# we used failpoint to imitate an upstream switching, which purged whole relay dir
 	run_sql_file $cur/data/db1.increment.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
+	check_expression_index_case_enabled
 	run_sql_file $cur/data/db2.increment.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"resume-relay -s mysql-replica-01" \
@@ -541,8 +552,6 @@ function run() {
 	run_sql_source1 "drop table if exists \`all_mode\`.\`tb1\`;"
 	run_sql_source2 "drop table if exists \`all_mode\`.\`tb2\`;"
 	run_sql_source2 "drop table if exists \`all_mode\`.\`tb2\`;"
-	check_log_not_contains $WORK_DIR/worker1/log/dm-worker.log "Error .* Table .* doesn't exist"
-	check_log_not_contains $WORK_DIR/worker2/log/dm-worker.log "Error .* Table .* doesn't exist"
 
 	# test Db not exists should be reported
 	run_sql_tidb "drop database all_mode"

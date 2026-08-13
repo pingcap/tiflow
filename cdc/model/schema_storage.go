@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
@@ -22,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/table/tables"
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -89,8 +91,12 @@ type TableInfo struct {
 	// only for new row format decoder
 	handleColID []int64
 
-	// number of virtual columns
-	virtualColumnCount int
+	// offset of virtual columns in TableInfo.Columns
+	// for example:
+	// Table has 4 columns: a (physical), b (physical), c (virtual), d (virtual)
+	// TableInfo.Columns order: a, b, c, d
+	// VirtualColumnsOffset will be [2, 3] (indices of virtual columns c and d)
+	VirtualColumnsOffset []int
 	// rowColInfosWithoutVirtualCols is the same as rowColInfos, but without virtual columns
 	rowColInfosWithoutVirtualCols *[]rowcodec.ColInfo
 }
@@ -120,7 +126,6 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 
 	rowColumnsCurrentOffset := 0
 
-	ti.virtualColumnCount = 0
 	for i, col := range ti.Columns {
 		ti.columnsOffset[col.ID] = i
 		pkIsHandle := false
@@ -145,7 +150,7 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 				}
 			}
 		} else {
-			ti.virtualColumnCount += 1
+			ti.VirtualColumnsOffset = append(ti.VirtualColumnsOffset, i)
 		}
 		ti.rowColInfos[i] = rowcodec.ColInfo{
 			ID:            col.ID,
@@ -181,21 +186,21 @@ func WrapTableInfo(schemaID int64, schemaName string, version uint64, info *mode
 }
 
 func (ti *TableInfo) initRowColInfosWithoutVirtualCols() {
-	if ti.virtualColumnCount == 0 {
+	if len(ti.VirtualColumnsOffset) == 0 {
 		ti.rowColInfosWithoutVirtualCols = &ti.rowColInfos
 		return
 	}
-	colInfos := make([]rowcodec.ColInfo, 0, len(ti.rowColInfos)-ti.virtualColumnCount)
+	colInfos := make([]rowcodec.ColInfo, 0, len(ti.rowColInfos)-len(ti.VirtualColumnsOffset))
 	for i, col := range ti.Columns {
 		if IsColCDCVisible(col) {
 			colInfos = append(colInfos, ti.rowColInfos[i])
 		}
 	}
-	if len(colInfos) != len(ti.rowColInfos)-ti.virtualColumnCount {
+	if len(colInfos) != len(ti.rowColInfos)-len(ti.VirtualColumnsOffset) {
 		log.Panic("invalid rowColInfosWithoutVirtualCols",
 			zap.Int("len(colInfos)", len(colInfos)),
 			zap.Int("len(ti.rowColInfos)", len(ti.rowColInfos)),
-			zap.Int("ti.virtualColumnCount", ti.virtualColumnCount))
+			zap.Any("ti.VirtualColumnsOffset", ti.VirtualColumnsOffset))
 	}
 	ti.rowColInfosWithoutVirtualCols = &colInfos
 }
@@ -387,7 +392,7 @@ func (ti *TableInfo) HasUniqueColumn() bool {
 
 // HasVirtualColumns returns whether the table has virtual columns
 func (ti *TableInfo) HasVirtualColumns() bool {
-	return ti.virtualColumnCount > 0
+	return len(ti.VirtualColumnsOffset) > 0
 }
 
 // IsEligible returns whether the table is a eligible table
@@ -435,7 +440,7 @@ func (ti *TableInfo) Clone() *TableInfo {
 // GetIndex return the corresponding index by the given name.
 func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 	for _, index := range ti.Indices {
-		if index != nil && index.Name.O == name {
+		if index != nil && index.Name.L == strings.ToLower(name) {
 			return index
 		}
 	}
@@ -443,6 +448,9 @@ func (ti *TableInfo) GetIndex(name string) *model.IndexInfo {
 }
 
 // IndexByName returns the index columns and offsets of the corresponding index by name
+// Index is not case-sensitive on any platform.
+// So we always match in lowercase.
+// See also: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html
 func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 	index := ti.GetIndex(name)
 	if index == nil {
@@ -459,25 +467,39 @@ func (ti *TableInfo) IndexByName(name string) ([]string, []int, bool) {
 
 // OffsetsByNames returns the column offsets of the corresponding columns by names
 // If any column does not exist, return false
-func (ti *TableInfo) OffsetsByNames(names []string) ([]int, bool) {
+// Column is not case-sensitive on any platform, nor are column aliases.
+// So we always match in lowercase.
+// See also: https://dev.mysql.com/doc/refman/5.7/en/identifier-case-sensitivity.html
+func (ti *TableInfo) OffsetsByNames(names []string) ([]int, error) {
 	// todo: optimize it
-	columnOffsets := make(map[string]int, len(ti.Columns))
+	columnOffsets := make(map[string]int)
+	virtualGeneratedColumn := make(map[string]struct{})
 	for _, col := range ti.Columns {
 		if col != nil {
-			columnOffsets[col.Name.O] = col.Offset
+			if IsColCDCVisible(col) {
+				columnOffsets[col.Name.L] = ti.columnsOffset[col.ID]
+			} else {
+				virtualGeneratedColumn[col.Name.L] = struct{}{}
+			}
 		}
 	}
 
 	result := make([]int, 0, len(names))
 	for _, col := range names {
-		offset, ok := columnOffsets[col]
+		name := strings.ToLower(col)
+		if _, ok := virtualGeneratedColumn[name]; ok {
+			return nil, errors.ErrDispatcherFailed.GenWithStack(
+				"found virtual generated columns when dispatch event, table: %v, columns: %v column: %v", ti.GetTableName(), names, name)
+		}
+		offset, ok := columnOffsets[name]
 		if !ok {
-			return nil, false
+			return nil, errors.ErrDispatcherFailed.GenWithStack(
+				"columns not found when dispatch event, table: %v, columns: %v, column: %v", ti.GetTableName(), names, name)
 		}
 		result = append(result, offset)
 	}
 
-	return result, true
+	return result, nil
 }
 
 // GetPrimaryKeyColumnNames returns the primary key column names

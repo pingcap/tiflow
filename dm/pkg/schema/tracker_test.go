@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -30,12 +31,16 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
+	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	dlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -617,7 +622,951 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 			AddRow("test", "create table t(a int, b int, c varchar(20000), primary key(a, b), key(c(20000)))/*!90000 SHARD_ROW_ID_BITS=6 */"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
-	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
+}
+
+func TestForeignKeyRelationBuildsRootParents(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec("create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))", "db")
+	createAndExec("create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDA := "`db`.`a`"
+	tableIDB := "`db`.`b`"
+	tableIDC := "`db`.`c`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c", "create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b", "create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a", "create table a(id int primary key)"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
+	require.NoError(t, err)
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "a"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationBuildsRootParentsWithHiddenColumns(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec("create table b(id int primary key, hidden_mid int, a_id int, constraint fk_b_a foreign key (a_id) references a(id))", "db")
+	createAndExec("create table c(id int primary key, hidden_mid int, b_a_id int, constraint fk_c_b foreign key (b_a_id) references b(a_id))", "db")
+
+	// Simulate expression-index-style hidden columns interleaved with visible columns.
+	bOriginTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "b"})
+	require.NoError(t, err)
+	require.Len(t, bOriginTI.Columns, 3)
+	bOriginTI.Columns[1].Hidden = true
+
+	cOriginTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
+	require.NoError(t, err)
+	require.Len(t, cOriginTI.Columns, 3)
+	cOriginTI.Columns[1].Hidden = true
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDA := "`db`.`a`"
+	tableIDB := "`db`.`b`"
+	tableIDC := "`db`.`c`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c", "create table c(id int primary key, b_a_id int, constraint fk_c_b foreign key (b_a_id) references b(a_id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b", "create table b(id int primary key, a_id int, constraint fk_b_a foreign key (a_id) references a(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a", "create table a(id int primary key)"))
+
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, cOriginTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "a"}).String(), relation.ParentTable)
+	// c has physical columns [id, hidden_mid(hidden), b_a_id], so b_a_id should map to visible index 1.
+	require.Equal(t, []int{1}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationBuildsSourceDomainParentForRoute(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	targetParent := &filter.Table{Schema: "db_r", Name: "parent_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("parent_r", "create table parent_r(id int primary key)"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "parent":
+			return &filter.Table{Schema: "db_r", Name: "parent_r"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "parent"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationRouteAwareInitIgnoresCachedIdentityError(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	targetParent := &filter.Table{Schema: "db_r", Name: "parent_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"))
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	_, err = tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, nil, true)
+	require.ErrorContains(t, err, "requires aligned child tables")
+	require.ErrorContains(t, err, "`db`.`child`")
+	require.ErrorContains(t, err, "`db_r`.`child_r`")
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("parent_r", "create table parent_r(id int primary key)"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "parent":
+			return &filter.Table{Schema: "db_r", Name: "parent_r"}
+		default:
+			return table
+		}
+	}
+
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "parent"}).String(), dti.ForeignKeyRelations[0].ParentTable)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyTableIdentityUsesCaseSensitiveWithoutRoute(t *testing.T) {
+	upper := &filter.Table{Schema: "DB", Name: "Parent"}
+	lower := &filter.Table{Schema: "db", Name: "parent"}
+
+	require.True(t, sameForeignKeyTableIdentity(upper, lower, false))
+	require.False(t, sameForeignKeyTableIdentity(upper, lower, true))
+	require.Equal(t, "`db`.`parent`", foreignKeyRelationTableID(upper, false))
+	require.Equal(t, "`DB`.`Parent`", foreignKeyRelationTableID(upper, true))
+}
+
+func TestForeignKeyRelationCaseInsensitiveRouteUsesPhysicalDownstreamTableID(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database DB", "")
+	createAndExec("create table Parent(id int primary key)", "DB")
+	createAndExec("create table Child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references Parent(id))", "DB")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "DB", Name: "Child"}
+	targetChild := &filter.Table{Schema: "DB_R", Name: "Child_R"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("Child_R", "create table Child_R(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references Parent_R(id))"))
+
+	targetParent := &filter.Table{Schema: "DB_R", Name: "Parent_R"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("Parent_R", "create table Parent_R(id int primary key)"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch strings.ToLower(table.Name) {
+		case "child":
+			return targetChild
+		case "parent":
+			return targetParent
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, false)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "parent"}).String(), dti.ForeignKeyRelations[0].ParentTable)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationRouteResolverMismatch(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "parent":
+			return &filter.Table{Schema: "db_r", Name: "wrong_parent"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	_, err = tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.ErrorContains(t, err, "requires 1:1 route alignment")
+	require.ErrorContains(t, err, "`db`.`parent`")
+	require.ErrorContains(t, err, "`db_r`.`parent_r`")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationBuildsSourceDomainRootParentForRouteChain(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec("create table b(a_id int primary key, constraint fk_b_a foreign key (a_id) references a(id))", "db")
+	createAndExec("create table c(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b(a_id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceC := &filter.Table{Schema: "db", Name: "c"}
+	targetA := &filter.Table{Schema: "db_r", Name: "a_r"}
+	targetB := &filter.Table{Schema: "db_r", Name: "b_r"}
+	targetC := &filter.Table{Schema: "db_r", Name: "c_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetC)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c_r", "create table c_r(b_a_id int primary key, constraint fk_c_b foreign key (b_a_id) references b_r(a_id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetB)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b_r", "create table b_r(a_id int primary key, constraint fk_b_a foreign key (a_id) references a_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetA)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a_r", "create table a_r(id int primary key)"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		return &filter.Table{Schema: "db_r", Name: table.Name + "_r"}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceC)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceC, targetC, originTI, routeResolver, true)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "a"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationInternalCacheUsesSourceIdentityForUnsupportedSharedTarget(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table gp1(id int primary key)", "db")
+	createAndExec("create table gp2(id int primary key)", "db")
+	createAndExec("create table p1(id int primary key, constraint fk_p1_gp1 foreign key (id) references gp1(id))", "db")
+	createAndExec("create table p2(id int primary key, constraint fk_p2_gp2 foreign key (id) references gp2(id))", "db")
+	createAndExec("create table child(p1_id int not null, p2_id int not null, primary key(p1_id, p2_id), constraint fk_child_p1 foreign key (p1_id) references p1(id), constraint fk_child_p2 foreign key (p2_id) references p2(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	targetParent := &filter.Table{Schema: "db_r", Name: "parent_r"}
+	targetGrandparent := &filter.Table{Schema: "db_r", Name: "grandparent_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(p1_id int not null, p2_id int not null, primary key(p1_id, p2_id), constraint fk_child_p1 foreign key (p1_id) references parent_r(id), constraint fk_child_p2 foreign key (p2_id) references parent_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("parent_r", "create table parent_r(id int primary key, constraint fk_parent_grandparent foreign key (id) references grandparent_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetGrandparent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("grandparent_r", "create table grandparent_r(id int primary key)"))
+
+	// This unsupported shared-target shape isolates the builder's source-domain
+	// cache identity. Production routed multi-worker FK causality must reject it
+	// before calling the route-aware builder.
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "p1", "p2":
+			return &filter.Table{Schema: "db_r", Name: "parent_r"}
+		case "gp1", "gp2":
+			return &filter.Table{Schema: "db_r", Name: "grandparent_r"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 2)
+
+	relationByChildIdx := make(map[int]sqlmodel.ForeignKeyCausalityRelation, 2)
+	for _, relation := range dti.ForeignKeyRelations {
+		require.Len(t, relation.ChildColumnIdx, 1)
+		relationByChildIdx[relation.ChildColumnIdx[0]] = relation
+	}
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "gp1"}).String(), relationByChildIdx[0].ParentTable)
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "gp2"}).String(), relationByChildIdx[1].ParentTable)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationSchemaAlignmentErrorGuidesRepair(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(child_id int primary key, parent_id int not null, data varchar(64) not null, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	require.Len(t, originTI.Columns, 3)
+	originTI.Columns[1].Name = ast.NewCIStr("parent_id_shadow")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(child_id int primary key, parent_id int not null, data varchar(64) not null, constraint fk_child_parent foreign key (parent_id) references parent(id))"))
+
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.ErrorContains(t, err, "foreign key causality initialization failed")
+	require.ErrorContains(t, err, "schema metadata used for FK causality are out of sync")
+	require.ErrorContains(t, err, "binlog-schema update")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationRejectsSameNameDifferentColumns(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(id int primary key, parent1_id int not null, parent2_id int not null, key idx_parent1(parent1_id), constraint fk_child_parent foreign key (parent1_id) references parent(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(id int primary key, parent1_id int not null, parent2_id int not null, key idx_parent2(parent2_id), constraint fk_child_parent foreign key (parent2_id) references parent(id))"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.ErrorContains(t, err, "foreign key causality initialization failed")
+	require.ErrorContains(t, err, "failed to match source foreign key metadata")
+	require.ErrorContains(t, err, "aligned source and downstream FK metadata")
+	require.ErrorContains(t, err, "binlog-schema update")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFKRelationMatchesRoutedRefTable(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table p1(id int primary key)", "db")
+	createAndExec("create table p2(id int primary key)", "db")
+	createAndExec("create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_p1 foreign key (parent_id) references p1(id), constraint fk_child_p2 foreign key (parent_id) references p2(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	targetParent := &filter.Table{Schema: "db_r", Name: "p2_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(parent_id int not null, key idx_parent(parent_id), constraint fk_child_p2_r foreign key (parent_id) references p2_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("p2_r", "create table p2_r(id int primary key)"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "p2":
+			return &filter.Table{Schema: "db_r", Name: "p2_r"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "p2"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFKRelationMatchesRoutedRefSchema(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db_child", "")
+	createAndExec("create database db_parent", "")
+	createAndExec("create database db_other", "")
+	createAndExec("create table parent(id int primary key)", "db_parent")
+	createAndExec("create table parent(id int primary key)", "db_other")
+	createAndExec("create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_other foreign key (parent_id) references db_other.parent(id), constraint fk_child_parent foreign key (parent_id) references db_parent.parent(id))", "db_child")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db_child", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_dst", Name: "child_r"}
+	targetParent := &filter.Table{Schema: "db_dst", Name: "parent_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(parent_id int not null, key idx_parent(parent_id), constraint fk_child_parent_r foreign key (parent_id) references parent_r(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetParent)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("parent_r", "create table parent_r(id int primary key)"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch {
+		case table.Schema == "db_child" && table.Name == "child":
+			return &filter.Table{Schema: "db_dst", Name: "child_r"}
+		case table.Schema == "db_parent" && table.Name == "parent":
+			return &filter.Table{Schema: "db_dst", Name: "parent_r"}
+		case table.Schema == "db_other" && table.Name == "parent":
+			return &filter.Table{Schema: "db_dst", Name: "other_parent_r"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db_parent", Table: "parent"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestFKRelationMatchesRefTableNoRoute(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table p1(id int primary key)", "db")
+	createAndExec("create table p2(id int primary key)", "db")
+	createAndExec("create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_p1 foreign key (parent_id) references p1(id), constraint fk_child_p2 foreign key (parent_id) references p2(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	tableIDP2 := "`db`.`p2`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_p2_downstream foreign key (parent_id) references p2(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDP2).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("p2", "create table p2(id int primary key)"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "p2"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationMatchesReferencedTableWithoutRouteCaseInsensitive(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database DB", "")
+	createAndExec("create table Parent(id int primary key)", "DB")
+	createAndExec("create table Child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_parent foreign key (parent_id) references Parent(id))", "DB")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "DB", Name: "Child"}
+	targetChild := &filter.Table{Schema: "db", Name: "child"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_parent_downstream foreign key (parent_id) references parent(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(&filter.Table{Schema: "db", Name: "parent"})).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("parent", "create table parent(id int primary key)"))
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	dti, err := tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, nil, false)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "parent"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationRejectsReferencedTableMismatchWithoutRoute(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table p1(id int primary key)", "db")
+	createAndExec("create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_p1 foreign key (parent_id) references p1(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_p2_downstream foreign key (parent_id) references p2(id))"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.ErrorContains(t, err, "aligned source and downstream FK metadata")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationDoesNotFallbackFromSameNameReferencedTableMismatch(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table p1(id int primary key)", "db")
+	createAndExec("create table p2(id int primary key)", "db")
+	createAndExec("create table child(parent_id int not null, key idx_parent(parent_id), constraint fk_child_parent foreign key (parent_id) references p1(id), constraint fk_child_other foreign key (parent_id) references p2(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	sourceChild := &filter.Table{Schema: "db", Name: "child"}
+	targetChild := &filter.Table{Schema: "db_r", Name: "child_r"}
+	mock.ExpectQuery("SHOW CREATE TABLE " + utils.GenTableID(targetChild)).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child_r", "create table child_r(parent_id int not null, key idx_parent(parent_id), constraint fk_child_parent foreign key (parent_id) references p2_r(id))"))
+
+	routeResolver := func(table *filter.Table) *filter.Table {
+		switch table.Name {
+		case "child":
+			return &filter.Table{Schema: "db_r", Name: "child_r"}
+		case "p2":
+			return &filter.Table{Schema: "db_r", Name: "p2_r"}
+		default:
+			return table
+		}
+	}
+
+	originTI, err := tracker.GetTableInfo(sourceChild)
+	require.NoError(t, err)
+	_, err = tracker.InitDownStreamForeignKeyRelations(tcontext.Background(), sourceChild, targetChild, originTI, routeResolver, true)
+	require.ErrorContains(t, err, "requires 1:1 route alignment")
+	require.ErrorContains(t, err, "`db`.`p1`")
+	require.ErrorContains(t, err, "`db_r`.`p2_r`")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationNilResolverKeepsParentRouteUnsupportedError(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table parent(id int primary key)", "db")
+	createAndExec("create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDChild := "`db`.`child`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDChild).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("child", "create table child(parent_id int primary key, constraint fk_child_parent foreign key (parent_id) references parent_r(id))"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "child"})
+	require.NoError(t, err)
+	_, err = tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDChild, originTI)
+	require.ErrorContains(t, err, "requires aligned parent tables")
+	require.ErrorContains(t, err, "source parent table")
+	require.ErrorContains(t, err, "downstream parent table")
+	require.ErrorContains(t, err, "`db`.`parent`")
+	require.ErrorContains(t, err, "`db`.`parent_r`")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestForeignKeyRelationFallsBackToDirectParentWhenUnmappable(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	createAndExec := func(sql string, db string) {
+		stmt, parseErr := p.ParseOneStmt(sql, "", "")
+		require.NoError(t, parseErr)
+		require.NoError(t, tracker.Exec(ctx, db, stmt))
+	}
+
+	createAndExec("create database db", "")
+	createAndExec("create table a(id int primary key)", "db")
+	createAndExec("create table b(id int primary key, g int, constraint fk_b_a foreign key (g) references a(id))", "db")
+	createAndExec("create table c(b_id int primary key, constraint fk_c_b foreign key (b_id) references b(id))", "db")
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableIDA := "`db`.`a`"
+	tableIDB := "`db`.`b`"
+	tableIDC := "`db`.`c`"
+
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDC).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("c", "create table c(b_id int primary key, constraint fk_c_b foreign key (b_id) references b(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDB).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("b", "create table b(id int primary key, g int, constraint fk_b_a foreign key (g) references a(id))"))
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableIDA).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("a", "create table a(id int primary key)"))
+
+	originTI, err := tracker.GetTableInfo(&filter.Table{Schema: "db", Name: "c"})
+	require.NoError(t, err)
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableIDC, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.ForeignKeyRelations, 1)
+
+	relation := dti.ForeignKeyRelations[0]
+	require.Equal(t, (&cdcmodel.TableName{Schema: "db", Table: "b"}).String(), relation.ParentTable)
+	require.Equal(t, []int{0}, relation.ChildColumnIdx)
+	require.Len(t, relation.ParentColumns, 1)
+	require.Equal(t, "id", relation.ParentColumns[0].Name.L)
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
@@ -647,7 +1596,90 @@ func TestGetDownStreamIndexInfoExceedsMaxIndexLength(t *testing.T) {
 			AddRow("test", "create table t(a bigint(20), b varbinary(767), c varbinary(767), d varbinary(767), e varbinary(767), primary key(a), key(b, c, d, e, a))"))
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
-	require.NotNil(t, dti.WhereHandle.UniqueNotNullIdx)
+	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
+}
+
+func TestWhereHandleCacheBySourceTable(t *testing.T) {
+	p := parser.New()
+	se := timock.NewContext()
+	ctx := context.Background()
+
+	createSQL := "create table t(id int primary key, a varchar(32), b varchar(32), unique key uk_a ((lower(a))))"
+	node, err := p.ParseOneStmt(createSQL, "utf8mb4", "utf8mb4_bin")
+	require.NoError(t, err)
+	sourceTI1, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	require.NoError(t, err)
+	node, err = p.ParseOneStmt(createSQL, "utf8mb4", "utf8mb4_bin")
+	require.NoError(t, err)
+	sourceTI2, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 2)
+	require.NoError(t, err)
+	hidden1 := testutil.HiddenColumnName(t, sourceTI1)
+	hidden2 := testutil.HiddenColumnName(t, sourceTI2)
+	testutil.ReorderColumnsByName(t, sourceTI1, "id", "a", hidden1, "b")
+	testutil.ReorderColumnsByName(t, sourceTI2, "id", "a", "b", hidden2)
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	targetTable := &filter.Table{Schema: "db", Name: "target"}
+	tableID := utils.GenTableID(targetTable)
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).
+			AddRow("target", createSQL))
+
+	dti, err := tracker.GetDownStreamTableInfoWithoutForeignKey(tcontext.Background(), tableID, sourceTI1)
+	require.NoError(t, err)
+
+	sourceTable1 := &filter.Table{Schema: "db", Name: "source1"}
+	sourceTable2 := &filter.Table{Schema: "db", Name: "source2"}
+	handle1 := dti.WhereHandle(sourceTable1, sourceTI1)
+	handle2 := dti.WhereHandle(sourceTable2, sourceTI2)
+	require.NotSame(t, handle1, handle2)
+	require.Same(t, handle1, dti.WhereHandle(sourceTable1, sourceTI1))
+	require.Same(t, handle2, dti.WhereHandle(sourceTable2, sourceTI2))
+
+	target := &cdcmodel.TableName{Schema: "db", Table: "target"}
+	change1 := sqlmodel.NewRowChange(
+		&cdcmodel.TableName{Schema: "db", Table: "source1"},
+		target,
+		[]any{1, "Alice", "p1"},
+		[]any{1, "Alice", "p1-updated"},
+		sourceTI1,
+		dti.TableInfo,
+		nil,
+	)
+	change1.SetWhereHandle(handle1)
+	change2 := sqlmodel.NewRowChange(
+		&cdcmodel.TableName{Schema: "db", Table: "source2"},
+		target,
+		[]any{2, "Bob", "p2"},
+		[]any{2, "Bob", "p2-updated"},
+		sourceTI2,
+		dti.TableInfo,
+		nil,
+	)
+	change2.SetWhereHandle(handle2)
+
+	sql, args := sqlmodel.GenUpdateSQL(change1, change2)
+	require.Equal(t, "UPDATE `db`.`target` SET "+
+		"`id`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, "+
+		"`a`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END, "+
+		"`b`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END "+
+		"WHERE (`id` = ?) OR (`id` = ?)", sql)
+	require.Equal(t, []any{
+		1, 1, 2, 2,
+		1, "Alice", 2, "Bob",
+		1, "p1-updated", 2, "p2-updated",
+		1, 2,
+	}, args)
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestReTrackDownStreamIndex(t *testing.T) {

@@ -39,9 +39,9 @@ func TestCheckingItems(t *testing.T) {
 
 	// ignore all checking items
 	ignoredCheckingItems := []string{AllChecking}
-	require.Nil(t, FilterCheckingItems(ignoredCheckingItems))
+	require.Empty(t, FilterCheckingItems(ignoredCheckingItems))
 	ignoredCheckingItems = append(ignoredCheckingItems, ShardTableSchemaChecking)
-	require.Nil(t, FilterCheckingItems(ignoredCheckingItems))
+	require.Empty(t, FilterCheckingItems(ignoredCheckingItems))
 
 	// ignore shard checking items
 	checkingItems := make(map[string]string)

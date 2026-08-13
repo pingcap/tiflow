@@ -391,7 +391,7 @@ func (s *Server) DMAPIGetSourceTableList(c *gin.Context, sourceName string, sche
 		return
 	}
 	defer baseDB.Close()
-	tableList, err := dbutil.GetTables(c.Request.Context(), baseDB.DB, schemaName)
+	tableList, err := conn.GetTables(c.Request.Context(), baseDB.DB, schemaName)
 	if err != nil {
 		_ = c.Error(err)
 		return
@@ -485,7 +485,8 @@ func (s *Server) DMAPIDeleteTask(c *gin.Context, taskName string, params openapi
 	if params.Force != nil && *params.Force {
 		force = *params.Force
 	}
-	if err := s.deleteTask(ctx, taskName, force); err != nil {
+	keepMeta := params.KeepMeta != nil && *params.KeepMeta
+	if err := s.deleteTask(ctx, taskName, force, keepMeta); err != nil {
 		_ = c.Error(err)
 		return
 	}

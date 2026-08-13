@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -38,7 +38,7 @@ type Decoder struct {
 	marshaller marshaller
 
 	upstreamTiDB *sql.DB
-	storage      storage.ExternalStorage
+	storage      storeapi.Storage
 
 	value []byte
 	msg   *message
@@ -53,7 +53,7 @@ type Decoder struct {
 // NewDecoder returns a new Decoder
 func NewDecoder(ctx context.Context, config *common.Config, db *sql.DB) (*Decoder, error) {
 	var (
-		externalStorage storage.ExternalStorage
+		externalStorage storeapi.Storage
 		err             error
 	)
 	if config.LargeMessageHandle.EnableClaimCheck() {

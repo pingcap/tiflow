@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/errno"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/parser/types"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,6 +57,25 @@ func genRowChangeJob(tbl filter.Table, tblInfo *model.TableInfo, key string, tp 
 			beforeImage, afterImage, tblInfo, tblInfo, nil,
 		),
 	}
+}
+
+func addHiddenColumn(t *testing.T, ti *model.TableInfo, name string) string {
+	t.Helper()
+
+	hiddenCol := *ti.Columns[0]
+	hiddenCol.Name = pmodel.NewCIStr(name)
+	hiddenCol.Hidden = true
+	hiddenCol.Offset = len(ti.Columns)
+	ti.Columns = append(ti.Columns, &hiddenCol)
+	return hiddenCol.Name.L
+}
+
+func columnNames(columns []*model.ColumnInfo) []string {
+	names := make([]string, 0, len(columns))
+	for _, col := range columns {
+		names = append(names, col.Name.L)
+	}
+	return names
 }
 
 func TestValidatorWorkerValidateTableChanges(t *testing.T) {
@@ -523,6 +544,54 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	require.Equal(t, "1", rows["a"][1].String)
 	require.Equal(t, "1", rows["b"][0].String)
 	require.Equal(t, "2", rows["b"][1].String)
+}
+
+func TestValidatorWorkerUsesVisibleColumns(t *testing.T) {
+	tbl := filter.Table{Schema: "test", Name: "tbl"}
+	tableInfo := genValidateTableInfo(t, "create table tbl(a int, id int primary key, b int)")
+	hidden := addHiddenColumn(t, tableInfo, "_V$_hidden")
+	testutil.ReorderColumnsByName(t, tableInfo, "a", hidden, "id", "b")
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	mock.ExpectQuery("SELECT .*`a`, `id`, `b`.* FROM `test`.`tbl` WHERE id in \\(\\?\\)").
+		WithArgs("42").
+		WillReturnRows(sqlmock.NewRows([]string{"a", "id", "b"}).AddRow("7", "42", "9"))
+
+	cfg := genSubtaskConfig(t)
+	cfg.ValidatorCfg.Mode = config.ValidationFull
+	worker := &validateWorker{
+		cfg: cfg.ValidatorCfg,
+		ctx: context.Background(),
+		db:  conn.NewBaseDBForTest(db, func() {}),
+		L:   log.L(),
+	}
+	failedRows, err := worker.batchValidateRowChanges(
+		[]*rowValidationJob{genRowChangeJob(tbl, tableInfo, "42", rowInsert, []interface{}{7, 42, 9})},
+		false,
+	)
+	require.NoError(t, err)
+	require.Empty(t, failedRows)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTableInfoForVisibleColumnCount(t *testing.T) {
+	tableInfo := genValidateTableInfo(t, "create table tbl(id int primary key, a int, b int)")
+	hidden := addHiddenColumn(t, tableInfo, "_V$_hidden")
+	testutil.ReorderColumnsByName(t, tableInfo, "id", "a", hidden, "b")
+
+	eventTableInfo, ok := tableInfoForVisibleColumnCount(tableInfo, 2)
+	require.True(t, ok)
+	require.NotSame(t, tableInfo, eventTableInfo)
+	require.Equal(t, []string{"id", "a", hidden}, columnNames(eventTableInfo.Columns))
+
+	eventTableInfo, ok = tableInfoForVisibleColumnCount(tableInfo, 3)
+	require.True(t, ok)
+	require.Same(t, tableInfo, eventTableInfo)
+
+	_, ok = tableInfoForVisibleColumnCount(tableInfo, 4)
+	require.False(t, ok)
 }
 
 func TestValidatorIsRetryableDBError(t *testing.T) {

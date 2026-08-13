@@ -92,12 +92,19 @@ type Server struct {
 	worker *SourceWorker
 	// relay status will never be put in server.sourceStatus
 	sourceStatus pb.SourceStatus
+
+	retryLogger *zap.Logger
 }
 
 // NewServer creates a new Server.
 func NewServer(cfg *Config) *Server {
+	retryLogger := log.With(
+		zap.String("component", "worker server"),
+		zap.String("worker", cfg.Name),
+	)
 	s := Server{
-		cfg: cfg,
+		cfg:         cfg,
+		retryLogger: log.NewRetrySampleLogger(retryLogger),
 	}
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 	s.closed.Store(true) // not start yet
@@ -323,7 +330,7 @@ func (s *Server) observeRelayConfig(ctx context.Context, rev int64) error {
 				case <-time.After(500 * time.Millisecond):
 					relaySource, rev1, err1 := ha.GetRelayConfig(s.etcdClient, s.cfg.Name)
 					if err1 != nil {
-						log.L().Error("get relay config from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
+						s.retryLogger.Error("get relay config from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++
 						if retryNum > retryGetRelayConfig && etcdutil.IsLimitedRetryableError(err1) {
 							return err1
@@ -416,7 +423,7 @@ func (s *Server) observeSourceBound(ctx context.Context, rev int64) error {
 				case <-time.After(500 * time.Millisecond):
 					bound, cfg, rev1, err1 := ha.GetSourceBoundConfig(s.etcdClient, s.cfg.Name)
 					if err1 != nil {
-						log.L().Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
+						s.retryLogger.Error("get source bound from etcd failed, will retry later", zap.Error(err1), zap.Int("retryNum", retryNum))
 						retryNum++
 						if retryNum > retryGetSourceBoundConfig && etcdutil.IsLimitedRetryableError(err1) {
 							return err1
@@ -486,7 +493,7 @@ func (s *Server) doClose() {
 
 	// stop worker and wait for return(we already lock the whole Sever, so no need use lock to get source worker)
 	if w := s.getSourceWorker(true); w != nil {
-		w.Stop(true)
+		w.StopForFailover(true)
 	}
 
 	// close listener at last, so we can get status from it if worker failed to close in previous step
@@ -585,7 +592,7 @@ func (s *Server) stopSourceWorker(sourceID string, needLock, graceful bool) erro
 	s.UpdateKeepAliveTTL(s.cfg.KeepAliveTTL)
 	s.setWorker(nil, false)
 	s.setSourceStatus("", nil, false)
-	w.Stop(graceful)
+	w.StopForFailover(graceful)
 	return nil
 }
 
@@ -811,6 +818,13 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 
 	var err error
 	resp.SubTaskStatus, sourceStatus.RelayStatus, err = w.QueryStatus(ctx, req.Name)
+
+	if sourceErr := w.getSourceStatusErr(); sourceErr != nil {
+		if resp.SourceStatus.Result == nil {
+			resp.SourceStatus.Result = &pb.ProcessResult{}
+		}
+		resp.SourceStatus.Result.Errors = append(resp.SourceStatus.Result.Errors, sourceErr)
+	}
 
 	if err != nil {
 		resp.Msg = fmt.Sprintf("error when get master status: %v", err)

@@ -80,6 +80,55 @@ func TestGetRandomServerID(t *testing.T) {
 	require.NotEqual(t, 101, serverID)
 }
 
+func TestGetTables(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	schema := "test_db"
+	tables := []string{"tbl1", "tbl2"}
+
+	rows := sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema), "Table_type"})
+	addRowsForTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
+
+	got, err := GetTables(context.Background(), db, schema)
+	require.NoError(t, err)
+	require.Equal(t, tables, got)
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema), "Table_type", "Auto_partition", "Table_group"})
+	addRowsForPolarDBXTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)).WillReturnRows(rows)
+
+	got, err = GetTables(context.Background(), db, schema)
+	require.NoError(t, err)
+	require.Equal(t, tables, got)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetTablesErrors(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	schema := "test_db"
+	query := fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", schema)
+
+	mock.ExpectQuery(query).WillReturnError(errors.New("query failed"))
+	_, err = GetTables(context.Background(), db, schema)
+	require.ErrorContains(t, err, "query failed")
+	require.NoError(t, mock.ExpectationsWereMet())
+
+	rows := sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", schema)}).AddRow("tbl1")
+	mock.ExpectQuery(query).WillReturnRows(rows)
+	_, err = GetTables(context.Background(), db, schema)
+	require.ErrorContains(t, err, "unexpected SHOW FULL TABLES result column count 1")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 func TestGetMariaDBGtidDomainID(t *testing.T) {
 	t.Parallel()
 
@@ -199,8 +248,8 @@ func TestGetGTID(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 
-	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("GTID_MODE", "ON")
-	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'GTID_MODE'`).WillReturnRows(rows)
+	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_mode", "ON")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_mode'`).WillReturnRows(rows)
 	mode, err := GetGTIDMode(tctx, NewBaseDBForTest(db))
 	require.NoError(t, err)
 	require.Equal(t, "ON", mode)
@@ -436,11 +485,26 @@ func TestGetSlaveServerID(t *testing.T) {
 	require.NoError(t, err)
 
 	cases := []struct {
+		version string
+		stmt    string
 		rows    *sqlmock.Rows
 		results map[uint32]struct{}
 	}{
-		// For MySQL
+		// For MySQL 8.4
 		{
+			"8.4.8",
+			"SHOW REPLICAS",
+			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Source_id", "Replica_UUID"}).
+				AddRow(192168010, "iconnect2", 3306, 192168011, "14cb6624-7f93-11e0-b2c0-c80aa9429562").
+				AddRow(1921680101, "athena", 3306, 192168011, "07af4990-f41f-11df-a566-7ac56fdaf645"),
+			map[uint32]struct{}{
+				192168010: {}, 1921680101: {},
+			},
+		},
+		// For MySQL 8.0
+		{
+			"8.0.45",
+			"SHOW SLAVE HOSTS",
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id", "Slave_UUID"}).
 				AddRow(192168010, "iconnect2", 3306, 192168011, "14cb6624-7f93-11e0-b2c0-c80aa9429562").
 				AddRow(1921680101, "athena", 3306, 192168011, "07af4990-f41f-11df-a566-7ac56fdaf645"),
@@ -450,6 +514,8 @@ func TestGetSlaveServerID(t *testing.T) {
 		},
 		// For MariaDB
 		{
+			"10.4.7-MariaDB",
+			"SHOW SLAVE HOSTS",
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(192168010, "iconnect2", 3306, 192168011).
 				AddRow(1921680101, "athena", 3306, 192168011),
@@ -459,6 +525,8 @@ func TestGetSlaveServerID(t *testing.T) {
 		},
 		// For MariaDB, with Server_id greater than 2^31, to test uint conversion
 		{
+			"10.4.7-MariaDB",
+			"SHOW SLAVE HOSTS",
 			sqlmock.NewRows([]string{"Server_id", "Host", "Port", "Master_id"}).
 				AddRow(2147483649, "iconnect2", 3306, 192168011).
 				AddRow(2147483650, "athena", 3306, 192168011),
@@ -470,8 +538,8 @@ func TestGetSlaveServerID(t *testing.T) {
 
 	tctx := tcontext.NewContext(context.Background(), log.L())
 	for _, ca := range cases {
-		mock.ExpectQuery("SHOW SLAVE HOSTS").WillReturnRows(ca.rows)
-		results, err2 := GetSlaveServerID(tctx, NewBaseDBForTest(db))
+		mock.ExpectQuery(ca.stmt).WillReturnRows(ca.rows)
+		results, err2 := GetSlaveServerID(tctx, NewBaseDBForTestWithVersion(db, ca.version))
 		require.NoError(t, err2)
 		require.Equal(t, ca.results, results)
 	}
@@ -552,6 +620,18 @@ func TestFetchAllDoTables(t *testing.T) {
 	require.Len(t, got, 1)
 	require.Equal(t, []string{"tbl1", "tbl2"}, got[doSchema])
 	require.NoError(t, mock.ExpectationsWereMet())
+
+	rows = sqlmock.NewRows([]string{"Database"})
+	addRowsForSchemas(rows, schemas)
+	mock.ExpectQuery(`SHOW DATABASES`).WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{fmt.Sprintf("Tables_in_%s", doSchema), "Table_type", "Auto_partition", "Table_group"})
+	addRowsForPolarDBXTables(rows, tables)
+	mock.ExpectQuery(fmt.Sprintf("SHOW FULL TABLES IN `%s` WHERE Table_Type != 'VIEW'", doSchema)).WillReturnRows(rows)
+	got, err = FetchAllDoTables(context.Background(), NewBaseDBForTest(db), ba)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Equal(t, []string{"tbl1", "tbl2"}, got[doSchema])
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestFetchTargetDoTables(t *testing.T) {
@@ -616,6 +696,27 @@ func TestFetchTargetDoTables(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRouteTargetDoTables(t *testing.T) {
+	t.Parallel()
+
+	r, err := regexprrouter.NewRegExprRouter(false, []*router.TableRule{
+		{SchemaPattern: "shard*", TablePattern: "tbl*", TargetSchema: "shard", TargetTable: "tbl"},
+	})
+	require.NoError(t, err)
+
+	tablesMap, extendedCols, err := RouteTargetDoTables("", map[string][]string{
+		"shard1": {"tbl1", "tbl2"},
+	}, r)
+	require.NoError(t, err)
+	require.Equal(t, map[filter.Table][]filter.Table{
+		{Schema: "shard", Name: "tbl"}: {
+			{Schema: "shard1", Name: "tbl1"},
+			{Schema: "shard1", Name: "tbl2"},
+		},
+	}, tablesMap)
+	require.Empty(t, extendedCols)
+}
+
 func addRowsForSchemas(rows *sqlmock.Rows, schemas []string) {
 	for _, d := range schemas {
 		rows.AddRow(d)
@@ -626,4 +727,31 @@ func addRowsForTables(rows *sqlmock.Rows, tables []string) {
 	for _, table := range tables {
 		rows.AddRow(table, "BASE TABLE")
 	}
+}
+
+func addRowsForPolarDBXTables(rows *sqlmock.Rows, tables []string) {
+	for _, table := range tables {
+		rows.AddRow(table, "BASE TABLE", "NO", "single_tg")
+	}
+}
+
+func TestGetGTIDMode(t *testing.T) {
+	t.Parallel()
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+
+	tctx := tcontext.NewContext(context.Background(), log.L())
+
+	// Mock the query for GetGlobalVariable
+	rows := mock.NewRows([]string{"Variable_name", "Value"}).AddRow("gtid_mode", "ON")
+	mock.ExpectQuery(`SHOW GLOBAL VARIABLES LIKE 'gtid_mode'`).WillReturnRows(rows)
+
+	// Call the actual GetGTIDMode function
+	gtidMode, err := GetGTIDMode(tctx, NewBaseDBForTest(db))
+
+	// Assert the results when we use lowercase gtid_mode
+	require.NoError(t, err)
+	require.Equal(t, "ON", gtidMode)
+	require.NoError(t, mock.ExpectationsWereMet())
 }

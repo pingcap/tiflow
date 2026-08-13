@@ -150,10 +150,9 @@ func (s *EventRouter) VerifyTables(infos []*model.TableInfo) error {
 				}
 			}
 		case *partition.ColumnsDispatcher:
-			_, ok := table.OffsetsByNames(v.Columns)
-			if !ok {
-				return cerror.ErrDispatcherFailed.GenWithStack(
-					"columns not found when verify the table, table: %v, columns: %v", table.TableName, v.Columns)
+			_, err := table.OffsetsByNames(v.Columns)
+			if err != nil {
+				return err
 			}
 		default:
 		}

@@ -32,6 +32,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestTestLogger(t *testing.T) {
@@ -46,6 +47,41 @@ func TestTestLogger(t *testing.T) {
 	logger.ErrorFilterContextCanceled("the message", zap.Int("number", 123456),
 		zap.Ints("array", []int{7, 8, 9}), ShortError(errors.Annotate(context.Canceled, "extra info")))
 	require.Empty(t, buffer.Stripped())
+}
+
+func TestNewRetrySampleLogger(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	base := Logger{zap.New(core).With(zap.String("base", "logger"))}
+	logger := NewRetrySampleLogger(base, zap.String("component", "retry-unit-test"))
+
+	for i := 1; i <= retryLogSampleFirst+1; i++ {
+		logger.Error("retryable operation failed", zap.Int("retryNum", i))
+	}
+	logger.Warn("retryable operation failed", zap.Int("retryNum", 3))
+	logger.Error("another retryable operation failed", zap.Int("retryNum", retryLogSampleFirst+2))
+
+	entries := observed.All()
+	require.Len(t, entries, retryLogSampleFirst+2)
+
+	require.Equal(t, "retryable operation failed", entries[0].Message)
+	require.Equal(t, zap.ErrorLevel, entries[0].Level)
+	require.Equal(t, map[string]any{
+		"base":      "logger",
+		"component": "retry-unit-test",
+		"retryNum":  int64(1),
+		"sampled":   "",
+	}, entries[0].ContextMap())
+
+	require.Equal(t, "retryable operation failed", entries[retryLogSampleFirst-1].Message)
+	require.Equal(t, zap.ErrorLevel, entries[retryLogSampleFirst-1].Level)
+	require.Equal(t, int64(retryLogSampleFirst), entries[retryLogSampleFirst-1].ContextMap()["retryNum"])
+
+	require.Equal(t, "retryable operation failed", entries[retryLogSampleFirst].Message)
+	require.Equal(t, zap.WarnLevel, entries[retryLogSampleFirst].Level)
+
+	require.Equal(t, "another retryable operation failed", entries[retryLogSampleFirst+1].Message)
+	require.Equal(t, zap.ErrorLevel, entries[retryLogSampleFirst+1].Level)
+	require.Equal(t, int64(retryLogSampleFirst+2), entries[retryLogSampleFirst+1].ContextMap()["retryNum"])
 }
 
 // makeTestLogger creates a Logger instance which produces JSON logs.

@@ -89,6 +89,8 @@ type Config struct {
 	DebeziumDisableSchema bool
 	// Debezium only. Whether before value should be included in the output.
 	DebeziumOutputOldValue bool
+	// CSV only. Whether header should be included in the output.
+	CSVOutputFieldHeader bool
 }
 
 // EncodingFormatType is the type of encoding format
@@ -129,6 +131,7 @@ func NewConfig(protocol config.Protocol) *Config {
 		DebeziumOutputOldValue: true,
 		OpenOutputOldValue:     true,
 		DebeziumDisableSchema:  false,
+		CSVOutputFieldHeader:   false,
 	}
 }
 
@@ -233,6 +236,7 @@ func (c *Config) Apply(sinkURI *url.URL, replicaConfig *config.ReplicaConfig) er
 			c.BinaryEncodingMethod = replicaConfig.Sink.CSVConfig.BinaryEncodingMethod
 			c.OutputOldValue = replicaConfig.Sink.CSVConfig.OutputOldValue
 			c.OutputHandleKey = replicaConfig.Sink.CSVConfig.OutputHandleKey
+			c.CSVOutputFieldHeader = replicaConfig.Sink.CSVConfig.OutputFieldHeader
 		}
 		if replicaConfig.Sink.KafkaConfig != nil && replicaConfig.Sink.KafkaConfig.LargeMessageHandle != nil {
 			c.LargeMessageHandle = replicaConfig.Sink.KafkaConfig.LargeMessageHandle
@@ -339,9 +343,9 @@ func (c *Config) WithChangefeedID(id model.ChangeFeedID) *Config {
 // Validate the Config
 func (c *Config) Validate() error {
 	if c.EnableTiDBExtension &&
-		!(c.Protocol == config.ProtocolCanalJSON || c.Protocol == config.ProtocolAvro) {
+		!(c.Protocol == config.ProtocolCanalJSON || c.Protocol == config.ProtocolAvro || c.Protocol == config.ProtocolDebezium) {
 		log.Warn("ignore invalid config, enable-tidb-extension"+
-			"only supports canal-json/avro protocol",
+			"only supports canal-json/avro/debezium protocol",
 			zap.Bool("enableTidbExtension", c.EnableTiDBExtension),
 			zap.String("protocol", c.Protocol.String()))
 	}

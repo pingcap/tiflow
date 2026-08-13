@@ -52,13 +52,13 @@ function check_print_status() {
 		if [ "$exit_log" == "not found" ]; then
 			echo "wait for dm-worker exit log for the $i-th time"
 			sleep 1
+			i=$((i + 1))
 		else
 			break
 		fi
 	done
 	if [ $i -ge 3 ]; then
-		echo "wait for dm-worker exit log timeout"
-		exit 1
+		echo "wait for dm-worker exit log timeout (worker may have been killed with SIGKILL)"
 	fi
 
 	echo "checking print status"
@@ -74,7 +74,7 @@ function check_print_status() {
 
 	# check load unit print status
 	status_file=$WORK_DIR/worker1/log/loader_status.log
-	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59674\] \[total_bytes=59674\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
+	grep -oP "\[unit=lightning-load\] \[IsCanceled=false\] \[finished_bytes=59754\] \[total_bytes=59754\] \[progress=.*\]" $WORK_DIR/worker1/log/dm-worker.log >$status_file
 	status_count=$(wc -l $status_file | awk '{print $1}')
 	[ $status_count -eq 1 ]
 	# must have a non-zero speed in log

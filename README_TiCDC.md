@@ -2,6 +2,10 @@
 
 **TiCDC** is [TiDB](https://docs.pingcap.com/tidb/stable)'s change data capture framework. It replicates change data to various downstream systems, such as MySQL protocol-compatible databases and [Kafka](https://kafka.apache.org/).
 
+> **Note**:
+>
+> This repository is only used for TiCDC versions v8.5 and lower, or v9.0 and up [github.com/pingcap/ticdc](https://github.com/pingcap/ticdc) is used.
+
 ## Architecture
 
 <img src="docs/media/cdc_architecture.svg?sanitize=true" alt="architecture" width="600"/>

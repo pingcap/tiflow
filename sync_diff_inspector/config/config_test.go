@@ -16,12 +16,16 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
 func TestParseConfig(t *testing.T) {
+	tmpDir := filepath.Join(t.TempDir(), "output")
+
 	cfg := NewConfig()
 	require.Nil(t, cfg.Parse([]string{"-L", "info", "--config", "config.toml"}))
 	cfg = NewConfig()
@@ -32,32 +36,100 @@ func TestParseConfig(t *testing.T) {
 	require.Contains(t, err.Error(), "LL")
 
 	require.Nil(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = tmpDir
 	require.Nil(t, cfg.Init())
 	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))
 
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
+	cfg.Task.OutputDir = tmpDir
 	// we change the config from config.toml to config_sharding.toml
 	// this action will raise error.
 	require.Contains(t, cfg.Init().Error(), "failed to init Task: config changes breaking the checkpoint, please use another outputDir and start over again")
 
-	require.NoError(t, os.RemoveAll(cfg.Task.OutputDir))
+	require.NoError(t, os.RemoveAll(tmpDir))
 	require.Nil(t, cfg.Parse([]string{"--config", "config_sharding.toml"}))
+	cfg.Task.OutputDir = tmpDir
 	// this time will be ok, because we remove the last outputDir.
 	require.Nil(t, cfg.Init())
 	require.Nil(t, cfg.Task.Init(cfg.DataSources, cfg.TableConfigs))
+	require.True(t, cfg.ExportFixSQL)
+	require.True(t, cfg.Task.ExportFixSQL)
+	require.Equal(t, SplitterStrategyAuto, cfg.SplitterStrategy)
+	require.Equal(t, SplitterStrategyAuto, cfg.Task.SplitterStrategy)
 
 	require.True(t, cfg.CheckConfig())
 
 	// we might not use the same config to run this test. e.g. MYSQL_PORT can be 4000
-	require.JSONEq(t, cfg.String(),
-		"{\"check-thread-count\":4,\"split-thread-count\":5,\"export-fix-sql\":true,\"check-struct-only\":false,\"dm-addr\":\"\",\"dm-task\":\"\",\"data-sources\":{\"mysql1\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null},\"mysql2\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null},\"mysql3\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule3\"],\"Router\":{\"Selector\":{}},\"Conn\":null},\"tidb0\":{\"host\":\"127.0.0.1\",\"port\":4000,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":null,\"Router\":{\"Selector\":{}},\"Conn\":null}},\"routes\":{\"rule1\":{\"schema-pattern\":\"test_*\",\"table-pattern\":\"t_*\",\"target-schema\":\"test\",\"target-table\":\"t\"},\"rule2\":{\"schema-pattern\":\"test2_*\",\"table-pattern\":\"t2_*\",\"target-schema\":\"test2\",\"target-table\":\"t2\"},\"rule3\":{\"schema-pattern\":\"test2_*\",\"table-pattern\":\"t2_*\",\"target-schema\":\"test\",\"target-table\":\"t\"}},\"table-configs\":{\"config1\":{\"target-tables\":[\"schema*.table*\",\"test2.t2\"],\"Schema\":\"\",\"Table\":\"\",\"ConfigIndex\":0,\"HasMatched\":false,\"IgnoreColumns\":[\"\",\"\"],\"Fields\":[\"\"],\"Range\":\"age \\u003e 10 AND age \\u003c 20\",\"TargetTableInfo\":null,\"Collation\":\"\",\"chunk-size\":0}},\"task\":{\"source-instances\":[\"mysql1\",\"mysql2\",\"mysql3\"],\"source-routes\":null,\"target-instance\":\"tidb0\",\"target-check-tables\":[\"schema*.table*\",\"!c.*\",\"test2.t2\"],\"target-configs\":[\"config1\"],\"output-dir\":\"/tmp/output/config\",\"SourceInstances\":[{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null},{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null},{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule3\"],\"Router\":{\"Selector\":{}},\"Conn\":null}],\"TargetInstance\":{\"host\":\"127.0.0.1\",\"port\":4000,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"security\":null,\"route-rules\":null,\"Router\":{\"Selector\":{}},\"Conn\":null},\"TargetTableConfigs\":[{\"target-tables\":[\"schema*.table*\",\"test2.t2\"],\"Schema\":\"\",\"Table\":\"\",\"ConfigIndex\":0,\"HasMatched\":false,\"IgnoreColumns\":[\"\",\"\"],\"Fields\":[\"\"],\"Range\":\"age \\u003e 10 AND age \\u003c 20\",\"TargetTableInfo\":null,\"Collation\":\"\",\"chunk-size\":0}],\"TargetCheckTables\":[{},{},{}],\"FixDir\":\"/tmp/output/config/fix-on-tidb0\",\"CheckpointDir\":\"/tmp/output/config/checkpoint\",\"HashFile\":\"\"},\"ConfigFile\":\"config_sharding.toml\",\"PrintVersion\":false}")
+	expectedJSON := strings.ReplaceAll(
+		"{\"check-thread-count\":4,\"split-thread-count\":5,\"export-fix-sql\":true,\"check-struct-only\":false,\"dm-addr\":\"\",\"dm-task\":\"\",\"data-sources\":{\"mysql1\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},\"mysql2\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},\"mysql3\":{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule3\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},\"tidb0\":{\"host\":\"127.0.0.1\",\"port\":4000,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":null,\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":{\"max_execution_time\":86400,\"tidb_opt_prefer_range_scan\":\"ON\"}}},\"routes\":{\"rule1\":{\"schema-pattern\":\"test_*\",\"table-pattern\":\"t_*\",\"target-schema\":\"test\",\"target-table\":\"t\"},\"rule2\":{\"schema-pattern\":\"test2_*\",\"table-pattern\":\"t2_*\",\"target-schema\":\"test2\",\"target-table\":\"t2\"},\"rule3\":{\"schema-pattern\":\"test2_*\",\"table-pattern\":\"t2_*\",\"target-schema\":\"test\",\"target-table\":\"t\"}},\"table-configs\":{\"config1\":{\"target-tables\":[\"schema*.table*\",\"test2.t2\"],\"Schema\":\"\",\"Table\":\"\",\"ConfigIndex\":0,\"HasMatched\":false,\"IgnoreColumns\":[\"\",\"\"],\"Fields\":[\"\"],\"Range\":\"age \\u003e 10 AND age \\u003c 20\",\"TargetTableInfo\":null,\"Collation\":\"\",\"chunk-size\":0}},\"task\":{\"source-instances\":[\"mysql1\",\"mysql2\",\"mysql3\"],\"source-routes\":null,\"target-instance\":\"tidb0\",\"target-check-tables\":[\"schema*.table*\",\"!c.*\",\"test2.t2\"],\"target-configs\":[\"config1\"],\"output-dir\":\"OUTPUT_DIR_PLACEHOLDER\",\"SourceInstances\":[{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule2\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null},{\"host\":\"127.0.0.1\",\"port\":3306,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":[\"rule1\",\"rule3\"],\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":null}],\"TargetInstance\":{\"host\":\"127.0.0.1\",\"port\":4000,\"user\":\"root\",\"password\":\"******\",\"sql-mode\":\"\",\"snapshot\":\"\",\"sql-hint-use-index\":\"\",\"security\":null,\"route-rules\":null,\"Router\":{\"Selector\":{}},\"Conn\":null,\"session\":{\"max_execution_time\":86400,\"tidb_opt_prefer_range_scan\":\"ON\"}},\"TargetTableConfigs\":[{\"target-tables\":[\"schema*.table*\",\"test2.t2\"],\"Schema\":\"\",\"Table\":\"\",\"ConfigIndex\":0,\"HasMatched\":false,\"IgnoreColumns\":[\"\",\"\"],\"Fields\":[\"\"],\"Range\":\"age \\u003e 10 AND age \\u003c 20\",\"TargetTableInfo\":null,\"Collation\":\"\",\"chunk-size\":0}],\"TargetCheckTables\":[{},{},{}],\"FixDir\":\"OUTPUT_DIR_PLACEHOLDER/fix-on-tidb0\",\"CheckpointDir\":\"OUTPUT_DIR_PLACEHOLDER/checkpoint\",\"HashFile\":\"\"},\"ConfigFile\":\"config_sharding.toml\",\"PrintVersion\":false}",
+		"OUTPUT_DIR_PLACEHOLDER", tmpDir)
+	expectedJSON = strings.Replace(expectedJSON, "\"source-routes\":null,\"target-instance\"", "\"source-routes\":null,\"syncpoint-changefeed\":\"\",\"target-instance\"", 1)
+	require.JSONEq(t, cfg.String(), expectedJSON)
 	hash, err := cfg.Task.ComputeConfigHash()
 	require.NoError(t, err)
-	require.Equal(t, hash, "c080f9894ec24aadb4aaec1109cd1951454f09a1233f2034bc3b06e0903cb289")
-
+	require.Equal(t, "da56a5b0a5179c3f23a3df82571a378543c196776327b315b65a2d63bde83bf9", hash)
 	require.True(t, cfg.TableConfigs["config1"].Valid())
+}
 
-	require.NoError(t, os.RemoveAll(cfg.Task.OutputDir))
+func TestComputeConfigHashIncludesExportFixSQL(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	require.NoError(t, cfg.Init())
+
+	cfg.Task.ExportFixSQL = true
+	withFixSQL, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	cfg.Task.ExportFixSQL = false
+	withoutFixSQL, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	require.NotEqual(t, withFixSQL, withoutFixSQL)
+}
+
+func TestComputeConfigHashIncludesSplitterStrategy(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	require.NoError(t, cfg.Init())
+
+	cfg.Task.SplitterStrategy = SplitterStrategyRandom
+	randomHash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	cfg.Task.SplitterStrategy = SplitterStrategyLimit
+	limitHash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	require.NotEqual(t, randomHash, limitHash)
+}
+
+func TestComputeConfigHashIncludesSyncpointChangefeed(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	require.NoError(t, cfg.Init())
+
+	cfg.Task.SyncpointChangefeed = "default/cf-1"
+	cf1Hash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	cfg.Task.SyncpointChangefeed = "default/cf-2"
+	cf2Hash, err := cfg.Task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	require.NotEqual(t, cf1Hash, cf2Hash)
+}
+
+func TestInitNormalizesSplitterStrategyBeforeCheckpointHash(t *testing.T) {
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
+	cfg.SplitterStrategy = " RANDOM "
+	require.NoError(t, cfg.Init())
+	require.Equal(t, SplitterStrategyRandom, cfg.SplitterStrategy)
+	require.Equal(t, SplitterStrategyRandom, cfg.Task.SplitterStrategy)
 }
 
 func TestError(t *testing.T) {
@@ -108,4 +180,83 @@ func TestNoSecretLeak(t *testing.T) {
 	s := DataSource{}
 	json.Unmarshal(sourceJSON, &s)
 	require.Equal(t, string(s.Password), "meow~~~")
+}
+
+func TestParseSyncpointChangefeed(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.toml")
+	configContent := `
+check-thread-count = 4
+export-fix-sql = true
+check-struct-only = false
+
+[data-sources.upstream]
+host = "127.0.0.1"
+port = 4000
+user = "root"
+password = ""
+snapshot = "auto"
+
+[data-sources.downstream]
+host = "127.0.0.1"
+port = 4001
+user = "root"
+password = ""
+snapshot = "auto"
+
+[task]
+output-dir = "output"
+source-instances = ["upstream"]
+target-instance = "downstream"
+target-check-tables = ["test.*"]
+syncpoint-changefeed = "ks2/random-cdc-000002-ks2"
+`
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), LocalFilePerm))
+
+	cfg := NewConfig()
+	require.NoError(t, cfg.Parse([]string{"--config", configPath}))
+	require.Equal(t, "ks2/random-cdc-000002-ks2", cfg.Task.SyncpointChangefeed)
+}
+
+func TestComputeConfigHashIgnoresTLSName(t *testing.T) {
+	task := &TaskConfig{
+		SourceInstances: []*DataSource{
+			{
+				Host: "127.0.0.1",
+				Port: 4000,
+				User: "root",
+				Security: &Security{
+					TLSName: "source-tls-1",
+					CAPath:  "/tmp/source-ca.pem",
+				},
+			},
+		},
+		TargetInstance: &DataSource{
+			Host: "127.0.0.1",
+			Port: 4001,
+			User: "root",
+			Security: &Security{
+				TLSName: "target-tls-1",
+				CAPath:  "/tmp/target-ca.pem",
+			},
+		},
+		TargetTableConfigs: []*TableConfig{
+			{TargetTables: []string{"test.t1"}},
+		},
+		CheckTables: []string{"test.t1"},
+	}
+
+	hash1, err := task.ComputeConfigHash()
+	require.NoError(t, err)
+
+	task.SourceInstances[0].Security.TLSName = "source-tls-2"
+	task.TargetInstance.Security.TLSName = "target-tls-2"
+
+	hash2, err := task.ComputeConfigHash()
+	require.NoError(t, err)
+	require.Equal(t, hash1, hash2)
+
+	task.TargetInstance.Security.CAPath = "/tmp/target-ca-new.pem"
+	hash3, err := task.ComputeConfigHash()
+	require.NoError(t, err)
+	require.NotEqual(t, hash2, hash3)
 }

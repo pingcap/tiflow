@@ -461,6 +461,28 @@ function DM_CREATE_DROP_TABLE() {
 	run_case CREATE_DROP_TABLE "double-source-optimistic" "init_table 111 121 211 221" "clean_table" "optimistic"
 }
 
+function DM_CHANGE_UTF_CHARSET_CASE() {
+	run_sql_source1 "alter table ${shardddl1}.${tb1} character set utf8mb4 collate utf8mb4_bin;"
+	run_sql_source1 "insert into ${shardddl1}.${tb1} values(1, 'a');"
+	run_sql_source1 "alter table ${shardddl1}.${tb2} character set utf8mb4 collate utf8mb4_bin;"
+	run_sql_source1 "insert into ${shardddl1}.${tb2} values(2, 'b');"
+	run_sql_source2 "alter table ${shardddl1}.${tb1} character set utf8mb4 collate utf8mb4_bin;"
+	run_sql_source2 "insert into ${shardddl1}.${tb1} values(3, 'c');"
+	# left 1 shard table not finished. optimistic mode should not block data sync
+
+	run_sql_tidb_with_retry "select count(1) from ${shardddl}.${tb};" "count(1): 3"
+	run_sql_tidb_with_retry "show create table ${shardddl}.${tb}" "CHARSET=utf8mb4"
+}
+
+function DM_CHANGE_UTF_CHARSET() {
+	run_case CHANGE_UTF_CHARSET "double-source-optimistic" \
+		"run_sql_source1 \"create table ${shardddl1}.${tb1} (id int primary key, name varchar(10)) default character set utf8mb3 collate utf8mb3_bin;\"; \
+    run_sql_source1 \"create table ${shardddl1}.${tb2} (id int primary key, name varchar(10)) default character set utf8mb3 collate utf8mb3_bin;\"; \
+    run_sql_source2 \"create table ${shardddl1}.${tb1} (id int primary key, name varchar(10)) default character set utf8mb3 collate utf8mb3_bin;\"; \
+    run_sql_source2 \"create table ${shardddl1}.${tb2} (id int primary key, name varchar(10)) default character set utf8mb3 collate utf8mb3_bin;\"" \
+		"clean_table" "optimistic"
+}
+
 function run() {
 	init_cluster
 	init_database
@@ -471,6 +493,7 @@ function run() {
 	DM_STOP_TASK_FOR_A_SOURCE
 	DM_UPDATE_BA_ROUTE
 	DM_CREATE_DROP_TABLE
+	DM_CHANGE_UTF_CHARSET
 }
 
 cleanup_data $shardddl

@@ -30,6 +30,7 @@ import (
 	"github.com/dustin/go-humanize"
 	"github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
@@ -252,6 +253,8 @@ const (
 	LoadModeLogical LoadMode = "logical"
 	// LoadModePhysical means use local backend of lightning to load data, which ingest SST files to load data.
 	LoadModePhysical LoadMode = "physical"
+	// LoadModeImportInto means use import-into backend of lightning to load data, which uses IMPORT INTO SQL statement.
+	LoadModeImportInto LoadMode = "import-into"
 )
 
 // LogicalDuplicateResolveType defines the duplication resolution when meet duplicate rows for logical import.
@@ -340,7 +343,7 @@ func (m *LoaderConfig) adjust() error {
 	}
 	m.ImportMode = LoadMode(strings.ToLower(string(m.ImportMode)))
 	switch m.ImportMode {
-	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical:
+	case LoadModeLoader, LoadModeSQL, LoadModeLogical, LoadModePhysical, LoadModeImportInto:
 	default:
 		return terror.ErrConfigInvalidLoadMode.Generate(m.ImportMode)
 	}
@@ -416,6 +419,31 @@ type SyncerConfig struct {
 	SafeModeDuration string `yaml:"safe-mode-duration" toml:"safe-mode-duration" json:"safe-mode-duration"`
 	// deprecated, use `ansi-quotes` in top level config instead
 	EnableANSIQuotes bool `yaml:"enable-ansi-quotes" toml:"enable-ansi-quotes" json:"enable-ansi-quotes"`
+}
+
+// IsForeignKeyChecksEnabled reports whether the downstream session keeps FK checks on.
+func IsForeignKeyChecksEnabled(session map[string]string) bool {
+	for key, value := range session {
+		if strings.EqualFold(key, "foreign_key_checks") {
+			trimmed := strings.Trim(value, " '\"")
+			return variable.TiDBOptOn(trimmed)
+		}
+	}
+	return false
+}
+
+// CheckForeignKeyChecksSyncerOptions rejects syncer options that change DML statement boundaries.
+func CheckForeignKeyChecksSyncerOptions(session map[string]string, syncerCfg SyncerConfig) error {
+	if !IsForeignKeyChecksEnabled(session) {
+		return nil
+	}
+	if syncerCfg.Compact {
+		return terror.ErrConfigUnsupportedForeignKeyChecksOption.Generate("compact")
+	}
+	if syncerCfg.MultipleRows {
+		return terror.ErrConfigUnsupportedForeignKeyChecksOption.Generate("multiple-rows")
+	}
+	return nil
 }
 
 // DefaultSyncerConfig return default syncer config for task.
@@ -864,6 +892,13 @@ func (c *TaskConfig) adjust() error {
 		}
 		if inst.LoaderThread != 0 {
 			inst.Loader.PoolSize = inst.LoaderThread
+		}
+
+		// import-into does not support sharding / multi-source tasks.
+		// NOTE: TaskConfig.adjust() runs before generating SubTaskConfig, so we validate it here
+		// to avoid multi-source import-into tasks passing admission and failing later at runtime.
+		if len(c.MySQLInstances) > 1 && strings.EqualFold(string(inst.Loader.ImportMode), string(LoadModeImportInto)) {
+			return terror.ErrConfigImportIntoShardingNotSupport.Generate()
 		}
 
 		if len(inst.SyncerConfigName) > 0 {

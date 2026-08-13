@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/avro"
 	"github.com/pingcap/tiflow/pkg/sink/codec/canal"
+	"github.com/pingcap/tiflow/pkg/sink/codec/debezium"
 	"github.com/pingcap/tiflow/pkg/sink/codec/open"
 	"github.com/pingcap/tiflow/pkg/sink/codec/simple"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -59,6 +60,8 @@ func NewDecoder(ctx context.Context, option *option, upstreamTiDB *sql.DB) (code
 		decoder = avro.NewDecoder(option.codecConfig, schemaM, option.topic, upstreamTiDB)
 	case config.ProtocolSimple:
 		decoder, err = simple.NewDecoder(ctx, option.codecConfig, upstreamTiDB)
+	case config.ProtocolDebezium:
+		decoder = debezium.NewDecoder(option.codecConfig, upstreamTiDB)
 	default:
 		log.Panic("Protocol not supported", zap.Any("Protocol", option.protocol))
 	}
@@ -96,16 +99,23 @@ func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Of
 			zap.Uint64("watermark", newWatermark))
 		return
 	}
-	if offset > p.watermarkOffset {
-		log.Panic("partition resolved ts fallback",
-			zap.Int32("partition", p.partition),
-			zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
-	}
-	log.Warn("partition resolved ts fall back, ignore it, since consumer read old offset message",
+	fields := []zap.Field{
 		zap.Int32("partition", p.partition),
-		zap.Uint64("newWatermark", newWatermark), zap.Any("offset", offset),
-		zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", p.watermarkOffset))
+		zap.Uint64("newWatermark", newWatermark),
+		zap.Any("offset", offset),
+		zap.Uint64("watermark", watermark),
+		zap.Any("watermarkOffset", p.watermarkOffset),
+	}
+
+	// TiCDC only guarantees at-least-once delivery. Duplicate MQ delivery can
+	// replay old resolved/checkpoint markers, making the resolved ts appear to
+	// fall back. This is unexpected but tolerable, so the consumer keeps the
+	// larger watermark.
+	if offset > p.watermarkOffset {
+		log.Warn("partition resolved ts fall back from newer offset: unexpected but tolerable under at-least-once delivery, ignore it", fields...)
+		return
+	}
+	log.Warn("partition resolved ts fall back, ignore it since consumer read old offset message", fields...)
 }
 
 func (p *partitionProgress) loadWatermark() uint64 {
@@ -117,13 +127,36 @@ type writer struct {
 
 	ddlList            []*model.DDLEvent
 	ddlWithMaxCommitTs *model.DDLEvent
-	ddlSink            ddlsink.Sink
+	// ddlKeysWithMaxCommitTs records every logical DDL seen at the current
+	// maximum CommitTs, so replayed prefixes of split DDL sequences can be
+	// ignored without collapsing distinct DDLs that share the same CommitTs.
+	ddlKeysWithMaxCommitTs map[ddlEventKey]struct{}
+	ddlSink                ddlsink.Sink
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
 	progresses  []*partitionProgress
 
 	eventRouter *dispatcher.EventRouter
+}
+
+// ddlEventKey identifies a logical DDL even if the Kafka replay decodes it
+// into a fresh DDLEvent object. The MQ codecs preserve StartTs/CommitTs/Query/Seq,
+// which is enough to distinguish split DDLs while still recognizing replays.
+type ddlEventKey struct {
+	startTs  uint64
+	commitTs uint64
+	query    string
+	seq      uint64
+}
+
+func newDDLEventKey(ddl *model.DDLEvent) ddlEventKey {
+	return ddlEventKey{
+		startTs:  ddl.StartTs,
+		commitTs: ddl.CommitTs,
+		query:    ddl.Query,
+		seq:      ddl.Seq,
+	}
 }
 
 func newWriter(ctx context.Context, o *option) *writer {
@@ -198,17 +231,23 @@ func (w *writer) appendDDL(ddl *model.DDLEvent, offset kafka.Offset) {
 		return
 	}
 
-	// A rename tables DDL job contains multiple DDL events with same CommitTs.
-	// So to tell if a DDL is redundant or not, we must check the equivalence of
-	// the current DDL and the DDL with max CommitTs.
-	if ddl == w.ddlWithMaxCommitTs {
-		log.Warn("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
+	ddlKey := newDDLEventKey(ddl)
+	if w.ddlWithMaxCommitTs == nil || ddl.CommitTs > w.ddlWithMaxCommitTs.CommitTs {
+		w.ddlKeysWithMaxCommitTs = make(map[ddlEventKey]struct{})
+	}
+
+	// The DDL with max CommitTs may be one event in a split DDL job, so we must
+	// remember every logical DDL already seen at that CommitTs rather than only
+	// comparing against the last decoded event object.
+	if _, duplicated := w.ddlKeysWithMaxCommitTs[ddlKey]; duplicated {
+		log.Warn("ignore redundant DDL, the DDL has already been seen at max CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	w.ddlList = append(w.ddlList, ddl)
 	w.ddlWithMaxCommitTs = ddl
+	w.ddlKeysWithMaxCommitTs[ddlKey] = struct{}{}
 	log.Info("DDL message received", zap.Any("offset", offset), zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 }
 
@@ -457,7 +496,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		progress.eventGroups[tableID] = group
 	}
 	if row.CommitTs < watermark {
-		log.Warn("RowChanged Event fallback row, since les than the partition watermark, ignore it",
+		log.Warn("RowChanged Event fallback row, since less than the partition watermark, ignore it",
 			zap.Int64("tableID", tableID), zap.Int32("partition", partition),
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
@@ -471,7 +510,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		return
 	}
 	switch w.option.protocol {
-	case config.ProtocolSimple, config.ProtocolOpen, config.ProtocolCanalJSON:
+	case config.ProtocolSimple, config.ProtocolOpen, config.ProtocolCanalJSON, config.ProtocolDebezium:
 		// simple protocol set the table id for all row message, it can be known which table the row message belongs to,
 		// also consider the table partition.
 		// open protocol set the partition table id if the table is partitioned.

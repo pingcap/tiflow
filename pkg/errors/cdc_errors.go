@@ -171,8 +171,12 @@ var (
 
 	// sink related errors
 	ErrExecDDLFailed = errors.Normalize(
-		"exec DDL failed",
+		"exec DDL failed %s",
 		errors.RFCCodeText("CDC:ErrExecDDLFailed"),
+	)
+	ErrDDLStateNotFound = errors.Normalize(
+		"DDL state not found %s",
+		errors.RFCCodeText("CDC:ErrDDLStateNotFound"),
 	)
 	ErrKafkaSendMessage = errors.Normalize(
 		"kafka send message failed",
@@ -407,10 +411,6 @@ var (
 		"canal encode failed",
 		errors.RFCCodeText("CDC:ErrCanalEncodeFailed"),
 	)
-	ErrOldValueNotEnabled = errors.Normalize(
-		"old value is not enabled",
-		errors.RFCCodeText("CDC:ErrOldValueNotEnabled"),
-	)
 	ErrSinkInvalidConfig = errors.Normalize(
 		"sink config invalid",
 		errors.RFCCodeText("CDC:ErrSinkInvalidConfig"),
@@ -424,7 +424,7 @@ var (
 		errors.RFCCodeText("CDC:ErrCraftCodecInvalidData"),
 	)
 	ErrMessageTooLarge = errors.Normalize(
-		"message is too large",
+		"message is too large. table:%s, length:%d, maxMessageBytes:%d",
 		errors.RFCCodeText("CDC:ErrMessageTooLarge"),
 	)
 	ErrStorageSinkInvalidDateSeparator = errors.Normalize(
@@ -442,6 +442,14 @@ var (
 	ErrDebeziumEncodeFailed = errors.Normalize(
 		"debezium encode failed",
 		errors.RFCCodeText("CDC:ErrDebeziumEncodeFailed"),
+	)
+	ErrDebeziumInvalidMessage = errors.Normalize(
+		"debezium invalid message format, %s",
+		errors.RFCCodeText("CDC:ErrDebeziumInvalidMessage"),
+	)
+	ErrDebeziumEmptyValueMessage = errors.Normalize(
+		"debezium value should not be empty",
+		errors.RFCCodeText("CDC:ErrDebeziumEmptyValueMessage"),
 	)
 	ErrStorageSinkInvalidConfig = errors.Normalize(
 		"storage sink config invalid",

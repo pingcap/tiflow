@@ -28,7 +28,6 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/format"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/openapi"
@@ -46,6 +45,13 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		Schema: req.Database,
 		Name:   req.Table,
 	}
+	schemaFlushed := false
+	defer func() {
+		if schemaFlushed {
+			s.resetForeignKeyRouteTopologyCheckCache()
+		}
+	}()
+
 	switch req.Op {
 	case pb.SchemaOp_ListMigrateTargets:
 		return s.listMigrateTargets(req)
@@ -116,8 +122,8 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			return "", terror.ErrSchemaTrackerInvalidCreateTableStmt.Generate(req.Schema)
 		}
 		// ensure correct table name.
-		stmt.Table.Schema = pmodel.NewCIStr(req.Database)
-		stmt.Table.Name = pmodel.NewCIStr(req.Table)
+		stmt.Table.Schema = ast.NewCIStr(req.Database)
+		stmt.Table.Name = ast.NewCIStr(req.Table)
 		stmt.IfNotExists = false // we must ensure drop the previous one.
 
 		var newCreateSQLBuilder strings.Builder
@@ -143,6 +149,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 		if err != nil {
 			return "", err
 		}
+		schemaFlushed = true
 
 		if req.Sync {
 			if s.cfg.ShardMode != config.ShardOptimistic {

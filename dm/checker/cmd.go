@@ -79,6 +79,7 @@ func runCheckOnConfigs(
 	ctx context.Context,
 	cfgs []*config.SubTaskConfig,
 	dumpWholeInstance bool,
+	extraCheckingItems ...string,
 ) (*checker.Results, error) {
 	if len(cfgs) == 0 {
 		return nil, nil
@@ -86,8 +87,29 @@ func runCheckOnConfigs(
 
 	ignoreCheckingItems := cfgs[0].IgnoreCheckingItems
 	checkingItems := config.FilterCheckingItems(ignoreCheckingItems)
-	if len(checkingItems) == 0 {
+	// keep backward compatibility: if no checking items selected from config
+	// and no extra checking items provided, return nil
+	if len(checkingItems) == 0 && len(extraCheckingItems) == 0 {
 		return nil, nil
+	}
+
+	// merge extraCheckingItems (caller-specified) into checkingItems
+	for _, it := range extraCheckingItems {
+		if it == config.AllChecking {
+			// if caller explicitly requests 'all', keep original behavior and
+			// treat as no-op here (all checks are controlled by config.FilterCheckingItems)
+			continue
+		}
+		if _, ok := checkingItems[it]; !ok {
+			// try to get description from config.AllCheckingItems first, then AdditionalCheckingItems
+			if desc, ok2 := config.AllCheckingItems[it]; ok2 {
+				checkingItems[it] = desc
+			} else if desc2, ok3 := config.AdditionalCheckingItems[it]; ok3 {
+				checkingItems[it] = desc2
+			} else {
+				checkingItems[it] = ""
+			}
+		}
 	}
 
 	c := NewChecker(cfgs, checkingItems, 0, 0)
@@ -115,8 +137,9 @@ func RunCheckOnConfigs(
 	cfgs []*config.SubTaskConfig,
 	dumpWholeInstance bool,
 	warnLimit, errLimit int64,
+	extraCheckingItems ...string,
 ) (*checker.Results, error) {
-	result, err := runCheckOnConfigs(ctx, cfgs, dumpWholeInstance)
+	result, err := runCheckOnConfigs(ctx, cfgs, dumpWholeInstance, extraCheckingItems...)
 	if err != nil || result == nil {
 		return result, err
 	}

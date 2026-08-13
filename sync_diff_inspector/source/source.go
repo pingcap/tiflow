@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -48,10 +49,15 @@ const (
 )
 
 const (
-	shieldDBName      = "_no__exists__db_"
-	shieldTableName   = "_no__exists__table_"
-	getSyncPointQuery = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 ORDER BY primary_ts DESC LIMIT 1"
+	shieldDBName                  = "_no__exists__db_"
+	shieldTableName               = "_no__exists__table_"
+	getSyncPointQuery             = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 ORDER BY primary_ts DESC LIMIT 1"
+	getSyncPointByChangefeedQuery = "SELECT primary_ts, secondary_ts FROM tidb_cdc.syncpoint_v1 WHERE changefeed = ? ORDER BY primary_ts DESC LIMIT 1"
 )
+
+type syncPointQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
 
 // ChecksumInfo stores checksum and count
 type ChecksumInfo struct {
@@ -118,6 +124,13 @@ type Source interface {
 	Close()
 }
 
+// ChecksumCapableSource is an optional interface that Sources may implement
+// to support the global-checksum fast path (used when export-fix-sql is false).
+type ChecksumCapableSource interface {
+	// GetGlobalChecksumIterator returns a chunk iterator and total number of chunks.
+	GetGlobalChecksumIterator(context.Context, int, *splitter.RangeInfo) (splitter.ChunkIterator, int, error)
+}
+
 // NewSources returns a new source
 func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, upstream Source, err error) {
 	// init db connection for upstream / downstream.
@@ -144,6 +157,7 @@ func NewSources(ctx context.Context, cfg *config.Config) (downstream Source, ups
 			NeedUnifiedTimeZone: needUnifiedTimeZone,
 			Collation:           tableConfig.Collation,
 			ChunkSize:           tableConfig.ChunkSize,
+			SplitterStrategy:    cfg.SplitterStrategy,
 		})
 
 		// When the router set case-sensitive false,
@@ -249,17 +263,42 @@ func buildSourceFromCfg(
 	return NewMySQLSources(ctx, tableDiffs, dbs, connCount, f, skipNonExistingTable)
 }
 
-func getAutoSnapshotPosition(cfg *mysql.Config) (string, string, error) {
-	tmpConn, err := common.ConnectMySQL(cfg, 2)
+func queryAutoSnapshotPosition(conn syncPointQuerier, changefeed string) (string, string, error) {
+	var primaryTs, secondaryTs string
+	var err error
+	if changefeed == "" {
+		err = conn.QueryRow(getSyncPointQuery).Scan(&primaryTs, &secondaryTs)
+	} else {
+		err = conn.QueryRow(getSyncPointByChangefeedQuery, changefeed).Scan(&primaryTs, &secondaryTs)
+	}
+	if err == nil {
+		return primaryTs, secondaryTs, nil
+	}
+	if changefeed != "" && errors.Cause(err) == sql.ErrNoRows {
+		return "", "", errors.Errorf("fetching auto-position tidb_snapshot failed: no syncpoint found for changefeed %s", changefeed)
+	}
+	return "", "", errors.Annotatef(err, "fetching auto-position tidb_snapshot failed")
+}
+
+func getAutoSnapshotPosition(cfg *mysql.Config, changefeed string) (string, string, error) {
+	tmpConn, err := common.ConnectMySQL(nil, cfg, 2)
 	if err != nil {
 		return "", "", errors.Annotatef(err, "connecting to auto-position tidb_snapshot failed")
 	}
 	defer tmpConn.Close()
-	var primaryTs, secondaryTs string
-	err = tmpConn.QueryRow(getSyncPointQuery).Scan(&primaryTs, &secondaryTs)
-	if err != nil {
-		return "", "", errors.Annotatef(err, "fetching auto-position tidb_snapshot failed")
+	if changefeed == "" {
+		log.Debug("resolve auto-position tidb_snapshot without changefeed filter")
+	} else {
+		log.Debug("resolve auto-position tidb_snapshot with changefeed filter", zap.String("changefeed", changefeed))
 	}
+	primaryTs, secondaryTs, err := queryAutoSnapshotPosition(tmpConn, changefeed)
+	if err != nil {
+		return "", "", errors.Trace(err)
+	}
+	log.Debug("resolved auto-position tidb_snapshot",
+		zap.String("changefeed", changefeed),
+		zap.String("primary-ts", primaryTs),
+		zap.String("secondary-ts", secondaryTs))
 	return primaryTs, secondaryTs, nil
 }
 
@@ -273,7 +312,7 @@ func initDBConn(_ context.Context, cfg *config.Config) error {
 		if !cfg.Task.SourceInstances[0].IsAutoSnapshot() {
 			return errors.Errorf("'auto' snapshot should be set on both target and source")
 		}
-		primaryTs, secondaryTs, err := getAutoSnapshotPosition(cfg.Task.TargetInstance.ToDriverConfig())
+		primaryTs, secondaryTs, err := getAutoSnapshotPosition(cfg.Task.TargetInstance.ToDriverConfig(), cfg.Task.SyncpointChangefeed)
 		if err != nil {
 			return err
 		}
@@ -282,22 +321,32 @@ func initDBConn(_ context.Context, cfg *config.Config) error {
 	}
 	// we had `cfg.SplitThreadCount` producers and `cfg.CheckThreadCount` consumer to use db connections maybe and `cfg.CheckThreadCount` splitter to split buckets.
 	// so the connection count need to be cfg.SplitThreadCount + cfg.CheckThreadCount + cfg.CheckThreadCount.
-	targetConn, err := common.ConnectMySQL(cfg.Task.TargetInstance.ToDriverConfig(), cfg.SplitThreadCount+2*cfg.CheckThreadCount)
+	targetConn, err := common.ConnectMySQL(
+		&cfg.Task.TargetInstance.SessionConfig,
+		cfg.Task.TargetInstance.ToDriverConfig(),
+		cfg.SplitThreadCount+2*cfg.CheckThreadCount,
+	)
 	if err != nil {
+		log.Error("failed to configure session", zap.String("data-source", cfg.Task.Target), zap.Error(err))
 		return errors.Trace(err)
 	}
 
 	cfg.Task.TargetInstance.Conn = targetConn
 
-	for _, source := range cfg.Task.SourceInstances {
+	for sourceIdx, source := range cfg.Task.SourceInstances {
 		// If it is still set to AUTO it means it was not set on the target.
 		// We require it to be set to AUTO on both.
 		if source.IsAutoSnapshot() {
 			return errors.Errorf("'auto' snapshot should be set on both target and source")
 		}
 		// connect source db with target db time_zone
-		conn, err := common.ConnectMySQL(source.ToDriverConfig(), cfg.SplitThreadCount+2*cfg.CheckThreadCount)
+		conn, err := common.ConnectMySQL(
+			&source.SessionConfig,
+			source.ToDriverConfig(),
+			cfg.SplitThreadCount+2*cfg.CheckThreadCount,
+		)
 		if err != nil {
+			log.Error("failed to configure session", zap.String("data-source", cfg.Task.Source[sourceIdx]), zap.Error(err))
 			return errors.Trace(err)
 		}
 		source.Conn = conn
@@ -314,10 +363,10 @@ func initTables(ctx context.Context, cfg *config.Config) (cfgTables []*config.Ta
 	}
 
 	for _, schema := range targetSchemas {
-		if filter.IsSystemSchema(schema) {
+		if filter.IsSystemSchema(strings.ToLower(schema)) {
 			continue
 		}
-		allTables, err := dbutil.GetTables(ctx, downStreamConn, schema)
+		allTables, err := conn.GetTables(ctx, downStreamConn, schema)
 		if err != nil {
 			return nil, errors.Annotatef(err, "get tables from target source %s", schema)
 		}

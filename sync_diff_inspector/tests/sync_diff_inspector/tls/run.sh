@@ -8,7 +8,7 @@ CONF_PATH=$(cd ../../conf && pwd)
 CA_PATH="$CONF_PATH/root.crt"
 CERT_PATH="$CONF_PATH/client.crt"
 KEY_PATH="$CONF_PATH/client.key"
-OUT_DIR=/tmp/tidb_tools_test/sync_diff_inspector/output
+OUT_DIR=/tmp/sync_diff_inspector_test/sync_diff_inspector/output
 rm -rf $OUT_DIR
 mkdir -p $OUT_DIR
 

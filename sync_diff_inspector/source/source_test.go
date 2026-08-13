@@ -22,11 +22,11 @@ import (
 	"regexp"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
@@ -137,7 +137,10 @@ func TestTiDBSource(t *testing.T) {
 	tableDiffs := prepareTiDBTables(t, tableCases)
 
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("source_test"))
-	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(sqlmock.NewRows([]string{"Table", "type"}).AddRow("test1", "base").AddRow("test2", "base"))
+	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "type", "Auto_partition", "Table_group"}).
+			AddRow("test1", "base", "NO", "single_tg").
+			AddRow("test2", "base", "NO", "single_tg"))
 	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
 
 	f, err := filter.Parse([]string{"source_test.*"})
@@ -221,6 +224,8 @@ func TestTiDBSource(t *testing.T) {
 	rowIter, err := tidb.GetRowsIterator(ctx, tableCase.rangeInfo)
 	require.NoError(t, err)
 
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(0)")
+
 	row := 0
 	var firstRow, secondRow map[string]*dbutil.ColumnData
 	for {
@@ -259,6 +264,13 @@ func TestTiDBSource(t *testing.T) {
 	rowIter.Close()
 
 	analyze := tidb.GetTableAnalyzer()
+	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
+	for i := 0; i < 5; i++ {
+		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	}
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(statsRows)
 	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
 	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
 	chunkIter, err := analyze.AnalyzeSplitter(ctx, tableDiffs[0], tableCase.rangeInfo)
@@ -275,15 +287,15 @@ func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
 	defer conn.Close()
 
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("source_test"))
-	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(sqlmock.NewRows([]string{"Table", "type"}).AddRow("test1", "base"))
-	statsRows := sqlmock.NewRows([]string{"Db_name", "Table_name", "Column_name", "Is_index", "Bucket_id", "Count", "Repeats", "Lower_Bound", "Upper_Bound"})
-	for i := 0; i < 5; i++ {
-		statsRows.AddRow("source_test", "test1", "PRIMARY", 1, (i+1)*64, (i+1)*64, 1,
-			fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
-	}
+	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "type", "Auto_partition", "Table_group"}).
+			AddRow("test1", "base", "NO", "single_tg"))
 	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) cnt")).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(100))
-
+	statsRows := sqlmock.NewRows([]string{"hist_id", "is_index", "bucket_id", "count", "lower_bound", "upper_bound"})
+	for i := 0; i < 5; i++ {
+		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
+	}
 	f, err := filter.Parse([]string{"source_test.*"})
 	require.NoError(t, err)
 
@@ -366,7 +378,10 @@ func TestMysqlShardSources(t *testing.T) {
 	cs := make([]*config.DataSource, 4)
 	for i := range dbs {
 		mock.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("source_test"))
-		mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(sqlmock.NewRows([]string{"Table", "type"}).AddRow("test1", "base").AddRow("test2", "base"))
+		mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(
+			sqlmock.NewRows([]string{"Table", "type", "Auto_partition", "Table_group"}).
+				AddRow("test1", "base", "NO", "single_tg").
+				AddRow("test2", "base", "NO", "single_tg"))
 		cs[i] = &config.DataSource{Conn: conn}
 	}
 
@@ -438,7 +453,7 @@ func TestMysqlShardSources(t *testing.T) {
 	shard.Close()
 }
 
-func TestMysqlRouter(t *testing.T) {
+func TestMySQLRouter(t *testing.T) {
 	ctx := context.Background()
 
 	conn, mock, err := sqlmock.New()
@@ -491,9 +506,11 @@ func TestMysqlRouter(t *testing.T) {
 
 	databasesRows := sqlmock.NewRows([]string{"Database"}).AddRow("source_test").AddRow("source_test_t")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(databasesRows)
-	tablesRows := sqlmock.NewRows([]string{"Tables_in_test", "Table_type"}).AddRow("test2", "BASE TABLE")
+	tablesRows := sqlmock.NewRows([]string{"Tables_in_test", "Table_type", "Auto_partition", "Table_group"}).
+		AddRow("test2", "BASE TABLE", "NO", "single_tg")
 	mock.ExpectQuery("SHOW FULL TABLES IN.*").WillReturnRows(tablesRows)
-	tablesRows = sqlmock.NewRows([]string{"Tables_in_test", "Table_type"}).AddRow("test_t", "BASE TABLE")
+	tablesRows = sqlmock.NewRows([]string{"Tables_in_test", "Table_type", "Auto_partition", "Table_group"}).
+		AddRow("test_t", "BASE TABLE", "NO", "single_tg")
 	mock.ExpectQuery("SHOW FULL TABLES IN.*").WillReturnRows(tablesRows)
 
 	f, err := filter.Parse([]string{"*.*"})
@@ -502,12 +519,7 @@ func TestMysqlRouter(t *testing.T) {
 	require.NoError(t, err)
 
 	// random splitter
-	// query 1: SELECT COUNT(1) cnt FROM `source_test`.`test2`
-	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
-	// query 2: SELECT COUNT(1) cnt FROM `source_test_t`.`test_t`
-	countRows = sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
+	testfailpoint.Enable(t, "github.com/pingcap/tiflow/sync_diff_inspector/splitter/getRowCount", "return(0)")
 	rangeIter, err := mysql.GetRangeIterator(ctx, nil, mysql.GetTableAnalyzer(), 3)
 	require.NoError(t, err)
 	_, err = rangeIter.Next(ctx)
@@ -518,12 +530,9 @@ func TestMysqlRouter(t *testing.T) {
 	require.NoError(t, err)
 	rangeIter.Close()
 
-	// Wait goroutine quits to avoid data race
-	time.Sleep(time.Second)
-
 	// row Iterator
 	dataRows := sqlmock.NewRows(tableCases[0].rowColumns)
-	for k := 0; k < 2; k++ {
+	for k := range 2 {
 		dataRows.AddRow(tableCases[0].rows[k]...)
 	}
 	mock.ExpectQuery(tableCases[0].rowQuery).WillReturnRows(dataRows)
@@ -606,9 +615,11 @@ func TestTiDBRouter(t *testing.T) {
 
 	databasesRows := sqlmock.NewRows([]string{"Database"}).AddRow("source_test_t").AddRow("source_test")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(databasesRows)
-	tablesRows := sqlmock.NewRows([]string{"Tables_in_test", "Table_type"}).AddRow("test_t", "BASE TABLE")
+	tablesRows := sqlmock.NewRows([]string{"Tables_in_test", "Table_type", "Auto_partition", "Table_group"}).
+		AddRow("test_t", "BASE TABLE", "NO", "single_tg")
 	mock.ExpectQuery("SHOW FULL TABLES IN.*").WillReturnRows(tablesRows)
-	tablesRows = sqlmock.NewRows([]string{"Tables_in_test", "Table_type"}).AddRow("test2", "BASE TABLE")
+	tablesRows = sqlmock.NewRows([]string{"Tables_in_test", "Table_type", "Auto_partition", "Table_group"}).
+		AddRow("test2", "BASE TABLE", "NO", "single_tg")
 	mock.ExpectQuery("SHOW FULL TABLES IN.*").WillReturnRows(tablesRows)
 	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
 
@@ -636,7 +647,7 @@ func prepareTiDBTables(t *testing.T, tableCases []*tableCaseType) []*common.Tabl
 			Info:   tableInfo,
 		})
 
-		chunkRange := chunk.NewChunkRange()
+		chunkRange := chunk.NewChunkRange(nil)
 		for i, column := range tableCase.rangeColumns {
 			chunkRange.Update(column, tableCase.rangeLeft[i], tableCase.rangeRight[i], true, true)
 		}
@@ -865,6 +876,7 @@ func TestInitTables(t *testing.T) {
 	cfg := config.NewConfig()
 	// Test case 1: test2.t2 will parse after filter.
 	require.NoError(t, cfg.Parse([]string{"--config", "../config/config.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
 	require.NoError(t, cfg.Init())
 
 	conn, mock, err := sqlmock.New()
@@ -875,12 +887,14 @@ func TestInitTables(t *testing.T) {
 
 	rows := sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("test2")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
-	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("t1", "t1").AddRow("t2", "t2")
+	rows = sqlmock.NewRows([]string{"col1", "col2", "Auto_partition", "Table_group"}).
+		AddRow("t1", "BASE TABLE", "NO", "single_tg").
+		AddRow("t2", "BASE TABLE", "NO", "single_tg")
 	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(rows)
 	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("t2", "CREATE TABLE `t2` (\n\t\t\t`id` int(11) DEFAULT NULL,\n\t\t  \t`name` varchar(24) DEFAULT NULL\n\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin")
-	mock.ExpectQuery("SHOW CREATE TABLE *").WillReturnRows(rows)
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(rows)
 	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("", "")
-	mock.ExpectQuery("SHOW VARIABLES LIKE*").WillReturnRows(rows)
+	mock.ExpectQuery("SHOW VARIABLES LIKE.*").WillReturnRows(rows)
 
 	tablesToBeCheck, err := initTables(ctx, cfg)
 	require.NoError(t, err)
@@ -896,20 +910,122 @@ func TestInitTables(t *testing.T) {
 	// Test case 2: init failed due to conflict table config point to one table.
 	cfg = config.NewConfig()
 	require.NoError(t, cfg.Parse([]string{"--config", "../config/config_conflict.toml"}))
+	cfg.Task.OutputDir = t.TempDir()
 	require.NoError(t, cfg.Init())
 	cfg.Task.TargetInstance.Conn = conn
 
 	rows = sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("test2")
 	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
-	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("t1", "t1").AddRow("t2", "t2")
+	rows = sqlmock.NewRows([]string{"col1", "col2", "Auto_partition", "Table_group"}).
+		AddRow("t1", "BASE TABLE", "NO", "single_tg").
+		AddRow("t2", "BASE TABLE", "NO", "single_tg")
 	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(rows)
 	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("t2", "CREATE TABLE `t2` (\n\t\t\t`id` int(11) DEFAULT NULL,\n\t\t  \t`name` varchar(24) DEFAULT NULL\n\t\t\t) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin")
-	mock.ExpectQuery("SHOW CREATE TABLE *").WillReturnRows(rows)
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(rows)
 	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("", "")
-	mock.ExpectQuery("SHOW VARIABLES LIKE*").WillReturnRows(rows)
+	mock.ExpectQuery("SHOW VARIABLES LIKE.*").WillReturnRows(rows)
 
 	_, err = initTables(ctx, cfg)
 	require.Contains(t, err.Error(), "different config matched to same target table")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestQueryAutoSnapshotPosition(t *testing.T) {
+	testCases := []struct {
+		name       string
+		changefeed string
+		query      string
+		args       []driver.Value
+	}{
+		{
+			name:  "without changefeed filter",
+			query: regexp.QuoteMeta(getSyncPointQuery),
+		},
+		{
+			name:       "with changefeed filter",
+			changefeed: "ks2/random-cdc-000002-ks2",
+			query:      regexp.QuoteMeta(getSyncPointByChangefeedQuery),
+			args:       []driver.Value{"ks2/random-cdc-000002-ks2"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			conn, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer conn.Close()
+
+			rows := sqlmock.NewRows([]string{"primary_ts", "secondary_ts"}).AddRow("466946054006767616", "466946054033768448")
+			expectation := mock.ExpectQuery(tc.query)
+			if len(tc.args) > 0 {
+				expectation.WithArgs(tc.args...)
+			}
+			expectation.WillReturnRows(rows)
+
+			primaryTs, secondaryTs, err := queryAutoSnapshotPosition(conn, tc.changefeed)
+			require.NoError(t, err)
+			require.Equal(t, "466946054006767616", primaryTs)
+			require.Equal(t, "466946054033768448", secondaryTs)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestQueryAutoSnapshotPositionNoChangefeedRow(t *testing.T) {
+	conn, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	changefeed := "ks2/random-cdc-000002-ks2"
+	mock.ExpectQuery(regexp.QuoteMeta(getSyncPointByChangefeedQuery)).
+		WithArgs(changefeed).
+		WillReturnRows(sqlmock.NewRows([]string{"primary_ts", "secondary_ts"}))
+
+	_, _, err = queryAutoSnapshotPosition(conn, changefeed)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "fetching auto-position tidb_snapshot failed: no syncpoint found for changefeed ks2/random-cdc-000002-ks2")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestInitTablesWithExtraShowFullTablesColumns(t *testing.T) {
+	ctx := context.Background()
+
+	conn, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer conn.Close()
+
+	cfg := config.NewConfig()
+	cfg.Task.TargetInstance = &config.DataSource{Conn: conn}
+	cfg.Task.CheckTables = []string{"test2.t2"}
+	cfg.Task.TargetCheckTables, err = filter.Parse(cfg.Task.CheckTables)
+	require.NoError(t, err)
+	cfg.Task.TargetTableConfigs = []*config.TableConfig{
+		{
+			TargetTables: []string{"test2.t2"},
+			Range:        "age > 10 AND age < 20",
+		},
+	}
+
+	rows := sqlmock.NewRows([]string{"Database"}).AddRow("mysql").AddRow("test2")
+	mock.ExpectQuery("SHOW DATABASES").WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{"Tables_in_test2", "Table_type", "Auto_partition", "Table_group"}).
+		AddRow("t1", "BASE TABLE", "NO", "single_tg").
+		AddRow("t2", "BASE TABLE", "NO", "single_tg")
+	mock.ExpectQuery("SHOW FULL TABLES*").WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25")
+	mock.ExpectQuery("SELECT version()*").WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{"Table", "Create Table"}).
+		AddRow("t2", "CREATE TABLE `t2` (\n\t`id` int(11) DEFAULT NULL,\n\t`name` varchar(24) DEFAULT NULL\n) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE=utf8_bin")
+	mock.ExpectQuery("SHOW CREATE TABLE.*").WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{"col1", "col2"}).AddRow("", "")
+	mock.ExpectQuery("SHOW VARIABLES LIKE.*").WillReturnRows(rows)
+
+	tablesToBeCheck, err := initTables(ctx, cfg)
+	require.NoError(t, err)
+	require.Len(t, tablesToBeCheck, 1)
+	require.Equal(t, "test2", tablesToBeCheck[0].Schema)
+	require.Equal(t, "t2", tablesToBeCheck[0].Table)
+	require.Equal(t, "age > 10 AND age < 20", tablesToBeCheck[0].Range)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

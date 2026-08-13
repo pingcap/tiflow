@@ -5,6 +5,6 @@ CREATE TABLE `roles` (
 `organization_id` int(11) DEFAULT NULL,
 `client_id` varchar(32) NOT NULL,
 `scope_action_ids` text NOT NULL,
-PRIMARY KEY (`id`),
-FULLTEXT KEY `scope_action_ids_idx` (`scope_action_ids`)
+PRIMARY KEY (`id`)
+-- FULLTEXT KEY `scope_action_ids_idx` (`scope_action_ids`) is disabled because TiDB classic rejects starter-only FULLTEXT indexes.
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;

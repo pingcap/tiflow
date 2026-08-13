@@ -18,7 +18,6 @@ import (
 	"database/sql"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -47,7 +46,7 @@ func newConnNumberChecker(toCheckDB *conn.BaseDB, stCfgs []*config.SubTaskConfig
 func (c *connNumberChecker) check(ctx context.Context, checkerName string, neededPriv map[mysql.PrivilegeType]priv) *Result {
 	result := &Result{
 		Name:  checkerName,
-		Desc:  "check if connetion concurrency exceeds database's maximum connection limit",
+		Desc:  "check if connection concurrency exceeds database's maximum connection limit",
 		State: StateSuccess,
 	}
 	baseConn, err := c.toCheckDB.GetBaseConn(ctx)
@@ -89,17 +88,17 @@ func (c *connNumberChecker) check(ctx context.Context, checkerName string, neede
 	}
 	// check super privilege for SHOW PROCESSLIST
 	usedConn := 0
-	grants, err := dbutil.ShowGrants(ctx, c.toCheckDB.DB, "", "")
+	grants, err := showGrants(ctx, c.toCheckDB.DB, "", "")
 	if err != nil {
 		markCheckError(result, err)
 		return result
 	}
-	err2 := verifyPrivilegesWithResult(result, grants, neededPriv)
+	err2 := verifyPrivilegesWithResult(result, grants, neededPriv, c.toCheckDB.Version)
 	if err2 != nil {
 		// no enough privilege to check the user's connection number
 		result.State = StateWarning
 		// nolint
-		result.Errors = append(result.Errors, NewWarn(err2.ShortErr))
+		result.Errors = append(result.Errors, NewWarn("%s", err2.ShortErr))
 		result.Instruction = err2.Instruction
 	} else {
 		processRows, err = baseConn.QuerySQL(tcontext.NewContext(ctx, log.L()), "SHOW PROCESSLIST")

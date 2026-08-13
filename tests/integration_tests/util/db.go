@@ -22,7 +22,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/pkg/diff"
 	"go.uber.org/zap"
 )
@@ -82,7 +82,7 @@ func CloseDBs(dbs []*sql.DB) error {
 func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	tables, err := dbutil.GetTables(ctx, sourceDB, schema)
+	tables, err := conn.GetTables(ctx, sourceDB, schema)
 	if err != nil {
 		log.Error("get tables", zap.Error(err))
 		return false
@@ -121,7 +121,7 @@ func CheckSyncState(sourceDB, targetDB *sql.DB, schema string) bool {
 	}
 
 	// check whether the tables in the targetDB is match that in the sourceDB
-	targetTables, err := dbutil.GetTables(ctx, targetDB, schema)
+	targetTables, err := conn.GetTables(ctx, targetDB, schema)
 	if err != nil {
 		log.Error("get tables", zap.Error(err))
 		return false

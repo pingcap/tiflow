@@ -22,6 +22,8 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util/chunk"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"go.uber.org/zap"
@@ -35,9 +37,11 @@ func (r *RowChange) CausalityKeys() []string {
 	ret := make([]string, 0, 1)
 	if r.preValues != nil {
 		ret = append(ret, r.getCausalityString(r.preValues)...)
+		ret = append(ret, r.getForeignKeyCausalityString(r.preValues)...)
 	}
 	if r.postValues != nil {
 		ret = append(ret, r.getCausalityString(r.postValues)...)
+		ret = append(ret, r.getForeignKeyCausalityString(r.postValues)...)
 	}
 	return ret
 }
@@ -153,25 +157,87 @@ func truncateIndexValues(
 	return values
 }
 
-func (r *RowChange) getCausalityString(values []interface{}) []string {
-	pkAndUks := r.whereHandle.UniqueIdxs
-	if len(pkAndUks) == 0 {
-		// the table has no PK/UK, all values of the row consists the causality key
-		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
+func (r *RowChange) getForeignKeyCausalityString(values []interface{}) []string {
+	if len(r.foreignKeyRelations) == 0 {
+		return nil
 	}
 
-	ret := make([]string, 0, len(pkAndUks))
+	keys := make([]string, 0, len(r.foreignKeyRelations))
 
-	for _, indexCols := range pkAndUks {
+	for _, relation := range r.foreignKeyRelations {
+		if len(relation.ChildColumnIdx) == 0 || len(relation.ParentColumns) == 0 {
+			continue
+		}
+
+		relationValues := make([]interface{}, len(relation.ChildColumnIdx))
+		skip := false
+		for i, idx := range relation.ChildColumnIdx {
+			if idx >= len(values) {
+				log.L().Debug("skip foreign key causality relation with out-of-range child column index",
+					zap.String("childTable", r.sourceTable.String()),
+					zap.String("parentTable", relation.ParentTable),
+					zap.Int("childColumnIndex", idx),
+					zap.Int("valueCount", len(values)))
+				skip = true
+				break
+			}
+
+			relationValues[i] = values[idx]
+			if relationValues[i] == nil {
+				skip = true
+				break
+			}
+		}
+
+		if skip {
+			continue
+		}
+
+		key := genKeyString(relation.ParentTable, relation.ParentColumns, relationValues)
+		if len(key) > 0 {
+			keys = append(keys, key)
+		}
+	}
+
+	return keys
+}
+
+func (r *RowChange) getCausalityString(values []interface{}) []string {
+	sourceTable := r.sourceTable
+	if r.causalityKeySourceTable != nil {
+		// Only causality keys use this table name; r.sourceTable keeps the original source table.
+		sourceTable = r.causalityKeySourceTable
+	}
+	causalityIndexes := r.whereHandle.causalityIdxs
+	if len(causalityIndexes) == 0 {
+		// No causality index: use the whole row.
+		columns := r.whereHandle.rowMapper.columnsForValues(values)
+		return []string{genKeyString(sourceTable.String(), columns, values)}
+	}
+
+	ret := make([]string, 0, len(causalityIndexes))
+
+	values, fullValuesOK := r.fillVirtualGeneratedValues(values)
+
+	for _, indexCols := range causalityIndexes {
 		// TODO: should not support multi value index and generate the value
 		// TODO: also fix https://github.com/pingcap/tiflow/issues/3286#issuecomment-971264282
 		if indexCols.MVIndex {
 			continue
 		}
-		cols, vals := getColsAndValuesOfIdx(r.sourceTableInfo.Columns, indexCols, values)
+
+		// Only hidden-column indexes require materialized values.
+		if indexHasHiddenColumn(indexCols, r.sourceTableInfo) && !fullValuesOK {
+			continue
+		}
+
+		cols, vals := r.whereHandle.rowMapper.columnsAndValuesByIndex(
+			indexCols,
+			values,
+		)
 		// handle prefix index
 		truncVals := truncateIndexValues(r.tiSessionCtx, r.sourceTableInfo, indexCols, cols, vals)
-		key := genKeyString(r.sourceTable.String(), cols, truncVals)
+		key := genKeyString(sourceTable.String(), cols, truncVals)
 		if len(key) > 0 { // ignore `null` value.
 			ret = append(ret, key)
 		} else {
@@ -180,10 +246,82 @@ func (r *RowChange) getCausalityString(values []interface{}) []string {
 	}
 
 	if len(ret) == 0 {
-		// the table has no PK/UK, or all UK are NULL. all values of the row
-		// consists the causality key
-		return []string{genKeyString(r.sourceTable.String(), r.sourceTableInfo.Columns, values)}
+		// No index key was generated; fall back to the whole row.
+		columns := r.whereHandle.rowMapper.columnsForValues(values)
+		return []string{genKeyString(sourceTable.String(), columns, values)}
 	}
 
 	return ret
+}
+
+// fillVirtualGeneratedValues returns a copy of values extended to the full
+// source column list, with hidden/virtual generated columns evaluated. The bool
+// reports whether full values are available.
+func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
+	if r.whereHandle.hiddenGeneratedColumnExprCache == nil {
+		return values, false
+	}
+
+	cols := r.sourceTableInfo.Columns
+	if r.whereHandle.rowMapper.isFullValues(values) {
+		return values, true
+	}
+
+	exprs, exprCtx, ok := r.whereHandle.hiddenGeneratedColumnExprCache.getOrBuildExprs(r.tiSessionCtx)
+	if !ok {
+		return values, false
+	}
+
+	visibleCols := r.whereHandle.rowMapper.visibleColumns
+	if len(values) != len(visibleCols) {
+		return values, false
+	}
+
+	datums, err := utils.AdjustBinaryProtocolForDatum(r.tiSessionCtx, values, visibleCols)
+	if err != nil {
+		log.L().Debug("cannot adjust row for generated column evaluation",
+			zap.String("table", r.sourceTable.String()), zap.Error(err))
+		return values, false
+	}
+
+	full := make([]any, len(cols))
+	fullDatums := make([]types.Datum, len(cols))
+	for i, col := range visibleCols {
+		full[col.Offset] = values[i]
+		fullDatums[col.Offset] = datums[i]
+	}
+
+	mutRow := chunk.MutRowFromDatums(fullDatums)
+	for _, col := range r.whereHandle.hiddenGeneratedColumnExprCache.columns {
+		expr, ok := exprs[col.Offset]
+		if !ok {
+			return values, false
+		}
+		d, err := expr.Eval(exprCtx.GetEvalCtx(), mutRow.ToRow())
+		if err != nil {
+			log.L().Debug("cannot evaluate generated column expression",
+				zap.String("table", r.sourceTable.String()),
+				zap.String("column", col.Name.O), zap.Error(err))
+			return values, false
+		}
+		full[col.Offset] = datumValue(d)
+		fullDatums[col.Offset] = d
+		mutRow.SetDatum(col.Offset, d)
+	}
+	return full, true
+}
+
+func datumValue(d types.Datum) any {
+	if d.IsNull() {
+		return nil
+	}
+	if s, err := d.ToString(); err == nil {
+		return s
+	}
+	value := d.GetValue()
+	// Keep byte values comparable for identityUpdated's != check.
+	if bs, ok := value.([]byte); ok {
+		return string(bs)
+	}
+	return value
 }

@@ -1,0 +1,8 @@
+source-id: "mariadb-source-01"
+enable-gtid: false
+enable-relay: false
+
+from:
+  host: "127.0.0.1"
+  user: "root"
+  port: 3306

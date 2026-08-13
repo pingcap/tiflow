@@ -253,11 +253,8 @@ func TestGenDMLWithSameOp(t *testing.T) {
 	expectQueries := []string{
 		// table1
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?),(?,?,?),(?,?,?)",
-		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
-		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
-		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
 		"DELETE FROM `db1`.`tb1` WHERE `id` = ? LIMIT 1",
 		"REPLACE INTO `db1`.`tb1` (`id`,`col1`,`name`) VALUES (?,?,?)",
@@ -292,11 +289,8 @@ func TestGenDMLWithSameOp(t *testing.T) {
 	expectArgs := [][]interface{}{
 		// table1
 		{1, 1, "a", 2, 2, "b", 3, 3, "c"},
-		{1},
 		{1, 1, "aa"},
-		{2},
 		{2, 2, "bb"},
-		{3},
 		{3, 3, "cc"},
 		{1},
 		{1, 4, "aa"},

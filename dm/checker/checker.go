@@ -19,23 +19,26 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // for mysql
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/lightning/pkg/checkpoints"
 	"github.com/pingcap/tidb/lightning/pkg/importer"
 	"github.com/pingcap/tidb/lightning/pkg/importer/opts"
 	"github.com/pingcap/tidb/lightning/pkg/precheck"
-	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
+	"github.com/pingcap/tidb/pkg/lightning/importdef"
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
+	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/loader"
@@ -304,6 +307,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 		c.checkList = append(c.checkList, checker.NewTargetPrivilegeChecker(
 			c.instances[0].targetDB.DB,
 			c.instances[0].targetDBInfo,
+			c.instances[0].targetDB.Version,
 		))
 	}
 	// sourceID -> DB
@@ -334,6 +338,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewSourceDumpPrivilegeChecker(
 					instance.sourceDB.DB,
 					instance.sourceDBinfo,
+					instance.sourceDB.Version,
 					info.sourceID2SourceTables[sourceID],
 					exportCfg.Consistency,
 					c.dumpWholeInstance,
@@ -364,7 +369,7 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 				c.checkList = append(c.checkList, checker.NewMySQLBinlogRowImageChecker(instance.sourceDB.DB, instance.sourceDBinfo))
 			}
 			if _, ok := c.checkingItems[config.ReplicationPrivilegeChecking]; ok {
-				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo))
+				c.checkList = append(c.checkList, checker.NewSourceReplicationPrivilegeChecker(instance.sourceDB.DB, instance.sourceDBinfo, instance.sourceDB.Version))
 			}
 			if _, ok := c.checkingItems[config.OnlineDDLChecking]; c.onlineDDL != nil && ok {
 				c.checkList = append(c.checkList, checker.NewOnlineDDLChecker(instance.sourceDB.DB, info.sourceID2InterestedDB[i], c.onlineDDL, instance.baList))
@@ -382,6 +387,13 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			c.instances[0].targetDB,
 			info.sourceID2TableMap,
 			info.targetTable2ExtendedColumns,
+			dumpThreads,
+		))
+	}
+	if _, ok := c.checkingItems[config.PrimaryKeyChecking]; ok {
+		c.checkList = append(c.checkList, checker.NewPrimaryKeyChecker(
+			upstreamDBs,
+			info.sourceID2TableMap,
 			dumpThreads,
 		))
 	}
@@ -589,7 +601,14 @@ func (c *Checker) fetchSourceTargetDB(
 	if err != nil {
 		return nil, nil, terror.WithScope(terror.ErrTaskCheckFailedOpenDB.Delegate(err, instance.cfg.To.User, instance.cfg.To.Host, instance.cfg.To.Port), terror.ScopeDownstream)
 	}
-	return conn.FetchTargetDoTables(ctx, instance.cfg.SourceID, instance.sourceDB, instance.baList, r)
+	sourceTables, err := conn.FetchAllDoTables(ctx, instance.sourceDB, instance.baList)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := checkTableRouteCaseCollisions(instance.cfg.CaseSensitive, instance.cfg.RouteRules, sourceTables); err != nil {
+		return nil, nil, err
+	}
+	return conn.RouteTargetDoTables(instance.cfg.SourceID, sourceTables, r)
 }
 
 func (c *Checker) displayCheckingItems() string {
@@ -866,10 +885,94 @@ func sameTableNameDetection(tables map[filter.Table][]filter.Table) error {
 	return nil
 }
 
+func checkTableRouteCaseCollisions(
+	caseSensitive bool,
+	rules []*router.TableRule,
+	sourceTables map[string][]string,
+) error {
+	if caseSensitive || len(sourceTables) == 0 {
+		return nil
+	}
+
+	// regexprrouter matches source patterns case-insensitively in this mode and
+	// reports "matches more than one rule" before the checker can build target
+	// table mappings. Match table-level route rules with the same filter
+	// semantics, but only against source tables that exist and remain after
+	// block/allow filtering. Schema-level route conflicts intentionally keep the
+	// router's generic duplicate-rule error because they are outside this target-
+	// table diagnostic.
+	type matchableRule struct {
+		rule    *router.TableRule
+		matcher *filter.Filter
+	}
+	matchableRules := make([]matchableRule, 0, len(rules))
+	for _, rule := range rules {
+		if rule == nil || rule.TablePattern == "" {
+			continue
+		}
+
+		matcher, err := filter.New(false, &filter.Rules{
+			DoDBs: []string{rule.SchemaPattern},
+			DoTables: []*filter.Table{
+				{Schema: rule.SchemaPattern, Name: rule.TablePattern},
+			},
+		})
+		if err != nil {
+			return terror.ErrTaskCheckGenTableRouter.Delegate(err)
+		}
+		matchableRules = append(matchableRules, matchableRule{rule: rule, matcher: matcher})
+	}
+
+	selectedTables := make([]filter.Table, 0)
+	for schema, tables := range sourceTables {
+		for _, table := range tables {
+			selectedTables = append(selectedTables, filter.Table{Schema: schema, Name: table})
+		}
+	}
+	sort.Slice(selectedTables, func(i, j int) bool {
+		return selectedTables[i].String() < selectedTables[j].String()
+	})
+
+	var messages []string
+	messageSet := make(map[string]struct{})
+	for i := range selectedTables {
+		targetNameSets := make(map[string]string)
+		for _, matchable := range matchableRules {
+			if !matchable.matcher.Match(&selectedTables[i]) {
+				continue
+			}
+
+			targetTable := matchable.rule.TargetTable
+			if targetTable == "" {
+				targetTable = selectedTables[i].Name
+			}
+
+			target := filter.Table{Schema: matchable.rule.TargetSchema, Name: targetTable}
+			name := target.String()
+			nameL := strings.ToLower(name)
+			if nameO, ok := targetNameSets[nameL]; !ok {
+				targetNameSets[nameL] = name
+			} else if nameO != name {
+				message := fmt.Sprintf("same target table %v vs %s", nameO, name)
+				if _, ok := messageSet[message]; !ok {
+					messageSet[message] = struct{}{}
+					messages = append(messages, message)
+				}
+			}
+		}
+	}
+
+	if len(messages) > 0 {
+		return terror.ErrTaskCheckSameTableName.Generate(messages)
+	}
+
+	return nil
+}
+
 // lightningPrecheckAdaptor implements the importer.PreRestoreInfoGetter interface.
 type lightningPrecheckAdaptor struct {
 	importer.TargetInfoGetter
-	allTables        map[string]*checkpoints.TidbDBInfo
+	allTables        map[string]*importdef.DBInfo
 	sourceDataResult importer.EstimateSourceDataSizeResult
 }
 
@@ -879,18 +982,18 @@ func newLightningPrecheckAdaptor(
 ) *lightningPrecheckAdaptor {
 	var (
 		sourceDataResult importer.EstimateSourceDataSizeResult
-		allTables        = make(map[string]*checkpoints.TidbDBInfo)
+		allTables        = make(map[string]*importdef.DBInfo)
 	)
 	if info != nil {
 		sourceDataResult.SizeWithIndex = info.totalDataSize.Load()
 	}
 	for db, tables := range info.db2TargetTables {
-		allTables[db] = &checkpoints.TidbDBInfo{
+		allTables[db] = &importdef.DBInfo{
 			Name:   db,
-			Tables: make(map[string]*checkpoints.TidbTableInfo),
+			Tables: make(map[string]*importdef.TableInfo),
 		}
 		for _, table := range tables {
-			allTables[db].Tables[table.Name] = &checkpoints.TidbTableInfo{
+			allTables[db].Tables[table.Name] = &importdef.TableInfo{
 				DB:   db,
 				Name: table.Name,
 			}
@@ -903,7 +1006,7 @@ func newLightningPrecheckAdaptor(
 	}
 }
 
-func (l *lightningPrecheckAdaptor) GetAllTableStructures(ctx context.Context, opts ...opts.GetPreInfoOption) (map[string]*checkpoints.TidbDBInfo, error) {
+func (l *lightningPrecheckAdaptor) GetAllTableStructures(ctx context.Context, opts ...opts.GetPreInfoOption) (map[string]*importdef.DBInfo, error) {
 	// re-use with other checker? or in fact we only use other information than structure?
 	return l.allTables, nil
 }

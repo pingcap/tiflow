@@ -22,7 +22,7 @@ import (
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/types"
 	driver "github.com/pingcap/tidb/pkg/types/parser_driver"
@@ -225,6 +225,18 @@ func getExpressionAndName(ft types.FieldType) (string, string) {
 		suf = " UNSIGNED"
 	}
 	return cs + suf, prefix + suf
+}
+
+func getTiDBType(ft *types.FieldType) string {
+	tidbType := types.TypeToStr(ft.GetType(), ft.GetCharset())
+	switch ft.GetType() {
+	case mysql.TypeYear, mysql.TypeBit, mysql.TypeVarchar, mysql.TypeString, mysql.TypeNewDecimal:
+		return tidbType
+	}
+	if mysql.HasUnsignedFlag(ft.GetFlag()) {
+		tidbType = tidbType + " unsigned"
+	}
+	return tidbType
 }
 
 func getBitFromUint64(n int, v uint64) []byte {

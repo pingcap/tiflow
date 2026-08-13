@@ -111,18 +111,26 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 	return
 }
 
-func (p *tableProgress) resolveLock(currentTime time.Time) {
+func (p *tableProgress) getResolveLockTargetTs(currentTime time.Time, currentTs uint64) uint64 {
 	resolvedTsUpdated := time.Unix(p.resolvedTsUpdated.Load(), 0)
 	if !p.initialized.Load() || time.Since(resolvedTsUpdated) < resolveLockFence {
-		return
+		return 0
 	}
 	resolvedTs := p.resolvedTs.Load()
 	resolvedTime := oracle.GetTimeFromTS(resolvedTs)
 	if currentTime.Sub(resolvedTime) < resolveLockFence {
+		return 0
+	}
+
+	return min(currentTs, oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence)))
+}
+
+func (p *tableProgress) resolveLock(currentTime time.Time, currentTs uint64) {
+	targetTs := p.getResolveLockTargetTs(currentTime, currentTs)
+	if targetTs == 0 {
 		return
 	}
 
-	targetTs := oracle.GoTimeToTS(resolvedTime.Add(resolveLockFence))
 	for _, subID := range p.subscriptionIDs {
 		p.client.ResolveLock(subID, targetTs)
 	}
@@ -488,13 +496,19 @@ func (p *MultiplexingPuller) runResolveLockChecker(ctx context.Context) error {
 			return ctx.Err()
 		case <-resolveLockTicker.C:
 		}
+		physical, logical, err := p.client.GetTS(ctx)
+		if err != nil {
+			log.Warn("get ts from pd failed", zap.Error(err))
+			continue
+		}
+		currentTs := oracle.ComposeTS(physical, logical)
 		currentTime := p.pdClock.CurrentTime()
 		for progress := range p.getAllProgresses() {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				progress.resolveLock(currentTime)
+				progress.resolveLock(currentTime, currentTs)
 			}
 		}
 	}

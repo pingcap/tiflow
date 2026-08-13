@@ -25,11 +25,12 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/lightning/pkg/checkpoints"
+	"github.com/pingcap/tidb/lightning/pkg/errormanager"
+	"github.com/pingcap/tidb/lightning/pkg/importinto"
 	lserver "github.com/pingcap/tidb/lightning/pkg/server"
-	"github.com/pingcap/tidb/pkg/lightning/checkpoints"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
-	"github.com/pingcap/tidb/pkg/lightning/errormanager"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -69,7 +70,7 @@ type LightningLoader struct {
 	logger log.Logger
 	cli    *clientv3.Client
 	core   *lserver.Lightning
-	cancel context.CancelFunc // for per task context, which maybe different from lightning context
+	cancel context.CancelCauseFunc // for per task context, which maybe different from lightning context
 
 	toDB *conn.BaseDB
 
@@ -118,14 +119,16 @@ func MakeGlobalConfig(cfg *config.SubTaskConfig) *lcfg.GlobalConfig {
 	if len(cfg.LoaderConfig.PDAddr) > 0 {
 		lightningCfg.TiDB.PdAddr = cfg.LoaderConfig.PDAddr
 	}
-	lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
-	if cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
+	switch cfg.LoaderConfig.ImportMode {
+	case config.LoadModePhysical:
 		lightningCfg.TikvImporter.Backend = lcfg.BackendLocal
+		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
+	case config.LoadModeImportInto:
+		lightningCfg.TikvImporter.Backend = lcfg.BackendImportInto
+	default:
+		lightningCfg.TikvImporter.Backend = lcfg.BackendTiDB
 	}
 	lightningCfg.PostRestore.Checksum = lcfg.OpLevelOff
-	if lightningCfg.TikvImporter.Backend == lcfg.BackendLocal {
-		lightningCfg.TikvImporter.SortedKVDir = cfg.SortingDirPhysical
-	}
 	lightningCfg.Mydumper.SourceDir = cfg.Dir
 	lightningCfg.App.Config.File = "" // make lightning not init logger, see more in https://github.com/pingcap/tidb/pull/29291
 	return lightningCfg
@@ -209,6 +212,24 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	if status != lightningStatusRunning {
 		return nil
 	}
+
+	// import-into uses a different checkpoint mechanism
+	if cfg.TikvImporter.Backend == lcfg.BackendImportInto {
+		cpMgr, err := importinto.NewCheckpointManager(cfg)
+		if err != nil {
+			return err
+		}
+		if err := cpMgr.Initialize(ctx); err != nil {
+			_ = cpMgr.Close()
+			return err
+		}
+		defer func() {
+			_ = cpMgr.Close()
+		}()
+		return cpMgr.IgnoreError(ctx, common.AllTables)
+	}
+
+	// physical/logical mode uses the original checkpoint mechanism
 	cpdb, err := checkpoints.OpenCheckpointsDB(ctx, cfg)
 	if err != nil {
 		return err
@@ -219,11 +240,23 @@ func (l *LightningLoader) ignoreCheckpointError(ctx context.Context, cfg *lcfg.C
 	return errors.Trace(cpdb.IgnoreErrorCheckpoint(ctx, "all"))
 }
 
+func enableImportIntoCompatibilityConfig(cfg *lcfg.Config) {
+	if cfg.TikvImporter.Backend == lcfg.BackendImportInto {
+		// DM import-into mode shares the same S3 URI with Dumpling and Lightning.
+		// Keep the URI unchanged for storage access, and only ask TiDB Lightning
+		// to strip external-id from IMPORT INTO SQL for compatibility with old
+		// IMPORT INTO planners. This compatibility flag should be deprecated once
+		// those old planners no longer need to be supported.
+		cfg.TikvImporter.StripS3ExternalIDForImportSQL = true
+	}
+}
+
 func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (err error) {
-	taskCtx, cancel := context.WithCancel(ctx)
+	taskCtx, cancel := context.WithCancelCause(ctx)
 	l.Lock()
 	l.cancel = cancel
 	l.Unlock()
+	enableImportIntoCompatibilityConfig(cfg)
 
 	// always try to skill all checkpoint errors so we can resume this phase.
 	err = l.ignoreCheckpointError(ctx, cfg)
@@ -233,6 +266,9 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if err = l.checkPointList.UpdateStatus(ctx, lightningStatusRunning); err != nil {
 		return err
 	}
+	defer func() {
+		l.lastErr = err
+	}()
 
 	var opts []lserver.Option
 	if l.cfg.MetricsFactory != nil {
@@ -279,7 +315,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lserver.WithDupIndicator(&hasDup))
 	}
-
 	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
@@ -292,9 +327,6 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 			}
 		}
 	})
-	defer func() {
-		l.lastErr = err
-	}()
 	if err != nil {
 		return convertLightningError(err)
 	}
@@ -402,10 +434,17 @@ func GetLightningConfig(globalCfg *lcfg.GlobalConfig, subtaskCfg *config.SubTask
 	if subtaskCfg.LoaderConfig.DiskQuotaPhysical > 0 {
 		cfg.TikvImporter.DiskQuota = subtaskCfg.LoaderConfig.DiskQuotaPhysical
 	}
-	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
+	switch cfg.TikvImporter.Backend {
+	case lcfg.BackendLocal:
 		cfg.TikvImporter.IncrementalImport = true
-	} else if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
-		return nil, err
+	case lcfg.BackendImportInto:
+		// import-into mode reads configuration from config.Config directly,
+		// no additional setup required here
+	default:
+		// TiDB backend
+		if err := cfg.TikvImporter.OnDuplicate.FromStringValue(string(subtaskCfg.OnDuplicateLogical)); err != nil {
+			return nil, err
+		}
 	}
 	switch subtaskCfg.OnDuplicatePhysical {
 	case config.OnDuplicateManual:
@@ -616,13 +655,25 @@ func (l *LightningLoader) Close() {
 
 // Kill does ungraceful shutdown.
 func (l *LightningLoader) Kill() {
-	// TODO: implement kill
-	l.Close()
+	l.KillWithCause(context.Canceled)
+}
+
+// KillWithCause does ungraceful shutdown with a cancel cause.
+// This is used by DM-worker failover so IMPORT INTO jobs can be preserved for takeover.
+func (l *LightningLoader) KillWithCause(cause error) {
+	l.pauseWithCause(cause)
+	l.removeLabelValuesWithTaskInMetrics(l.cfg.Name, l.cfg.SourceID)
+	l.checkPointList.Close()
+	l.closed.Store(true)
 }
 
 // Pause pauses the process, and it can be resumed later
 // should cancel context from external.
 func (l *LightningLoader) Pause() {
+	l.pauseWithCause(context.Canceled)
+}
+
+func (l *LightningLoader) pauseWithCause(cause error) {
 	l.Lock()
 	defer l.Unlock()
 	if l.isClosed() {
@@ -630,7 +681,10 @@ func (l *LightningLoader) Pause() {
 		return
 	}
 	if l.cancel != nil {
-		l.cancel()
+		if cause == nil {
+			cause = context.Canceled
+		}
+		l.cancel(cause)
 	}
 	l.core.Stop()
 }

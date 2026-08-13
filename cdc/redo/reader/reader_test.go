@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/redo/common"
@@ -68,8 +69,10 @@ func genLogFile(
 		}
 	} else if logType == redo.RedoDDLLogFileType {
 		event := &model.DDLEvent{
-			CommitTs:  maxCommitTs,
-			TableInfo: &model.TableInfo{},
+			CommitTs: maxCommitTs,
+			TableInfo: &model.TableInfo{
+				TableInfo: &timodel.TableInfo{},
+			},
 		}
 		log := event.ToRedoLog()
 		rawData, err := codec.MarshalRedoLog(log, nil)

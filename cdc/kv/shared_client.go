@@ -194,7 +194,6 @@ type rangeTask struct {
 // requestedStore represents a store that has been connected.
 // A store may have multiple streams.
 type requestedStore struct {
-	storeID   uint64
 	storeAddr string
 	// Use to select a stream to send request.
 	nextStream atomic.Uint32
@@ -275,6 +274,14 @@ func NewSharedClient(
 // AllocSubscriptionID gets an ID can be used in `Subscribe`.
 func (s *SharedClient) AllocSubscriptionID() SubscriptionID {
 	return SubscriptionID(subscriptionIDGen.Add(1))
+}
+
+// GetTS returns the current PD TSO.
+func (s *SharedClient) GetTS(ctx context.Context) (int64, int64, error) {
+	if s.pd == nil {
+		return 0, 0, errors.New("pd client is nil")
+	}
+	return s.pd.GetTS(ctx)
 }
 
 // Subscribe the given table span.
@@ -441,7 +448,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				continue
 			}
 
-			store := s.getStore(ctx, eg, region.rpcCtx.Peer.StoreId, region.rpcCtx.Addr)
+			store := s.getStore(ctx, eg, region.rpcCtx.Addr)
 			stream := store.getStream()
 			stream.requests.In() <- region
 
@@ -452,7 +459,6 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
 				zap.Uint64("regionID", region.verID.GetID()),
 				zap.String("span", region.span.String()),
-				zap.Uint64("storeID", store.storeID),
 				zap.String("addr", store.storeAddr))
 		}
 	}
@@ -481,14 +487,13 @@ func (s *SharedClient) attachRPCContextForRegion(ctx context.Context, region reg
 
 // getStore gets a requestedStore from requestedStores by storeAddr.
 func (s *SharedClient) getStore(
-	ctx context.Context, g *errgroup.Group,
-	storeID uint64, storeAddr string,
+	ctx context.Context, g *errgroup.Group, storeAddr string,
 ) *requestedStore {
 	var rs *requestedStore
 	if rs = s.stores[storeAddr]; rs != nil {
 		return rs
 	}
-	rs = &requestedStore{storeID: storeID, storeAddr: storeAddr}
+	rs = &requestedStore{storeAddr: storeAddr}
 	s.stores[storeAddr] = rs
 	for i := uint(0); i < s.config.KVClient.GrpcStreamConcurrent; i++ {
 		stream := newStream(ctx, s, g, rs)
@@ -779,7 +784,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 			now := time.Now()
 			for regionID, lastRun := range resolveLastRun {
 				if now.Sub(lastRun) < resolveLockMinInterval {
-					resolveLastRun[regionID] = lastRun
+					copied[regionID] = lastRun
 				}
 			}
 			resolveLastRun = copied
@@ -827,7 +832,7 @@ func (s *SharedClient) handleResolveLockTasks(ctx context.Context) error {
 }
 
 func (s *SharedClient) logSlowRegions(ctx context.Context) error {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {
@@ -835,10 +840,6 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 		}
-		log.Info("event feed starts to check locked regions",
-			zap.String("namespace", s.changefeed.Namespace),
-			zap.String("changefeed", s.changefeed.ID))
-
 		currTime := s.pdClock.CurrentTime()
 		s.totalSpans.RLock()
 		var slowInitializeRegionCount int

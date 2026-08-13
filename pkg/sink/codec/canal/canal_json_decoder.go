@@ -25,13 +25,13 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/meta/metabuild"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	pmodel "github.com/pingcap/tidb/pkg/parser/model"
+	pmodel "github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -90,7 +90,7 @@ type batchDecoder struct {
 
 	config *common.Config
 
-	storage storage.ExternalStorage
+	storage storeapi.Storage
 
 	upstreamTiDB *sql.DB
 	bytesDecoder *encoding.Decoder
@@ -106,7 +106,7 @@ func NewBatchDecoder(
 	ctx context.Context, codecConfig *common.Config, db *sql.DB,
 ) (codec.RowEventDecoder, error) {
 	var (
-		externalStorage storage.ExternalStorage
+		externalStorage storeapi.Storage
 		err             error
 	)
 	if codecConfig.LargeMessageHandle.EnableClaimCheck() {
@@ -211,6 +211,14 @@ func (b *batchDecoder) buildData(holder *common.ColumnsHolder) (map[string]inter
 		t := holder.Types[i]
 		name := holder.Types[i].Name()
 		mysqlType := strings.ToLower(t.DatabaseTypeName())
+		// go-sql-driver/mysql v1.8 reports ENUM/SET via DatabaseTypeName; v1.7 reported
+		// them as CHAR/BINARY because the wire type is fieldTypeString. The downstream
+		// canalJSONFormatColumn expects ENUM/SET values to be integer indexes, but the
+		// text-protocol SELECT here returns the name(s). Map back to the generic char
+		// type so the value passes through as a string — MySQL accepts the name on write.
+		if mysqlType == "enum" || mysqlType == "set" {
+			mysqlType = "char"
+		}
 
 		var value string
 		rawValue := holder.Values[i].([]uint8)

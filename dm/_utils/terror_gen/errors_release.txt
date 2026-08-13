@@ -4,6 +4,7 @@ ErrDBInvalidConn,[code=10003:class=database:scope=not-set:level=high], "Message:
 ErrDBUnExpect,[code=10004:class=database:scope=not-set:level=high], "Message: unexpect database error: %s"
 ErrDBQueryFailed,[code=10005:class=database:scope=not-set:level=high], "Message: query statement failed: %s"
 ErrDBExecuteFailed,[code=10006:class=database:scope=not-set:level=high], "Message: execute statement failed: %s"
+ErrDBExecuteFailedBegin,[code=10007:class=database:scope=not-set:level=high], "Message: execute statement failed: begin"
 ErrParseMydumperMeta,[code=11001:class=functional:scope=internal:level=high], "Message: parse mydumper metadata error: %s, metadata: %s"
 ErrGetFileSize,[code=11002:class=functional:scope=internal:level=high], "Message: get file %s size"
 ErrDropMultipleTables,[code=11003:class=functional:scope=internal:level=high], "Message: not allowed operation: drop multiple tables in one statement, Workaround: It is recommended to include only one DDL operation in a statement executed upstream. Please manually handle it using dmctl (skipping the DDL statement or replacing the DDL statement with a specified DDL statement). For details, see https://docs.pingcap.com/tidb-data-migration/stable/handle-failed-sql-statements"
@@ -185,7 +186,7 @@ ErrConfigOnlineDDLMistakeRegex,[code=20049:class=config:scope=internal:level=hig
 ErrOpenAPITaskConfigExist,[code=20050:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' already exist, Workaround: If you want to override it, please use the overwrite flag."
 ErrOpenAPITaskConfigNotExist,[code=20051:class=config:scope=internal:level=low], "Message: the openapi task config for '%s' does not exist"
 ErrConfigCollationCompatibleNotSupport,[code=20052:class=config:scope=internal:level=medium], "Message: collation compatible %s not supported, Workaround: Please check the `collation_compatible` config in task configuration file, which can be set to `loose`/`strict`."
-ErrConfigInvalidLoadMode,[code=20053:class=config:scope=internal:level=medium], "Message: invalid load mode '%s', Workaround: Please choose a valid value in ['logical', 'physical']"
+ErrConfigInvalidLoadMode,[code=20053:class=config:scope=internal:level=medium], "Message: invalid load mode '%s', Workaround: Please choose a valid value in ['logical', 'physical', 'import-into']"
 ErrConfigInvalidDuplicateResolution,[code=20054:class=config:scope=internal:level=medium], "Message: invalid load on-duplicate-logical or on-duplicate option '%s', Workaround: Please choose a valid value in ['replace', 'error', 'ignore'] or leave it empty."
 ErrConfigValidationMode,[code=20055:class=config:scope=internal:level=high], "Message: invalid validation mode, Workaround: Please check `validation-mode` config in task configuration file."
 ErrContinuousValidatorCfgNotFound,[code=20056:class=config:scope=internal:level=medium], "Message: mysql-instance(%d)'s continuous validator config %s not exist, Workaround: Please check the `validator-config-name` config in task configuration file."
@@ -200,6 +201,9 @@ ErrConfigColumnMappingDeprecated,[code=20064:class=config:scope=internal:level=h
 ErrConfigInvalidLoadAnalyze,[code=20065:class=config:scope=internal:level=medium], "Message: invalid load analyze option '%s', Workaround: Please choose a valid value in ['required', 'optional', 'off'] or leave it empty."
 ErrConfigStrictOptimisticShardMode,[code=20066:class=config:scope=internal:level=medium], "Message: cannot enable `strict-optimistic-shard-mode` while `shard-mode` is not `optimistic`, Workaround: Please set `shard-mode` to `optimistic` if you want to enable `strict-optimistic-shard-mode`."
 ErrConfigSecretKeyPath,[code=20067:class=config:scope=internal:level=high], "Message: invalid secret key path or content: %v, Workaround: Please check whether the path is valid, and has required permission to read the file, and the key is correct."
+ErrConfigImportIntoShardingNotSupport,[code=20068:class=config:scope=internal:level=high], "Message: import-into mode does not support sharding (multi-source) scenario, Workaround: Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'."
+ErrConfigImportIntoRequiresSharedStorage,[code=20069:class=config:scope=internal:level=high], "Message: import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s', Workaround: Please use a shared storage URI like s3://bucket/path"
+ErrConfigUnsupportedForeignKeyChecksOption,[code=20070:class=config:scope=internal:level=medium], "Message: `%s` is not supported when foreign_key_checks=1, Workaround: Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
@@ -356,7 +360,7 @@ ErrSyncerFailpoint,[code=36063:class=sync-unit:scope=internal:level=low], "Messa
 ErrSyncerEvent,[code=36064:class=sync-unit:scope=internal:level=high]
 ErrSyncerOperatorNotExist,[code=36065:class=sync-unit:scope=internal:level=low], "Message: error operator not exist, position: %s"
 ErrSyncerEventNotExist,[code=36066:class=sync-unit:scope=internal:level=high], "Message: replace or inject event not exist, location: %s"
-ErrSyncerParseDDL,[code=36067:class=sync-unit:scope=internal:level=high], "Message: parse DDL: %s, Workaround: Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
+ErrSyncerParseDDL,[code=36067:class=sync-unit:scope=internal:level=high], "Message: parse DDL: %s, Workaround: Please confirm your DDL statement is correct and needed. For TiDB compatible DDL, see https://docs.pingcap.com/tidb/stable/mysql-compatibility#ddl-operations. You can use `handle-error` command to skip or replace the DDL or add a binlog filter rule to ignore it if the DDL is not needed."
 ErrSyncerUnsupportedStmt,[code=36068:class=sync-unit:scope=internal:level=high], "Message: `%s` statement not supported in %s mode"
 ErrSyncerGetEvent,[code=36069:class=sync-unit:scope=upstream:level=high], "Message: get binlog event error: %v, Workaround: Please check if the binlog file could be parsed by `mysqlbinlog`."
 ErrSyncerDownstreamTableNotFound,[code=36070:class=sync-unit:scope=internal:level=high], "Message: downstream table %s not found"

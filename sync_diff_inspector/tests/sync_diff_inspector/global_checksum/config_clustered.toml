@@ -1,0 +1,36 @@
+# Diff Configuration.
+
+######################### Global config #########################
+
+check-thread-count = 4
+export-fix-sql = false
+check-struct-only = false
+
+######################### Databases config #########################
+[data-sources]
+[data-sources.tidb1]
+    host = "127.0.0.1"
+    port = 4001
+    user = "root"
+    password = ""
+
+[data-sources.tidb]
+    host = "127.0.0.1"
+    port = 4000
+    user = "root"
+    password = ""
+
+######################### Task config #########################
+[task]
+    output-dir = "/tmp/sync_diff_inspector_test/sync_diff_inspector/output"
+
+    source-instances = ["tidb1"]
+    target-instance = "tidb"
+
+    target-check-tables = ["checksum_mode_clustered.t"]
+    target-configs = ["config1"]
+
+[table-configs]
+[table-configs.config1]
+target-tables = ["checksum_mode_clustered.t"]
+chunk-size = 1

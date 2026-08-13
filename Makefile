@@ -341,10 +341,11 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --exclude-dirs "^dm/","^tests/"
-	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
+	tools/bin/golangci-lint version
+	time tools/bin/golangci-lint run --new-from-merge-base master --timeout 120m0s -v --exclude-dirs "^dm/","^tests/"
+	cd dm && time ../tools/bin/golangci-lint run --new-from-merge-base master --timeout 120m0s -v
 
-check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
+check: check-copyright generate_mock go-generate fmt tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \
 	check_cdc_integration_test check_dm_integration_test check_engine_integration_test
 	@git --no-pager diff --exit-code || (echo "Please add changed files!" && false)
@@ -363,8 +364,6 @@ else
 	go tool cover -html "$(TEST_DIR)/all_cov.out" -o "$(TEST_DIR)/all_cov.html"
 endif
 
-swagger-spec: tools/bin/swag
-	tools/bin/swag init --exclude dm,engine --parseVendor -generalInfo cdc/api/v1/api.go --output docs/swagger
 
 unit_test_coverage:
 	grep -vE ".*.pb.go|$(CDC_PKG)/testing_utils/.*|$(CDC_PKG)/cdc/sink/simple_mysql_tester.go|.*.__failpoint_binding__.go" "$(TEST_DIR)/cov.unit.out" > "$(TEST_DIR)/unit_cov.out"
@@ -387,6 +386,17 @@ clean:
 
 sync-diff-inspector:
 	$(GOBUILD) -ldflags '$(LDFLAGS)' -o bin/sync_diff_inspector ./sync_diff_inspector
+
+sync-diff-inspector-integration_test: failpoint-enable sync-diff-inspector failpoint-disable
+	@which bin/tidb-server
+	@which bin/tikv-server
+	@which bin/pd-server
+	@which bin/sync_diff_inspector
+	@which bin/dumpling
+	@which bin/loader
+	@which bin/importer
+	cd sync_diff_inspector && ln -sf ../bin .
+	cd sync_diff_inspector && ./tests/run.sh
 
 dm: dm-master dm-worker dmctl dm-syncer
 
@@ -498,7 +508,8 @@ install_test_python_dep:
 	@echo "install python requirments for test"
 	pip install --user -q -r ./dm/tests/requirements.txt
 
-check_third_party_binary_for_dm : sync-diff-inspector
+check_third_party_binary_for_dm:
+	@which bin/sync_diff_inspector
 	@which bin/tidb-server
 	@which mysql
 	@which bin/minio

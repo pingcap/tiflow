@@ -71,7 +71,7 @@ func (d *BatchEncoder) buildMessageOnlyHandleKeyColumns(e *model.RowChangedEvent
 			zap.Int("length", length),
 			zap.Any("table", e.TableInfo.TableName),
 			zap.Any("key", key))
-		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(e.TableInfo.GetTableName(), length, d.config.MaxMessageBytes)
 	}
 
 	return key, value, nil
@@ -114,7 +114,7 @@ func (d *BatchEncoder) AppendRowChangedEvent(
 				zap.Int("length", length),
 				zap.Any("table", e.TableInfo.TableName),
 				zap.Any("key", key))
-			return cerror.ErrMessageTooLarge.GenWithStackByArgs()
+			return cerror.ErrMessageTooLarge.GenWithStackByArgs(e.TableInfo.GetTableName(), length, d.config.MaxMessageBytes)
 		}
 
 		if d.config.LargeMessageHandle.EnableClaimCheck() {
@@ -324,8 +324,9 @@ func (d *BatchEncoder) newClaimCheckLocationMessage(
 			"when create the claim-check location message",
 			zap.Int("maxMessageBytes", d.config.MaxMessageBytes),
 			zap.Int("length", length),
+			zap.Any("table", event.TableInfo.TableName),
 			zap.Any("key", key))
-		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs()
+		return nil, nil, cerror.ErrMessageTooLarge.GenWithStackByArgs(event.TableInfo.GetTableName(), length, d.config.MaxMessageBytes)
 	}
 
 	return key, value, nil

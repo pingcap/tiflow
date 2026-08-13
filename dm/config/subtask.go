@@ -29,7 +29,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/google/uuid"
-	extstorage "github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
@@ -177,9 +177,9 @@ type SubTaskConfig struct {
 	} `yaml:"experimental" toml:"experimental" json:"experimental"`
 
 	// members below are injected by dataflow engine
-	ExtStorage      extstorage.ExternalStorage `toml:"-" json:"-"`
-	MetricsFactory  promutil.Factory           `toml:"-" json:"-"`
-	FrameworkLogger *zap.Logger                `toml:"-" json:"-"`
+	ExtStorage      storeapi.Storage `toml:"-" json:"-"`
+	MetricsFactory  promutil.Factory `toml:"-" json:"-"`
+	FrameworkLogger *zap.Logger      `toml:"-" json:"-"`
 	// members below are injected by dataflow engine
 	// UUID should be unique in one go runtime.
 	// IOTotalBytes is used build TCPConnWithIOCounter and UUID is used to as a
@@ -314,6 +314,21 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigStrictOptimisticShardMode.Generate()
 	}
 
+	isImportInto := strings.EqualFold(string(c.LoaderConfig.ImportMode), string(LoadModeImportInto))
+
+	// import-into mode does not support sharding (multi-source) scenario
+	if (c.ShardMode != "" || c.IsSharding) && isImportInto {
+		return terror.ErrConfigImportIntoShardingNotSupport.Generate()
+	}
+
+	// import-into mode requires shared storage (s3, gcs, azure, etc.)
+	if isImportInto && strings.TrimSpace(c.LoaderConfig.Dir) == "" {
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
+	}
+	if isImportInto && storage.IsLocalDiskPath(c.LoaderConfig.Dir) {
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
+	}
+
 	if len(c.ColumnMappingRules) > 0 {
 		return terror.ErrConfigColumnMappingDeprecated.Generate()
 	}
@@ -398,6 +413,9 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		return terror.ErrConfigInvalidSafeModeDuration.Generate(c.SyncerConfig.SafeModeDuration, err)
 	} else if c.SyncerConfig.SafeMode && duration == 0 {
 		return terror.ErrConfigConfictSafeModeDurationAndSafeMode.Generate()
+	}
+	if err := CheckForeignKeyChecksSyncerOptions(c.To.Session, c.SyncerConfig); err != nil {
+		return err
 	}
 
 	c.From.AdjustWithTimeZone(c.Timezone)

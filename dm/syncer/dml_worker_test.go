@@ -14,14 +14,23 @@
 package syncer
 
 import (
+	"context"
+	"database/sql/driver"
+	"regexp"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	tiddl "github.com/pingcap/tidb/pkg/ddl"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/dm/config"
+	connpkg "github.com/pingcap/tiflow/dm/pkg/conn"
+	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/stretchr/testify/require"
 )
@@ -87,6 +96,14 @@ func TestGenSQL(t *testing.T) {
 		},
 		{
 			[]interface{}{1, 2, 3, "haha"},
+			[]interface{}{1, 2, 3, "hihi"},
+			true,
+
+			[]string{"REPLACE INTO `targetSchema`.`targetTable` (`id`,`col1`,`col2`,`name`) VALUES (?,?,?,?)"},
+			[][]interface{}{{1, 2, 3, "hihi"}},
+		},
+		{
+			[]interface{}{1, 2, 3, "haha"},
 			[]interface{}{4, 5, 6, "hihi"},
 			true,
 
@@ -127,4 +144,206 @@ func TestJudgeKeyNotFound(t *testing.T) {
 	require.True(t, dmlWorker.judgeKeyNotFound(0, jobs))
 	require.False(t, dmlWorker.judgeKeyNotFound(2, jobs))
 	require.False(t, dmlWorker.judgeKeyNotFound(4, jobs))
+}
+
+func TestShouldDisableForeignKeyChecksForJob(t *testing.T) {
+	t.Parallel()
+
+	worker := &DMLWorker{}
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "target", Table: "tb"}
+	tableInfo := mockTableInfo(t, "create table db.tb(id int primary key, name varchar(10))")
+
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, "v"}, tableInfo, nil, nil)
+	insertJob := &job{tp: dml, safeMode: true, dml: insertChange}
+	require.False(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
+
+	worker.foreignKeyChecksEnabled = true
+	require.True(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
+
+	updateChange := sqlmodel.NewRowChange(source, target, []interface{}{1, "a"}, []interface{}{1, "b"}, tableInfo, nil, nil)
+	updateJob := &job{tp: dml, safeMode: true, dml: updateChange}
+	require.True(t, worker.shouldDisableForeignKeyChecksForJob(updateJob))
+
+	deleteChange := sqlmodel.NewRowChange(source, target, []interface{}{1, "a"}, nil, tableInfo, nil, nil)
+	deleteJob := &job{tp: dml, safeMode: true, dml: deleteChange}
+	require.False(t, worker.shouldDisableForeignKeyChecksForJob(deleteJob))
+
+	insertJob.safeMode = false
+	require.False(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
+}
+
+func TestShouldDisableForeignKeyChecks(t *testing.T) {
+	t.Parallel()
+
+	worker := &DMLWorker{foreignKeyChecksEnabled: true}
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "target", Table: "tbl"}
+	tableInfo := mockTableInfo(t, "create table db.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))")
+
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, 2, 3, "v"}, tableInfo, nil, nil)
+	insertJob := newDMLJob(insertChange, ecWithSafeMode)
+	require.True(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
+
+	insertJob.safeMode = false
+	require.False(t, worker.shouldDisableForeignKeyChecksForJob(insertJob))
+
+	updateChange := sqlmodel.NewRowChange(source, target, []interface{}{1, 2, 3, "v"}, []interface{}{1, 2, 3, "v2"}, tableInfo, nil, nil)
+	updateJob := newDMLJob(updateChange, ecWithSafeMode)
+	require.True(t, worker.shouldDisableForeignKeyChecksForJob(updateJob))
+
+	deleteChange := sqlmodel.NewRowChange(source, target, []interface{}{1, 2, 3, "v"}, nil, tableInfo, nil, nil)
+	deleteJob := newDMLJob(deleteChange, ecWithSafeMode)
+	require.False(t, worker.shouldDisableForeignKeyChecksForJob(deleteJob))
+
+	worker.foreignKeyChecksEnabled = false
+	anotherJob := newDMLJob(insertChange, ecWithSafeMode)
+	require.False(t, worker.shouldDisableForeignKeyChecksForJob(anotherJob))
+}
+
+func TestValidateSafeModeForeignKeyUpdate(t *testing.T) {
+	t.Parallel()
+
+	worker := &DMLWorker{foreignKeyChecksEnabled: true}
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "target", Table: "tb"}
+
+	// payload is UK, v is non-key
+	tableInfo := mockTableInfo(t,
+		"create table db.tb(id int primary key, payload varchar(10) unique, v varchar(10))",
+	)
+
+	// PK change
+	pkUpdate := sqlmodel.NewRowChange(
+		source, target,
+		[]interface{}{1, "a", "x"},
+		[]interface{}{2, "a", "x"},
+		tableInfo, nil, nil,
+	)
+
+	// UK change
+	ukUpdate := sqlmodel.NewRowChange(
+		source, target,
+		[]interface{}{1, "a", "x"},
+		[]interface{}{1, "b", "x"},
+		tableInfo, nil, nil,
+	)
+
+	// Non-key change
+	nonKeyUpdate := sqlmodel.NewRowChange(
+		source, target,
+		[]interface{}{1, "a", "x"},
+		[]interface{}{1, "a", "y"},
+		tableInfo, nil, nil,
+	)
+
+	t.Run("safe-mode pk update should error", func(t *testing.T) {
+		j := newDMLJob(pkUpdate, ecWithSafeMode)
+		err := worker.validateSafeModeForeignKeyUpdate([]*job{j})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "PK/UK changes")
+	})
+
+	t.Run("safe-mode uk update should error", func(t *testing.T) {
+		j := newDMLJob(ukUpdate, ecWithSafeMode)
+		err := worker.validateSafeModeForeignKeyUpdate([]*job{j})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "PK/UK changes")
+	})
+
+	t.Run("safe-mode non-key update should pass", func(t *testing.T) {
+		j := newDMLJob(nonKeyUpdate, ecWithSafeMode)
+		require.NoError(t, worker.validateSafeModeForeignKeyUpdate([]*job{j}))
+	})
+
+	t.Run("non-safe-mode pk update should pass", func(t *testing.T) {
+		j := newDMLJob(pkUpdate, ec)
+		require.NoError(t, worker.validateSafeModeForeignKeyUpdate([]*job{j}))
+	})
+}
+
+func TestExecuteBatchJobsWithForeignKey(t *testing.T) {
+	t.Parallel()
+
+	// helper: convert []interface{} -> []driver.Value
+	toDriverValues := func(args []interface{}) []driver.Value {
+		out := make([]driver.Value, len(args))
+		for i, v := range args {
+			out[i] = v
+		}
+		return out
+	}
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	sqlConn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	defer sqlConn.Close()
+
+	baseConn := connpkg.NewBaseConnForTest(sqlConn, nil)
+	cfg := &config.SubTaskConfig{Name: "test"}
+	dbConn := dbconn.NewDBConn(cfg, baseConn)
+
+	worker := &DMLWorker{
+		toDBConns:               []*dbconn.DBConn{dbConn},
+		syncCtx:                 tcontext.Background(),
+		successFunc:             func(int, int, []*job) {},
+		fatalFunc:               func(*job, error) {},
+		metricProxies:           nil,
+		foreignKeyChecksEnabled: true,
+		logger:                  log.L(),
+	}
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb"}
+	target := &cdcmodel.TableName{Schema: "targetSchema", Table: "targetTable"}
+	createSQL := "create table db.tb(id int primary key, col1 int unique not null, col2 int unique, name varchar(24))"
+	tableInfo := mockTableInfo(t, createSQL)
+
+	insertChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{1, 2, 3, "normal"}, tableInfo, nil, nil)
+	replaceChange := sqlmodel.NewRowChange(source, target, nil, []interface{}{2, 3, 4, "safe"}, tableInfo, nil, nil)
+
+	insertJob := newDMLJob(insertChange, ec)
+	replaceJob := newDMLJob(replaceChange, ecWithSafeMode)
+
+	insertQueries, insertArgs := worker.genSQLs([]*job{insertJob})
+	replaceQueries, replaceArgs := worker.genSQLs([]*job{replaceJob})
+
+	require.Len(t, insertQueries, 1)
+	require.Len(t, replaceQueries, 1)
+
+	// Normal insert should execute directly
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(insertQueries[0])).
+		WithArgs(toDriverValues(insertArgs[0])...).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	// Safe-mode REPLACE should trigger disable + REPLACE + restore
+	// disable FKC
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SET SESSION foreign_key_checks=0")).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	// REPLACE job
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta(replaceQueries[0])).
+		WithArgs(toDriverValues(replaceArgs[0])...).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	// restore FKC
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("SET SESSION foreign_key_checks=1")).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	// Run two jobs separately: first insert, then REPLACE
+	worker.executeBatchJobs(0, []*job{insertJob}, false)
+	worker.executeBatchJobs(0, []*job{replaceJob}, true)
+
+	require.NoError(t, mock.ExpectationsWereMet())
 }

@@ -68,7 +68,7 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 		logger:        syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
 		inCh:          inCh,
 		outCh:         make(chan *job, syncer.cfg.QueueSize),
-		sessCtx:       syncer.sessCtx,
+		sessCtx:       syncer.causalityCtx,
 		workerCount:   syncer.cfg.WorkerCount,
 	}
 

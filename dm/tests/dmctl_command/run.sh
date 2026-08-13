@@ -239,7 +239,8 @@ function run_validation_start_stop_cmd {
 	echo "--> (fail) validation start: invalid start-time"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"validation start --start-time xx" \
-		"Error: start-time should be in the format like '2006-01-02 15:04:05' or '2006-01-02T15:04:05'" 1
+		"Error: start-time should be in the format like" 1 \
+		"2006-01-02T15:04:05+0800" 1
 
 	echo "--> (fail) validation start: without all-task and task-name"
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \

@@ -1,0 +1,4 @@
+select * from test_basic.t1 order by id;
+id	name
+1	test 1
+2	test 2 updated

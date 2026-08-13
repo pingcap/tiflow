@@ -118,6 +118,14 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig, sourceCfgMap map[string]*SourceConfig) (
 	[]*SubTaskConfig, error,
 ) {
+	// import-into does not support sharding / multi-source tasks.
+	if fullCfg := task.SourceConfig.FullMigrateConf; fullCfg != nil && fullCfg.ImportMode != nil {
+		if strings.EqualFold(string(*fullCfg.ImportMode), string(openapi.TaskFullMigrateConfImportModeImportInto)) &&
+			len(task.SourceConfig.SourceConf) > 1 {
+			return nil, terror.ErrConfigImportIntoShardingNotSupport.Generate()
+		}
+	}
+
 	// source name -> migrate rule list
 	tableMigrateRuleMap := make(map[string][]openapi.TaskTableMigrateRule)
 	for _, rule := range task.TableMigrateRule {
@@ -153,6 +161,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		// set task name and mode
 		subTaskCfg.Name = task.Name
 		subTaskCfg.Mode = string(task.TaskMode)
+		if task.Timezone != nil {
+			subTaskCfg.Timezone = *task.Timezone
+		}
 		// set task meta
 		subTaskCfg.MetaSchema = *task.MetaSchema
 		// add binlog meta
@@ -193,7 +204,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg.CaseSensitive = sourceCfgMap[sourceCfg.SourceName].CaseSensitive
 		// set source db config
 		subTaskCfg.SourceID = sourceCfg.SourceName
-		subTaskCfg.From = sourceCfgMap[sourceCfg.SourceName].From
+		subTaskCfg.From = *sourceCfgMap[sourceCfg.SourceName].From.Clone()
 		// set target db config
 		subTaskCfg.To = *toDBCfg.Clone()
 		// TODO ExprFilter
@@ -270,6 +281,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 			if incrCfg.ReplBatch != nil {
 				subTaskCfg.SyncerConfig.Batch = *incrCfg.ReplBatch
 			}
+			if incrCfg.SafeMode != nil {
+				subTaskCfg.SyncerConfig.SafeMode = *incrCfg.SafeMode
+			}
 		}
 		subTaskCfg.ValidatorCfg = defaultValidatorConfig()
 		// set route,blockAllowList,filter config
@@ -343,6 +357,11 @@ func GetTargetDBCfgFromOpenAPITask(task *openapi.Task) *dbconfig.DBConfig {
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+	}
+	if task.TargetConfig.Session != nil && task.TargetConfig.Session.ForeignKeyChecks != nil {
+		toDBCfg.Session = map[string]string{
+			"foreign_key_checks": string(*task.TargetConfig.Session.ForeignKeyChecks),
+		}
 	}
 	if task.TargetConfig.Security != nil {
 		var certAllowedCN []string
@@ -571,6 +590,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	taskSourceConfig.IncrMigrateConf = &openapi.TaskIncrMigrateConf{
 		ReplBatch:   &oneSubtaskConfig.SyncerConfig.Batch,
 		ReplThreads: &oneSubtaskConfig.SyncerConfig.WorkerCount,
+		SafeMode:    &oneSubtaskConfig.SyncerConfig.SafeMode,
 	}
 	if oneSubtaskConfig.LoaderConfig.Security != nil {
 		var certAllowedCN []string
@@ -675,6 +695,10 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			Password: oneSubtaskConfig.To.Password,
 		},
 	}
+	if oneSubtaskConfig.Timezone != "" {
+		timezone := oneSubtaskConfig.Timezone
+		task.Timezone = &timezone
+	}
 	if oneSubtaskConfig.ShardMode != "" {
 		taskShardMode := openapi.TaskShardMode(oneSubtaskConfig.ShardMode)
 		task.ShardMode = &taskShardMode
@@ -700,7 +724,24 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			CertAllowedCn:  &certAllowedCN,
 		}
 	}
+	task.TargetConfig.Session = projectTargetSession(oneSubtaskConfig.To.Session)
 	return &task
+}
+
+// projectTargetSession currently exposes only foreign_key_checks and normalizes
+// its value to "0" or "1".
+func projectTargetSession(session map[string]string) *openapi.TaskTargetSession {
+	for key := range session {
+		if !strings.EqualFold(key, "foreign_key_checks") {
+			continue
+		}
+		value := openapi.TaskTargetSessionForeignKeyChecksN0
+		if IsForeignKeyChecksEnabled(session) {
+			value = openapi.TaskTargetSessionForeignKeyChecksN1
+		}
+		return &openapi.TaskTargetSession{ForeignKeyChecks: &value}
+	}
+	return nil
 }
 
 // TaskConfigToOpenAPITask converts TaskConfig to an openapi task.

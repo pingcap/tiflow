@@ -62,7 +62,13 @@ function clean_cluster_sources_and_tasks() {
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
 	openapi_source_check "list_source_success" 0
 	openapi_task_check "get_task_list" 0
-	run_sql_tidb "DROP DATABASE if exists openapi;"
+	# Force-deleting sources may trigger async DM metadata cleanup that races
+	# with this DROP. Retry to tolerate transient errors.
+	for i in $(seq 1 3); do
+		run_sql_tidb "DROP DATABASE if exists openapi;" && break
+		echo "DROP DATABASE openapi failed (attempt $i), retrying..."
+		sleep 1
+	done
 }
 
 function test_source() {
@@ -461,6 +467,84 @@ function test_noshard_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK SUCCESS"
 }
 
+function test_delete_task_keep_meta() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: DELETE TASK KEEP META"
+	prepare_database
+
+	task_name="test_keep_meta"
+	target_schema_v1="openapi_keep_meta_v1"
+	target_schema_v2="openapi_keep_meta_v2"
+	checkpoint_table="${task_name}_syncer_checkpoint"
+
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	run_sql_source1 "CREATE TABLE openapi.keep_meta(id INT PRIMARY KEY, value INT);"
+	master_status=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
+	binlog_name=${master_status[0]}
+	binlog_pos=${master_status[1]}
+	binlog_gtid=${master_status[2]:-}
+
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v1};"
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v2};"
+	run_sql_tidb "CREATE DATABASE ${target_schema_v1};"
+	run_sql_tidb "CREATE DATABASE ${target_schema_v2};"
+	run_sql_tidb "CREATE TABLE ${target_schema_v1}.keep_meta(id INT PRIMARY KEY, value INT);"
+	run_sql_tidb "CREATE TABLE ${target_schema_v2}.keep_meta(id INT PRIMARY KEY, value INT);"
+
+	openapi_task_check "create_keep_meta_task_success" "$task_name" "$target_schema_v1" "$binlog_name" "$binlog_pos" "$binlog_gtid"
+	openapi_task_check "start_task_success" "$task_name" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
+
+	run_sql_source1 "INSERT INTO openapi.keep_meta VALUES (1, 10);"
+	run_sql_tidb_with_retry "SELECT count(1) FROM ${target_schema_v1}.keep_meta WHERE id = 1;" "count(1): 1"
+
+	# stop-task flushes the checkpoint before keep-meta deletes the task definition.
+	openapi_task_check "stop_task_success" "$task_name" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Paused\"" 1
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 1"
+	openapi_task_check "delete_task_with_keep_meta_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 1"
+
+	# Recreate the same task from the original binlog position but route new
+	# events to v2. The retained checkpoint must prevent row 1 from replaying.
+	openapi_task_check "create_keep_meta_task_success" "$task_name" "$target_schema_v2" "$binlog_name" "$binlog_pos" "$binlog_gtid"
+	openapi_task_check "start_task_success" "$task_name" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
+	run_sql_source1 "INSERT INTO openapi.keep_meta VALUES (2, 20);"
+	run_sql_tidb_with_retry "SELECT count(1) FROM ${target_schema_v2}.keep_meta WHERE id = 2;" "count(1): 1"
+	run_sql_tidb_with_retry "SELECT count(1) FROM ${target_schema_v2}.keep_meta;" "count(1): 1"
+
+	# force and keep-meta are orthogonal. Only already-persisted checkpoints are
+	# guaranteed here, so this is intentionally a metadata-retention smoke test.
+	openapi_task_check "delete_task_with_force_keep_meta_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 1"
+
+	# Recreate the stopped task once more and use the default delete behavior.
+	# Omitting keep_meta must remove the retained downstream checkpoint.
+	openapi_task_check "create_keep_meta_task_success" "$task_name" "$target_schema_v2" "$binlog_name" "$binlog_pos" "$binlog_gtid"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 1
+	openapi_task_check "delete_task_success" "$task_name"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 0"
+
+	openapi_source_check "delete_source_success" "mysql-01"
+	openapi_source_check "list_source_success" 0
+	run_sql_source1 "DROP DATABASE IF EXISTS openapi;"
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v1};"
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v2};"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK KEEP META SUCCESS"
+}
+
 function test_complex_operations_of_source_and_task() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: COMPLEX OPERATION"
 	prepare_database
@@ -663,6 +747,52 @@ function test_noshard_task_dump_status() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK DUMP STATUS SUCCESS"
 }
 
+function test_task_status_source_error_fallback() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TASK STATUS SOURCE ERROR FALLBACK"
+	prepare_database
+
+	export GO_FAILPOINTS='github.com/pingcap/tiflow/dm/pkg/binlog/BlockGetSourceStatus=return();github.com/pingcap/tiflow/dm/worker/QueryStatusSourceStatusTimeout=return(200)'
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+
+	task_name="test-source-status-error-fallback"
+
+	openapi_source_check "create_source1_success"
+	openapi_source_check "create_source2_success"
+
+	openapi_task_check "create_noshard_task_success" $task_name ""
+	openapi_task_check "start_task_success" $task_name ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 2
+
+	openapi_task_check "get_task_status_success_with_source_error" "$task_name" 2 "database driver error" "context deadline exceeded"
+
+	export GO_FAILPOINTS=""
+	kill_dm_worker
+	check_port_offline $WORKER1_PORT 20
+	check_port_offline $WORKER2_PORT 20
+
+	# run dm-worker1
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	# run dm-worker2
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	openapi_source_check "list_source_success" 2
+
+	clean_cluster_sources_and_tasks
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TASK STATUS SOURCE ERROR FALLBACK SUCCESS"
+}
+
 function test_task_with_ignore_check_items() {
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: TEST TASK WITH IGNORE CHECK ITEMS"
 	prepare_database
@@ -769,11 +899,8 @@ function test_delete_task_with_stopped_downstream() {
 	# stop downstream
 	cleanup_tidb_server
 
-	# delete task failed because downstream is stopped.
-	openapi_task_check "delete_task_failed" "$task_name"
-
-	# delete task success with force
-	openapi_task_check "delete_task_with_force_success" "$task_name"
+	# delete task success even if downstream is stopped.
+	openapi_task_check "delete_task_success" "$task_name"
 	openapi_task_check "get_task_list" 0
 
 	# restart downstream
@@ -781,6 +908,41 @@ function test_delete_task_with_stopped_downstream() {
 	sleep 2
 	clean_cluster_sources_and_tasks
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK WITH STOPPED DOWNSTREAM SUCCESS"
+}
+
+function test_delete_task_with_downstream_meta_cleanup_error() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: DELETE TASK WITH DOWNSTREAM META CLEANUP ERROR"
+	cleanup_data openapi
+	cleanup_process
+	export GO_FAILPOINTS="github.com/pingcap/tiflow/dm/master/MockRemoveDownstreamMetaDataError=return(true)"
+	run_dm_master $WORK_DIR/master1 $MASTER_PORT1 $cur/conf/dm-master1.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT1
+	run_dm_master $WORK_DIR/master2 $MASTER_PORT2 $cur/conf/dm-master2.toml
+	check_rpc_alive $cur/../bin/check_master_online 127.0.0.1:$MASTER_PORT2
+	run_dm_worker $WORK_DIR/worker1 $WORKER1_PORT $cur/conf/dm-worker1.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER1_PORT
+	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $cur/conf/dm-worker2.toml
+	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
+	prepare_database
+
+	task_name="test-no-shard-openapi-delete-failpoint"
+	target_table_name=""
+
+	# create source successfully
+	openapi_source_check "create_source1_success"
+	openapi_source_check "create_source2_success"
+	openapi_source_check "list_source_success" 2
+
+	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 2
+
+	openapi_task_check "delete_task_success" "$task_name"
+
+	export GO_FAILPOINTS=""
+	cleanup_process
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK WITH DOWNSTREAM META CLEANUP ERROR SUCCESS"
 }
 
 function test_start_task_with_condition() {
@@ -1089,10 +1251,8 @@ function test_tls() {
 	# create source2 successfully
 	openapi_source_check "create_source2_success"
 
-	echo "kill tidb and start downstream TiDB cluster with different TLS certificates"
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
+	echo "restart downstream TiDB (TLS, different certs)"
+	cleanup_downstream_cluster
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf ca.pem dm.pem dm.key ca2.pem tidb.pem tidb.key
 
 	task_name="task-tls-1"
@@ -1105,10 +1265,8 @@ function test_tls() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 
-	echo "kill tidb and start downstream TiDB cluster with same TLS certificates"
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
+	echo "restart downstream TiDB (TLS, matching certs)"
+	cleanup_downstream_cluster
 	run_downstream_cluster_with_tls $WORK_DIR $cur/tls_conf ca2.pem tidb.pem tidb.key ca2.pem tidb.pem tidb.key
 
 	task_name="task-tls-2"
@@ -1138,9 +1296,8 @@ function test_tls() {
 		"$(cat $cur/tls_conf/ca2.pem)" "$(cat $cur/tls_conf/tidb.pem)" "$(cat $cur/tls_conf/tidb.key)" \
 		"" "" ""
 
-	killall -9 tidb-server 2>/dev/null || true
-	killall -9 tikv-server 2>/dev/null || true
-	killall -9 pd-server 2>/dev/null || true
+	# Restore the plain (non-TLS) downstream for subsequent tests.
+	cleanup_downstream_cluster
 	run_tidb_server 4000 $TIDB_PASSWORD
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: TLS SUCCESS"
 }
@@ -1241,9 +1398,11 @@ function run() {
 	test_shard_task
 	test_multi_tasks
 	test_noshard_task
+	test_delete_task_keep_meta
 	test_dump_and_load_task
 	test_task_templates
 	test_noshard_task_dump_status
+	test_task_status_source_error_fallback
 	test_complex_operations_of_source_and_task
 	test_task_with_ignore_check_items
 	test_delete_task_with_stopped_downstream
@@ -1251,10 +1410,17 @@ function run() {
 	test_stop_task_with_condition
 	test_reverse_https
 	test_full_mode_task
-	test_tls
+	# test_tls: on next-gen, Lightning's loader tries HTTPS on the status
+	# port (10080) to fetch TiDB settings, but [security] ssl-* only enables
+	# TLS on the mysql port — the status port stays plain HTTP. This causes
+	# "tls: first record does not look like a TLS handshake". Needs cluster-ssl
+	# on PD/TiKV to make the status port serve HTTPS.
+	if [ "${NEXT_GEN:-}" != "1" ]; then
+		test_tls
+	fi
 
-	# NOTE: this test case MUST running at last, because it will offline some members of cluster
 	test_cluster
+	test_delete_task_with_downstream_meta_cleanup_error
 }
 
 cleanup_data openapi

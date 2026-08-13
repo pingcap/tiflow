@@ -1,0 +1,4 @@
+[sink]
+column-selectors = [
+    {matcher = ['test.t1'], columns = ['account_id']},
+]

@@ -39,7 +39,8 @@ EOF
 		--path $WORK_DIR/tidb \
 		--store unistore \
 		--config $WORK_DIR/tidb-tls-config.toml \
-		--log-file "$WORK_DIR/tidb.log" 2>&1 &
+		--log-file "$WORK_DIR/tidb.log" \
+		${TIDB_EXTRA_ARGS:-} 2>&1 &
 
 	sleep 5
 
@@ -89,8 +90,7 @@ function prepare_test() {
 	mkdir $WORK_DIR
 
 	# kill the old tidb with tls
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	cleanup_tidb_server
 
 	run_sql 'SHOW GLOBAL VARIABLES LIKE "tls_version";' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	setup_mysql_tls
@@ -336,8 +336,7 @@ function prepare_test_no_tls() {
 	mkdir $WORK_DIR
 
 	# kill the old tidb
-	pkill -hup tidb-server 2>/dev/null || true
-	wait_process_exit tidb-server
+	cleanup_tidb_server
 
 	# restart tidb
 	run_tidb_server 4000 $TIDB_PASSWORD
@@ -404,8 +403,7 @@ cleanup_process
 run
 
 # kill the tidb with tls
-pkill -hup tidb-server 2>/dev/null || true
-wait_process_exit tidb-server
+cleanup_tidb_server
 
 run_tidb_server 4000 $TIDB_PASSWORD
 

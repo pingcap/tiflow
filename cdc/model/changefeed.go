@@ -58,8 +58,8 @@ func DefaultChangeFeedID(id string) ChangeFeedID {
 	}
 }
 
-// ChangeFeedID4Test returns `ChangefeedID` with given namespace and id
-func ChangeFeedID4Test(namespace, id string) ChangeFeedID {
+// GenerateChangeFeedID returns `ChangefeedID` with given namespace and id
+func GenerateChangeFeedID(namespace, id string) ChangeFeedID {
 	return ChangeFeedID{
 		Namespace: namespace,
 		ID:        id,
@@ -218,8 +218,7 @@ func (info *ChangeFeedInfo) NeedBlockGC() bool {
 
 func (info *ChangeFeedInfo) isFailedByGC() bool {
 	if info.Error == nil {
-		log.Panic("changefeed info is not consistent",
-			zap.Any("state", info.State), zap.Any("error", info.Error))
+		log.Panic("changefeed info is not consistent", zap.Any("state", info.State))
 	}
 	return cerror.IsChangefeedGCFastFailErrorCode(errors.RFCErrorCode(info.Error.Code))
 }
@@ -348,8 +347,8 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 	if err != nil {
 		log.Warn(
 			"failed to parse the sink uri",
-			zap.Error(err),
-			zap.Any("sinkUri", info.SinkURI),
+			zap.Error(util.MaskSensitiveDataInURLError(err)),
+			zap.Any("sinkURI", util.MaskSensitiveDataInURIForError(info.SinkURI)),
 		)
 		return
 	}
@@ -381,9 +380,6 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 }
 
 func (info *ChangeFeedInfo) rmMQOnlyFields() {
-	log.Info("since the downstream is not a MQ, remove MQ only fields",
-		zap.String("namespace", info.Namespace),
-		zap.String("changefeed", info.ID))
 	info.Config.Sink.DispatchRules = nil
 	info.Config.Sink.SchemaRegistry = nil
 	info.Config.Sink.EncoderConcurrency = nil
@@ -492,7 +488,7 @@ func (info *ChangeFeedInfo) fixState() {
 func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
-		log.Warn("parse sink URI failed", zap.Error(err))
+		log.Warn("parse sink URI failed", zap.Error(util.MaskSensitiveDataInURLError(err)))
 		// SAFETY: It is safe to ignore this unresolvable sink URI here,
 		// as it is almost impossible for this to happen.
 		// If we ignore it when fixing it after it happens,
@@ -522,7 +518,7 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
-		log.Warn("parse sink URI failed", zap.Error(err))
+		log.Warn("parse sink URI failed", zap.Error(util.MaskSensitiveDataInURLError(err)))
 		return
 	}
 

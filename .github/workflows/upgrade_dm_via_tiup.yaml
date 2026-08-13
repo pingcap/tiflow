@@ -24,7 +24,7 @@ concurrency:
 jobs:
   from_v1:
     name: From V1
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     # skip it now, the ansible script fails with "Could not find the requested service prometheus-9090.service: host"
     # TODO enable it later.
     if: ${{ false }}
@@ -32,22 +32,22 @@ jobs:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
 
     steps:
-      - name: Set up Go env
-        uses: actions/setup-go@v3
-        with:
-          go-version: '1.23'
-
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           path: go/src/github.com/pingcap/tiflow
 
       - name: Check out code by workflow dispatch
         if: ${{ github.event.inputs.pr != '' }}
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           path: go/src/github.com/pingcap/tiflow
           ref: refs/pull/${{ github.event.inputs.pr }}/head
+
+      - name: Set up Go env
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go/src/github.com/pingcap/tiflow/go.mod'
 
       - name: Setup containers
         working-directory: ${{ env.working-directory }}
@@ -61,19 +61,9 @@ jobs:
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
           docker-compose exec -T control bash -c "cd /go/src/github.com/pingcap/tiflow/dm && ./tests/tiup/upgrade-from-v1.sh"
 
-      # send Slack notify if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
-        if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
-        with:
-          args: "upgrade job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
-
   from_v2:
     name: From V2
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     env:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
     strategy:
@@ -83,19 +73,19 @@ jobs:
           ["v2.0.1", "v2.0.7", "v5.3.0"]
 
     steps:
-      - name: Set up Go env
-        uses: actions/setup-go@v3
-        with:
-          go-version: '1.23'
-
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           path: go/src/github.com/pingcap/tiflow
 
+      - name: Set up Go env
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go/src/github.com/pingcap/tiflow/go.mod'
+
       - name: Check out code by workflow dispatch
         if: ${{ github.event.inputs.pr != '' }}
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           path: go/src/github.com/pingcap/tiflow
           ref: refs/pull/${{ github.event.inputs.pr }}/head
@@ -167,38 +157,29 @@ jobs:
       # Update logs as artifact seems not stable, so we set `continue-on-error: true` here.
       - name: Upload logs
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: ${{ failure() }}
         with:
           name: upgrade-via-tiup-${{ matrix.previous_v2 }}
           path: |
             ./logs
 
-      # send Slack notify if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
-        if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
-        with:
-          args: "upgrade-via-tiup job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"
-
   upgrade_tidb:
     name: Upgrade TiDB
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     env:
       working-directory: ${{ github.workspace }}/go/src/github.com/pingcap/tiflow
     steps:
-      - name: Set up Go env
-        uses: actions/setup-go@v3
-        with:
-          go-version: '1.23'
 
       - name: Check out code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v6
         with:
           path: go/src/github.com/pingcap/tiflow
+
+      - name: Set up Go env
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go/src/github.com/pingcap/tiflow/go.mod'
 
       # TODO: support more versions
       - name: Setup containers
@@ -226,13 +207,3 @@ jobs:
         run: |
           cd ${{ env.working-directory }}/dm/tests/tiup/docker
           docker-compose exec -T control bash -c "source /root/.profile && cd /go/src/github.com/pingcap/tiflow && ./dm/tests/tiup/upgrade-tidb.sh after_upgrade nightly"
-
-      # send Slack notify if failed.
-      # NOTE: With the exception of `GITHUB_TOKEN`, secrets are not passed to the runner when a workflow is triggered from a forked repository.
-      - name: Slack notification
-        if: ${{ failure() }}
-        env:
-          SLACK_WEBHOOK: ${{ secrets.SLACK_NOTIFY }}
-        uses: Ilshidur/action-slack@2.1.0
-        with:
-          args: "upgrade job failed, see https://github.com/pingcap/tiflow/actions/runs/{{ GITHUB_RUN_ID }}"

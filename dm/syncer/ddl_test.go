@@ -274,6 +274,58 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 	}
 }
 
+func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestRejectForeignKeyDDL")))
+	testEC := &eventContext{tctx: tctx}
+
+	cfg := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
+		To: dbconfig.DBConfig{
+			Session: map[string]string{"foreign_key_checks": "1"},
+		},
+	}
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.tctx = tctx
+	c.Assert(syncer.genRouter(), check.IsNil)
+
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+	cases := []string{
+		"CREATE TABLE fk_demo.child (id INT PRIMARY KEY, parent_id INT, CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES fk_demo.parent(id))",
+		"ALTER TABLE fk_demo.child ADD CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES fk_demo.parent(id)",
+	}
+	for _, sql := range cases {
+		qec := &queryEventContext{
+			eventContext: testEC,
+			ddlSchema:    "fk_demo",
+			originSQL:    sql,
+			p:            parser.New(),
+		}
+		_, err := ddlWorker.genDDLInfo(qec, sql)
+		c.Assert(err, check.NotNil)
+		c.Assert(err.Error(), check.Matches, ".*foreign_key_checks=1.*")
+	}
+
+	cfgOff := &config.SubTaskConfig{
+		Flavor: mysql.MySQLFlavor,
+		To: dbconfig.DBConfig{
+			Session: map[string]string{"foreign_key_checks": "0"},
+		},
+	}
+	syncerOff := NewSyncer(cfgOff, nil, nil)
+	syncerOff.tctx = tctx
+	c.Assert(syncerOff.genRouter(), check.IsNil)
+
+	ddlWorkerOff := NewDDLWorker(&tctx.Logger, syncerOff)
+	qecOff := &queryEventContext{
+		eventContext: testEC,
+		ddlSchema:    "fk_demo",
+		originSQL:    cases[0],
+		p:            parser.New(),
+	}
+	_, err := ddlWorkerOff.genDDLInfo(qecOff, cases[0])
+	c.Assert(err, check.IsNil)
+}
+
 func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 	cases := []struct {
 		sql      string

@@ -37,10 +37,12 @@ import (
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/r3labs/diff"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
+	pdopt "github.com/tikv/pd/client/opt"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -134,7 +136,7 @@ type APIV2HelpersImpl struct{}
 
 // verifyCreateChangefeedConfig verifies ChangefeedConfig and
 // returns a changefeedInfo for create a changefeed.
-func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
+func (h APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	pdClient pd.Client,
@@ -211,24 +213,25 @@ func (APIV2HelpersImpl) verifyCreateChangefeedConfig(
 	// verify replicaConfig
 	sinkURIParsed, err := url.Parse(cfg.SinkURI)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return nil, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(cfg.SinkURI))
 	}
 	err = replicaCfg.ValidateAndAdjust(sinkURIParsed)
 	if err != nil {
 		return nil, err
 	}
 
-	f, err := filter.NewFilter(replicaCfg, "")
+	scheme := sinkURIParsed.Scheme
+	topic := strings.TrimFunc(sinkURIParsed.Path, func(r rune) bool {
+		return r == '/'
+	})
+	protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(replicaCfg.Sink.Protocol))
+
+	ineligibleTables, _, err := h.getVerifiedTables(ctx, replicaCfg, kvStorage, cfg.StartTs, scheme, topic, protocol)
 	if err != nil {
-		return nil, errors.Cause(err)
-	}
-	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f, kvStorage, cfg.StartTs)
-	if err != nil {
-		return nil, errors.Cause(err)
-	}
-	err = f.Verify(tableInfos)
-	if err != nil {
-		return nil, errors.Cause(err)
+		return nil, err
 	}
 	if !replicaCfg.ForceReplicate && !cfg.ReplicaConfig.IgnoreIneligibleTable {
 		if len(ineligibleTables) != 0 {
@@ -291,7 +294,7 @@ func (h APIV2HelpersImpl) verifyUpstream(
 
 // verifyUpdateChangefeedConfig verifies config to update
 // a changefeed and returns a changefeedInfo
-func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
+func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	ctx context.Context,
 	cfg *ChangefeedConfig,
 	oldInfo *model.ChangeFeedInfo,
@@ -324,22 +327,6 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		newInfo.SinkURI = cfg.SinkURI
 	}
 
-	// verify changefeed info
-	f, err := filter.NewFilter(newInfo.Config, "")
-	if err != nil {
-		return nil, nil, cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs(errors.Cause(err).Error())
-	}
-	tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
-	if err != nil {
-		return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-	}
-	err = f.Verify(tableInfos)
-	if err != nil {
-		return nil, nil, cerror.ErrChangefeedUpdateRefused.
-			GenWithStackByArgs(errors.Cause(err).Error())
-	}
-
 	if configUpdated || sinkURIUpdated {
 		log.Info("config or sink uri updated, check the compatibility",
 			zap.Bool("configUpdated", configUpdated),
@@ -359,11 +346,32 @@ func (APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		}
 		sinkURIParsed, err := url.Parse(sinkURI)
 		if err != nil {
+			err = cerror.WrapError(
+				cerror.ErrSinkURIInvalid,
+				util.MaskSensitiveDataInURLError(err),
+				util.MaskSensitiveDataInURIForError(sinkURI))
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 		err = newInfo.Config.ValidateAndAdjust(sinkURIParsed)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+
+		scheme := sinkURIParsed.Scheme
+		topic := strings.TrimFunc(sinkURIParsed.Path, func(r rune) bool {
+			return r == '/'
+		})
+		protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(newInfo.Config.Sink.Protocol))
+
+		// use checkpointTs get snapshot from kv storage
+		ineligibleTables, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, checkpointTs, scheme, topic, protocol)
+		if err != nil {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+		if !newInfo.Config.ForceReplicate && !newInfo.Config.IgnoreIneligibleTable {
+			if len(ineligibleTables) != 0 {
+				return nil, nil, cerror.ErrTableIneligible.GenWithStackByArgs(ineligibleTables)
+			}
 		}
 
 		if err := validator.Validate(ctx,
@@ -457,8 +465,8 @@ func (APIV2HelpersImpl) getPDClient(
 	}
 
 	pdClient, err := pd.NewClientWithContext(
-		ctx, pdAddrs, credential.PDSecurityOption(),
-		pd.WithGRPCDialOptions(
+		ctx, "cdc-apihelper", pdAddrs, credential.PDSecurityOption(),
+		pdopt.WithGRPCDialOptions(
 			grpcTLSOption,
 			grpc.WithBlock(),
 			grpc.WithConnectParams(grpc.ConnectParams{
@@ -471,7 +479,7 @@ func (APIV2HelpersImpl) getPDClient(
 				MinConnectTimeout: 3 * time.Second,
 			}),
 		),
-		pd.WithForwardingOption(config.EnablePDForwarding))
+		pdopt.WithForwardingOption(config.EnablePDForwarding))
 	if err != nil {
 		return nil, cerror.WrapError(cerror.ErrAPIGetPDClientFailed, errors.Trace(err))
 	}
@@ -554,6 +562,10 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 		return nil, nil, err
 	}
 
+	err = f.Verify(tableInfos)
+	if err != nil {
+		return nil, nil, err
+	}
 	if !sink.IsMQScheme(scheme) {
 		return ineligibleTables, eligibleTables, nil
 	}

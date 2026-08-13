@@ -150,11 +150,46 @@ type Checkpoint struct {
 	hp *nodeHeap
 }
 
-// SavedState contains the information of the latest checked chunk and state of `report`
-// When sync-diff start from the checkpoint, it will load this information and continue running
+// ChecksumSourceState stores one source's checksum progress in global-checksum mode.
+type ChecksumSourceState struct {
+	LastRange *chunk.Range `json:"last-range,omitempty"`
+	Checksum  uint64       `json:"checksum"`
+	Count     int64        `json:"count"`
+	Done      bool         `json:"done"`
+}
+
+// ChecksumState stores checkpoint progress for global-checksum mode.
+type ChecksumState struct {
+	TableIndex int                  `json:"table-index"`
+	Upstream   *ChecksumSourceState `json:"upstream,omitempty"`
+	Downstream *ChecksumSourceState `json:"downstream,omitempty"`
+}
+
+// NewChecksumState returns an initialized checksum state for one table index.
+func NewChecksumState(tableIndex int) *ChecksumState {
+	return &ChecksumState{
+		TableIndex: tableIndex,
+		Upstream:   &ChecksumSourceState{},
+		Downstream: &ChecksumSourceState{},
+	}
+}
+
+func (s *ChecksumState) init() {
+	if s.Upstream == nil {
+		s.Upstream = &ChecksumSourceState{}
+	}
+	if s.Downstream == nil {
+		s.Downstream = &ChecksumSourceState{}
+	}
+}
+
+// SavedState stores mode-dependent checkpoint state plus report state for resume.
+// Depending on the execution mode, it contains either Chunk (chunk diff mode)
+// or Checksum (global-checksum mode).
 type SavedState struct {
-	Chunk  *Node          `json:"chunk-info"`
-	Report *report.Report `json:"report-info"`
+	Chunk    *Node          `json:"chunk-info,omitempty"`
+	Checksum *ChecksumState `json:"checksum-info,omitempty"`
+	Report   *report.Report `json:"report-info"`
 }
 
 // InitCurrentSavedID the method is only used in initialization without lock, be cautious
@@ -258,16 +293,56 @@ func (cp *Checkpoint) SaveChunk(ctx context.Context, fileName string, cur *Node,
 	return cur.GetID(), nil
 }
 
-// LoadChunk loads chunk info from file `chunk`
-func (cp *Checkpoint) LoadChunk(fileName string) (*Node, *report.Report, error) {
+// SaveChecksumState saves global-checksum checkpoint state to file.
+func (cp *Checkpoint) SaveChecksumState(
+	ctx context.Context,
+	fileName string,
+	state *ChecksumState,
+	reportInfo *report.Report,
+) error {
+	savedState := &SavedState{
+		Checksum: state,
+		Report:   reportInfo,
+	}
+	checkpointData, err := json.Marshal(savedState)
+	if err != nil {
+		log.Warn("fail to save checksum checkpoint", zap.Error(err))
+		return errors.Trace(err)
+	}
+
+	return writeFileAtomic(fileName, checkpointData, config.LocalFilePerm)
+}
+
+func loadSavedState(fileName string) (*SavedState, error) {
 	bytes, err := os.ReadFile(fileName)
 	if err != nil {
-		return nil, nil, errors.Trace(err)
+		return nil, errors.Trace(err)
 	}
 	n := &SavedState{}
 	err = json.Unmarshal(bytes, n)
 	if err != nil {
+		return nil, errors.Trace(err)
+	}
+	if n.Checksum != nil {
+		n.Checksum.init()
+	}
+	return n, nil
+}
+
+// LoadChunk loads chunk info from file `chunk`
+func (cp *Checkpoint) LoadChunk(fileName string) (*Node, *report.Report, error) {
+	n, err := loadSavedState(fileName)
+	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 	return n.Chunk, n.Report, nil
+}
+
+// LoadChecksumState loads checksum checkpoint state from file.
+func (cp *Checkpoint) LoadChecksumState(fileName string) (*ChecksumState, *report.Report, error) {
+	n, err := loadSavedState(fileName)
+	if err != nil {
+		return nil, nil, errors.Trace(err)
+	}
+	return n.Checksum, n.Report, nil
 }

@@ -23,7 +23,7 @@ import (
 
 	"github.com/pierrec/lz4/v4"
 	"github.com/pingcap/log"
-	"github.com/pingcap/tidb/br/pkg/storage"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/common"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -103,7 +103,7 @@ type fileWorkerGroup struct {
 	op        *writer.LogWriterOptions
 	workerNum int
 
-	extStorage    storage.ExternalStorage
+	extStorage    storeapi.Storage
 	uuidGenerator uuid.Generator
 
 	pool    sync.Pool
@@ -116,7 +116,7 @@ type fileWorkerGroup struct {
 
 func newFileWorkerGroup(
 	cfg *writer.LogWriterConfig, workerNum int,
-	extStorage storage.ExternalStorage,
+	extStorage storeapi.Storage,
 	opts ...writer.Option,
 ) *fileWorkerGroup {
 	if workerNum <= 0 {
@@ -215,7 +215,7 @@ func (f *fileWorkerGroup) bgFlushFileCache(egCtx context.Context) error {
 }
 
 func (f *fileWorkerGroup) multiPartUpload(ctx context.Context, file *fileCache) error {
-	multipartWrite, err := f.extStorage.Create(ctx, file.filename, &storage.WriterOption{
+	multipartWrite, err := f.extStorage.Create(ctx, file.filename, &storeapi.WriterOption{
 		Concurrency: f.cfg.FlushConcurrency,
 	})
 	if err != nil {

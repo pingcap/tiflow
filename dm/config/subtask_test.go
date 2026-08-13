@@ -166,6 +166,87 @@ func TestSubTaskAdjustFail(t *testing.T) {
 			},
 			"Message: online scheme rtc not supported",
 		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.ShardMode = ShardPessimistic
+				cfg.LoaderConfig.ImportMode = LoadModeImportInto
+				return cfg
+			},
+			"Message: import-into mode does not support sharding",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.ShardMode = ShardPessimistic
+				cfg.LoaderConfig.ImportMode = "ImPorT-InTo"
+				return cfg
+			},
+			"Message: import-into mode does not support sharding",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.IsSharding = true
+				cfg.LoaderConfig.ImportMode = LoadModeImportInto
+				return cfg
+			},
+			"Message: import-into mode does not support sharding",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.LoaderConfig.ImportMode = LoadModeImportInto
+				cfg.LoaderConfig.Dir = "/local/path"
+				return cfg
+			},
+			"Message: import-into mode requires shared storage",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.LoaderConfig.ImportMode = "ImPorT-InTo"
+				cfg.LoaderConfig.Dir = "/local/path"
+				return cfg
+			},
+			"Message: import-into mode requires shared storage",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.LoaderConfig.ImportMode = LoadModeImportInto
+				cfg.LoaderConfig.Dir = "./relative/path"
+				return cfg
+			},
+			"Message: import-into mode requires shared storage",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.LoaderConfig.ImportMode = LoadModeImportInto
+				cfg.LoaderConfig.Dir = ""
+				return cfg
+			},
+			"Message: import-into mode requires shared storage",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.SyncerConfig.Compact = true
+				return cfg
+			},
+			"Message: `compact` is not supported when foreign_key_checks=1",
+		},
+		{
+			func() *SubTaskConfig {
+				cfg := newSubTaskConfig()
+				cfg.To.Session = map[string]string{"foreign_key_checks": "1"}
+				cfg.SyncerConfig.MultipleRows = true
+				return cfg
+			},
+			"Message: `multiple-rows` is not supported when foreign_key_checks=1",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -173,6 +254,21 @@ func TestSubTaskAdjustFail(t *testing.T) {
 		err := cfg.Adjust(true)
 		require.ErrorContains(t, err, tc.errMsg)
 	}
+}
+
+func TestSubTaskAdjustAllowsDMLBoundaryOptionsWhenForeignKeyChecksOff(t *testing.T) {
+	cfg := &SubTaskConfig{
+		Name:     "test-task",
+		SourceID: "mysql-instance-01",
+		To: dbconfig.DBConfig{
+			Session: map[string]string{"foreign_key_checks": "0"},
+		},
+		SyncerConfig: SyncerConfig{
+			Compact:      true,
+			MultipleRows: true,
+		},
+	}
+	require.NoError(t, cfg.Adjust(false))
 }
 
 func TestSubTaskBlockAllowList(t *testing.T) {
@@ -418,4 +514,41 @@ func TestSubTaskConfigMarshalAtomic(t *testing.T) {
 
 	require.Equal(t, cfg.IOTotalBytes.Load(), uint64(110))
 	require.Equal(t, cfg.DumpIOTotalBytes.Load(), uint64(210))
+}
+
+func TestLoaderConfigImportModeImportInto(t *testing.T) {
+	cfg := &SubTaskConfig{
+		Name:     "test",
+		SourceID: "source",
+		Mode:     ModeFull,
+		From: dbconfig.DBConfig{
+			Host: "127.0.0.1",
+			Port: 3306,
+			User: "root",
+		},
+		To: dbconfig.DBConfig{
+			Host: "127.0.0.1",
+			Port: 4000,
+			User: "root",
+		},
+	}
+
+	// Test import-into mode is valid
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket/prefix",
+		ImportMode: LoadModeImportInto,
+	}
+	err := cfg.Adjust(false)
+	require.NoError(t, err)
+	require.Equal(t, LoadModeImportInto, cfg.LoaderConfig.ImportMode)
+
+	// Test invalid mode
+	cfg.LoaderConfig = LoaderConfig{
+		PoolSize:   defaultPoolSize,
+		Dir:        "s3://bucket/prefix",
+		ImportMode: "invalid-mode",
+	}
+	err = cfg.Adjust(false)
+	require.ErrorContains(t, err, "invalid load mode")
 }
