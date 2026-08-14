@@ -594,11 +594,14 @@ def create_load_task_success():
     print("create_load_task_success resp=", resp.json())
     assert resp.status_code == 201
 
-def start_task_success(task_name, source_name):
+def start_task_success(task_name, source_name, remove_meta="true"):
     url = API_ENDPOINT + "/" + task_name + "/start"
     req = {}
     if source_name != "":
-        req = {"source_name_list": [source_name], "remove_meta": True}
+        req = {
+            "source_name_list": [source_name],
+            "remove_meta": remove_meta.lower() == "true",
+        }
     resp = requests.post(url=url, json=req)
     if resp.status_code != 200:
         print("start_task_failed resp=", resp.json())
@@ -869,17 +872,102 @@ def operate_schema_and_table_success(task_name, source_name, schema_name, table_
     assert create_table["schema_name"] == schema_name
     assert table_name in create_table["schema_create_sql"]
 
-    # overwrite table
+    # Omitted flush and sync fields both default to true.
     set_table_data = {
-        "sql_content": "CREATE TABLE openapi.t1(i TINYINT, j INT UNIQUE KEY);",
-        "flush": True,
-        "sync": True,
+        "sql_content": (
+            "CREATE TABLE `{}`.`{}` "
+            "(i TINYINT, request_default_marker INT);".format(
+                schema_name, table_name
+            )
+        ),
     }
     resp = requests.put(url=single_table_url, json=set_table_data)
     assert resp.status_code == 200
-    table_list = requests.get(url=table_url).json()
-    print("get_task_schema_success table resp=", table_list)
-    assert len(table_list) == 1
+    default_schema_resp = requests.get(url=single_table_url)
+    assert default_schema_resp.status_code == 200
+    assert "request_default_marker" in default_schema_resp.json()["schema_create_sql"]
+
+    # Explicit false values are preserved, while flush=false remains a
+    # compatibility value and the schema is still persisted to the checkpoint.
+    set_table_data = {
+        "sql_content": (
+            "CREATE TABLE `{}`.`{}` "
+            "(i TINYINT, request_false_marker INT);".format(
+                schema_name, table_name
+            )
+        ),
+        "flush": False,
+        "sync": False,
+    }
+    resp = requests.put(url=single_table_url, json=set_table_data)
+    assert resp.status_code == 200
+    false_schema_resp = requests.get(url=single_table_url)
+    assert false_schema_resp.status_code == 200
+    assert "request_false_marker" in false_schema_resp.json()["schema_create_sql"]
+
+    # Reuse the existing worker schema operation to read and apply the source
+    # table schema. No SQL content is needed for an automatic source.
+    upstream_schema_data = {
+        "schema_source": "upstream",
+    }
+    resp = requests.put(url=single_table_url, json=upstream_schema_data)
+    assert resp.status_code == 200
+    upstream_schema_resp = requests.get(url=single_table_url)
+    assert upstream_schema_resp.status_code == 200
+    upstream_schema = upstream_schema_resp.json()["schema_create_sql"]
+    assert "request_default_marker" not in upstream_schema
+    assert "request_false_marker" not in upstream_schema
+    assert "`j`" in upstream_schema
+
+    # Explicit SQL mode remains available before applying the downstream
+    # table schema through the existing worker path.
+    direct_schema_data = {
+        "schema_source": "sql",
+        "sql_content": (
+            "CREATE TABLE `{}`.`{}` "
+            "(i TINYINT, request_downstream_marker INT);".format(
+                schema_name, table_name
+            )
+        ),
+    }
+    resp = requests.put(url=single_table_url, json=direct_schema_data)
+    assert resp.status_code == 200
+    direct_schema_resp = requests.get(url=single_table_url)
+    assert direct_schema_resp.status_code == 200
+    assert (
+        "request_downstream_marker"
+        in direct_schema_resp.json()["schema_create_sql"]
+    )
+
+    downstream_schema_data = {
+        "schema_source": "downstream",
+        "flush": False,
+        "sync": False,
+    }
+    resp = requests.put(url=single_table_url, json=downstream_schema_data)
+    assert resp.status_code == 200
+    downstream_schema_resp = requests.get(url=single_table_url)
+    assert downstream_schema_resp.status_code == 200
+    downstream_schema = downstream_schema_resp.json()["schema_create_sql"]
+    assert "request_downstream_marker" not in downstream_schema
+    assert "`j`" in downstream_schema
+
+    invalid_schema_data = [
+        {},
+        {"schema_source": "sql", "sql_content": ""},
+        {"schema_source": "upstream", "sql_content": ""},
+        {"schema_source": "downstream", "sql_content": "CREATE TABLE t(i INT)"},
+        {"schema_source": "invalid"},
+    ]
+    for invalid_data in invalid_schema_data:
+        resp = requests.put(url=single_table_url, json=invalid_data)
+        assert resp.status_code == 400
+
+    unchanged_schema_resp = requests.get(url=single_table_url)
+    assert unchanged_schema_resp.status_code == 200
+    unchanged_schema = unchanged_schema_resp.json()["schema_create_sql"]
+    assert "request_downstream_marker" not in unchanged_schema
+    assert "`j`" in unchanged_schema
 
 
 def create_task_template_success(task_name, target_table_name=""):

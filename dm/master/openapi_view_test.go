@@ -1349,3 +1349,187 @@ func (s *OpenAPIViewSuite) TestTaskAPI() {
 func TestOpenAPIViewSuite(t *testing.T) {
 	suite.Run(t, new(OpenAPIViewSuite))
 }
+
+func TestNewOperateWorkerSchemaRequestDefaults(t *testing.T) {
+	trueValue := true
+	falseValue := false
+	sqlContent := "CREATE TABLE table (id INT)"
+	testCases := []struct {
+		name      string
+		sync      *bool
+		flush     *bool
+		wantSync  bool
+		wantFlush bool
+	}{
+		{
+			name:      "both omitted",
+			wantSync:  true,
+			wantFlush: true,
+		},
+		{
+			name:      "sync false",
+			sync:      &falseValue,
+			wantSync:  false,
+			wantFlush: true,
+		},
+		{
+			name:      "flush false",
+			flush:     &falseValue,
+			wantSync:  true,
+			wantFlush: false,
+		},
+		{
+			name:      "both false",
+			sync:      &falseValue,
+			flush:     &falseValue,
+			wantSync:  false,
+			wantFlush: false,
+		},
+		{
+			name:      "both true",
+			sync:      &trueValue,
+			flush:     &trueValue,
+			wantSync:  true,
+			wantFlush: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := newOperateWorkerSchemaRequest(
+				"task", "source", "schema", "table",
+				openapi.OperateTaskTableStructureRequest{
+					SqlContent: &sqlContent,
+					Sync:       tc.sync,
+					Flush:      tc.flush,
+				},
+			)
+			require.NoError(t, err)
+
+			require.Equal(t, pb.SchemaOp_SetSchema, req.Op)
+			require.Equal(t, "task", req.Task)
+			require.Equal(t, "source", req.Source)
+			require.Equal(t, "schema", req.Database)
+			require.Equal(t, "table", req.Table)
+			require.Equal(t, "CREATE TABLE table (id INT)", req.Schema)
+			require.Equal(t, tc.wantSync, req.Sync)
+			require.Equal(t, tc.wantFlush, req.Flush)
+		})
+	}
+}
+
+func TestNewOperateWorkerSchemaRequestSources(t *testing.T) {
+	sqlSource := openapi.OperateTaskTableStructureRequestSchemaSourceSql
+	upstreamSource := openapi.OperateTaskTableStructureRequestSchemaSourceUpstream
+	downstreamSource := openapi.OperateTaskTableStructureRequestSchemaSourceDownstream
+	invalidSource := openapi.OperateTaskTableStructureRequestSchemaSource("invalid")
+	sqlContent := "CREATE TABLE table (id INT)"
+	emptySQL := ""
+	whitespaceSQL := " \t\n"
+	falseValue := false
+
+	testCases := []struct {
+		name           string
+		schemaSource   *openapi.OperateTaskTableStructureRequestSchemaSource
+		sqlContent     *string
+		sync           *bool
+		flush          *bool
+		wantSchema     string
+		wantFromSource bool
+		wantFromTarget bool
+		wantSync       bool
+		wantFlush      bool
+		wantErr        string
+	}{
+		{
+			name:       "legacy sql",
+			sqlContent: &sqlContent,
+			wantSchema: sqlContent,
+			wantSync:   true,
+			wantFlush:  true,
+		},
+		{
+			name:         "explicit sql with false options",
+			schemaSource: &sqlSource,
+			sqlContent:   &sqlContent,
+			sync:         &falseValue,
+			flush:        &falseValue,
+			wantSchema:   sqlContent,
+			wantSync:     false,
+			wantFlush:    false,
+		},
+		{
+			name:           "upstream",
+			schemaSource:   &upstreamSource,
+			wantFromSource: true,
+			wantSync:       true,
+			wantFlush:      true,
+		},
+		{
+			name:           "downstream",
+			schemaSource:   &downstreamSource,
+			wantFromTarget: true,
+			wantSync:       true,
+			wantFlush:      true,
+		},
+		{
+			name:    "legacy sql missing",
+			wantErr: "`sql_content` must be provided and non-empty when `schema_source` is `sql`",
+		},
+		{
+			name:       "legacy sql empty",
+			sqlContent: &emptySQL,
+			wantErr:    "`sql_content` must be provided and non-empty when `schema_source` is `sql`",
+		},
+		{
+			name:         "explicit sql whitespace",
+			schemaSource: &sqlSource,
+			sqlContent:   &whitespaceSQL,
+			wantErr:      "`sql_content` must be provided and non-empty when `schema_source` is `sql`",
+		},
+		{
+			name:         "upstream with sql",
+			schemaSource: &upstreamSource,
+			sqlContent:   &emptySQL,
+			wantErr:      "`sql_content` must be omitted when `schema_source` is `upstream`",
+		},
+		{
+			name:         "downstream with sql",
+			schemaSource: &downstreamSource,
+			sqlContent:   &sqlContent,
+			wantErr:      "`sql_content` must be omitted when `schema_source` is `downstream`",
+		},
+		{
+			name:         "invalid source",
+			schemaSource: &invalidSource,
+			wantErr:      "`schema_source` must be one of `sql`, `upstream`, or `downstream`",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req, err := newOperateWorkerSchemaRequest(
+				"task", "source", "schema", "table",
+				openapi.OperateTaskTableStructureRequest{
+					SchemaSource: tc.schemaSource,
+					SqlContent:   tc.sqlContent,
+					Sync:         tc.sync,
+					Flush:        tc.flush,
+				},
+			)
+			if tc.wantErr != "" {
+				require.Error(t, err)
+				require.Equal(t, tc.wantErr, terror.Message(err))
+				require.Nil(t, req)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantSchema, req.Schema)
+			require.Equal(t, tc.wantFromSource, req.FromSource)
+			require.Equal(t, tc.wantFromTarget, req.FromTarget)
+			require.Equal(t, tc.wantSync, req.Sync)
+			require.Equal(t, tc.wantFlush, req.Flush)
+		})
+	}
+}

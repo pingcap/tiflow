@@ -434,6 +434,25 @@ function test_noshard_task() {
 	openapi_task_check "get_task_status_success" "$task_name" 2
 	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 5000 18000 42000
 
+	# stop task first for operate schema
+	openapi_task_check "stop_task_success" "$task_name" "mysql-02"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name -s mysql-02" \
+		'"stage": "Paused"' 1 \
+		'"unit": "Sync"' 1
+
+	# operate schema
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
+
+	# start task again
+	openapi_task_check "start_task_success" "$task_name" "mysql-02" "false"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name -s mysql-02" \
+		'"stage": "Running"' 1 \
+		'"unit": "Sync"' 1
+	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (5, 6);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
 	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 
@@ -442,15 +461,6 @@ function test_noshard_task() {
 
 	# get task list
 	openapi_task_check "get_task_list" 1
-
-	# stop task first for operate schema
-	openapi_task_check "stop_task_success" "$task_name" "mysql-02"
-
-	# operate schema
-	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
-
-	# start task again
-	openapi_task_check "start_task_success" "$task_name" "mysql-02"
 
 	# delete task failed because there is a running task
 	openapi_task_check "delete_task_failed" "$task_name"
