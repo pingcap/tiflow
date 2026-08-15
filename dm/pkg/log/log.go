@@ -289,6 +289,19 @@ func (t RedactInfoLogType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(false)
 }
 
+// MarshalTOML implements the `toml.Marshaler` interface so Config.Toml()
+// emits false/true/"marker" instead of the underlying int values 0/1/2.
+func (t RedactInfoLogType) MarshalTOML() ([]byte, error) {
+	switch t {
+	case RedactInfoLogON:
+		return []byte("true"), nil
+	case RedactInfoLogMarker:
+		return []byte(`"marker"`), nil
+	default:
+		return []byte("false"), nil
+	}
+}
+
 const invalidRedactInfoLogTypeErrMsg = `the "redact-info-log" value is invalid; it should be either false, true, or "MARKER"`
 
 // UnmarshalJSON implements the `json.Marshaler` interface to ensure the compatibility.

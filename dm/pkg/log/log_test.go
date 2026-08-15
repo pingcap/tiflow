@@ -296,13 +296,14 @@ func TestRedactInfoLogTypeJSON(t *testing.T) {
 
 func TestRedactInfoLogTypeTOML(t *testing.T) {
 	cases := []struct {
-		name string
-		raw  string
-		want RedactInfoLogType
+		name    string
+		raw     string
+		want    RedactInfoLogType
+		encoded string
 	}{
-		{name: "false", raw: "redact-info-log = false\n", want: RedactInfoLogOFF},
-		{name: "true", raw: "redact-info-log = true\n", want: RedactInfoLogON},
-		{name: "marker", raw: "redact-info-log = \"marker\"\n", want: RedactInfoLogMarker},
+		{name: "false", raw: "redact-info-log = false\n", want: RedactInfoLogOFF, encoded: "redact-info-log = false\n"},
+		{name: "true", raw: "redact-info-log = true\n", want: RedactInfoLogON, encoded: "redact-info-log = true\n"},
+		{name: "marker", raw: "redact-info-log = \"marker\"\n", want: RedactInfoLogMarker, encoded: "redact-info-log = \"marker\"\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -310,6 +311,10 @@ func TestRedactInfoLogTypeTOML(t *testing.T) {
 			_, err := toml.Decode(tc.raw, &cfg)
 			require.NoError(t, err)
 			require.Equal(t, tc.want, cfg.RedactInfoLog)
+
+			encoded, err := toml.Marshal(cfg)
+			require.NoError(t, err)
+			require.Equal(t, tc.encoded, string(encoded))
 		})
 	}
 
