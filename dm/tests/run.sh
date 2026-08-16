@@ -144,3 +144,5 @@ else
 		run $script
 	done
 fi
+
+# add new line to trigger dm tests
