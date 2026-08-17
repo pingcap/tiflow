@@ -26,6 +26,7 @@ import (
 	fakejobPkg "github.com/pingcap/tiflow/engine/pkg/fakejob"
 	"github.com/pingcap/tiflow/engine/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
@@ -217,7 +218,7 @@ watchLoop:
 			opts = append(opts, clientv3.WithRev(revision+1))
 		}
 		ch := cli.Watch(clientv3.WithRequireLeader(ctx), key, opts...)
-		log.Info("start to watch etcd", zap.String("key", key),
+		log.Info("start to watch etcd", logutil.ZapRedactString("key", key),
 			zap.Int64("revision", revision),
 			zap.Strings("endpoints", d.config.EtcdEndpoints))
 		for resp := range ch {

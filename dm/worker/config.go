@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/version"
 )
 
@@ -66,7 +67,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogFormat, "log-format", "text", `the format of the log, "text" or "json"`)
-	fs.BoolVar(&cfg.RedactInfoLog, "redact-info-log", false, "whether to enable the log redaction")
+	fs.Var(&cfg.RedactInfoLog, "redact-info-log", "whether to enable the log redaction (false|true|\"MARKER\")")
 	// fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 	// NOTE: add `advertise-addr` for dm-master if needed.
 	fs.StringVar(&cfg.Join, "join", "", `join to an existing cluster (usage: dm-master cluster's "${master-addr}")`)
@@ -95,7 +96,8 @@ type Config struct {
 	// RedactInfoLog indicates that whether to enable the log redaction. It can be the following values:
 	// - false: disable redact log.
 	// - true: enable redact log, which will replace the sensitive information with "?".
-	RedactInfoLog bool `toml:"redact-info-log" json:"redact-info-log"`
+	// - "MARKER": enable redact log, which will use single guillemets ‹› to enclose the sensitive information.
+	RedactInfoLog logutil.RedactInfoLogType `toml:"redact-info-log" json:"redact-info-log"`
 
 	Join          string `toml:"join" json:"join" `
 	WorkerAddr    string `toml:"worker-addr" json:"worker-addr"`
