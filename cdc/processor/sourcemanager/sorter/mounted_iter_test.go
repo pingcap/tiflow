@@ -63,7 +63,7 @@ func TestMountedEventIter(t *testing.T) {
 	defer quota.Close()
 	iter := NewMountedEventIter(model.ChangeFeedID{}, rawIter, mg, 3, quota)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		event, _, err := iter.Next(context.Background())
 		require.NotNil(t, event)
 		require.Nil(t, err)

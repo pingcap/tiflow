@@ -215,11 +215,11 @@ func BenchmarkSchedulerBasicAddTables(b *testing.B) {
 	) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*member.CaptureStatus{}
-		for i := 0; i < captureCount; i++ {
+		for i := range captureCount {
 			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
 		currentTables = make([]tablepb.Span, 0, total)
-		for i := 0; i < total; i++ {
+		for i := range total {
 			currentTables = append(currentTables, tablepb.Span{TableID: int64(10000 + i)})
 		}
 		replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
@@ -239,12 +239,12 @@ func BenchmarkSchedulerBasicRemoveTables(b *testing.B) {
 	) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*member.CaptureStatus{}
-		for i := 0; i < captureCount; i++ {
+		for i := range captureCount {
 			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
 		currentTables = make([]tablepb.Span, 0, total)
 		replications = mapToSpanMap(map[model.TableID]*replication.ReplicationSet{})
-		for i := 0; i < total; i++ {
+		for i := range total {
 			replications.ReplaceOrInsert(tablepb.Span{TableID: int64(10000 + i)},
 				&replication.ReplicationSet{
 					Primary: fmt.Sprint(i % captureCount),
@@ -266,7 +266,7 @@ func BenchmarkSchedulerBasicAddRemoveTables(b *testing.B) {
 	) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*member.CaptureStatus{}
-		for i := 0; i < captureCount; i++ {
+		for i := range captureCount {
 			captures[fmt.Sprint(i)] = &member.CaptureStatus{}
 		}
 		currentTables = make([]tablepb.Span, 0, total)

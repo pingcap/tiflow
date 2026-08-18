@@ -104,7 +104,7 @@ func WriteError(w http.ResponseWriter, statusCode int, err error) {
 }
 
 // WriteData write data to response with http status code 200
-func WriteData(w http.ResponseWriter, data interface{}) {
+func WriteData(w http.ResponseWriter, data any) {
 	js, err := json.MarshalIndent(data, "", " ")
 	if err != nil {
 		log.Error("invalid json data", zap.Any("data", data), zap.Error(err))

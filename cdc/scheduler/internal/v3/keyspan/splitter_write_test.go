@@ -215,7 +215,7 @@ func TestSplitRegionEven(t *testing.T) {
 	tblID := model.TableID(1)
 	regionCount := 4653 + 1051 + 745 + 9530 + 1
 	regions := make([]pdutil.RegionInfo, regionCount)
-	for i := 0; i < regionCount; i++ {
+	for i := range regionCount {
 		regions[i] = pdutil.RegionInfo{
 			ID:          uint64(i),
 			StartKey:    "" + strconv.Itoa(i),
@@ -243,7 +243,7 @@ func TestSplitLargeRegion(t *testing.T) {
 	tblID := model.TableID(1)
 	regionCount := spanRegionLimit*5 + 1000
 	regions := make([]pdutil.RegionInfo, regionCount)
-	for i := 0; i < regionCount; i++ {
+	for i := range regionCount {
 		regions[i] = pdutil.RegionInfo{
 			ID:          uint64(i),
 			StartKey:    "" + strconv.Itoa(i),
@@ -271,7 +271,7 @@ func TestSpanRegionLimitBase(t *testing.T) {
 	splitter := newWriteSplitter(model.GenerateChangeFeedID("test", "test"), nil, 0)
 	var regions []pdutil.RegionInfo
 	// test spanRegionLimit works
-	for i := 0; i < spanRegionLimit*6; i++ {
+	for i := range spanRegionLimit * 6 {
 		regions = append(regions, pdutil.NewTestRegionInfo(uint64(i+9), []byte("f"), []byte("f"), 100))
 	}
 	captureNum := 2
@@ -321,17 +321,17 @@ func TestSpanRegionLimit(t *testing.T) {
 	// random generate writtenKeys for each region
 	var writtenKeys []int
 
-	for i := 0; i < countOver20000; i++ {
+	for range countOver20000 {
 		number := rand.Intn(80000) + 20001
 		writtenKeys = append(writtenKeys, number)
 	}
 
-	for i := 0; i < countBetween5000And10000; i++ {
+	for range countBetween5000And10000 {
 		number := rand.Intn(5001) + 5000
 		writtenKeys = append(writtenKeys, number)
 	}
 
-	for i := 0; i < countBelow1000; i++ {
+	for range countBelow1000 {
 		number := rand.Intn(1000)
 		writtenKeys = append(writtenKeys, number)
 	}

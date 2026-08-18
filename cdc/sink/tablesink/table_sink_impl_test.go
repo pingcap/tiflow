@@ -310,11 +310,9 @@ func TestClose(t *testing.T) {
 	require.Nil(t, err)
 	require.Len(t, sink.events, 7, "all events should be flushed")
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		tb.Close()
-		wg.Done()
-	}()
+	})
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopping == tb.state.Load()
 	}, time.Second, time.Millisecond*10, "table should be stopping")
@@ -366,11 +364,9 @@ func TestCloseCancellable(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		tb.Close()
-		wg.Done()
-	}()
+	})
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopped == tb.state.Load()
@@ -399,11 +395,9 @@ func TestCloseReentrant(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		tb.Close()
-		wg.Done()
-	}()
+	})
 	wg.Wait()
 	require.Eventually(t, func() bool {
 		return state.TableSinkStopped == tb.state.Load()

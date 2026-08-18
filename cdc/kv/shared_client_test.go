@@ -78,12 +78,10 @@ func newMockServiceSpecificAddr(
 	grpcServer = grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
 	// grpcServer is the server, srv is the service
 	cdcpb.RegisterChangeDataServer(grpcServer, srv)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := grpcServer.Serve(lis)
 		require.Nil(t, err)
-	}()
+	})
 	return
 }
 
@@ -206,12 +204,10 @@ func TestConnectToOfflineOrFailedTiKV(t *testing.T) {
 		wg.Wait()
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	subID := client.AllocSubscriptionID()
 	span := tablepb.Span{TableID: 1, StartKey: []byte("a"), EndKey: []byte("b")}
@@ -315,12 +311,10 @@ func TestGetStoreFailed(t *testing.T) {
 		wg.Wait()
 	}()
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := client.Run(ctx)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	failpoint.Enable("github.com/pingcap/tiflow/pkg/version/GetStoreFailed", `return(true)`)
 	subID := client.AllocSubscriptionID()
@@ -372,16 +366,14 @@ func newMockChangeDataServer(ch chan *cdcpb.ChangeDataEvent) *mockChangeDataServ
 
 func (m *mockChangeDataServer) EventFeed(s cdcpb.ChangeData_EventFeedServer) error {
 	closed := make(chan struct{})
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
+	m.wg.Go(func() {
 		defer close(closed)
 		for {
 			if _, err := s.Recv(); err != nil {
 				return
 			}
 		}
-	}()
+	})
 	m.wg.Add(1)
 	defer m.wg.Done()
 	ticker := time.NewTicker(20 * time.Millisecond)

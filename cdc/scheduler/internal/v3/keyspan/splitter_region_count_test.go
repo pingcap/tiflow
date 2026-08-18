@@ -133,10 +133,10 @@ func TestRegionCountEvenlySplitSpan(t *testing.T) {
 
 	cache := NewMockRegionCache()
 	totalRegion := 1000
-	for i := 0; i < totalRegion; i++ {
+	for i := range totalRegion {
 		cache.regions.ReplaceOrInsert(tablepb.Span{
-			StartKey: []byte(fmt.Sprintf("t1_%09d", i)),
-			EndKey:   []byte(fmt.Sprintf("t1_%09d", i+1)),
+			StartKey: fmt.Appendf(nil, "t1_%09d", i),
+			EndKey:   fmt.Appendf(nil, "t1_%09d", i+1),
 		}, uint64(i+1))
 	}
 

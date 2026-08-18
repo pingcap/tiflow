@@ -31,7 +31,7 @@ func TestInsertAndRemove(t *testing.T) {
 	t.Parallel()
 	list := newSpanList()
 	var keys [][]byte
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		key := make([]byte, rand.Intn(128)+1)
 		rand.Read(key)
 		keys = append(keys, key)
@@ -46,7 +46,7 @@ func TestInsertAndRemove(t *testing.T) {
 	}
 	checkList(t, list)
 
-	for i := 0; i < 10000; i++ {
+	for range 10000 {
 		indexToRemove := rand.Intn(10000)
 		seekRes := list.Seek(keys[indexToRemove], make(seekResult, maxHeight))
 		if seekRes.Node().Next() == nil {

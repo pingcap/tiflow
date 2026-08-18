@@ -162,8 +162,7 @@ func createOwner4Test(globalVars *vars.GlobalVars, t *testing.T) (*ownerImpl, *o
 
 func TestCreateRemoveChangefeed(t *testing.T) {
 	globalVars := vars.NewGlobalVars4Test()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	owner, state, tester := createOwner4Test(globalVars, t)
 
@@ -680,8 +679,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 	mockPDClient := &gc.MockPDClient{}
 	m := upstream.NewManager4Test(mockPDClient)
 	o := NewOwner(m, nil, vars.NewGlobalVars4Test()).(*ownerImpl)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	tester := orchestrator.NewReactorStateTester(t, state, nil)
 
@@ -793,7 +791,7 @@ func TestUpdateGCSafePoint(t *testing.T) {
 func TestCalculateGCSafepointTs(t *testing.T) {
 	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
 	expectMinTsMap := make(map[uint64]uint64)
-	expectForceUpdateMap := make(map[uint64]interface{})
+	expectForceUpdateMap := make(map[uint64]any)
 	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
 	o.upstreamManager = upstream.NewManager4Test(nil)
 
@@ -802,7 +800,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		model.StateWarning, model.StatePending,
 		model.StateFailed, /* failed changefeed with normal error should not be ignored */
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-%d", i))
 		upstreamID := uint64(i / 10)
 		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i) + 100}
@@ -835,7 +833,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		cfID := model.DefaultChangeFeedID(fmt.Sprintf("testChangefeed-ignored-%d", i))
 		upstreamID := uint64(i)
 		cfStatus := &model.ChangeFeedStatus{CheckpointTs: uint64(i)}
@@ -863,7 +861,7 @@ func TestCalculateGCSafepointTs(t *testing.T) {
 
 func TestCalculateGCSafepointTsNoChangefeed(t *testing.T) {
 	state := orchestrator.NewGlobalStateForTest(etcd.DefaultCDCClusterID)
-	expectForceUpdateMap := make(map[uint64]interface{})
+	expectForceUpdateMap := make(map[uint64]any)
 	o := &ownerImpl{changefeeds: make(map[model.ChangeFeedID]*changefeed)}
 	o.upstreamManager = upstream.NewManager4Test(nil)
 	up, err := o.upstreamManager.GetDefaultUpstream()
@@ -914,8 +912,7 @@ func TestFixChangefeedState(t *testing.T) {
 func TestCheckClusterVersion(t *testing.T) {
 	globalVars := vars.NewGlobalVars4Test()
 	owner4Test, state, tester := createOwner4Test(globalVars, t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	tester.MustUpdate(fmt.Sprintf("%s/capture/6bbc01c8-0605-4f86-a0f9-b3119109b225",
 		etcd.DefaultClusterAndMetaPrefix),

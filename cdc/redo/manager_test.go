@@ -114,8 +114,7 @@ func TestConsistentConfig(t *testing.T) {
 // TestLogManagerInProcessor tests how redo log manager is used in processor.
 func TestLogManagerInProcessor(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testWriteDMLs := func(storage string, useFileBackend bool) {
 		ctx, cancel := context.WithCancel(ctx)
@@ -227,8 +226,7 @@ func TestLogManagerInProcessor(t *testing.T) {
 // where the redo log manager needs to handle DDL event only.
 func TestLogManagerInOwner(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testWriteDDLs := func(storage string, useFileBackend bool) {
 		ctx, cancel := context.WithCancel(ctx)
@@ -358,7 +356,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 	tables := make([]model.TableID, 0, numOfTables)
 	maxTsMap := spanz.NewHashMap[*model.Ts]()
 	startTs := uint64(100)
-	for i := 0; i < numOfTables; i++ {
+	for i := range numOfTables {
 		tableID := model.TableID(i)
 		tables = append(tables, tableID)
 		span := spanz.TableIDToComparableSpan(tableID)
@@ -380,7 +378,7 @@ func runBenchTest(b *testing.B, storage string, useFileBackend bool) {
 			defer wg.Done()
 			maxCommitTs := maxTsMap.GetV(span)
 			var rows []*model.RowChangedEvent
-			for i := 0; i < maxRowCount; i++ {
+			for i := range maxRowCount {
 				if i%100 == 0 {
 					// prepare new row change events
 					b.StopTimer()
