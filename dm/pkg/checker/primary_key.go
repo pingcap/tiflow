@@ -150,7 +150,7 @@ func (c *PrimaryKeyChecker) Check(ctx context.Context) *Result {
 		}
 	})
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		worker := &primaryKeyWorker{c: c}
 		pool.Go(worker.handle)
 	}

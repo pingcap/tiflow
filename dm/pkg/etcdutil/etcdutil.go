@@ -88,7 +88,7 @@ func RemoveMember(client *clientv3.Client, id uint64) (*clientv3.MemberRemoveRes
 	return client.MemberRemove(ctx, id)
 }
 
-type EtcdOpFunc func(*tcontext.Context, *clientv3.Client) (interface{}, error)
+type EtcdOpFunc func(*tcontext.Context, *clientv3.Client) (any, error)
 
 // DoTxnWithRepeatable do multiple etcd operations in one txn with repeatable retry.
 // There are two situations that this function can be used:
@@ -100,7 +100,7 @@ func DoTxnWithRepeatable(cli *clientv3.Client, opFunc EtcdOpFunc) (*clientv3.Txn
 	defer cancel()
 	tctx := tcontext.NewContext(ctx, log.L())
 
-	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (interface{}, error) {
+	ret, _, err := etcdDefaultTxnStrategy.Apply(tctx, etcdDefaultTxnRetryParam, func(t *tcontext.Context) (any, error) {
 		return opFunc(t, cli)
 	})
 	if err != nil {
@@ -113,7 +113,7 @@ func DoTxnWithRepeatable(cli *clientv3.Client, opFunc EtcdOpFunc) (*clientv3.Txn
 }
 
 func ThenOpFunc(ops ...clientv3.Op) EtcdOpFunc {
-	return func(tctx *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+	return func(tctx *tcontext.Context, cli *clientv3.Client) (any, error) {
 		resp, err := cli.Txn(tctx.Ctx).Then(ops...).Commit()
 		if err != nil {
 			return nil, terror.ErrHAFailTxnOperation.Delegate(err, "txn commit failed")
@@ -123,7 +123,7 @@ func ThenOpFunc(ops ...clientv3.Op) EtcdOpFunc {
 }
 
 func FullOpFunc(cmps []clientv3.Cmp, opsThen, opsElse []clientv3.Op) EtcdOpFunc {
-	return func(tctx *tcontext.Context, cli *clientv3.Client) (interface{}, error) {
+	return func(tctx *tcontext.Context, cli *clientv3.Client) (any, error) {
 		failpoint.Inject("ErrNoSpace", func() {
 			tctx.L().Info("fail to do ops in etcd", zap.String("failpoint", "ErrNoSpace"))
 			failpoint.Return(nil, v3rpc.ErrNoSpace)

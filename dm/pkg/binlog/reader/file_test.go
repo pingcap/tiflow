@@ -171,10 +171,10 @@ func TestGetEvent(t *testing.T) {
 
 	// write two QueryEvent
 	var queryEv *replication.BinlogEvent
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		queryEv, err = event.GenQueryEvent(
 			header, latestPos, 0, 0, 0, nil,
-			[]byte(fmt.Sprintf("schema-%d", i)), []byte(fmt.Sprintf("query-%d", i)))
+			fmt.Appendf(nil, "schema-%d", i), fmt.Appendf(nil, "query-%d", i))
 		require.Nil(t, err)
 		require.NotNil(t, queryEv)
 		_, err = f.Write(queryEv.RawData)
@@ -245,7 +245,7 @@ func TestWithChannelBuffer(t *testing.T) {
 	for i := 0; i < cfg.ChBufferSize; i++ {
 		queryEv, err = event.GenQueryEvent(
 			header, latestPos, 0, 0, 0, nil,
-			[]byte(fmt.Sprintf("schema-%d", i)), []byte(fmt.Sprintf("query-%d", i)))
+			fmt.Appendf(nil, "schema-%d", i), fmt.Appendf(nil, "query-%d", i))
 		require.Nil(t, err)
 		require.NotNil(t, queryEv)
 		_, err = f.Write(queryEv.RawData)

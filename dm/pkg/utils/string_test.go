@@ -56,12 +56,12 @@ func TestTruncateInterface(t *testing.T) {
 		i2  = compose{b: true, i: 456, s: "def"}
 		i3  = compose{b: false, i: 321, s: "cba"}
 		i4  = compose{b: false, i: 654, s: "fed"}
-		iis [][]interface{}
+		iis [][]any
 	)
-	iis = append(iis, []interface{}{i1, i2}, []interface{}{i3, i4})
+	iis = append(iis, []any{i1, i2}, []any{i3, i4})
 
 	cases := []struct {
-		v      interface{}
+		v      any
 		n      int
 		expect string
 	}{

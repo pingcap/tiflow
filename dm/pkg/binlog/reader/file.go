@@ -106,9 +106,7 @@ func (r *FileReader) StartSyncByPos(pos gmysql.Position) error {
 
 	// keep running until canceled in `Close`.
 	r.ctx, r.cancel = context.WithCancel(context.Background())
-	r.wg.Add(1)
-	go func() {
-		defer r.wg.Done()
+	r.wg.Go(func() {
 		err := r.parser.ParseFile(pos.Name, int64(pos.Pos), r.onEvent)
 		if err != nil {
 			if errors.Cause(err) != context.Canceled {
@@ -122,7 +120,7 @@ func (r *FileReader) StartSyncByPos(pos gmysql.Position) error {
 			r.logger.Info("parse end of binlog file", zap.Uint32("pos", r.readOffset.Load()))
 			close(r.endCh)
 		}
-	}()
+	})
 
 	r.stage = common.StagePrepared
 	return nil
@@ -173,7 +171,7 @@ func (r *FileReader) GetEvent(ctx context.Context) (*replication.BinlogEvent, er
 }
 
 // Status implements Reader.Status.
-func (r *FileReader) Status() interface{} {
+func (r *FileReader) Status() any {
 	r.mu.RLock()
 	stage := r.stage
 	r.mu.RUnlock()
