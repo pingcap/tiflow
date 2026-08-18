@@ -489,7 +489,6 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 	}
 
 	for workerID, entry := range m.workerEntries {
-		entry := entry
 		state := entry.State()
 		if state == workerEntryOffline || state == workerEntryTombstone {
 			// Prevent repeated delivery of the workerOffline event.

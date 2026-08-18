@@ -154,7 +154,6 @@ func TestEtcdBank(t *testing.T) {
 	}
 
 	for i := 0; i < workerNumber; i++ {
-		i := i
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
