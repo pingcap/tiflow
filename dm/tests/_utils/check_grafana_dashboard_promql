@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Check the PromQL expression used by the DM professional dashboard panel."""
+
+import json
+import sys
+from pathlib import Path
+
+
+EXPECTED_EXPR = (
+    'clamp_min(dm_syncer_binlog_file{k8s_cluster=~"$k8s_cluster",tidb_cluster=~"$tidb_cluster", '
+    'job_id=~"$job_id",source_id=~"$source", task=~"$task", node="master"} - '
+    'ON(task,source_id) dm_syncer_binlog_file{k8s_cluster=~"$k8s_cluster",tidb_cluster=~"$tidb_cluster", '
+    'job_id=~"$job_id",source_id=~"$source", task=~"$task", node="syncer"}, 0)'
+)
+
+
+def yield_panels(container):
+    for panel in container.get("panels", []):
+        yield panel
+        yield from yield_panels(panel)
+
+
+def main():
+    if len(sys.argv) != 2:
+        raise RuntimeError("usage: check_grafana_dashboard_promql DASHBOARD_JSON")
+
+    dashboard_path = Path(sys.argv[1])
+    with dashboard_path.open(encoding="utf-8") as dashboard_file:
+        dashboard = json.load(dashboard_file)
+
+    panels = [panel for panel in yield_panels(dashboard) if panel.get("id") == 43]
+    if len(panels) != 1:
+        raise RuntimeError(f"expected exactly one panel with id 43, found {len(panels)}")
+
+    targets = [target for target in panels[0].get("targets", []) if target.get("refId") == "B"]
+    if len(targets) != 1:
+        raise RuntimeError(
+            f"expected exactly one target with refId B in panel id 43, found {len(targets)}"
+        )
+
+    expression = targets[0].get("expr")
+    if expression != EXPECTED_EXPR:
+        raise RuntimeError(
+            "panel id 43 target refId B has unexpected PromQL expression; "
+            f"expected {EXPECTED_EXPR!r}, found {expression!r}"
+        )
+
+
+if __name__ == "__main__":
+    main()
