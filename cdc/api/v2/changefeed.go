@@ -593,26 +593,11 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 		return
 	}
 
-	taskStatus := make([]model.CaptureTaskStatus, 0)
-	if cfInfo.State == model.StateNormal {
-		processorInfos, err := h.capture.StatusProvider().GetAllTaskStatuses(
-			ctx,
-			changefeedID,
-		)
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
-		for captureID, status := range processorInfos {
-			tables := make([]int64, 0)
-			for tableID := range status.Tables {
-				tables = append(tables, tableID)
-			}
-			taskStatus = append(taskStatus,
-				model.CaptureTaskStatus{
-					CaptureID: captureID, Tables: tables,
-					Operation: status.Operation,
-				})
+	var taskStatus []model.CaptureTaskStatus
+	if cfInfo.State.IsRunning() {
+		if taskStatus, err = api.CollectTaskStatuses(ctx, h.capture.StatusProvider(), changefeedID); err != nil {
+			log.Warn("failed to get task statuses, returning changefeed detail without task_status",
+				zap.String("changefeed", changefeedID.String()), zap.Error(err))
 		}
 	}
 	detail := toAPIModel(cfInfo, status.ResolvedTs,
@@ -717,26 +702,11 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	taskStatus := make([]model.CaptureTaskStatus, 0)
-	if info.State == model.StateNormal {
-		processorInfos, err := h.capture.StatusProvider().GetAllTaskStatuses(
-			ctx,
-			changefeedID,
-		)
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
-		for captureID, status := range processorInfos {
-			tables := make([]int64, 0)
-			for tableID := range status.Tables {
-				tables = append(tables, tableID)
-			}
-			taskStatus = append(taskStatus,
-				model.CaptureTaskStatus{
-					CaptureID: captureID, Tables: tables,
-					Operation: status.Operation,
-				})
+	var taskStatus []model.CaptureTaskStatus
+	if info.State.IsRunning() {
+		if taskStatus, err = api.CollectTaskStatuses(ctx, h.capture.StatusProvider(), changefeedID); err != nil {
+			log.Warn("failed to get task statuses, returning changefeed detail without task_status",
+				zap.String("changefeed", changefeedID.String()), zap.Error(err))
 		}
 	}
 	c.JSON(http.StatusOK, toAPIModel(info, status.ResolvedTs, status.CheckpointTs,
