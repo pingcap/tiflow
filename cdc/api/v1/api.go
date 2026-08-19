@@ -209,24 +209,11 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 		return
 	}
 
-	taskStatus := make([]model.CaptureTaskStatus, 0)
+	var taskStatus []model.CaptureTaskStatus
 	if info.State.IsRunning() {
-		processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
-		if err != nil {
+		if taskStatus, err = api.CollectTaskStatuses(ctx, h.statusProvider(), changefeedID); err != nil {
 			log.Warn("failed to get task statuses, returning changefeed detail without task_status",
 				zap.String("changefeed", changefeedID.String()), zap.Error(err))
-		} else {
-			for captureID, status := range processorInfos {
-				tables := make([]int64, 0)
-				for tableID := range status.Tables {
-					tables = append(tables, tableID)
-				}
-				taskStatus = append(taskStatus,
-					model.CaptureTaskStatus{
-						CaptureID: captureID, Tables: tables,
-						Operation: status.Operation,
-					})
-			}
 		}
 	}
 	sinkURI, err := util.MaskSinkURI(info.SinkURI)
