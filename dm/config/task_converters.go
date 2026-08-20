@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -52,7 +53,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		cfg.ShadowTableRules = c.ShadowTableRules
 		cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 		cfg.Name = c.Name
-		cfg.MetricLabels = cloneMetricLabels(c.MetricLabels)
+		cfg.MetricLabels = maps.Clone(c.MetricLabels)
 		cfg.Mode = c.TaskMode
 		cfg.CaseSensitive = c.CaseSensitive
 		cfg.MetaSchema = c.MetaSchema
@@ -169,7 +170,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg := NewSubTaskConfig()
 		// set task name and mode
 		subTaskCfg.Name = task.Name
-		subTaskCfg.MetricLabels = cloneMetricLabels(metricLabels)
+		subTaskCfg.MetricLabels = maps.Clone(metricLabels)
 		subTaskCfg.Mode = string(task.TaskMode)
 		if task.Timezone != nil {
 			subTaskCfg.Timezone = *task.Timezone
@@ -394,7 +395,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	// global configs.
 	stCfg0 := stCfgs[0]
 	c.Name = stCfg0.Name
-	c.MetricLabels = cloneMetricLabels(stCfg0.MetricLabels)
+	c.MetricLabels = maps.Clone(stCfg0.MetricLabels)
 	c.TaskMode = stCfg0.Mode
 	c.IsSharding = stCfg0.IsSharding
 	c.ShardMode = stCfg0.ShardMode
@@ -769,17 +770,6 @@ func ValidateMetricLabels(labels map[string]string) error {
 	return nil
 }
 
-func cloneMetricLabels(labels map[string]string) map[string]string {
-	if labels == nil {
-		return nil
-	}
-	clone := make(map[string]string, len(labels))
-	for key, value := range labels {
-		clone[key] = value
-	}
-	return clone
-}
-
 func metricLabelsFromOpenAPI(labels *openapi.Task_MetricLabels) map[string]string {
 	if labels == nil {
 		return nil
@@ -791,7 +781,7 @@ func metricLabelsToOpenAPI(labels map[string]string) *openapi.Task_MetricLabels 
 	if labels == nil {
 		return nil
 	}
-	return &openapi.Task_MetricLabels{AdditionalProperties: cloneMetricLabels(labels)}
+	return &openapi.Task_MetricLabels{AdditionalProperties: maps.Clone(labels)}
 }
 
 // projectTargetSession currently exposes only foreign_key_checks and normalizes

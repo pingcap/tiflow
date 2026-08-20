@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"sort"
@@ -1292,7 +1293,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 	targetDB := *taskConfig.TargetDB
 	return &TaskConfigForDowngrade{
 		Name:                      taskConfig.Name,
-		MetricLabels:              cloneMetricLabels(taskConfig.MetricLabels),
+		MetricLabels:              maps.Clone(taskConfig.MetricLabels),
 		TaskMode:                  taskConfig.TaskMode,
 		IsSharding:                taskConfig.IsSharding,
 		ShardMode:                 taskConfig.ShardMode,

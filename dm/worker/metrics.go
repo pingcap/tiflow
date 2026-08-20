@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -122,20 +123,12 @@ func registerTaskMetricLabels(task string, labels map[string]string) {
 	metricLabelsMu.Lock()
 	defer metricLabelsMu.Unlock()
 	if metricRefs[task] == 0 {
-		metricLabels[task] = copyMetricLabels(labels)
+		metricLabels[task] = maps.Clone(labels)
 	}
 	metricRefs[task]++
 }
 
 func stringPtr(value string) *string { return &value }
-
-func copyMetricLabels(labels map[string]string) map[string]string {
-	result := make(map[string]string, len(labels))
-	for key, value := range labels {
-		result[key] = value
-	}
-	return result
-}
 
 func unregisterTaskMetricLabels(task string) {
 	metricLabelsMu.Lock()
