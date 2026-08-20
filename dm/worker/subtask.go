@@ -15,7 +15,6 @@ package worker
 
 import (
 	"context"
-	"reflect"
 	"sync"
 	"time"
 
@@ -706,10 +705,6 @@ func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error 
 	if !st.stageCAS(pb.Stage_Paused, pb.Stage_Paused) { // only test for Paused
 		return terror.ErrWorkerUpdateTaskStage.Generate(st.Stage().String())
 	}
-	if !reflect.DeepEqual(st.cfg.MetricLabels, cfg.MetricLabels) {
-		return terror.ErrWorkerUpdateTaskStage.Generate("metric labels cannot be changed")
-	}
-
 	for _, u := range st.units {
 		err := u.Update(ctx, cfg)
 		if err != nil {
