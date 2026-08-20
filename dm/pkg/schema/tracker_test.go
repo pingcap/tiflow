@@ -368,6 +368,37 @@ func TestCreateTableIfNotExists(t *testing.T) {
 	require.Less(t, duration.Seconds(), float64(30))
 }
 
+func TestExecIgnoresRawFullTextIndex(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	require.NoError(t, tracker.CreateSchemaIfNotExists("test"))
+	stmt := parseSQL(t, p, `
+		CREATE TABLE t (
+			id VARCHAR(14) NOT NULL,
+			text_col TEXT,
+			normal_col INT,
+			PRIMARY KEY (id),
+			KEY normal_idx (normal_col),
+			FULLTEXT INDEX fulltext_idx (text_col) WITH PARSER STANDARD
+		)`).(*ast.CreateTableStmt)
+	require.Len(t, stmt.Constraints, 3)
+
+	require.NoError(t, tracker.Exec(ctx, "test", stmt))
+	// Tracker metadata omits only the FULLTEXT index.
+	ti, err := tracker.GetTableInfo(&filter.Table{Schema: "test", Name: "t"})
+	require.NoError(t, err)
+	require.Len(t, ti.Indices, 2)
+	require.NotNil(t, ti.FindIndexByName("primary"))
+	require.NotNil(t, ti.FindIndexByName("normal_idx"))
+	require.Nil(t, ti.FindIndexByName("fulltext_idx"))
+	// The original AST may still be used to execute the physical DDL.
+	require.Len(t, stmt.Constraints, 3)
+}
+
 func TestBatchCreateTableIfNotExist(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
@@ -623,6 +654,51 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
 	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
+}
+
+func TestGetDownStreamTableInfoIgnoresRawFullTextIndex(t *testing.T) {
+	p := parser.New()
+	se := timock.NewContext()
+	ctx := context.Background()
+	node, err := p.ParseOneStmt(
+		"CREATE TABLE t (id VARCHAR(14) NOT NULL, text_col TEXT, normal_col INT, PRIMARY KEY (id), KEY normal_idx (normal_col))",
+		"",
+		"",
+	)
+	require.NoError(t, err)
+	originTI, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	require.NoError(t, err)
+
+	dbConn, mock := mockBaseConn(t)
+	tracker, err := NewTestTracker(ctx, "test-tracker", dbConn, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(fmt.Sprintf("SET SESSION SQL_MODE = '%s'", mysql.DefaultSQLMode)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+
+	tableID := "`test`.`t`"
+	mock.ExpectQuery("SHOW CREATE TABLE " + tableID).WillReturnRows(
+		sqlmock.NewRows([]string{"Table", "Create Table"}).AddRow("t", `
+			CREATE TABLE t (
+				id VARCHAR(14) NOT NULL,
+				text_col TEXT,
+				normal_col INT,
+				PRIMARY KEY (id),
+				KEY normal_idx (normal_col),
+				FULLTEXT INDEX fulltext_idx (text_col) WITH PARSER STANDARD
+			)`),
+	)
+
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, originTI)
+	require.NoError(t, err)
+	require.Len(t, dti.TableInfo.Indices, 2)
+	require.NotNil(t, dti.TableInfo.FindIndexByName("primary"))
+	require.NotNil(t, dti.TableInfo.FindIndexByName("normal_idx"))
+	require.Nil(t, dti.TableInfo.FindIndexByName("fulltext_idx"))
+	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
+	require.NoError(t, mock.ExpectationsWereMet())
 }
 
 func TestForeignKeyRelationBuildsRootParents(t *testing.T) {

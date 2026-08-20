@@ -246,7 +246,7 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 	case *ast.DropDatabaseStmt:
 		return tr.upstreamTracker.DropSchema(tr.se, v)
 	case *ast.CreateTableStmt:
-		return tr.upstreamTracker.CreateTable(tr.se, v)
+		return tr.upstreamTracker.CreateTable(tr.se, stripRawFullTextConstraints(v))
 	case *ast.AlterTableStmt:
 		return tr.upstreamTracker.AlterTable(ctx, tr.se, v)
 	case *ast.RenameTableStmt:
@@ -264,6 +264,34 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 		tr.logger.DPanic("unexpected statement type", zap.String("type", fmt.Sprintf("%T", v)))
 	}
 	return nil
+}
+
+// stripRawFullTextConstraints removes FULLTEXT indexes from a CREATE TABLE
+// statement before building the lightweight TableInfo used by DM.
+//
+// TiDB's planner preprocessor normally rewrites ast.ConstraintFulltext into
+// the internal columnar-index representation. DM's schema trackers build
+// TableInfo directly from the parser AST, so an unprocessed FULLTEXT index on
+// a BLOB/TEXT column would otherwise be treated as a normal KV index and fail
+// with ErrBlobKeyWithoutLength. FULLTEXT indexes are non-unique and are not
+// used by DM to generate DML row handles, so omitting them is safe here.
+//
+// Do not modify the original statement because it may still be used to
+// execute the physical DDL downstream.
+func stripRawFullTextConstraints(stmt *ast.CreateTableStmt) *ast.CreateTableStmt {
+	for _, constraint := range stmt.Constraints {
+		if constraint.Tp == ast.ConstraintFulltext {
+			cloned := *stmt
+			cloned.Constraints = make([]*ast.Constraint, 0, len(stmt.Constraints)-1)
+			for _, candidate := range stmt.Constraints {
+				if candidate.Tp != ast.ConstraintFulltext {
+					cloned.Constraints = append(cloned.Constraints, candidate)
+				}
+			}
+			return &cloned
+		}
+	}
+	return stmt
 }
 
 // GetTableInfo returns the schema associated with the table.
@@ -629,7 +657,8 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 
 	// suppress ErrTooLongKey
 	metaBuildCtx := ddl.NewMetaBuildContextWithSctx(dt.se, metabuild.WithSuppressTooLongIndexErr(true))
-	ti, err := ddl.BuildTableInfoWithStmt(metaBuildCtx, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
+	createTableStmt := stripRawFullTextConstraints(stmtNode.(*ast.CreateTableStmt))
+	ti, err := ddl.BuildTableInfoWithStmt(metaBuildCtx, createTableStmt, mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
