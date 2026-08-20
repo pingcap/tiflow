@@ -15,9 +15,11 @@ package worker
 
 import (
 	"context"
+	"maps"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"sync"
 	"time"
 
 	cpu "github.com/pingcap/tidb/pkg/util"
@@ -32,6 +34,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -66,7 +69,77 @@ var (
 			Name:      "cpu_usage",
 			Help:      "the cpu usage of worker",
 		})
+	metricLabelsMu sync.RWMutex
+	metricLabels   = make(map[string]map[string]string)
+	metricRefs     = make(map[string]int)
 )
+
+type taskMetricGatherer struct {
+	prometheus.Registerer
+	gatherer prometheus.Gatherer
+}
+
+func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
+	families, err := g.gatherer.Gather()
+	if err != nil {
+		return families, err
+	}
+	metricLabelsMu.RLock()
+	defer metricLabelsMu.RUnlock()
+	for _, family := range families {
+		for _, metric := range family.Metric {
+			var task string
+			for _, label := range metric.Label {
+				if label.GetName() == "task" {
+					task = label.GetValue()
+					break
+				}
+			}
+			labels, ok := metricLabels[task]
+			if !ok || task == "" {
+				continue
+			}
+			existing := make(map[string]struct{}, len(metric.Label))
+			for _, label := range metric.Label {
+				existing[label.GetName()] = struct{}{}
+			}
+			for name, value := range labels {
+				if _, exists := existing[name]; exists {
+					continue
+				}
+				metric.Label = append(metric.Label, &dto.LabelPair{
+					Name: stringPtr(name), Value: stringPtr(value),
+				})
+			}
+		}
+	}
+	return families, nil
+}
+
+func registerTaskMetricLabels(task string, labels map[string]string) {
+	if len(labels) == 0 {
+		return
+	}
+	metricLabelsMu.Lock()
+	defer metricLabelsMu.Unlock()
+	if metricRefs[task] == 0 {
+		metricLabels[task] = maps.Clone(labels)
+	}
+	metricRefs[task]++
+}
+
+func stringPtr(value string) *string { return &value }
+
+func unregisterTaskMetricLabels(task string) {
+	metricLabelsMu.Lock()
+	defer metricLabelsMu.Unlock()
+	if metricRefs[task] <= 1 {
+		delete(metricRefs, task)
+		delete(metricLabels, task)
+		return
+	}
+	metricRefs[task]--
+}
 
 type statusHandler struct{}
 
@@ -118,7 +191,7 @@ func RegistryMetrics() {
 	loader.RegisterMetrics(registry)
 	metrics.RegisterValidatorMetrics(registry)
 	metrics.DefaultMetricsProxies.RegisterMetrics(registry)
-	prometheus.DefaultGatherer = registry
+	prometheus.DefaultGatherer = taskMetricGatherer{Registerer: registry, gatherer: registry}
 }
 
 // InitStatus initializes the HTTP status server.

@@ -1894,6 +1894,11 @@ components:
       description: "task"
       type: object
       properties:
+        metric_labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels added to task-scoped metrics
         name:
           type: string
           example: "task-1"
