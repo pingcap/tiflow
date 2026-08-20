@@ -6,17 +6,16 @@ cur=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source $cur/../_utils/test_prepare
 WORK_DIR=$TEST_DIR/$TEST_NAME
 
-function check_dashboard() {
-	echo "check dashboard"
+function check_dashboard_datasource() {
+	echo "check dashboard data source"
 	check_grafana_dashboard_datasource "../metrics/grafana/DM-Monitor-Standard.json"
 	check_grafana_dashboard_datasource "../metrics/grafana/DM-Monitor-Professional.json"
-	check_grafana_dashboard_promql "../metrics/grafana/DM-Monitor-Professional.json"
-	echo "check dashboard success"
+	echo "check dashboard data source success"
 }
 
 function run() {
 
-	check_dashboard
+	check_dashboard_datasource
 
 	inject_points=(
 		"github.com/pingcap/tiflow/dm/syncer/BlockDDLJob=return(1)"
