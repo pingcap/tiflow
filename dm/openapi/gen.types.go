@@ -554,6 +554,7 @@ type TableNameList []string
 // task
 type Task struct {
 	BinlogFilterRule *Task_BinlogFilterRule `json:"binlog_filter_rule,omitempty"`
+	MetricLabels     map[string]string      `json:"metric_labels,omitempty"`
 
 	// whether to enable support for the online ddl plugin
 	EnhanceOnlineSchemaChange bool `json:"enhance_online_schema_change"`

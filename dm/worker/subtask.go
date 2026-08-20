@@ -15,6 +15,7 @@ package worker
 
 import (
 	"context"
+	"reflect"
 	"sync"
 	"time"
 
@@ -106,7 +107,8 @@ type SubTask struct {
 
 	etcdClient *clientv3.Client
 
-	workerName string
+	workerName             string
+	metricLabelsRegistered bool
 
 	validator *syncer.DataValidator
 }
@@ -124,14 +126,16 @@ func NewRealSubTask(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, work
 func NewSubTaskWithStage(cfg *config.SubTaskConfig, stage pb.Stage, etcdClient *clientv3.Client, workerName string) *SubTask {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	st := SubTask{
-		cfg:        cfg,
-		stage:      stage,
-		l:          log.With(zap.String("subtask", cfg.Name)),
-		ctx:        ctx,
-		cancel:     cancel,
-		etcdClient: etcdClient,
-		workerName: workerName,
+		cfg:                    cfg,
+		stage:                  stage,
+		l:                      log.With(zap.String("subtask", cfg.Name)),
+		ctx:                    ctx,
+		cancel:                 cancel,
+		etcdClient:             etcdClient,
+		workerName:             workerName,
+		metricLabelsRegistered: len(cfg.MetricLabels) > 0,
 	}
+	registerTaskMetricLabels(cfg.Name, cfg.MetricLabels)
 	updateTaskMetric(st.cfg.Name, st.cfg.SourceID, st.stage, st.workerName)
 	return &st
 }
@@ -568,6 +572,7 @@ func (st *SubTask) Close() {
 // closeWithCause stops the sub task with a cancel cause.
 func (st *SubTask) closeWithCause(cause error) {
 	st.l.Info("closing")
+	st.unregisterMetricLabels()
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
 		return
@@ -592,6 +597,7 @@ type unitKillerWithCause interface {
 // killWithCause kill running unit and stop the sub task with a cancel cause.
 func (st *SubTask) killWithCause(cause error) {
 	st.l.Info("killing")
+	st.unregisterMetricLabels()
 	if !st.setStageIfNotIn([]pb.Stage{pb.Stage_Stopped, pb.Stage_Stopping, pb.Stage_Finished}, pb.Stage_Stopping) {
 		st.l.Info("subTask is already closed, no need to close")
 		return
@@ -608,6 +614,18 @@ func (st *SubTask) killWithCause(cause error) {
 
 	st.StopValidator()
 	st.validator = nil
+}
+
+func (st *SubTask) unregisterMetricLabels() {
+	st.Lock()
+	if !st.metricLabelsRegistered {
+		st.Unlock()
+		return
+	}
+	st.metricLabelsRegistered = false
+	task := st.cfg.Name
+	st.Unlock()
+	unregisterTaskMetricLabels(task)
 }
 
 // Pause pauses a running subtask or a subtask paused by error.
@@ -673,6 +691,9 @@ func (st *SubTask) Resume(relay relay.Process) error {
 func (st *SubTask) Update(ctx context.Context, cfg *config.SubTaskConfig) error {
 	if !st.stageCAS(pb.Stage_Paused, pb.Stage_Paused) { // only test for Paused
 		return terror.ErrWorkerUpdateTaskStage.Generate(st.Stage().String())
+	}
+	if !reflect.DeepEqual(st.cfg.MetricLabels, cfg.MetricLabels) {
+		return terror.ErrWorkerUpdateTaskStage.Generate("metric labels cannot be changed")
 	}
 
 	for _, u := range st.units {

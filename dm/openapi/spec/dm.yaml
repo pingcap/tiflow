@@ -1604,6 +1604,11 @@ components:
     SubTaskStatus:
       type: object
       properties:
+        metric_labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels added to task-scoped metrics
         name:
           type: string
           description: task name

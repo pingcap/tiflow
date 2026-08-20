@@ -27,11 +27,15 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
+	"github.com/prometheus/common/model"
 	"go.uber.org/zap"
 )
 
 // TaskConfigToSubTaskConfigs generates sub task configs by TaskConfig.
 func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBConfig) ([]*SubTaskConfig, error) {
+	if err := ValidateMetricLabels(c.MetricLabels); err != nil {
+		return nil, err
+	}
 	cfgs := make([]*SubTaskConfig, len(c.MySQLInstances))
 	for i, inst := range c.MySQLInstances {
 		dbCfg, exist := sources[inst.SourceID]
@@ -48,6 +52,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		cfg.ShadowTableRules = c.ShadowTableRules
 		cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 		cfg.Name = c.Name
+		cfg.MetricLabels = cloneMetricLabels(c.MetricLabels)
 		cfg.Mode = c.TaskMode
 		cfg.CaseSensitive = c.CaseSensitive
 		cfg.MetaSchema = c.MetaSchema
@@ -118,6 +123,9 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig, sourceCfgMap map[string]*SourceConfig) (
 	[]*SubTaskConfig, error,
 ) {
+	if err := ValidateMetricLabels(task.MetricLabels); err != nil {
+		return nil, err
+	}
 	// import-into does not support sharding / multi-source tasks.
 	if fullCfg := task.SourceConfig.FullMigrateConf; fullCfg != nil && fullCfg.ImportMode != nil {
 		if strings.EqualFold(string(*fullCfg.ImportMode), string(openapi.TaskFullMigrateConfImportModeImportInto)) &&
@@ -160,6 +168,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg := NewSubTaskConfig()
 		// set task name and mode
 		subTaskCfg.Name = task.Name
+		subTaskCfg.MetricLabels = cloneMetricLabels(task.MetricLabels)
 		subTaskCfg.Mode = string(task.TaskMode)
 		if task.Timezone != nil {
 			subTaskCfg.Timezone = *task.Timezone
@@ -384,6 +393,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	// global configs.
 	stCfg0 := stCfgs[0]
 	c.Name = stCfg0.Name
+	c.MetricLabels = cloneMetricLabels(stCfg0.MetricLabels)
 	c.TaskMode = stCfg0.Mode
 	c.IsSharding = stCfg0.IsSharding
 	c.ShardMode = stCfg0.ShardMode
@@ -683,6 +693,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	// set basic global config
 	task := openapi.Task{
 		Name:                      oneSubtaskConfig.Name,
+		MetricLabels:              cloneMetricLabels(oneSubtaskConfig.MetricLabels),
 		TaskMode:                  openapi.TaskTaskMode(oneSubtaskConfig.Mode),
 		EnhanceOnlineSchemaChange: oneSubtaskConfig.OnlineDDL,
 		MetaSchema:                &oneSubtaskConfig.MetaSchema,
@@ -726,6 +737,46 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	}
 	task.TargetConfig.Session = projectTargetSession(oneSubtaskConfig.To.Session)
 	return &task
+}
+
+const (
+	maxMetricLabels     = 8
+	maxMetricLabelName  = 64
+	maxMetricLabelValue = 256
+)
+
+var reservedMetricLabels = map[string]struct{}{
+	"task": {}, "source_id": {}, "worker": {}, "instance": {}, "job": {}, "__name__": {},
+}
+
+// ValidateMetricLabels validates labels that are added to task-scoped metrics.
+func ValidateMetricLabels(labels map[string]string) error {
+	if len(labels) > maxMetricLabels {
+		return fmt.Errorf("too many metric labels, max %d", maxMetricLabels)
+	}
+	for name, value := range labels {
+		if len(name) > maxMetricLabelName || len(value) > maxMetricLabelValue {
+			return fmt.Errorf("metric label %q is too long", name)
+		}
+		if !model.LabelName(name).IsValid() || strings.HasPrefix(name, "__") {
+			return fmt.Errorf("invalid metric label name %q", name)
+		}
+		if _, ok := reservedMetricLabels[name]; ok {
+			return fmt.Errorf("metric label %q conflicts with built-in label", name)
+		}
+	}
+	return nil
+}
+
+func cloneMetricLabels(labels map[string]string) map[string]string {
+	if labels == nil {
+		return nil
+	}
+	clone := make(map[string]string, len(labels))
+	for key, value := range labels {
+		clone[key] = value
+	}
+	return clone
 }
 
 // projectTargetSession currently exposes only foreign_key_checks and normalizes
