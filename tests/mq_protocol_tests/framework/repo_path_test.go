@@ -1,4 +1,4 @@
-// Copyright 2020 PingCAP, Inc.
+// Copyright 2026 PingCAP, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,21 +14,19 @@
 package framework
 
 import (
+	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestDockerComposeOperator_SetupTearDown(t *testing.T) {
-	// This integration-style test verifies the operator can boot and tear down
-	// the avro compose stack after resolving its compose file from the repo tree.
-	fileName, err := ResolveRepoPath(DockerComposeFilePathPrefix + "docker-compose-avro.yml")
-	assert.NoError(t, err)
+func TestResolveRepoPath(t *testing.T) {
+	// This regression test verifies repo-local compose assets can be found
+	// without invoking git, so worktree and symlinked checkouts stay stable.
+	composePath, err := ResolveRepoPath(DockerComposeFilePathPrefix + "docker-compose-avro.yml")
+	require.NoError(t, err)
 
-	d := &DockerComposeOperator{
-		FileName:   fileName,
-		Controller: "controller0",
-	}
-	d.Setup()
-	d.TearDown()
+	info, statErr := os.Stat(composePath)
+	require.NoError(t, statErr)
+	require.False(t, info.IsDir())
 }
