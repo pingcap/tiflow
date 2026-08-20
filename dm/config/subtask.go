@@ -109,9 +109,11 @@ type SubTaskConfig struct {
 	CollationCompatible string `yaml:"collation_compatible" toml:"collation_compatible" json:"collation_compatible"`
 
 	Name string `toml:"name" json:"name"`
+	Mode string `toml:"mode" json:"mode"`
+
 	// MetricLabels are propagated to task-scoped metrics. They are opaque to DM.
 	MetricLabels map[string]string `toml:"metric-labels,omitempty" json:"metric-labels,omitempty"`
-	Mode         string            `toml:"mode" json:"mode"`
+
 	//  treat it as hidden configuration
 	IgnoreCheckingItems []string `toml:"ignore-checking-items" json:"ignore-checking-items"`
 	// it represents a MySQL/MariaDB instance or a replica group

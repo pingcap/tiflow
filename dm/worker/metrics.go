@@ -73,7 +73,10 @@ var (
 	metricRefs     = make(map[string]int)
 )
 
-type taskMetricGatherer struct{ gatherer prometheus.Gatherer }
+type taskMetricGatherer struct {
+	prometheus.Registerer
+	gatherer prometheus.Gatherer
+}
 
 func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 	families, err := g.gatherer.Gather()
@@ -195,7 +198,7 @@ func RegistryMetrics() {
 	loader.RegisterMetrics(registry)
 	metrics.RegisterValidatorMetrics(registry)
 	metrics.DefaultMetricsProxies.RegisterMetrics(registry)
-	prometheus.DefaultGatherer = taskMetricGatherer{gatherer: registry}
+	prometheus.DefaultGatherer = taskMetricGatherer{Registerer: registry, gatherer: registry}
 }
 
 // InitStatus initializes the HTTP status server.

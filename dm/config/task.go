@@ -532,13 +532,15 @@ func defaultValidatorConfig() ValidatorConfig {
 type TaskConfig struct {
 	*flag.FlagSet `yaml:"-" toml:"-" json:"-"`
 
-	Name string `yaml:"name" toml:"name" json:"name"`
+	Name                      string `yaml:"name" toml:"name" json:"name"`
+	TaskMode                  string `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
+	IsSharding                bool   `yaml:"is-sharding" toml:"is-sharding" json:"is-sharding"`
+	ShardMode                 string `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
+	StrictOptimisticShardMode bool   `yaml:"strict-optimistic-shard-mode" toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
+
 	// MetricLabels are propagated to task-scoped metrics. They are opaque to DM.
-	MetricLabels              map[string]string `yaml:"metric-labels,omitempty" toml:"metric-labels,omitempty" json:"metric-labels,omitempty"`
-	TaskMode                  string            `yaml:"task-mode" toml:"task-mode" json:"task-mode"`
-	IsSharding                bool              `yaml:"is-sharding" toml:"is-sharding" json:"is-sharding"`
-	ShardMode                 string            `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
-	StrictOptimisticShardMode bool              `yaml:"strict-optimistic-shard-mode" toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
+	MetricLabels map[string]string `yaml:"metric-labels,omitempty" toml:"metric-labels,omitempty" json:"metric-labels,omitempty"`
+
 	// treat it as hidden configuration
 	IgnoreCheckingItems []string `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
 	// we store detail status in meta

@@ -209,6 +209,7 @@ func (st *SubTask) Run(expectStage pb.Stage, expectValidatorStage pb.Stage, rela
 			zap.Stringer("expected stage", expectStage))
 		return
 	}
+	st.registerMetricLabels()
 
 	if err := st.initUnits(relay); err != nil {
 		st.l.Error("fail to initialize subtask", log.ShortError(err))
@@ -626,6 +627,19 @@ func (st *SubTask) unregisterMetricLabels() {
 	task := st.cfg.Name
 	st.Unlock()
 	unregisterTaskMetricLabels(task)
+}
+
+func (st *SubTask) registerMetricLabels() {
+	st.Lock()
+	if st.metricLabelsRegistered || len(st.cfg.MetricLabels) == 0 {
+		st.Unlock()
+		return
+	}
+	st.metricLabelsRegistered = true
+	task := st.cfg.Name
+	labels := st.cfg.MetricLabels
+	st.Unlock()
+	registerTaskMetricLabels(task, labels)
 }
 
 // Pause pauses a running subtask or a subtask paused by error.

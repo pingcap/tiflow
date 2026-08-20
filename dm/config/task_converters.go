@@ -123,7 +123,8 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig, sourceCfgMap map[string]*SourceConfig) (
 	[]*SubTaskConfig, error,
 ) {
-	if err := ValidateMetricLabels(task.MetricLabels); err != nil {
+	metricLabels := metricLabelsFromOpenAPI(task.MetricLabels)
+	if err := ValidateMetricLabels(metricLabels); err != nil {
 		return nil, err
 	}
 	// import-into does not support sharding / multi-source tasks.
@@ -168,7 +169,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg := NewSubTaskConfig()
 		// set task name and mode
 		subTaskCfg.Name = task.Name
-		subTaskCfg.MetricLabels = cloneMetricLabels(task.MetricLabels)
+		subTaskCfg.MetricLabels = cloneMetricLabels(metricLabels)
 		subTaskCfg.Mode = string(task.TaskMode)
 		if task.Timezone != nil {
 			subTaskCfg.Timezone = *task.Timezone
@@ -693,7 +694,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	// set basic global config
 	task := openapi.Task{
 		Name:                      oneSubtaskConfig.Name,
-		MetricLabels:              cloneMetricLabels(oneSubtaskConfig.MetricLabels),
+		MetricLabels:              metricLabelsToOpenAPI(oneSubtaskConfig.MetricLabels),
 		TaskMode:                  openapi.TaskTaskMode(oneSubtaskConfig.Mode),
 		EnhanceOnlineSchemaChange: oneSubtaskConfig.OnlineDDL,
 		MetaSchema:                &oneSubtaskConfig.MetaSchema,
@@ -777,6 +778,20 @@ func cloneMetricLabels(labels map[string]string) map[string]string {
 		clone[key] = value
 	}
 	return clone
+}
+
+func metricLabelsFromOpenAPI(labels *openapi.Task_MetricLabels) map[string]string {
+	if labels == nil {
+		return nil
+	}
+	return labels.AdditionalProperties
+}
+
+func metricLabelsToOpenAPI(labels map[string]string) *openapi.Task_MetricLabels {
+	if labels == nil {
+		return nil
+	}
+	return &openapi.Task_MetricLabels{AdditionalProperties: cloneMetricLabels(labels)}
 }
 
 // projectTargetSession currently exposes only foreign_key_checks and normalizes
