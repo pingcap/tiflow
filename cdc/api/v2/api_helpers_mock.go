@@ -88,13 +88,14 @@ func (mr *MockAPIV2HelpersMockRecorder) getPDClient(ctx, pdAddrs, credential int
 }
 
 // getVerifiedTables mocks base method.
-func (m *MockAPIV2Helpers) getVerifiedTables(ctx context.Context, replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64, scheme, topic string, protocol config.Protocol) ([]model.TableName, []model.TableName, error) {
+func (m *MockAPIV2Helpers) getVerifiedTables(ctx context.Context, replicaConfig *config.ReplicaConfig, storage kv.Storage, startTs uint64, scheme, topic string, protocol config.Protocol) ([]model.TableName, []model.TableName, []model.TableName, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getVerifiedTables", ctx, replicaConfig, storage, startTs, scheme, topic, protocol)
 	ret0, _ := ret[0].([]model.TableName)
 	ret1, _ := ret[1].([]model.TableName)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
+	ret2, _ := ret[2].([]model.TableName)
+	ret3, _ := ret[3].(error)
+	return ret0, ret1, ret2, ret3
 }
 
 // getVerifiedTables indicates an expected call of getVerifiedTables.

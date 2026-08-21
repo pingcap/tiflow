@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -85,4 +86,24 @@ func TestConfirmIgnoreIneligibleTables(t *testing.T) {
 	ignore, err = confirmIgnoreIneligibleTables(cmd)
 	require.Nil(t, err)
 	require.True(t, ignore)
+}
+
+func TestFormatTableNames(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "[]", formatTableNames(nil))
+	require.Equal(t, "[]", formatTableNames([]v2.TableName{}))
+
+	require.Equal(t,
+		"[test.t1]",
+		formatTableNames([]v2.TableName{{Schema: "test", Table: "t1", TableID: 110}}),
+	)
+
+	require.Equal(t,
+		"[test.t1, test.t2]",
+		formatTableNames([]v2.TableName{
+			{Schema: "test", Table: "t1", TableID: 110},
+			{Schema: "test", Table: "t2", TableID: 111, IsPartition: true},
+		}),
+	)
 }
