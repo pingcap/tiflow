@@ -43,7 +43,7 @@ type unitHolder interface {
 	Pause(ctx context.Context) error
 	Resume(ctx context.Context) error
 	Stage() (metadata.TaskStage, *pb.ProcessResult)
-	Status(ctx context.Context) interface{}
+	Status(ctx context.Context) any
 	// CheckAndUpdateStatus checks if the last update of source status is outdated,
 	// if so, it will call Status.
 	// this should be an async func.
@@ -136,12 +136,10 @@ func (u *unitHolderImpl) Init(ctx context.Context) error {
 	u.fieldMu.Unlock()
 
 	resultCh := make(chan pb.ProcessResult, 1)
-	u.processWg.Add(1)
-	go func() {
-		defer u.processWg.Done()
+	u.processWg.Go(func() {
 		u.unit.Process(runCtx, resultCh)
 		u.fetchAndHandleResult(resultCh)
-	}()
+	})
 	return nil
 }
 
@@ -183,12 +181,10 @@ func (u *unitHolderImpl) Resume(ctx context.Context) error {
 	u.fieldMu.Unlock()
 
 	resultCh := make(chan pb.ProcessResult, 1)
-	u.processWg.Add(1)
-	go func() {
-		defer u.processWg.Done()
+	u.processWg.Go(func() {
 		u.unit.Resume(runCtx, resultCh)
 		u.fetchAndHandleResult(resultCh)
-	}()
+	})
 	return nil
 }
 
@@ -243,12 +239,12 @@ func (u *unitHolderImpl) Stage() (metadata.TaskStage, *pb.ProcessResult) {
 
 // Status implement UnitHolder.Status. Each invocation will try to query upstream
 // once and calculate the status.
-func (u *unitHolderImpl) Status(ctx context.Context) interface{} {
+func (u *unitHolderImpl) Status(ctx context.Context) any {
 	// nil sourceStatus is supported
 	return u.unit.Status(u.getSourceStatus())
 }
 
-func (u *unitHolderImpl) updateSourceStatus(ctx context.Context) interface{} {
+func (u *unitHolderImpl) updateSourceStatus(ctx context.Context) any {
 	sourceStatus, err := binlog.GetSourceStatus(
 		tcontext.NewContext(ctx, u.logger),
 		u.upstreamDB,
@@ -279,13 +275,11 @@ func (u *unitHolderImpl) CheckAndUpdateStatus() {
 	defer u.fieldMu.Unlock()
 	if time.Since(u.sourceStatusCheckTime) > sourceStatusRefreshInterval {
 		u.sourceStatusCheckTime = time.Now()
-		u.bgWg.Add(1)
-		go func() {
-			defer u.bgWg.Done()
+		u.bgWg.Go(func() {
 			ctx, cancel := context.WithTimeout(context.Background(), sourceStatusCtxTimeOut)
 			u.updateSourceStatus(ctx)
 			cancel()
-		}()
+		})
 	}
 }
 

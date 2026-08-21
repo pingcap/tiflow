@@ -101,9 +101,7 @@ func TestMasterPollAndClose(t *testing.T) {
 
 	master.On("Tick", mock.Anything).Return(nil)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			err := master.Poll(ctx)
 			if err != nil {
@@ -113,7 +111,7 @@ func TestMasterPollAndClose(t *testing.T) {
 			}
 			require.NoError(t, err)
 		}
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		return master.TickCount() > 10

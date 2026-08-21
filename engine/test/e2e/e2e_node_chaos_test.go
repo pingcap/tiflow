@@ -42,7 +42,7 @@ func updateKeyAndCheckOnce(
 		zap.Int("expect-mvcc", expectedMvcc))
 	ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 	defer cancel()
-	for j := 0; j < workerCount; j++ {
+	for j := range workerCount {
 		err := cli.UpdateFakeJobKey(ctx1, j, updateValue)
 		require.NoError(t, err)
 	}
@@ -51,7 +51,7 @@ func updateKeyAndCheckOnce(
 		ctx1, cancel := context.WithTimeout(ctx, DefaultTimeoutForTest)
 		defer cancel()
 		log.Debug("wait and check fake job value and mvcc. tick.")
-		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
+		for jobIdx := range workerCount {
 			err := cli.CheckFakeJobKey(ctx1, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
 				log.Warn("check fake job failed", zap.Error(err))
@@ -135,7 +135,7 @@ func TestNodeFailure(t *testing.T) {
 	updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, "random-value-1", mvccCount)
 
 	log.Info("restart all server masters and check fake job is running normally")
-	for i := 0; i < nodeCount; i++ {
+	for i := range nodeCount {
 		cli.ContainerRestart(masterContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-server-master-value-%d", i)
@@ -157,18 +157,18 @@ func TestNodeFailure(t *testing.T) {
 	}, time.Second*10, time.Second, "leader is not changed")
 
 	log.Info("restart all executors and check fake job is running normally")
-	for i := 0; i < nodeCount; i++ {
+	for i := range nodeCount {
 		cli.ContainerRestart(executorContainerName(i))
 		mvccCount++
 		value := fmt.Sprintf("restart-executor-value-%d", i)
 		updateKeyAndCheckOnce(ctx, t, cli, jobID, cfg.WorkerCount, value, mvccCount)
 	}
 
-	for i := 0; i < nodeCount; i++ {
+	for i := range nodeCount {
 		cli.ContainerStop(masterContainerName(i))
 		cli.ContainerStop(executorContainerName(i))
 	}
-	for i := 0; i < nodeCount; i++ {
+	for i := range nodeCount {
 		cli.ContainerStart(masterContainerName(i))
 		cli.ContainerStart(executorContainerName(i))
 	}
