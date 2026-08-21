@@ -292,6 +292,7 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string",
+        "avro-include-before-value": true,
 		"encoding-format": "json"
       },
       "large-message-handle": {
@@ -469,6 +470,7 @@ const (
         "avro-enable-watermark": true,
         "avro-decimal-handling-mode": "string",
         "avro-bigint-unsigned-handling-mode": "string",
+        "avro-include-before-value": true,
         "encoding-format": "json"
       },
       "large-message-handle": {
