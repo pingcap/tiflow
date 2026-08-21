@@ -930,6 +930,10 @@ var (
 		"command '%s' is aborted by user",
 		errors.RFCCodeText("CDC:ErrCliAborted"),
 	)
+	ErrCliInvalidServiceSafePoint = errors.Normalize(
+		"the min-service-safe-point is bigger than start-ts, min-service-safe-point: %d start-ts: %d",
+		errors.RFCCodeText("CDC:ErrCliInvalidServiceSafePoint"),
+	)
 	// Filter error
 	ErrFailedToFilterDML = errors.Normalize(
 		"failed to filter dml event: %v, please report a bug",

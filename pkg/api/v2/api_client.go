@@ -27,6 +27,7 @@ type APIV2Interface interface {
 	RESTClient() rest.CDCRESTInterface
 	ChangefeedsGetter
 	TsoGetter
+	SafePointGetter
 	UnsafeGetter
 	StatusGetter
 	CapturesGetter
@@ -53,6 +54,14 @@ func (c *APIV2Client) Tso() TsoInterface {
 		return nil
 	}
 	return newTso(c)
+}
+
+// SafePoint returns a SafePointInterface to communicate with cdc api
+func (c *APIV2Client) SafePoint() SafePointInterface {
+	if c == nil {
+		return nil
+	}
+	return newSafePoint(c)
 }
 
 // Unsafe returns a UnsafeInterface to communicate with cdc api
