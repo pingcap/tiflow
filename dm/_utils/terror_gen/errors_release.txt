@@ -67,7 +67,7 @@ ErrBinlogGTIDMySQLNotValid,[code=11059:class=functional:scope=internal:level=hig
 ErrBinlogGTIDMariaDBNotValid,[code=11060:class=functional:scope=internal:level=high], "Message: GTID set string %s for MariaDB not valid"
 ErrBinlogMariaDBServerIDMismatch,[code=11061:class=functional:scope=internal:level=high], "Message: server_id mismatch, in GTID (%d), in event header/server_id (%d)"
 ErrBinlogOnlyOneGTIDSupport,[code=11062:class=functional:scope=internal:level=high], "Message: only one GTID in set is supported, but got %d (%s)"
-ErrBinlogOnlyOneIntervalInUUID,[code=11063:class=functional:scope=internal:level=high], "Message: only one Interval in UUIDSet is supported, but got %d (%s)"
+ErrBinlogOnlyOneIntervalInUUID,[code=11063:class=functional:scope=internal:level=high], "Message: only one Interval in MysqlGTIDSet is supported, but got %d (%s)"
 ErrBinlogIntervalValueNotValid,[code=11064:class=functional:scope=internal:level=high], "Message: Interval's Stop should equal to Start+1, but got %+v (%s)"
 ErrBinlogEmptyQuery,[code=11065:class=functional:scope=internal:level=high], "Message: empty query not valid"
 ErrBinlogTableMapEvNotValid,[code=11066:class=functional:scope=internal:level=high], "Message: empty schema (% X) or table (% X) or column type (% X)"
