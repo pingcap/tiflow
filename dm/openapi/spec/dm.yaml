@@ -1685,6 +1685,62 @@ components:
           type: string
           example: "auto"
           description: "to control the way in which data is exported for consistency assurance"
+        import_mode:
+          type: string
+          example: "logical"
+          description: "to control import mode of full import"
+          enum:
+            - "logical"
+            - "physical"
+        sorting_dir:
+          type: string
+          example: "./sort_dir"
+          description: "sorting dir name for physical import"
+        disk_quota:
+          type: string
+          example: "80G"
+          description: "disk quota for physical import"
+        checksum:
+          type: string
+          example: "optional"
+          description: "to control checksum of physical import"
+          enum:
+            - "required"
+            - "optional"
+            - "off"
+        analyze:
+          type: string
+          example: "optional"
+          description: "to control checksum of physical import"
+          enum:
+            - "required"
+            - "optional"
+            - "off"
+        range_concurrency:
+          type: integer
+          description: "to control range concurrency of physical import"
+          default: 0
+        compress-kv-pairs:
+          type: string
+          description: "to control compress kv pairs of physical import"
+        pd_addr:
+          type: string
+          description: "address of pd"
+        on_duplicate_logical:
+          type: string
+          example: "replace"
+          description: "to control the duplication resolution when meet duplicate rows for logical import"
+          enum:
+            - "replace"
+            - "error"
+            - "ignore"
+        on_duplicate_physical:
+          type: string
+          example: "none"
+          description: "to control the duplication resolution when meet duplicate rows for physical import"
+          enum:
+            - "none"
+            - "manual"
     TaskIncrMigrateConf:
       description: configuration of incremental tasks
       type: object

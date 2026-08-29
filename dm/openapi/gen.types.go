@@ -33,6 +33,47 @@ const (
 	TaskTaskModeIncremental TaskTaskMode = "incremental"
 )
 
+// Defines values for TaskFullMigrateConfAnalyze.
+const (
+	TaskFullMigrateConfAnalyzeOff TaskFullMigrateConfAnalyze = "off"
+
+	TaskFullMigrateConfAnalyzeOptional TaskFullMigrateConfAnalyze = "optional"
+
+	TaskFullMigrateConfAnalyzeRequired TaskFullMigrateConfAnalyze = "required"
+)
+
+// Defines values for TaskFullMigrateConfChecksum.
+const (
+	TaskFullMigrateConfChecksumOff TaskFullMigrateConfChecksum = "off"
+
+	TaskFullMigrateConfChecksumOptional TaskFullMigrateConfChecksum = "optional"
+
+	TaskFullMigrateConfChecksumRequired TaskFullMigrateConfChecksum = "required"
+)
+
+// Defines values for TaskFullMigrateConfImportMode.
+const (
+	TaskFullMigrateConfImportModeLogical TaskFullMigrateConfImportMode = "logical"
+
+	TaskFullMigrateConfImportModePhysical TaskFullMigrateConfImportMode = "physical"
+)
+
+// Defines values for TaskFullMigrateConfOnDuplicateLogical.
+const (
+	TaskFullMigrateConfOnDuplicateLogicalError TaskFullMigrateConfOnDuplicateLogical = "error"
+
+	TaskFullMigrateConfOnDuplicateLogicalIgnore TaskFullMigrateConfOnDuplicateLogical = "ignore"
+
+	TaskFullMigrateConfOnDuplicateLogicalReplace TaskFullMigrateConfOnDuplicateLogical = "replace"
+)
+
+// Defines values for TaskFullMigrateConfOnDuplicatePhysical.
+const (
+	TaskFullMigrateConfOnDuplicatePhysicalManual TaskFullMigrateConfOnDuplicatePhysical = "manual"
+
+	TaskFullMigrateConfOnDuplicatePhysicalNone TaskFullMigrateConfOnDuplicatePhysical = "none"
+)
+
 // Defines values for TaskStage.
 const (
 	TaskStageFinished TaskStage = "Finished"
@@ -539,18 +580,63 @@ type TaskBinLogFilterRule struct {
 
 // configuration of full migrate tasks
 type TaskFullMigrateConf struct {
+	// to control checksum of physical import
+	Analyze *TaskFullMigrateConfAnalyze `json:"analyze,omitempty"`
+
+	// to control checksum of physical import
+	Checksum *TaskFullMigrateConfChecksum `json:"checksum,omitempty"`
+
+	// to control compress kv pairs of physical import
+	CompressKvPairs *string `json:"compress-kv-pairs,omitempty"`
+
 	// to control the way in which data is exported for consistency assurance
 	Consistency *string `json:"consistency,omitempty"`
 
 	// storage dir name
 	DataDir *string `json:"data_dir,omitempty"`
 
+	// disk quota for physical import
+	DiskQuota *string `json:"disk_quota,omitempty"`
+
 	// full export of concurrent
 	ExportThreads *int `json:"export_threads,omitempty"`
 
+	// to control import mode of full import
+	ImportMode *TaskFullMigrateConfImportMode `json:"import_mode,omitempty"`
+
 	// full import of concurrent
 	ImportThreads *int `json:"import_threads,omitempty"`
+
+	// to control the duplication resolution when meet duplicate rows for logical import
+	OnDuplicateLogical *TaskFullMigrateConfOnDuplicateLogical `json:"on_duplicate_logical,omitempty"`
+
+	// to control the duplication resolution when meet duplicate rows for physical import
+	OnDuplicatePhysical *TaskFullMigrateConfOnDuplicatePhysical `json:"on_duplicate_physical,omitempty"`
+
+	// address of pd
+	PdAddr *string `json:"pd_addr,omitempty"`
+
+	// to control range concurrency of physical import
+	RangeConcurrency *int `json:"range_concurrency,omitempty"`
+
+	// sorting dir name for physical import
+	SortingDir *string `json:"sorting_dir,omitempty"`
 }
+
+// to control checksum of physical import
+type TaskFullMigrateConfAnalyze string
+
+// to control checksum of physical import
+type TaskFullMigrateConfChecksum string
+
+// to control import mode of full import
+type TaskFullMigrateConfImportMode string
+
+// to control the duplication resolution when meet duplicate rows for logical import
+type TaskFullMigrateConfOnDuplicateLogical string
+
+// to control the duplication resolution when meet duplicate rows for physical import
+type TaskFullMigrateConfOnDuplicatePhysical string
 
 // configuration of incremental tasks
 type TaskIncrMigrateConf struct {

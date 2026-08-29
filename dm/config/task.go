@@ -345,9 +345,6 @@ func (m *LoaderConfig) adjust() error {
 		m.PoolSize = defaultPoolSize
 	}
 
-	if m.OnDuplicateLogical == "" && m.OnDuplicate != "" {
-		m.OnDuplicateLogical = m.OnDuplicate
-	}
 	if m.OnDuplicateLogical == "" {
 		m.OnDuplicateLogical = OnDuplicateReplace
 	}
