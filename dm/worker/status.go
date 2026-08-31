@@ -113,6 +113,37 @@ func (w *SourceWorker) Status(stName string, sourceStatus *binlog.SourceStatus) 
 	return status
 }
 
+// subTaskStatusSnapshot returns the subtask fields that can be read without
+// holding SourceWorker's lock. It is used when a lifecycle operation holds that
+// lock while waiting for a subtask to stop.
+func (w *SourceWorker) subTaskStatusSnapshot(stName string) []*pb.SubTaskStatus {
+	statuses := w.getAllSubTaskStatus()
+	if len(statuses) == 0 {
+		return nil
+	}
+
+	if stName != "" {
+		if status, ok := statuses[stName]; ok {
+			return []*pb.SubTaskStatus{status}
+		}
+		return []*pb.SubTaskStatus{{
+			Name:   stName,
+			Status: &pb.SubTaskStatus_Msg{Msg: common.NoSubTaskMsg(stName)},
+		}}
+	}
+
+	names := make([]string, 0, len(statuses))
+	for name := range statuses {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	result := make([]*pb.SubTaskStatus, 0, len(statuses))
+	for _, name := range names {
+		result = append(result, statuses[name])
+	}
+	return result
+}
+
 // GetUnitAndSourceStatusJSON returns the status of the worker and its unit as json string.
 // This function will also cause every unit to print its status to log.
 func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *binlog.SourceStatus) string {
