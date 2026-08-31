@@ -167,6 +167,13 @@ func (g *encoderGroup) runEncoder(ctx context.Context, idx int) error {
 			for _, event := range future.events {
 				err := encoder.AppendRowChangedEvent(ctx, future.Key.Topic, event.Event, event.Callback)
 				if err != nil {
+					log.Error("encode row changed event failed",
+						zap.String("namespace", g.changefeedID.Namespace),
+						zap.String("changefeed", g.changefeedID.ID),
+						zap.String("schema", event.Event.TableInfo.GetSchemaName()),
+						zap.String("table", event.Event.TableInfo.GetTableName()),
+						zap.Uint64("commitTs", event.Event.CommitTs),
+						zap.Error(err))
 					return errors.Trace(err)
 				}
 			}
