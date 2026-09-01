@@ -57,6 +57,26 @@ function init_data_with_diff_column() {
 	run_sql_source2 "INSERT INTO openapi.t(i,j) VALUES (3, 4);"
 }
 
+function check_task_metric_label() {
+	local port=$1
+	local task=$2
+	local label=$3
+	local value=$4
+
+	for _ in $(seq 1 30); do
+		if curl -sf "http://127.0.0.1:$port/metrics" |
+			grep '^dm_worker_task_state{' |
+			grep -F "task=\"$task\"" |
+			grep -Fq "$label=\"$value\""; then
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "task metric label $label=$value not found for task $task on port $port"
+	return 1
+}
+
 function clean_cluster_sources_and_tasks() {
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
@@ -415,7 +435,7 @@ function test_noshard_task() {
 	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# create no shard task success
-	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	openapi_task_check "create_noshard_task_with_metric_labels_success" "$task_name" "$target_table_name" "all" "123"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -424,6 +444,8 @@ function test_noshard_task() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Running\"" 2
+	check_task_metric_label $WORKER1_PORT "$task_name" "keyspace_id" "123"
+	check_task_metric_label $WORKER2_PORT "$task_name" "keyspace_id" "123"
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 
