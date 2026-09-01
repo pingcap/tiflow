@@ -108,7 +108,7 @@ func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 					continue
 				}
 				metric.Label = append(metric.Label, &dto.LabelPair{
-					Name: stringPtr(name), Value: stringPtr(value),
+					Name: &name, Value: &value,
 				})
 			}
 		}
@@ -127,8 +127,6 @@ func registerTaskMetricLabels(task string, labels map[string]string) {
 	}
 	metricRefs[task]++
 }
-
-func stringPtr(value string) *string { return &value }
 
 func unregisterTaskMetricLabels(task string) {
 	metricLabelsMu.Lock()

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/stretchr/testify/require"
 )
 
 var _ prometheus.Registerer = taskMetricGatherer{}
@@ -31,13 +32,11 @@ func TestTaskMetricGathererAddsLabels(t *testing.T) {
 	defer unregisterTaskMetricLabels("task-1")
 
 	families, err := (taskMetricGatherer{Registerer: registry, gatherer: registry}).Gather()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	for _, label := range families[0].Metric[0].GetLabel() {
 		if label.GetName() == "project_id" && label.GetValue() == "123" {
 			return
 		}
 	}
-	t.Fatal("injected label not found")
+	require.Fail(t, "injected label not found")
 }
