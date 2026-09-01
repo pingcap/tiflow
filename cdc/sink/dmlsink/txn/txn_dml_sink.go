@@ -119,9 +119,7 @@ func newSink(ctx context.Context,
 		sink.workers = append(sink.workers, w)
 	}
 
-	sink.wg.Add(1)
-	go func() {
-		defer sink.wg.Done()
+	sink.wg.Go(func() {
 		err := g.Wait()
 
 		sink.alive.Lock()
@@ -136,7 +134,7 @@ func newSink(ctx context.Context,
 			case errCh <- err:
 			}
 		}
-	}()
+	})
 
 	return sink
 }

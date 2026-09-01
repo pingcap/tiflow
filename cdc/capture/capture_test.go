@@ -64,12 +64,10 @@ func TestReset(t *testing.T) {
 	// simulate network isolation scenarios
 	etcdServer.Close()
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		_, err = cp.reset(ctx)
 		require.Regexp(t, ".*context canceled.*", err)
-		wg.Done()
-	}()
+	})
 	time.Sleep(100 * time.Millisecond)
 	info, err := cp.Info()
 	require.Nil(t, err)
@@ -230,15 +228,13 @@ func TestCampaignLiveness(t *testing.T) {
 	// Force set alive.
 	cp.liveness = model.LivenessCaptureAlive
 	wg := sync.WaitGroup{}
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// Grant campaign
 		g := <-me.campaignRequestCh
 		// Set liveness to stopping
 		cp.liveness.Store(model.LivenessCaptureStopping)
 		me.campaignGrantCh <- g
-	}()
+	})
 	err = cp.campaignOwner(ctx, globalVars)
 	require.Nil(t, err)
 	require.True(t, me.campaignFlag)

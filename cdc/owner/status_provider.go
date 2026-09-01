@@ -89,7 +89,7 @@ type Query struct {
 	Tp           QueryType
 	ChangeFeedID model.ChangeFeedID
 
-	Data interface{}
+	Data any
 }
 
 // NewStatusProvider returns a new StatusProvider for the owner.

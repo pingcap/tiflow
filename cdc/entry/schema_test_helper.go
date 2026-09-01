@@ -131,7 +131,7 @@ func (s *SchemaTestHelper) DDL2Job(ddl string) *timodel.Job {
 	args := &timodel.RenameTablesArgs{
 		RenameTableInfos: make([]*timodel.RenameTableArgs, 0, tableNum),
 	}
-	for i := 0; i < tableNum; i++ {
+	for i := range tableNum {
 		args.RenameTableInfos = append(args.RenameTableInfos, &timodel.RenameTableArgs{
 			OldSchemaID:   res.SchemaID,
 			NewSchemaID:   res.SchemaID,
@@ -238,7 +238,7 @@ func (s *SchemaTestHelper) DDL2Event(ddl string) *model.DDLEvent {
 		args := &timodel.RenameTablesArgs{
 			RenameTableInfos: make([]*timodel.RenameTableArgs, 0, tableNum),
 		}
-		for i := 0; i < tableNum; i++ {
+		for i := range tableNum {
 			args.RenameTableInfos = append(args.RenameTableInfos, &timodel.RenameTableArgs{
 				OldSchemaID:   res.SchemaID,
 				NewSchemaID:   res.SchemaID,

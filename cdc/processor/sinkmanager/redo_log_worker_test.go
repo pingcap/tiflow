@@ -107,12 +107,10 @@ func (suite *redoLogWorkerSuite) TestHandleTaskGotSomeFilteredEvents() {
 
 	taskChan := make(chan *redoTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	callback := func(lastWritePos sorter.Position) {
 		require.Equal(suite.T(), sorter.Position{
@@ -156,12 +154,10 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndOneTxnFinished()
 
 	taskChan := make(chan *redoTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	callback := func(lastWritePos sorter.Position) {
 		require.Equal(suite.T(), sorter.Position{
@@ -203,12 +199,10 @@ func (suite *redoLogWorkerSuite) TestHandleTaskAbortWhenNoMemAndBlocked() {
 
 	taskChan := make(chan *redoTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
-	}()
+	})
 
 	callback := func(lastWritePos sorter.Position) {
 		require.Equal(suite.T(), sorter.Position{
@@ -248,12 +242,10 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceIfNoWorkloa
 
 	taskChan := make(chan *redoTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
-	}()
+	})
 
 	callback := func(lastWritePos sorter.Position) {
 		require.Equal(suite.T(), sorter.Position{
@@ -296,12 +288,10 @@ func (suite *redoLogWorkerSuite) TestHandleTaskWithoutMemory() {
 
 	taskChan := make(chan *redoTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	defer sink.Close()
