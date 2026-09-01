@@ -275,6 +275,8 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 // a BLOB/TEXT column would otherwise be treated as a normal KV index and fail
 // with ErrBlobKeyWithoutLength. FULLTEXT indexes are non-unique and are not
 // used by DM to generate DML row handles, so omitting them is safe here.
+// This is a temporary compatibility workaround until TiDB provides the full
+// normalization for direct TableInfo builders; see pingcap/tidb#70570.
 //
 // Do not modify the original statement because it may still be used to
 // execute the physical DDL downstream.
