@@ -368,7 +368,7 @@ func TestCreateTableIfNotExists(t *testing.T) {
 	require.Less(t, duration.Seconds(), float64(30))
 }
 
-func TestExecIgnoresRawFullTextIndex(t *testing.T) {
+func TestExecMocksRawFullTextIndex(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
 	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
@@ -388,15 +388,72 @@ func TestExecIgnoresRawFullTextIndex(t *testing.T) {
 	require.Len(t, stmt.Constraints, 3)
 
 	require.NoError(t, tracker.Exec(ctx, "test", stmt))
-	// Tracker metadata omits only the FULLTEXT index.
+	// Tracker metadata preserves the FULLTEXT index identity as a non-unique
+	// placeholder so later index DDLs can still be tracked.
 	ti, err := tracker.GetTableInfo(&filter.Table{Schema: "test", Name: "t"})
 	require.NoError(t, err)
-	require.Len(t, ti.Indices, 2)
+	require.Len(t, ti.Indices, 3)
 	require.NotNil(t, ti.FindIndexByName("primary"))
 	require.NotNil(t, ti.FindIndexByName("normal_idx"))
-	require.Nil(t, ti.FindIndexByName("fulltext_idx"))
+	fullTextIndex := ti.FindIndexByName("fulltext_idx")
+	require.NotNil(t, fullTextIndex)
+	require.Equal(t, model.ColumnarIndexTypeNA, fullTextIndex.GetColumnarIndexType())
+	require.False(t, fullTextIndex.Unique)
 	// The original AST may still be used to execute the physical DDL.
 	require.Len(t, stmt.Constraints, 3)
+	require.Equal(t, ast.ConstraintFulltext, stmt.Constraints[2].Tp)
+	require.LessOrEqual(t, stmt.Constraints[2].Keys[0].Length, 0)
+
+	// The placeholder retains the name for later index DDLs.
+	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p,
+		"ALTER TABLE t RENAME INDEX fulltext_idx TO fulltext_idx_renamed")))
+	ti, err = tracker.GetTableInfo(&filter.Table{Schema: "test", Name: "t"})
+	require.NoError(t, err)
+	require.Nil(t, ti.FindIndexByName("fulltext_idx"))
+	require.NotNil(t, ti.FindIndexByName("fulltext_idx_renamed"))
+}
+
+func TestExecTracksFullTextIndexLifecycle(t *testing.T) {
+	ctx := context.Background()
+	p := parser.New()
+	tracker, err := NewTestTracker(ctx, "test-tracker", nil, dlog.L())
+	require.NoError(t, err)
+	defer tracker.Close()
+
+	require.NoError(t, tracker.CreateSchemaIfNotExists("test"))
+	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p, `
+		CREATE TABLE t (id INT PRIMARY KEY, text_col TEXT)`)))
+	table := &filter.Table{Schema: "test", Name: "t"}
+
+	createIndexStmt := parseSQL(t, p,
+		"CREATE FULLTEXT INDEX ft_idx ON t(text_col) WITH PARSER STANDARD").(*ast.CreateIndexStmt)
+	require.NoError(t, tracker.Exec(ctx, "test", createIndexStmt))
+	require.Equal(t, ast.IndexKeyTypeFulltext, createIndexStmt.KeyType)
+	ti, err := tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	require.Equal(t, model.ColumnarIndexTypeNA, ti.FindIndexByName("ft_idx").GetColumnarIndexType())
+
+	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p,
+		"ALTER TABLE t RENAME INDEX ft_idx TO ft_idx_renamed")))
+	ti, err = tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	require.Nil(t, ti.FindIndexByName("ft_idx"))
+	require.Equal(t, model.ColumnarIndexTypeNA, ti.FindIndexByName("ft_idx_renamed").GetColumnarIndexType())
+	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p,
+		"DROP INDEX ft_idx_renamed ON t")))
+
+	alterAddStmt := parseSQL(t, p,
+		"ALTER TABLE t ADD FULLTEXT INDEX ft_idx_2(text_col) WITH PARSER STANDARD").(*ast.AlterTableStmt)
+	require.NoError(t, tracker.Exec(ctx, "test", alterAddStmt))
+	require.Equal(t, ast.ConstraintFulltext, alterAddStmt.Specs[0].Constraint.Tp)
+	ti, err = tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	require.Equal(t, model.ColumnarIndexTypeNA, ti.FindIndexByName("ft_idx_2").GetColumnarIndexType())
+	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p,
+		"ALTER TABLE t RENAME INDEX ft_idx_2 TO ft_idx_2_renamed")))
+	ti, err = tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	require.Equal(t, model.ColumnarIndexTypeNA, ti.FindIndexByName("ft_idx_2_renamed").GetColumnarIndexType())
 }
 
 func TestBatchCreateTableIfNotExist(t *testing.T) {
@@ -656,7 +713,7 @@ func TestGetDownStreamIndexInfo(t *testing.T) {
 	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
 }
 
-func TestGetDownStreamTableInfoIgnoresRawFullTextIndex(t *testing.T) {
+func TestGetDownStreamTableInfoMocksRawFullTextIndex(t *testing.T) {
 	p := parser.New()
 	se := timock.NewContext()
 	ctx := context.Background()
@@ -693,10 +750,13 @@ func TestGetDownStreamTableInfoIgnoresRawFullTextIndex(t *testing.T) {
 
 	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, originTI)
 	require.NoError(t, err)
-	require.Len(t, dti.TableInfo.Indices, 2)
+	require.Len(t, dti.TableInfo.Indices, 3)
 	require.NotNil(t, dti.TableInfo.FindIndexByName("primary"))
 	require.NotNil(t, dti.TableInfo.FindIndexByName("normal_idx"))
-	require.Nil(t, dti.TableInfo.FindIndexByName("fulltext_idx"))
+	fullTextIndex := dti.TableInfo.FindIndexByName("fulltext_idx")
+	require.NotNil(t, fullTextIndex)
+	require.Equal(t, model.ColumnarIndexTypeNA, fullTextIndex.GetColumnarIndexType())
+	require.False(t, fullTextIndex.Unique)
 	require.NotNil(t, dti.DefaultWhereHandle().UniqueNotNullIdx)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
