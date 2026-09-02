@@ -107,7 +107,9 @@ def create_task_with_precheck(task_name, ignore_check, is_success, check_result)
         assert resp.status_code == 400
         assert check_result in resp.json()["error_msg"]
 
-def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all"):
+def create_noshard_task_success(
+    task_name, tartget_table_name="", task_mode="all", keyspace_id=""
+):
     task = {
         "name": task_name,
         "task_mode": task_mode,
@@ -145,6 +147,8 @@ def create_noshard_task_success(task_name, tartget_table_name="", task_mode="all
             ],
         },
     }
+    if keyspace_id:
+        task["metric_labels"] = {"keyspace_id": keyspace_id}
     resp = requests.post(url=API_ENDPOINT, json={"task": task})
     print("create_noshard_task_success resp=", resp.json())
     assert resp.status_code == 201
@@ -1222,6 +1226,7 @@ if __name__ == "__main__":
     FUNC_MAP = {
         "create_task_failed": create_task_failed,
         "create_noshard_task_success": create_noshard_task_success,
+        "create_noshard_task_with_metric_labels_success": create_noshard_task_success,
         "create_shard_task_success": create_shard_task_success,
         "create_dump_task_success": create_dump_task_success,
         "create_dump_task_without_table_filter_success": create_dump_task_without_table_filter_success,
