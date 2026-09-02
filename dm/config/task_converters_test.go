@@ -14,6 +14,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -58,6 +59,40 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 	testNoShardTaskToSubTaskConfigs(c)
 	testShardAndFilterTaskToSubTaskConfigs(c)
+}
+
+func TestValidateMetricLabels(t *testing.T) {
+	testCases := []struct {
+		name    string
+		labels  map[string]string
+		wantErr string
+	}{
+		{name: "empty", labels: nil},
+		{name: "valid", labels: map[string]string{"keyspace_id": "123", "tenant": "租户"}},
+		{name: "starts with digit", labels: map[string]string{"1tenant": "123"}, wantErr: "invalid metric label name"},
+		{name: "contains hyphen", labels: map[string]string{"tenant-id": "123"}, wantErr: "invalid metric label name"},
+		{name: "contains whitespace", labels: map[string]string{"tenant id": "123"}, wantErr: "invalid metric label name"},
+		{name: "unicode name", labels: map[string]string{"租户": "123"}, wantErr: "invalid metric label name"},
+		{name: "reserved prefix", labels: map[string]string{"__tenant": "123"}, wantErr: "invalid metric label name"},
+		{name: "built-in label", labels: map[string]string{"target_schema": "db"}, wantErr: "conflicts with built-in label"},
+		{name: "too many", labels: map[string]string{
+			"label_1": "", "label_2": "", "label_3": "", "label_4": "", "label_5": "",
+			"label_6": "", "label_7": "", "label_8": "", "label_9": "",
+		}, wantErr: "too many metric labels"},
+		{name: "name too long", labels: map[string]string{strings.Repeat("a", maxMetricLabelName+1): ""}, wantErr: "is too long"},
+		{name: "value too long", labels: map[string]string{"tenant": strings.Repeat("a", maxMetricLabelValue+1)}, wantErr: "is too long"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateMetricLabels(tc.labels)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
 }
 
 func testNoShardTaskToSubTaskConfigs(c *check.C) {

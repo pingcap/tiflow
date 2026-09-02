@@ -748,7 +748,13 @@ const (
 )
 
 var reservedMetricLabels = map[string]struct{}{
-	"task": {}, "source_id": {}, "worker": {}, "instance": {}, "job": {}, "__name__": {},
+	// Labels used by DM task-scoped metrics. User-supplied labels must not
+	// change their meaning when they are added to a gathered metric.
+	"node": {}, "queueNo": {}, "queue_id": {}, "resumable_err": {},
+	"source_id": {}, "stage": {}, "table": {}, "target_schema": {},
+	"target_table": {}, "task": {}, "type": {}, "worker": {},
+	// Labels added by Prometheus when metrics are scraped or stored.
+	"instance": {}, "job": {}, "__name__": {},
 }
 
 // ValidateMetricLabels validates labels that are added to task-scoped metrics.
@@ -760,7 +766,7 @@ func ValidateMetricLabels(labels map[string]string) error {
 		if len(name) > maxMetricLabelName || len(value) > maxMetricLabelValue {
 			return fmt.Errorf("metric label %q is too long", name)
 		}
-		if !model.LabelName(name).IsValid() || strings.HasPrefix(name, "__") {
+		if !model.LabelName(name).IsValidLegacy() || strings.HasPrefix(name, "__") {
 			return fmt.Errorf("invalid metric label name %q", name)
 		}
 		if _, ok := reservedMetricLabels[name]; ok {

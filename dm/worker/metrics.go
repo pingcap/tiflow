@@ -105,6 +105,8 @@ func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 			}
 			for name, value := range labels {
 				if _, exists := existing[name]; exists {
+					// Built-in labels always take precedence. Validation rejects all
+					// known conflicts; keep this guard for metrics added in the future.
 					continue
 				}
 				metric.Label = append(metric.Label, &dto.LabelPair{
