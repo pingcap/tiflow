@@ -16,6 +16,7 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/failpoint"
 	pclog "github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	pmysql "github.com/pingcap/tidb/pkg/parser/mysql"
@@ -1332,12 +1334,56 @@ func TestLoadTableStructureFromExternalStorage(t *testing.T) {
 	localDir := t.TempDir()
 	dumpStorage, err := storage.CreateStorage(ctx, localDir)
 	require.NoError(t, err)
+	t.Cleanup(dumpStorage.Close)
 	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db-schema-create.sql", []byte("CREATE DATABASE `source_db`;\n")))
 	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.t-schema.sql", []byte(
 		"CREATE TABLE `t` (`a` BIGINT, `b` VARCHAR(20));\n")))
 	// A data file must never be read as a schema file.
 	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.t.0.sql", []byte("not valid SQL")))
 
+	syncer := newTestSyncerForExternalStorage(t, dumpStorage)
+	require.NoError(t, syncer.loadTableStructureFromDump(ctx))
+
+	tableInfo, err := syncer.schemaTracker.GetTableInfo(&filter.Table{Schema: "source_db", Name: "t"})
+	require.NoError(t, err)
+	require.Equal(t, "a", tableInfo.Columns[0].Name.O)
+	require.Equal(t, "b", tableInfo.Columns[1].Name.O)
+}
+
+type readErrorStorage struct {
+	storeapi.Storage
+	failFile string
+}
+
+func (s *readErrorStorage) ReadFile(ctx context.Context, name string) ([]byte, error) {
+	if name == s.failFile {
+		return nil, errors.New("injected read error")
+	}
+	return s.Storage.ReadFile(ctx, name)
+}
+
+func TestLoadTableStructureFromExternalStorageReadError(t *testing.T) {
+	ctx := context.Background()
+	dumpStorage, err := storage.CreateStorage(ctx, t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(dumpStorage.Close)
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db-schema-create.sql", []byte("CREATE DATABASE `source_db`;\n")))
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.bad-schema.sql", []byte("CREATE TABLE `bad` (`a` BIGINT);\n")))
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.good-schema.sql", []byte("CREATE TABLE `good` (`a` BIGINT);\n")))
+
+	syncer := newTestSyncerForExternalStorage(t, &readErrorStorage{
+		Storage:  dumpStorage,
+		failFile: "source_db.bad-schema.sql",
+	})
+	require.EqualError(t, syncer.loadTableStructureFromDump(ctx), "injected read error")
+
+	_, err = syncer.schemaTracker.GetTableInfo(&filter.Table{Schema: "source_db", Name: "good"})
+	require.NoError(t, err)
+}
+
+func newTestSyncerForExternalStorage(t *testing.T, dumpStorage storeapi.Storage) *Syncer {
+	t.Helper()
+	ctx := context.Background()
 	cfg := genDefaultSubTaskConfig4Test()
 	localLoaderDir := cfg.LoaderConfig.Dir
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(localLoaderDir)) })
@@ -1346,16 +1392,12 @@ func TestLoadTableStructureFromExternalStorage(t *testing.T) {
 	cfg.ExtStorage = dumpStorage
 
 	syncer := NewSyncer(cfg, nil, nil)
+	var err error
 	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, nil, log.L())
 	require.NoError(t, err)
 	t.Cleanup(func() { syncer.schemaTracker.Close() })
 	require.NoError(t, syncer.genRouter())
-	require.NoError(t, syncer.loadTableStructureFromDump(ctx))
-
-	tableInfo, err := syncer.schemaTracker.GetTableInfo(&filter.Table{Schema: "source_db", Name: "t"})
-	require.NoError(t, err)
-	require.Equal(t, "a", tableInfo.Columns[0].Name.O)
-	require.Equal(t, "b", tableInfo.Columns[1].Name.O)
+	return syncer
 }
 
 func (s *testSyncerSuite) TestTrackDDL(c *check.C) {
