@@ -52,6 +52,7 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
@@ -1324,6 +1325,37 @@ func (s *testSyncerSuite) TestRemoveMetadataIsFine(c *check.C) {
 	fresh, err = syncer.IsFreshTask(context.Background())
 	c.Assert(err, check.IsNil)
 	c.Assert(fresh, check.IsFalse)
+}
+
+func TestLoadTableStructureFromExternalStorage(t *testing.T) {
+	ctx := context.Background()
+	localDir := t.TempDir()
+	dumpStorage, err := storage.CreateStorage(ctx, localDir)
+	require.NoError(t, err)
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db-schema-create.sql", []byte("CREATE DATABASE `source_db`;\n")))
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.t-schema.sql", []byte(
+		"CREATE TABLE `t` (`a` BIGINT, `b` VARCHAR(20));\n")))
+	// A data file must never be read as a schema file.
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.t.0.sql", []byte("not valid SQL")))
+
+	cfg := genDefaultSubTaskConfig4Test()
+	localLoaderDir := cfg.LoaderConfig.Dir
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(localLoaderDir)) })
+	cfg.LoaderConfig.Dir = "s3://unused/dump"
+	cfg.LoaderConfig.PoolSize = 4
+	cfg.ExtStorage = dumpStorage
+
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, nil, log.L())
+	require.NoError(t, err)
+	t.Cleanup(func() { syncer.schemaTracker.Close() })
+	require.NoError(t, syncer.genRouter())
+	require.NoError(t, syncer.loadTableStructureFromDump(ctx))
+
+	tableInfo, err := syncer.schemaTracker.GetTableInfo(&filter.Table{Schema: "source_db", Name: "t"})
+	require.NoError(t, err)
+	require.Equal(t, "a", tableInfo.Columns[0].Name.O)
+	require.Equal(t, "b", tableInfo.Columns[1].Name.O)
 }
 
 func (s *testSyncerSuite) TestTrackDDL(c *check.C) {
