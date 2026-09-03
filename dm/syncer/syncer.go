@@ -3083,6 +3083,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			logger.Warn("fail to create dump storage", zap.Error(err))
 			return err
 		}
+		defer dumpStorage.Close()
 	}
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
