@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -102,6 +103,8 @@ const (
 
 	unhandledEventSampleInterval = 5 * time.Minute
 	unhandledEventSampleFirst    = 1
+
+	maxSchemaFileReadConcurrency = 16
 )
 
 // waitXIDStatus represents the status for waiting XID event when pause/stop task.
@@ -1939,7 +1942,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
-		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
+		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
 			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 		}
 	}
@@ -3072,12 +3075,16 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-	// TODO: delete this check after we support parallel reading the files to improve load speed
-	if !storage.IsLocalDiskPath(s.cfg.LoaderConfig.Dir) {
-		logger.Warn("skip load table structure from dump files for non-local-dir loader because it may be slow", zap.String("loaderDir", s.cfg.LoaderConfig.Dir))
-		return nil
+	dumpStorage := s.cfg.ExtStorage
+	if dumpStorage == nil {
+		var err error
+		dumpStorage, err = storage.CreateStorage(ctx, s.cfg.LoaderConfig.Dir)
+		if err != nil {
+			logger.Warn("fail to create dump storage", zap.Error(err))
+			return err
+		}
 	}
-	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
+	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
 		return err
@@ -3095,10 +3102,20 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if len(cols) > 0 {
 				continue
 			}
-			tables = append(tables, dbutil.TableName(db, table))
 			tableFiles = append(tableFiles, [2]string{db, f})
 			continue
 		}
+	}
+	sort.Strings(dbs)
+	sort.Slice(tableFiles, func(i, j int) bool {
+		if tableFiles[i][0] != tableFiles[j][0] {
+			return tableFiles[i][0] < tableFiles[j][0]
+		}
+		return tableFiles[i][1] < tableFiles[j][1]
+	})
+	for _, dbAndFile := range tableFiles {
+		db, table, _ := utils.GetTableFromDumpFilename(dbAndFile[1])
+		tables = append(tables, dbutil.TableName(db, table))
 	}
 	logger.Info("fetch table structure from dump files",
 		zap.Strings("database", dbs),
@@ -3123,9 +3140,29 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		return err
 	}
 
-	for _, dbAndFile := range tableFiles {
+	type schemaFileReadResult struct {
+		content []byte
+		err     error
+	}
+	readConcurrency := min(max(s.cfg.LoaderConfig.PoolSize, 1), maxSchemaFileReadConcurrency)
+	readResults, err := mydump.ParallelProcess(
+		ctx,
+		tableFiles,
+		readConcurrency,
+		func(ctx context.Context, dbAndFile [2]string) (schemaFileReadResult, error) {
+			content, readErr := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, dbAndFile[1], dumpStorage)
+			// Keep reading the remaining schema files and report the first error,
+			// which preserves the existing best-effort behavior.
+			return schemaFileReadResult{content: content, err: readErr}, nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	for i, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
+		content, err2 := readResults[i].content, readResults[i].err
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
