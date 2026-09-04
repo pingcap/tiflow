@@ -28,7 +28,7 @@ import (
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	_ "github.com/go-sql-driver/mysql"
+	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/failpoint"
 	pclog "github.com/pingcap/log"
@@ -1972,6 +1972,317 @@ func TestWaitBeforeRunExit(t *testing.T) {
 	require.Equal(t, context.Canceled, syncer.runCtx.Ctx.Err())
 	require.Equal(t, 2*time.Second, waitBeforeRunExitDurationForTest)
 	require.NoError(t, failpoint.Disable("github.com/pingcap/tiflow/dm/syncer/recordAndIgnorePrepareTime"))
+}
+
+type singleAttemptRetryStrategy struct{}
+
+func (singleAttemptRetryStrategy) Apply(
+	ctx *tcontext.Context,
+	_ retry.Params,
+	operateFn retry.OperateFunc,
+) (interface{}, int, error) {
+	ret, err := operateFn(ctx)
+	return ret, 0, err
+}
+
+func TestWaitBeforeRunExitCancelsBlockedAsyncDDL(t *testing.T) {
+	const (
+		ddlSQL      = "CREATE TABLE IF NOT EXISTS `test`.`t` (`id` INT)"
+		waitOnStop  = 200 * time.Millisecond
+		waitTimeout = 2 * time.Second
+	)
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 1
+	cfg.QueueSize = 16
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
+	syncer.cliArgs = &config.TaskCliArgs{WaitTimeOnStop: waitOnStop.String()}
+	syncer.reset()
+	syncer.runFatalChan = make(chan *pb.ProcessError, 1)
+
+	runCtx, runCancel := context.WithCancel(context.Background())
+	syncCtx, syncCancel := context.WithCancel(context.Background())
+	syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+	syncer.syncCtx, syncer.syncCancel = tcontext.NewContext(syncCtx, syncer.tctx.L()), syncCancel
+	t.Cleanup(func() {
+		runCancel()
+		syncCancel()
+		syncer.closeJobChans()
+	})
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	sqlConn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	syncer.ddlDBConn = dbconn.NewDBConn(
+		cfg,
+		conn.NewBaseConnForTest(sqlConn, singleAttemptRetryStrategy{}),
+	)
+
+	mock.ExpectQuery("SELECT UNIX_TIMESTAMP\\(\\)").
+		WillReturnRows(sqlmock.NewRows([]string{"UNIX_TIMESTAMP()"}).AddRow(1000))
+	mock.ExpectBegin()
+	mock.ExpectExec("SET TIMESTAMP = 0").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS").WillReturnError(gmysql.ErrInvalidConn)
+	mock.ExpectRollback()
+	mock.ExpectQuery("ADMIN SHOW DDL JOBS 10").WillReturnRows(
+		sqlmock.NewRows([]string{"JOB_ID", "CREATE_TIME", "STATE"}).
+			AddRow(1, "2026-08-03 18:00:00", "running"))
+	mock.ExpectQuery("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0").WillReturnRows(
+		sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(1, ddlSQL))
+
+	startLocation := binlog.MustZeroLocation(mysql.MySQLFlavor)
+	startLocation.Position = mysql.Position{Name: "mysql-bin.000001", Pos: 100}
+	currentLocation := startLocation.Clone()
+	currentLocation.Position.Pos = 200
+	ddlJob := newDummyJob(ddl, &filter.Table{Schema: "test", Name: "t"}, ddlSQL)
+	ddlJob.location = currentLocation
+	ddlJob.startLocation = startLocation
+	ddlJob.currentLocation = currentLocation
+	ddlJob.jobAddTime = time.Now()
+	ddlJob.eventHeader = &replication.EventHeader{}
+	checkpointBeforeDDL := syncer.checkpoint.GlobalPoint()
+
+	syncer.runWg.Add(1)
+	go syncer.syncDDL(adminQueueName, syncer.ddlDBConn, syncer.ddlJobCh)
+	handleJobDone := make(chan error, 1)
+	go func() {
+		_, handleErr := syncer.handleJob(ddlJob)
+		handleJobDone <- handleErr
+	}()
+
+	// Consuming the ADMIN SHOW DDL JOBS expectation proves syncDDL has entered
+	// waitAsyncDDL. At this point handleJob must still own the transaction lock
+	// while it waits on jobWg.
+	require.Eventually(t, func() bool {
+		return mock.ExpectationsWereMet() == nil
+	}, time.Second, 10*time.Millisecond)
+	if syncer.waitTransactionLock.TryLock() {
+		syncer.waitTransactionLock.Unlock()
+		t.Fatal("handleJob did not hold waitTransactionLock while async DDL polling was blocked")
+	}
+	require.NotNil(t, syncer.getAsyncDDLReconcileInfo())
+
+	outerCtx, outerCancel := context.WithCancel(context.Background())
+	syncer.runWg.Add(1)
+	go syncer.waitBeforeRunExit(outerCtx)
+	stopStarted := time.Now()
+	outerCancel()
+
+	select {
+	case <-runCtx.Done():
+	case <-time.After(waitTimeout):
+		t.Fatal("graceful deadline did not cancel runCtx while the transaction lock was held")
+	}
+	// Only the graceful run context owns async-DDL polling. The execution
+	// context remains alive, so the deadline cannot create a new ambiguous
+	// outcome by canceling a DDL that is still inside ExecuteSQL.
+	require.NoError(t, syncCtx.Err())
+
+	select {
+	case err = <-handleJobDone:
+		require.NoError(t, err)
+	case <-time.After(waitTimeout):
+		t.Fatal("handleJob did not return after the asynchronous DDL poller was canceled")
+	}
+	syncer.closeJobChans()
+	runDone := make(chan struct{})
+	go func() {
+		syncer.runWg.Wait()
+		close(runDone)
+	}()
+	select {
+	case <-runDone:
+	case <-time.After(waitTimeout):
+		t.Fatal("syncer goroutines did not drain after the graceful deadline")
+	}
+
+	stopDuration := time.Since(stopStarted)
+	require.GreaterOrEqual(t, stopDuration, waitOnStop/2)
+	require.Less(t, stopDuration, waitTimeout)
+	require.True(t, utils.IsContextCanceledError(syncer.execError.Load()), syncer.execError.Load())
+	require.Empty(t, syncer.runFatalChan)
+	require.Equal(t, checkpointBeforeDDL, syncer.checkpoint.GlobalPoint())
+	require.NotEqual(t, currentLocation, syncer.checkpoint.GlobalPoint())
+	// Cancellation leaves the descriptor unresolved for an in-memory Resume;
+	// it must not be cleared merely because the DM-side polling stopped.
+	require.NotNil(t, syncer.getAsyncDDLReconcileInfo())
+}
+
+type asyncDDLBarrierCheckpoint struct {
+	CheckPoint
+	mu     sync.Mutex
+	global binlog.Location
+}
+
+func (cp *asyncDDLBarrierCheckpoint) SaveGlobalPoint(location binlog.Location) {
+	cp.mu.Lock()
+	cp.global = location
+	cp.mu.Unlock()
+}
+
+func (cp *asyncDDLBarrierCheckpoint) GlobalPoint() binlog.Location {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+	return cp.global
+}
+
+func (*asyncDDLBarrierCheckpoint) Snapshot(bool) *SnapshotInfo { return nil }
+
+func (*asyncDDLBarrierCheckpoint) LastFlushOutdated() bool { return false }
+
+func TestSyncDDLReconcilesPendingAsyncDDL(t *testing.T) {
+	const ddlSQL = "CREATE TABLE IF NOT EXISTS `test`.`t` (`id` INT)"
+
+	testCases := []struct {
+		name               string
+		status             string
+		cancelPolling      bool
+		expectContextErr   bool
+		expectCancelled    bool
+		expectCheckpoint   bool
+		expectInfoRetained bool
+	}{
+		{
+			name:               "running",
+			status:             "running",
+			cancelPolling:      true,
+			expectContextErr:   true,
+			expectInfoRetained: true,
+		},
+		{
+			name:             "synced",
+			status:           "synced",
+			expectCheckpoint: true,
+		},
+		{
+			name:            "cancelled",
+			status:          "cancelled",
+			expectCancelled: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			cfg := genDefaultSubTaskConfig4Test()
+			cfg.WorkerCount = 1
+			cfg.QueueSize = 16
+			syncer := NewSyncer(cfg, nil, nil)
+			syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask(
+				"task-"+testCase.name, "worker", "source")
+			syncer.reset()
+			syncer.runFatalChan = make(chan *pb.ProcessError, 1)
+
+			runCtx, runCancel := context.WithCancel(context.Background())
+			syncer.runCtx, syncer.runCancel = tcontext.NewContext(runCtx, syncer.tctx.L()), runCancel
+			syncCtx, syncCancel := context.WithCancel(context.Background())
+			syncer.syncCtx, syncer.syncCancel = tcontext.NewContext(syncCtx, syncer.tctx.L()), syncCancel
+			t.Cleanup(func() {
+				runCancel()
+				syncCancel()
+				syncer.closeJobChans()
+			})
+
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, db.Close()) })
+			sqlConn, err := db.Conn(context.Background())
+			require.NoError(t, err)
+			syncer.ddlDBConn = dbconn.NewDBConn(
+				cfg,
+				conn.NewBaseConnForTest(sqlConn, &retry.FiniteRetryStrategy{}),
+			)
+			mock.ExpectQuery("ADMIN SHOW DDL JOBS 10").WillReturnRows(
+				sqlmock.NewRows([]string{"JOB_ID", "CREATE_TIME", "STATE"}).
+					AddRow(1, "2026-08-03 18:00:00", testCase.status))
+			mock.ExpectQuery("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0").WillReturnRows(
+				sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(1, ddlSQL))
+
+			startLocation := binlog.MustZeroLocation(mysql.MySQLFlavor)
+			startLocation.Position = mysql.Position{Name: "mysql-bin.000001", Pos: 100}
+			currentLocation := startLocation.Clone()
+			currentLocation.Position.Pos = 200
+			wrappedDDLs := []string{
+				"SET TIMESTAMP = 0",
+				ddlSQL,
+				"SET TIMESTAMP = DEFAULT",
+			}
+			info := syncer.setAsyncDDLReconcileInfo(
+				wrappedDDLs, 1, 1000, startLocation, currentLocation)
+			wrappedDDLs[1] = "mutated after descriptor creation"
+			require.Equal(t, ddlSQL, info.ddls[1])
+			// reset is the same state transition used by Resume and must retain
+			// the unresolved async-DDL barrier.
+			syncer.reset()
+			require.Same(t, info, syncer.getAsyncDDLReconcileInfo())
+			checkpoint := &asyncDDLBarrierCheckpoint{
+				global: binlog.MustZeroLocation(mysql.MySQLFlavor),
+			}
+			syncer.checkpoint = checkpoint
+
+			ddlJob := newDummyJob(ddl, &filter.Table{Schema: "test", Name: "t"}, ddlSQL)
+			ddlJob.location = currentLocation
+			ddlJob.startLocation = startLocation
+			ddlJob.currentLocation = currentLocation
+			ddlJob.jobAddTime = time.Now()
+			ddlJob.eventHeader = &replication.EventHeader{}
+
+			syncer.runWg.Add(1)
+			go syncer.syncDDL(adminQueueName, syncer.ddlDBConn, syncer.ddlJobCh)
+			handleJobDone := make(chan error, 1)
+			go func() {
+				_, handleErr := syncer.handleJob(ddlJob)
+				handleJobDone <- handleErr
+			}()
+
+			require.Eventually(t, func() bool {
+				return mock.ExpectationsWereMet() == nil
+			}, time.Second, 10*time.Millisecond)
+			if testCase.cancelPolling {
+				runCancel()
+			}
+
+			select {
+			case err = <-handleJobDone:
+				require.NoError(t, err)
+			case <-time.After(2 * time.Second):
+				t.Fatal("handleJob did not finish while reconciling the pending asynchronous DDL")
+			}
+			syncer.closeJobChans()
+			runDone := make(chan struct{})
+			go func() {
+				syncer.runWg.Wait()
+				close(runDone)
+			}()
+			select {
+			case <-runDone:
+			case <-time.After(2 * time.Second):
+				t.Fatal("DDL worker did not drain after reconciliation")
+			}
+
+			execErr := syncer.execError.Load()
+			switch {
+			case testCase.expectContextErr:
+				require.True(t, utils.IsContextCanceledError(execErr), execErr)
+			case testCase.expectCancelled:
+				require.True(t, terror.ErrSyncerCancelledDDL.Equal(execErr), execErr)
+			default:
+				require.NoError(t, execErr)
+			}
+			if testCase.expectCheckpoint {
+				require.Equal(t, currentLocation, checkpoint.GlobalPoint())
+			} else {
+				require.NotEqual(t, currentLocation, checkpoint.GlobalPoint())
+			}
+			if testCase.expectInfoRetained {
+				require.Same(t, info, syncer.getAsyncDDLReconcileInfo())
+				require.False(t, syncer.asyncDDLResolved(info))
+			} else {
+				require.Nil(t, syncer.getAsyncDDLReconcileInfo())
+			}
+		})
+	}
 }
 
 func TestSyncerGetTableInfo(t *testing.T) {
