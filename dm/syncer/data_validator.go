@@ -858,27 +858,17 @@ func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCo
 // tableInfoForVisibleColumnCount returns the source TableInfo layout that matches
 // a binlog row image with columnCount visible columns.
 func tableInfoForVisibleColumnCount(tableInfo *model.TableInfo, columnCount int) (*model.TableInfo, bool) {
-	visibleCount := 0
-	stripColumnCount := len(tableInfo.Columns)
-	for i, col := range tableInfo.Columns {
-		if col.Hidden {
-			continue
-		}
-		visibleCount++
-		if visibleCount > columnCount {
-			stripColumnCount = i
-			break
-		}
-	}
-	if visibleCount < columnCount {
+	layout := sqlmodel.NewRowImageLayoutFromColumns(tableInfo.Columns, nil)
+	sourceColumnCount, ok := layout.SourceColumnCountForVisibleColumnCount(columnCount)
+	if !ok {
 		return nil, false
 	}
-	if visibleCount == columnCount {
+	if sourceColumnCount == len(tableInfo.Columns) {
 		return tableInfo, true
 	}
 
 	clone := tableInfo.Clone()
-	clone.Columns = clone.Columns[:stripColumnCount]
+	clone.Columns = clone.Columns[:sourceColumnCount]
 	return clone, true
 }
 
