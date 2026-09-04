@@ -117,6 +117,21 @@ func (mr *MockChangefeedInterfaceMockRecorder) Get(ctx, namespace, name interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockChangefeedInterface)(nil).Get), ctx, namespace, name)
 }
 
+// GetAllTables mocks base method.
+func (m *MockChangefeedInterface) GetAllTables(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAllTables", ctx, cfg)
+	ret0, _ := ret[0].(*v2.Tables)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetAllTables indicates an expected call of GetAllTables.
+func (mr *MockChangefeedInterfaceMockRecorder) GetAllTables(ctx, cfg interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTables", reflect.TypeOf((*MockChangefeedInterface)(nil).GetAllTables), ctx, cfg)
+}
+
 // List mocks base method.
 func (m *MockChangefeedInterface) List(ctx context.Context, namespace, state string) ([]v2.ChangefeedCommonInfo, error) {
 	m.ctrl.T.Helper()

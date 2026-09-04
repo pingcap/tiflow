@@ -30,7 +30,7 @@ function run() {
 	# Note we return one error for the failpoint, if owner retry changefeed frequently, it may break the test.
 	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer/KafkaSinkAsyncSendError=1*return(true)'
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
-	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
+	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | grep '^ID:' | head -n1 | awk '{print $2}')
 	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
 
 	run_sql "CREATE DATABASE kafka_sink_error_resume;" ${UP_TIDB_HOST} ${UP_TIDB_PORT}

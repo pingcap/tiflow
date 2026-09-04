@@ -32,6 +32,8 @@ type ChangefeedsGetter interface {
 type ChangefeedInterface interface {
 	// Create creates a changefeed
 	Create(ctx context.Context, cfg *v2.ChangefeedConfig) (*v2.ChangeFeedInfo, error)
+	// GetAllTables returns eligible and ineligible tables for a changefeed
+	GetAllTables(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
 	// VerifyTable verifies table for a changefeed
 	VerifyTable(ctx context.Context, cfg *v2.VerifyTableConfig) (*v2.Tables, error)
 	// Update updates a changefeed
@@ -69,6 +71,18 @@ func (c *changefeeds) Create(ctx context.Context,
 		WithURI("changefeeds").
 		WithBody(cfg).
 		Do(ctx).Into(result)
+	return result, err
+}
+
+func (c *changefeeds) GetAllTables(ctx context.Context,
+	cfg *v2.VerifyTableConfig,
+) (*v2.Tables, error) {
+	result := &v2.Tables{}
+	err := c.client.Post().
+		WithURI("get_all_tables").
+		WithBody(cfg).
+		Do(ctx).
+		Into(result)
 	return result, err
 }
 
