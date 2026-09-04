@@ -360,7 +360,7 @@ func TestCreateTableIfNotExists(t *testing.T) {
 	require.Equal(t, ti1, ti3, "ti3 = %s\nti1 = %s", asJSON{ti3}, asJSON{ti1})
 
 	start := time.Now()
-	for n := 0; n < 100; n++ {
+	for n := range 100 {
 		err = tracker.CreateTableIfNotExists(&filter.Table{Schema: "testdb", Name: fmt.Sprintf("foo-%d", n)}, ti1)
 		require.NoError(t, err)
 	}

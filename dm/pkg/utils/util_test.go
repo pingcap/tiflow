@@ -302,7 +302,7 @@ func TestProxyFields(t *testing.T) {
 			require.NoError(t, os.Unsetenv(env))
 		}
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if (1<<i)&mask != 0 {
 				require.NoError(t, os.Setenv(envs[i], envPreset[i]))
 			}

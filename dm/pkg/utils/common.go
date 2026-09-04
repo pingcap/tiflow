@@ -154,7 +154,7 @@ type session struct {
 	sessionctx.Context
 	vars                 *variable.SessionVars
 	exprctx              exprctx.ExprContext
-	values               map[fmt.Stringer]interface{}
+	values               map[fmt.Stringer]any
 	builtinFunctionUsage map[string]uint32
 	mu                   sync.RWMutex
 }
@@ -169,14 +169,14 @@ func (se *session) GetExprCtx() exprctx.ExprContext {
 }
 
 // SetValue implements the sessionctx.Context interface.
-func (se *session) SetValue(key fmt.Stringer, value interface{}) {
+func (se *session) SetValue(key fmt.Stringer, value any) {
 	se.mu.Lock()
 	se.values[key] = value
 	se.mu.Unlock()
 }
 
 // Value implements the sessionctx.Context interface.
-func (se *session) Value(key fmt.Stringer) interface{} {
+func (se *session) Value(key fmt.Stringer) any {
 	se.mu.RLock()
 	value := se.values[key]
 	se.mu.RUnlock()
@@ -211,7 +211,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 	}
 	sessionCtx := session{
 		vars:                 variables,
-		values:               make(map[fmt.Stringer]interface{}, 1),
+		values:               make(map[fmt.Stringer]any, 1),
 		builtinFunctionUsage: make(map[string]uint32),
 	}
 	sessionCtx.exprctx = sessionexpr.NewExprContext(&sessionCtx)
@@ -219,7 +219,7 @@ func NewSessionCtx(vars map[string]string) sessionctx.Context {
 }
 
 // AdjustBinaryProtocolForDatum converts the data in binlog to TiDB datum.
-func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []interface{}, cols []*model.ColumnInfo) ([]types.Datum, error) {
+func AdjustBinaryProtocolForDatum(ctx sessionctx.Context, data []any, cols []*model.ColumnInfo) ([]types.Datum, error) {
 	ret := make([]types.Datum, 0, len(data))
 	for i, d := range data {
 		datum := types.NewDatum(d)
