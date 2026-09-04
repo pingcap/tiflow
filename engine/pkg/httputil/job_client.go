@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/openapi"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -56,13 +57,13 @@ func NewJobHTTPClient(cli *httputil.Client) JobHTTPClient {
 // if we can't get response from jobmaster, return nil and an error
 func (c *jobHTTPClientImpl) GetJobDetail(ctx context.Context, jobMasterAddr string, jobID string) ([]byte, *openapi.HTTPError) {
 	url := fmt.Sprintf("http://%s%s", jobMasterAddr, fmt.Sprintf(openapi.JobDetailAPIFormat, jobID))
-	log.Info("get job detail from job master", zap.String("url", url))
+	log.Info("get job detail from job master", logutil.ZapRedactString("url", url))
 	resp, err := c.cli.Get(ctx, url)
 	if err != nil {
 		errOut := errors.ErrJobManagerGetJobDetailFail.Wrap(err).GenWithStackByArgs()
 		return nil, openapi.NewHTTPError(errOut)
 	}
-	log.Debug("job master response", zap.Any("response status", resp.Status), zap.String("url", url))
+	log.Debug("job master response", zap.Any("response status", resp.Status), logutil.ZapRedactString("url", url))
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -73,13 +74,13 @@ func (c *jobHTTPClientImpl) GetJobDetail(ctx context.Context, jobMasterAddr stri
 
 	// if response code is 2XX, body should be the job detail
 	if resp.StatusCode/100 == http.StatusOK/100 {
-		log.Debug("job master response", zap.Any("response body", string(body)), zap.String("url", url))
+		log.Debug("job master response", zap.Any("response body", string(body)), logutil.ZapRedactString("url", url))
 		return body, nil
 	}
 	log.Warn(
 		"failed to get job detail from job master",
 		zap.String("response body", string(body)),
-		zap.String("url", url),
+		logutil.ZapRedactString("url", url),
 		zap.String("status", resp.Status),
 	)
 
