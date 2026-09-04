@@ -26,4 +26,4 @@ type Model struct {
 }
 
 // KeyValueMap alias to key value map when updating data in gorm
-type KeyValueMap = map[string]interface{}
+type KeyValueMap = map[string]any

@@ -218,7 +218,7 @@ func (m *MockMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) erro
 }
 
 // OnWorkerMessage implements MasterImpl.OnWorkerMessage
-func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (m *MockMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -283,7 +283,7 @@ func (m *MockWorkerHandler) Unwrap() master.RunningHandle {
 }
 
 // SendMessage implements RunningHandle.SendMessage
-func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+func (m *MockWorkerHandler) SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error {
 	args := m.Called(ctx, topic, message, nonblocking)
 	return args.Error(0)
 }

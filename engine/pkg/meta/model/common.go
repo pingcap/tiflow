@@ -15,6 +15,7 @@ package model
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pingcap/tiflow/engine/model"
 	"github.com/pingcap/tiflow/engine/pkg/tenant"
@@ -80,13 +81,14 @@ type GetResponse struct {
 
 // String only for debug
 func (resp *GetResponse) String() string {
-	s := fmt.Sprintf("header:[%s];kvs:[", resp.Header)
+	var s strings.Builder
+	fmt.Fprintf(&s, "header:[%s];kvs:[", resp.Header)
 	for _, kv := range resp.Kvs {
-		s += kv.String()
+		s.WriteString(kv.String())
 	}
 
-	s += "];"
-	return s
+	s.WriteString("];")
+	return s.String()
 }
 
 // DeleteResponse .

@@ -82,23 +82,17 @@ func (c *mockCluster) Start(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-
+	c.wg.Go(func() {
 		err := c.gcCoordinator.Run(ctx)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, context.Canceled))
-	}()
+	})
 
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
-
+	c.wg.Go(func() {
 		err := c.gcRunner.Run(ctx)
 		require.Error(t, err)
 		require.True(t, errors.Is(err, context.Canceled))
-	}()
+	})
 }
 
 func (c *mockCluster) Stop() {

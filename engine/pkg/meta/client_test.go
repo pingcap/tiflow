@@ -37,7 +37,7 @@ func (c *errorClientConn) StoreType() metaModel.StoreType {
 	return metaModel.StoreType("unknown")
 }
 
-func (c *errorClientConn) GetConn() (interface{}, error) {
+func (c *errorClientConn) GetConn() (any, error) {
 	return nil, nil
 }
 
