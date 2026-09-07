@@ -82,8 +82,8 @@ func TestValidateMetricLabels(t *testing.T) {
 			"label_1": "", "label_2": "", "label_3": "", "label_4": "", "label_5": "",
 			"label_6": "", "label_7": "", "label_8": "", "label_9": "",
 		}, wantErr: "too many metric labels"},
-		{name: "name too long", labels: map[string]string{strings.Repeat("a", maxMetricLabelName+1): ""}, wantErr: "is too long"},
-		{name: "value too long", labels: map[string]string{"tenant": strings.Repeat("a", maxMetricLabelValue+1)}, wantErr: "is too long"},
+		{name: "name too long", labels: map[string]string{strings.Repeat("a", maxMetricLabelName+1): ""}, wantErr: "metric label name"},
+		{name: "value too long", labels: map[string]string{"tenant": strings.Repeat("a", maxMetricLabelValue+1)}, wantErr: `value of metric label "tenant"`},
 	}
 
 	for _, tc := range testCases {
@@ -94,6 +94,7 @@ func TestValidateMetricLabels(t *testing.T) {
 				return
 			}
 			require.ErrorContains(t, err, tc.wantErr)
+			require.True(t, terror.ErrConfigInvalidMetricLabels.Equal(err))
 		})
 	}
 	for name := range reservedMetricLabels {

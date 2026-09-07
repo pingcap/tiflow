@@ -435,7 +435,7 @@ function test_noshard_task() {
 	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# create no shard task success
-	openapi_task_check "create_noshard_task_with_metric_labels_success" "$task_name" "$target_table_name" "all" "123"
+	openapi_task_check "create_noshard_task_success" "$task_name" "$target_table_name" "all" "123"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2

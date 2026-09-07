@@ -765,17 +765,25 @@ var reservedMetricLabels = map[string]struct{}{
 // ValidateMetricLabels validates labels that are added to task-scoped metrics.
 func ValidateMetricLabels(labels map[string]string) error {
 	if len(labels) > maxMetricLabels {
-		return fmt.Errorf("too many metric labels, max %d", maxMetricLabels)
+		return terror.ErrConfigInvalidMetricLabels.Generate(
+			fmt.Sprintf("too many metric labels, max %d", maxMetricLabels))
 	}
 	for name, value := range labels {
-		if len(name) > maxMetricLabelName || len(value) > maxMetricLabelValue {
-			return fmt.Errorf("metric label %q is too long", name)
+		if len(name) > maxMetricLabelName {
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("metric label name %q exceeds %d bytes", name, maxMetricLabelName))
+		}
+		if len(value) > maxMetricLabelValue {
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("value of metric label %q exceeds %d bytes", name, maxMetricLabelValue))
 		}
 		if !model.LabelName(name).IsValidLegacy() || strings.HasPrefix(name, "__") {
-			return fmt.Errorf("invalid metric label name %q", name)
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("invalid metric label name %q", name))
 		}
 		if _, ok := reservedMetricLabels[name]; ok {
-			return fmt.Errorf("metric label %q conflicts with built-in label", name)
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("metric label %q conflicts with built-in label", name))
 		}
 	}
 	return nil

@@ -903,7 +903,22 @@ func (st *SubTask) getCfg() *config.SubTaskConfig {
 
 func (st *SubTask) SetCfg(subTaskConfig config.SubTaskConfig) {
 	st.Lock()
+	oldTask := st.cfg.Name
+	oldLabelsRegistered := st.metricLabelsRegistered
+	newLabelsRegistered := len(subTaskConfig.MetricLabels) > 0
+	switch {
+	case oldLabelsRegistered && newLabelsRegistered && oldTask == subTaskConfig.Name:
+		replaceTaskMetricLabels(subTaskConfig.Name, subTaskConfig.MetricLabels)
+	case oldLabelsRegistered:
+		unregisterTaskMetricLabels(oldTask)
+		if newLabelsRegistered {
+			registerTaskMetricLabels(subTaskConfig.Name, subTaskConfig.MetricLabels)
+		}
+	case newLabelsRegistered:
+		registerTaskMetricLabels(subTaskConfig.Name, subTaskConfig.MetricLabels)
+	}
 	st.cfg = &subTaskConfig
+	st.metricLabelsRegistered = newLabelsRegistered
 	st.Unlock()
 }
 

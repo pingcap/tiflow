@@ -153,19 +153,31 @@ func registerTaskMetricLabels(task string, labels map[string]string) {
 	metricLabelsMu.Lock()
 	defer metricLabelsMu.Unlock()
 	if metricRefs[task] == 0 {
-		names := make([]string, 0, len(labels))
-		for name := range labels {
-			names = append(names, name)
-		}
-		sort.Strings(names)
-		pairs := make([]*dto.LabelPair, 0, len(names))
-		for _, name := range names {
-			value := labels[name]
-			pairs = append(pairs, &dto.LabelPair{Name: &name, Value: &value})
-		}
-		metricLabels[task] = pairs
+		metricLabels[task] = makeTaskMetricLabelPairs(labels)
 	}
 	metricRefs[task]++
+}
+
+func replaceTaskMetricLabels(task string, labels map[string]string) {
+	metricLabelsMu.Lock()
+	defer metricLabelsMu.Unlock()
+	if metricRefs[task] > 0 {
+		metricLabels[task] = makeTaskMetricLabelPairs(labels)
+	}
+}
+
+func makeTaskMetricLabelPairs(labels map[string]string) []*dto.LabelPair {
+	names := make([]string, 0, len(labels))
+	for name := range labels {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	pairs := make([]*dto.LabelPair, 0, len(names))
+	for _, name := range names {
+		value := labels[name]
+		pairs = append(pairs, &dto.LabelPair{Name: &name, Value: &value})
+	}
+	return pairs
 }
 
 func unregisterTaskMetricLabels(task string) {

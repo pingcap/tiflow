@@ -564,7 +564,7 @@ type Task struct {
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`
 
-	// labels added to task-scoped metrics
+	// Labels added to task-scoped metrics. At most 8 labels are allowed. Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__", and may contain at most 64 bytes. Values may contain at most 256 bytes. The following built-in names are reserved: __name__, instance, job, kind, le, medium, name, node, phase, quantile, queueNo, queue_id, result, resumable_err, source_id, stage, state, table, target_schema, target_table, task, type, and worker.
 	MetricLabels *Task_MetricLabels `json:"metric_labels,omitempty"`
 
 	// task name
@@ -601,7 +601,7 @@ type Task_BinlogFilterRule struct {
 	AdditionalProperties map[string]TaskBinLogFilterRule `json:"-"`
 }
 
-// labels added to task-scoped metrics
+// Labels added to task-scoped metrics. At most 8 labels are allowed. Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__", and may contain at most 64 bytes. Values may contain at most 256 bytes. The following built-in names are reserved: __name__, instance, job, kind, le, medium, name, node, phase, quantile, queueNo, queue_id, result, resumable_err, source_id, stage, state, table, target_schema, target_table, task, type, and worker.
 type Task_MetricLabels struct {
 	AdditionalProperties map[string]string `json:"-"`
 }

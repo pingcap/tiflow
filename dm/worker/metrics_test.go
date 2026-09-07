@@ -14,12 +14,16 @@
 package worker
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/pb"
+	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dto "github.com/prometheus/client_model/go"
@@ -110,6 +114,33 @@ func TestTaskMetricLabelReferences(t *testing.T) {
 	metricLabelsMu.RLock()
 	_, labelsExist = metricLabels["task-refs"]
 	_, refsExist := metricRefs["task-refs"]
+	metricLabelsMu.RUnlock()
+	require.False(t, labelsExist)
+	require.False(t, refsExist)
+}
+
+func TestSubTaskUpdateMetricLabels(t *testing.T) {
+	task := "task-update-metric-labels"
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name:         task,
+		MetricLabels: map[string]string{"project_id": "old"},
+	}, pb.Stage_Paused, nil, "worker")
+	st.units = []unit.Unit{NewMockUnit(pb.UnitType_Sync)}
+	t.Cleanup(st.unregisterMetricLabels)
+
+	require.NoError(t, st.Update(context.Background(), &config.SubTaskConfig{
+		Name:         task,
+		MetricLabels: map[string]string{"project_id": "new"},
+	}))
+	metricLabelsMu.RLock()
+	registeredLabels := metricLabelPairsMap(metricLabels[task])
+	metricLabelsMu.RUnlock()
+	require.Equal(t, map[string]string{"project_id": "new"}, registeredLabels)
+
+	require.NoError(t, st.Update(context.Background(), &config.SubTaskConfig{Name: task}))
+	metricLabelsMu.RLock()
+	_, labelsExist := metricLabels[task]
+	_, refsExist := metricRefs[task]
 	metricLabelsMu.RUnlock()
 	require.False(t, labelsExist)
 	require.False(t, refsExist)
