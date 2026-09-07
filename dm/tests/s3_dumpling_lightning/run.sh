@@ -117,6 +117,7 @@ function run_test() {
 	run_sql_file $cur/data/clean_data.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
 	run_sql_file $cur/data/db1.prepare.sql $MYSQL_HOST1 $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql_file $cur/data/db2.prepare.sql $MYSQL_HOST2 $MYSQL_PORT2 $MYSQL_PASSWORD2
+	run_sql_file $cur/data/downstream.prepare.sql $TIDB_HOST $TIDB_PORT $TIDB_PASSWORD
 
 	echo "start task"
 	cp $cur/conf/dm-task.yaml $WORK_DIR/dm-task.yaml
@@ -139,6 +140,7 @@ function run_test() {
 
 	# check table data (full dump + increments replicated via sync)
 	run_sql_tidb_with_retry "select count(1) from ${db}.${tb};" "count(1): 25"
+	run_sql_tidb_with_retry "select name from ${db}.${tb} where id = 18;" "name: name-18"
 
 	# check dump file
 	if $1; then
