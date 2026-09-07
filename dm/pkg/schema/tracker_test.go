@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/format"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	timock "github.com/pingcap/tidb/pkg/util/mock"
@@ -42,6 +43,8 @@ import (
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/pingcap/tiflow/pkg/util/testutil"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func parseSQL(t *testing.T, p *parser.Parser, sql string) ast.StmtNode {
@@ -368,6 +371,64 @@ func TestCreateTableIfNotExists(t *testing.T) {
 	require.Less(t, duration.Seconds(), float64(30))
 }
 
+func TestFullTextRewriteLogsAndPreservesAST(t *testing.T) {
+	cases := []struct {
+		sql     string
+		indexes []string
+	}{
+		{"CREATE TABLE db.t (a TEXT, b TEXT, KEY k(a(8)), FULLTEXT f1(a), FULLTEXT f2(a,b))", []string{"f1", "f2"}},
+		{"CREATE FULLTEXT INDEX f1 ON db.t(a,b) WITH PARSER STANDARD", []string{"f1"}},
+		{"ALTER TABLE db.t ADD FULLTEXT f1(a), ADD KEY k(a(8)), ADD FULLTEXT f2(a,b)", []string{"f1", "f2"}},
+		{"CREATE TABLE db.t (a TEXT, KEY k(a(8)))", nil},
+		{"CREATE INDEX k ON db.t(a(8))", nil},
+		{"ALTER TABLE db.t ADD KEY k(a(8))", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.sql, func(t *testing.T) {
+			core, observed := observer.New(zap.InfoLevel)
+			logger := dlog.Logger{Logger: zap.New(core)}
+			rewrite := func(stmt ast.StmtNode) ast.StmtNode {
+				switch v := stmt.(type) {
+				case *ast.CreateTableStmt:
+					return MockRawFullTextConstraints(v, logger)
+				case *ast.CreateIndexStmt:
+					return mockRawFullTextIndex(v, logger)
+				case *ast.AlterTableStmt:
+					return mockRawFullTextAlterTable(v, logger)
+				default:
+					t.Fatalf("unexpected statement %T", stmt)
+					return nil
+				}
+			}
+			restore := func(stmt ast.StmtNode) string {
+				var sql strings.Builder
+				require.NoError(t, stmt.Restore(format.NewRestoreCtx(format.DefaultRestoreFlags, &sql)))
+				return sql.String()
+			}
+			stmt := parseSQL(t, parser.New(), tc.sql)
+			originalSQL := restore(stmt)
+			rewritten := rewrite(stmt)
+			require.Equal(t, originalSQL, restore(stmt))
+			require.NotContains(t, restore(rewritten), "FULLTEXT")
+			if len(tc.indexes) == 0 {
+				require.Same(t, stmt, rewritten)
+			} else {
+				require.NotSame(t, stmt, rewritten)
+			}
+			// Already-normalized or ordinary indexes do not trigger another log.
+			require.Same(t, rewritten, rewrite(rewritten))
+			entries := observed.All()
+			require.Len(t, entries, len(tc.indexes))
+			for i, entry := range entries {
+				require.Contains(t, entry.Message, "non-unique prefix index")
+				require.Equal(t, map[string]interface{}{
+					"schema": "db", "table": "t", "index": tc.indexes[i],
+				}, entry.ContextMap())
+			}
+		})
+	}
+}
+
 func TestExecMocksRawFullTextIndex(t *testing.T) {
 	ctx := context.Background()
 	p := parser.New()
@@ -441,6 +502,9 @@ func TestExecTracksFullTextIndexLifecycle(t *testing.T) {
 	require.Equal(t, model.ColumnarIndexTypeNA, ti.FindIndexByName("ft_idx_renamed").GetColumnarIndexType())
 	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p,
 		"DROP INDEX ft_idx_renamed ON t")))
+	ti, err = tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	require.Nil(t, ti.FindIndexByName("ft_idx_renamed"))
 
 	alterAddStmt := parseSQL(t, p,
 		"ALTER TABLE t ADD FULLTEXT INDEX ft_idx_2(text_col) WITH PARSER STANDARD").(*ast.AlterTableStmt)
@@ -454,6 +518,12 @@ func TestExecTracksFullTextIndexLifecycle(t *testing.T) {
 	ti, err = tracker.GetTableInfo(table)
 	require.NoError(t, err)
 	require.Equal(t, model.ColumnarIndexTypeNA, ti.FindIndexByName("ft_idx_2_renamed").GetColumnarIndexType())
+	require.Nil(t, ti.FindIndexByName("ft_idx_2"))
+	require.NoError(t, tracker.Exec(ctx, "test", parseSQL(t, p,
+		"ALTER TABLE t DROP INDEX ft_idx_2_renamed")))
+	ti, err = tracker.GetTableInfo(table)
+	require.NoError(t, err)
+	require.Nil(t, ti.FindIndexByName("ft_idx_2_renamed"))
 }
 
 func TestBatchCreateTableIfNotExist(t *testing.T) {
@@ -723,7 +793,7 @@ func TestGetDownStreamTableInfoMocksRawFullTextIndex(t *testing.T) {
 		"",
 	)
 	require.NoError(t, err)
-	originTI, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
+	oriTi, err := ddl.MockTableInfo(se, node.(*ast.CreateTableStmt), 1)
 	require.NoError(t, err)
 
 	dbConn, mock := mockBaseConn(t)
@@ -748,7 +818,7 @@ func TestGetDownStreamTableInfoMocksRawFullTextIndex(t *testing.T) {
 			)`),
 	)
 
-	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, originTI)
+	dti, err := tracker.GetDownStreamTableInfo(tcontext.Background(), tableID, oriTi)
 	require.NoError(t, err)
 	require.Len(t, dti.TableInfo.Indices, 3)
 	require.NotNil(t, dti.TableInfo.FindIndexByName("primary"))

@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/pkg/quotes"
@@ -139,7 +140,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			s.tctx.L().Info("overwrite --flush to true for operate-schema")
 		}
 
-		ti, err2 := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), stmt)
+		ti, err2 := ddl2.BuildTableInfoFromAST(metabuild.NewContext(), schema.MockRawFullTextConstraints(stmt, s.tctx.L()))
 		if err2 != nil {
 			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
 		}
