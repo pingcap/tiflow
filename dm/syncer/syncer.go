@@ -3072,20 +3072,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if len(cols) > 0 {
 				continue
 			}
+			tables = append(tables, dbutil.TableName(db, table))
 			tableFiles = append(tableFiles, [2]string{db, f})
 			continue
 		}
-	}
-	sort.Strings(dbs)
-	sort.Slice(tableFiles, func(i, j int) bool {
-		if tableFiles[i][0] != tableFiles[j][0] {
-			return tableFiles[i][0] < tableFiles[j][0]
-		}
-		return tableFiles[i][1] < tableFiles[j][1]
-	})
-	for _, dbAndFile := range tableFiles {
-		db, table, _ := utils.GetTableFromDumpFilename(dbAndFile[1])
-		tables = append(tables, dbutil.TableName(db, table))
 	}
 	logger.Info("fetch table structure from dump files",
 		zap.Strings("database", dbs),
@@ -3115,80 +3105,84 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		err     error
 	}
 	readConcurrency := min(max(s.cfg.LoaderConfig.PoolSize, 1), maxSchemaFileReadConcurrency)
-	readResults, err := mydump.ParallelProcess(
-		ctx,
-		tableFiles,
-		readConcurrency,
-		func(ctx context.Context, dbAndFile [2]string) (schemaFileReadResult, error) {
-			content, readErr := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, dbAndFile[1], dumpStorage)
-			// Keep reading the remaining schema files and report the first error,
-			// which preserves the existing best-effort behavior.
-			return schemaFileReadResult{content: content, err: readErr}, nil
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	for i, dbAndFile := range tableFiles {
-		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := readResults[i].content, readResults[i].err
-		if err2 != nil {
-			logger.Warn("fail to read file for creating table in schema tracker",
-				zap.String("db", db),
-				zap.String("path", s.cfg.LoaderConfig.Dir),
-				zap.String("file", file),
-				zap.Error(err2))
-			setFirstErr(err2)
-			continue
+	for batchStart := 0; batchStart < len(tableFiles); batchStart += readConcurrency {
+		batchEnd := min(batchStart+readConcurrency, len(tableFiles))
+		batch := tableFiles[batchStart:batchEnd]
+		readResults, err := mydump.ParallelProcess(
+			ctx,
+			batch,
+			readConcurrency,
+			func(ctx context.Context, dbAndFile [2]string) (schemaFileReadResult, error) {
+				content, readErr := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, dbAndFile[1], dumpStorage)
+				// Keep reading the remaining schema files and report the first error,
+				// which preserves the existing best-effort behavior.
+				return schemaFileReadResult{content: content, err: readErr}, nil
+			},
+		)
+		if err != nil {
+			return err
 		}
-		stmts := bytes.Split(content, []byte(";\n"))
-		for _, stmt := range stmts {
-			stmt = bytes.TrimSpace(stmt)
-			if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
-				continue
-			}
-			stmtNode, err := p.ParseOneStmt(string(stmt), "", "")
-			if err != nil {
-				logger.Warn("fail to parse statement for creating table in schema tracker",
+
+		for i, dbAndFile := range batch {
+			db, file := dbAndFile[0], dbAndFile[1]
+			content, err2 := readResults[i].content, readResults[i].err
+			if err2 != nil {
+				logger.Warn("fail to read file for creating table in schema tracker",
 					zap.String("db", db),
 					zap.String("path", s.cfg.LoaderConfig.Dir),
 					zap.String("file", file),
-					zap.ByteString("statement", stmt),
-					zap.Error(err))
-				setFirstErr(err)
+					zap.Error(err2))
+				setFirstErr(err2)
 				continue
 			}
-			switch v := stmtNode.(type) {
-			case *ast.SetStmt:
-				logger.Warn("ignoring statement",
-					zap.String("type", fmt.Sprintf("%T", v)),
-					zap.ByteString("statement", stmt))
-			case *ast.CreateTableStmt:
-				err = s.schemaTracker.Exec(ctx, db, stmtNode)
+			stmts := bytes.Split(content, []byte(";\n"))
+			for _, stmt := range stmts {
+				stmt = bytes.TrimSpace(stmt)
+				if len(stmt) == 0 || bytes.HasPrefix(stmt, []byte("/*")) {
+					continue
+				}
+				stmtNode, err := p.ParseOneStmt(string(stmt), "", "")
 				if err != nil {
-					logger.Warn("fail to create table for dump files",
-						zap.Any("path", s.cfg.LoaderConfig.Dir),
-						zap.Any("file", file),
+					logger.Warn("fail to parse statement for creating table in schema tracker",
+						zap.String("db", db),
+						zap.String("path", s.cfg.LoaderConfig.Dir),
+						zap.String("file", file),
 						zap.ByteString("statement", stmt),
 						zap.Error(err))
 					setFirstErr(err)
 					continue
 				}
-				s.saveTablePoint(
-					&filter.Table{Schema: db, Name: v.Table.Name.O},
-					s.getFlushedGlobalPoint(),
-				)
-			default:
-				err = s.schemaTracker.Exec(ctx, db, stmtNode)
-				if err != nil {
-					logger.Warn("fail to create table for dump files",
-						zap.Any("path", s.cfg.LoaderConfig.Dir),
-						zap.Any("file", file),
-						zap.ByteString("statement", stmt),
-						zap.Error(err))
-					setFirstErr(err)
-					continue
+				switch v := stmtNode.(type) {
+				case *ast.SetStmt:
+					logger.Warn("ignoring statement",
+						zap.String("type", fmt.Sprintf("%T", v)),
+						zap.ByteString("statement", stmt))
+				case *ast.CreateTableStmt:
+					err = s.schemaTracker.Exec(ctx, db, stmtNode)
+					if err != nil {
+						logger.Warn("fail to create table for dump files",
+							zap.Any("path", s.cfg.LoaderConfig.Dir),
+							zap.Any("file", file),
+							zap.ByteString("statement", stmt),
+							zap.Error(err))
+						setFirstErr(err)
+						continue
+					}
+					s.saveTablePoint(
+						&filter.Table{Schema: db, Name: v.Table.Name.O},
+						s.getFlushedGlobalPoint(),
+					)
+				default:
+					err = s.schemaTracker.Exec(ctx, db, stmtNode)
+					if err != nil {
+						logger.Warn("fail to create table for dump files",
+							zap.Any("path", s.cfg.LoaderConfig.Dir),
+							zap.Any("file", file),
+							zap.ByteString("statement", stmt),
+							zap.Error(err))
+						setFirstErr(err)
+						continue
+					}
 				}
 			}
 		}
