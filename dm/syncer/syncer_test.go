@@ -2029,11 +2029,13 @@ func TestCheckCanUpdateCfg(t *testing.T) {
 	require.True(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(syncer.CheckCanUpdateCfg(cfg2)))
 
 	// update ba list or route rules or filter rules is ok or syncerCfg
-	cfg2.Name = cfg.Name
+	cfg2, err := cfg.Clone()
+	require.NoError(t, err)
 
 	cfg2.BAList = &filter.Rules{DoDBs: []string{"test"}}
 	cfg2.RouteRules = []*router.TableRule{{SchemaPattern: "test", TargetSchema: "test1"}}
 	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
 	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
-	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+	cfg2.MetricLabels = map[string]string{"project_id": "123"}
+	require.NoError(t, syncer.CheckCanUpdateCfg(cfg2))
 }

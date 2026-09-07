@@ -3384,7 +3384,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
-// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 2. only balist, route/filter rules, syncerConfig and metric labels can be updated at this moment.
 // 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
@@ -3406,6 +3406,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	oldCfg.MetricLabels = newCfg.MetricLabels
 	oldCfg.To.Session = newCfg.To.Session // session is adjusted in `createDBs`
 
 	// support fields that changed in func `copyConfigFromSource`

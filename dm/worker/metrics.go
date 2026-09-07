@@ -15,9 +15,12 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"sort"
+	"sync"
 	"time"
 
 	cpu "github.com/pingcap/tidb/pkg/util"
@@ -32,6 +35,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	dto "github.com/prometheus/client_model/go"
 )
 
 const (
@@ -66,7 +70,126 @@ var (
 			Name:      "cpu_usage",
 			Help:      "the cpu usage of worker",
 		})
+	metricLabelsMu sync.RWMutex
+	metricLabels   = make(map[string][]*dto.LabelPair)
+	metricRefs     = make(map[string]int)
 )
+
+// taskMetricGatherer injects labels at gather time because task metrics are
+// created across several DM and Lightning packages. Registrations are
+// reference-counted because multiple subtasks of the same task share labels.
+type taskMetricGatherer struct {
+	prometheus.Registerer
+	gatherer prometheus.Gatherer
+}
+
+func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
+	families, err := g.gatherer.Gather()
+	if err != nil {
+		return families, err
+	}
+	metricLabelsMu.RLock()
+	defer metricLabelsMu.RUnlock()
+	if len(metricLabels) == 0 {
+		return families, nil
+	}
+	for _, family := range families {
+		if len(family.Metric) == 0 {
+			continue
+		}
+		taskLabelIndex := -1
+		for i, label := range family.Metric[0].Label {
+			if label.GetName() == "task" {
+				taskLabelIndex = i
+				break
+			}
+		}
+		if taskLabelIndex < 0 {
+			continue
+		}
+		existing := make(map[string]struct{}, len(family.Metric[0].Label))
+		for _, label := range family.Metric[0].Label {
+			existing[label.GetName()] = struct{}{}
+		}
+		for _, metric := range family.Metric {
+			var task string
+			metricLabelsByName := existing
+			if taskLabelIndex < len(metric.Label) && metric.Label[taskLabelIndex].GetName() == "task" {
+				task = metric.Label[taskLabelIndex].GetValue()
+			} else {
+				// Metric families normally have one label layout. Keep a defensive
+				// fallback for unchecked collectors with inconsistent metrics.
+				metricLabelsByName = make(map[string]struct{}, len(metric.Label))
+				for _, label := range metric.Label {
+					metricLabelsByName[label.GetName()] = struct{}{}
+					if label.GetName() == "task" {
+						task = label.GetValue()
+					}
+				}
+			}
+			labels, ok := metricLabels[task]
+			if !ok || task == "" {
+				continue
+			}
+			for _, label := range labels {
+				if _, exists := metricLabelsByName[label.GetName()]; exists {
+					return families, fmt.Errorf(
+						"task metric label %q conflicts with metric family %q",
+						label.GetName(), family.GetName())
+				}
+			}
+			// LabelPair values are immutable after registration and may be shared
+			// safely by all series for the same task.
+			metric.Label = append(metric.Label, labels...)
+		}
+	}
+	return families, nil
+}
+
+func registerTaskMetricLabels(task string, labels map[string]string) {
+	if len(labels) == 0 {
+		return
+	}
+	metricLabelsMu.Lock()
+	defer metricLabelsMu.Unlock()
+	if metricRefs[task] == 0 {
+		metricLabels[task] = makeTaskMetricLabelPairs(labels)
+	}
+	metricRefs[task]++
+}
+
+func replaceTaskMetricLabels(task string, labels map[string]string) {
+	metricLabelsMu.Lock()
+	defer metricLabelsMu.Unlock()
+	if metricRefs[task] > 0 {
+		metricLabels[task] = makeTaskMetricLabelPairs(labels)
+	}
+}
+
+func makeTaskMetricLabelPairs(labels map[string]string) []*dto.LabelPair {
+	names := make([]string, 0, len(labels))
+	for name := range labels {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	pairs := make([]*dto.LabelPair, 0, len(names))
+	for _, name := range names {
+		value := labels[name]
+		pairs = append(pairs, &dto.LabelPair{Name: &name, Value: &value})
+	}
+	return pairs
+}
+
+func unregisterTaskMetricLabels(task string) {
+	metricLabelsMu.Lock()
+	defer metricLabelsMu.Unlock()
+	if metricRefs[task] <= 1 {
+		delete(metricRefs, task)
+		delete(metricLabels, task)
+		return
+	}
+	metricRefs[task]--
+}
 
 type statusHandler struct{}
 
@@ -118,7 +241,7 @@ func RegistryMetrics() {
 	loader.RegisterMetrics(registry)
 	metrics.RegisterValidatorMetrics(registry)
 	metrics.DefaultMetricsProxies.RegisterMetrics(registry)
-	prometheus.DefaultGatherer = registry
+	prometheus.DefaultGatherer = taskMetricGatherer{Registerer: registry, gatherer: registry}
 }
 
 // InitStatus initializes the HTTP status server.

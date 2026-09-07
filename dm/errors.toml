@@ -1234,6 +1234,12 @@ description = ""
 workaround = "Please use a shared storage URI like s3://bucket/path"
 tags = ["internal", "high"]
 
+[error.DM-config-20071]
+message = "invalid metric labels: %s"
+description = ""
+workaround = "Please check the `metric-labels` config in the task configuration."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""
