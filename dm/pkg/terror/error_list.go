@@ -276,6 +276,7 @@ const (
 	codeConfigImportIntoShardingNotSupport
 	codeConfigImportIntoRequiresSharedStorage
 	codeConfigUnsupportedForeignKeyChecksOption
+	codeConfigInvalidMetricLabels
 )
 
 // Binlog operation error code list.
@@ -993,6 +994,7 @@ var (
 	ErrConfigImportIntoShardingNotSupport       = New(codeConfigImportIntoShardingNotSupport, ClassConfig, ScopeInternal, LevelHigh, "import-into mode does not support sharding (multi-source) scenario", "Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'.")
 	ErrConfigImportIntoRequiresSharedStorage    = New(codeConfigImportIntoRequiresSharedStorage, ClassConfig, ScopeInternal, LevelHigh, "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'", "Please use a shared storage URI like s3://bucket/path")
 	ErrConfigUnsupportedForeignKeyChecksOption  = New(codeConfigUnsupportedForeignKeyChecksOption, ClassConfig, ScopeInternal, LevelMedium, "`%s` is not supported when foreign_key_checks=1", "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file.")
+	ErrConfigInvalidMetricLabels                = New(codeConfigInvalidMetricLabels, ClassConfig, ScopeInternal, LevelMedium, "invalid metric labels: %s", "Please check the `metric-labels` config in the task configuration.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

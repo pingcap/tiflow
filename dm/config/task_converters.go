@@ -15,6 +15,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -27,11 +28,15 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
+	"github.com/prometheus/common/model"
 	"go.uber.org/zap"
 )
 
 // TaskConfigToSubTaskConfigs generates sub task configs by TaskConfig.
 func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBConfig) ([]*SubTaskConfig, error) {
+	if err := ValidateMetricLabels(c.MetricLabels); err != nil {
+		return nil, err
+	}
 	cfgs := make([]*SubTaskConfig, len(c.MySQLInstances))
 	for i, inst := range c.MySQLInstances {
 		dbCfg, exist := sources[inst.SourceID]
@@ -48,6 +53,7 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		cfg.ShadowTableRules = c.ShadowTableRules
 		cfg.IgnoreCheckingItems = c.IgnoreCheckingItems
 		cfg.Name = c.Name
+		cfg.MetricLabels = maps.Clone(c.MetricLabels)
 		cfg.Mode = c.TaskMode
 		cfg.CaseSensitive = c.CaseSensitive
 		cfg.MetaSchema = c.MetaSchema
@@ -118,6 +124,10 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig, sourceCfgMap map[string]*SourceConfig) (
 	[]*SubTaskConfig, error,
 ) {
+	metricLabels := metricLabelsFromOpenAPI(task.MetricLabels)
+	if err := ValidateMetricLabels(metricLabels); err != nil {
+		return nil, err
+	}
 	// import-into does not support sharding / multi-source tasks.
 	if fullCfg := task.SourceConfig.FullMigrateConf; fullCfg != nil && fullCfg.ImportMode != nil {
 		if strings.EqualFold(string(*fullCfg.ImportMode), string(openapi.TaskFullMigrateConfImportModeImportInto)) &&
@@ -160,6 +170,7 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		subTaskCfg := NewSubTaskConfig()
 		// set task name and mode
 		subTaskCfg.Name = task.Name
+		subTaskCfg.MetricLabels = maps.Clone(metricLabels)
 		subTaskCfg.Mode = string(task.TaskMode)
 		if task.Timezone != nil {
 			subTaskCfg.Timezone = *task.Timezone
@@ -384,6 +395,7 @@ func SubTaskConfigsToTaskConfig(stCfgs ...*SubTaskConfig) *TaskConfig {
 	// global configs.
 	stCfg0 := stCfgs[0]
 	c.Name = stCfg0.Name
+	c.MetricLabels = maps.Clone(stCfg0.MetricLabels)
 	c.TaskMode = stCfg0.Mode
 	c.IsSharding = stCfg0.IsSharding
 	c.ShardMode = stCfg0.ShardMode
@@ -683,6 +695,7 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	// set basic global config
 	task := openapi.Task{
 		Name:                      oneSubtaskConfig.Name,
+		MetricLabels:              metricLabelsToOpenAPI(oneSubtaskConfig.MetricLabels),
 		TaskMode:                  openapi.TaskTaskMode(oneSubtaskConfig.Mode),
 		EnhanceOnlineSchemaChange: oneSubtaskConfig.OnlineDDL,
 		MetaSchema:                &oneSubtaskConfig.MetaSchema,
@@ -726,6 +739,68 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 	}
 	task.TargetConfig.Session = projectTargetSession(oneSubtaskConfig.To.Session)
 	return &task
+}
+
+const (
+	maxMetricLabels     = 8
+	maxMetricLabelName  = 64
+	maxMetricLabelValue = 256
+)
+
+var reservedMetricLabels = map[string]struct{}{
+	// Labels used by DM task-scoped metrics. User-supplied labels must not
+	// change their meaning when they are added to a gathered metric.
+	"kind": {}, "medium": {}, "name": {}, "node": {}, "phase": {},
+	"queueNo": {}, "queue_id": {}, "result": {}, "resumable_err": {},
+	"source_id": {}, "stage": {}, "state": {}, "table": {},
+	"target_schema": {}, "target_table": {}, "task": {}, "type": {},
+	"worker": {},
+	// Histograms and summaries add these labels during text encoding, after
+	// taskMetricGatherer has injected the custom labels.
+	"le": {}, "quantile": {},
+	// Labels added by Prometheus when metrics are scraped or stored.
+	"instance": {}, "job": {}, "__name__": {},
+}
+
+// ValidateMetricLabels validates labels that are added to task-scoped metrics.
+func ValidateMetricLabels(labels map[string]string) error {
+	if len(labels) > maxMetricLabels {
+		return terror.ErrConfigInvalidMetricLabels.Generate(
+			fmt.Sprintf("too many metric labels, max %d", maxMetricLabels))
+	}
+	for name, value := range labels {
+		if len(name) > maxMetricLabelName {
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("metric label name %q exceeds %d bytes", name, maxMetricLabelName))
+		}
+		if len(value) > maxMetricLabelValue {
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("value of metric label %q exceeds %d bytes", name, maxMetricLabelValue))
+		}
+		if !model.LabelName(name).IsValidLegacy() || strings.HasPrefix(name, "__") {
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("invalid metric label name %q", name))
+		}
+		if _, ok := reservedMetricLabels[name]; ok {
+			return terror.ErrConfigInvalidMetricLabels.Generate(
+				fmt.Sprintf("metric label %q conflicts with built-in label", name))
+		}
+	}
+	return nil
+}
+
+func metricLabelsFromOpenAPI(labels *openapi.Task_MetricLabels) map[string]string {
+	if labels == nil {
+		return nil
+	}
+	return labels.AdditionalProperties
+}
+
+func metricLabelsToOpenAPI(labels map[string]string) *openapi.Task_MetricLabels {
+	if labels == nil {
+		return nil
+	}
+	return &openapi.Task_MetricLabels{AdditionalProperties: maps.Clone(labels)}
 }
 
 // projectTargetSession currently exposes only foreign_key_checks and normalizes

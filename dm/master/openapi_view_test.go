@@ -29,6 +29,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/deepmap/oapi-codegen/pkg/testutil"
+	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tiflow/dm/checker"
@@ -53,6 +54,23 @@ import (
 var (
 	source1Name = "mysql-replica-01"
 )
+
+func TestTerrorHTTPErrorHandlerReturnsMetricLabelErrorCode(t *testing.T) {
+	router := gin.New()
+	router.Use(terrorHTTPErrorHandler())
+	router.GET("/", func(c *gin.Context) {
+		err := config.ValidateMetricLabels(map[string]string{"task": "value"})
+		require.Error(t, err)
+		_ = c.Error(err)
+	})
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	var response openapi.ErrorWithMessage
+	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+	require.Equal(t, int(terror.ErrConfigInvalidMetricLabels.Code()), response.ErrorCode)
+}
 
 func setupTestServer(ctx context.Context, t *testing.T) *Server {
 	t.Helper()
