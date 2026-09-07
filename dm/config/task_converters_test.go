@@ -75,6 +75,9 @@ func TestValidateMetricLabels(t *testing.T) {
 		{name: "unicode name", labels: map[string]string{"租户": "123"}, wantErr: "invalid metric label name"},
 		{name: "reserved prefix", labels: map[string]string{"__tenant": "123"}, wantErr: "invalid metric label name"},
 		{name: "built-in label", labels: map[string]string{"target_schema": "db"}, wantErr: "conflicts with built-in label"},
+		{name: "lightning label", labels: map[string]string{"phase": "restore"}, wantErr: "conflicts with built-in label"},
+		{name: "histogram label", labels: map[string]string{"le": "1"}, wantErr: "conflicts with built-in label"},
+		{name: "summary label", labels: map[string]string{"quantile": "0.5"}, wantErr: "conflicts with built-in label"},
 		{name: "too many", labels: map[string]string{
 			"label_1": "", "label_2": "", "label_3": "", "label_4": "", "label_5": "",
 			"label_6": "", "label_7": "", "label_8": "", "label_9": "",
@@ -91,6 +94,11 @@ func TestValidateMetricLabels(t *testing.T) {
 				return
 			}
 			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+	for name := range reservedMetricLabels {
+		t.Run("reserved/"+name, func(t *testing.T) {
+			require.Error(t, ValidateMetricLabels(map[string]string{name: "value"}))
 		})
 	}
 }

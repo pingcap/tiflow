@@ -15,10 +15,11 @@ package worker
 
 import (
 	"context"
-	"maps"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"sort"
 	"sync"
 	"time"
 
@@ -70,10 +71,13 @@ var (
 			Help:      "the cpu usage of worker",
 		})
 	metricLabelsMu sync.RWMutex
-	metricLabels   = make(map[string]map[string]string)
+	metricLabels   = make(map[string][]*dto.LabelPair)
 	metricRefs     = make(map[string]int)
 )
 
+// taskMetricGatherer injects labels at gather time because task metrics are
+// created across several DM and Lightning packages. Registrations are
+// reference-counted because multiple subtasks of the same task share labels.
 type taskMetricGatherer struct {
 	prometheus.Registerer
 	gatherer prometheus.Gatherer
@@ -86,33 +90,57 @@ func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 	}
 	metricLabelsMu.RLock()
 	defer metricLabelsMu.RUnlock()
+	if len(metricLabels) == 0 {
+		return families, nil
+	}
 	for _, family := range families {
+		if len(family.Metric) == 0 {
+			continue
+		}
+		taskLabelIndex := -1
+		for i, label := range family.Metric[0].Label {
+			if label.GetName() == "task" {
+				taskLabelIndex = i
+				break
+			}
+		}
+		if taskLabelIndex < 0 {
+			continue
+		}
+		existing := make(map[string]struct{}, len(family.Metric[0].Label))
+		for _, label := range family.Metric[0].Label {
+			existing[label.GetName()] = struct{}{}
+		}
 		for _, metric := range family.Metric {
 			var task string
-			for _, label := range metric.Label {
-				if label.GetName() == "task" {
-					task = label.GetValue()
-					break
+			metricLabelsByName := existing
+			if taskLabelIndex < len(metric.Label) && metric.Label[taskLabelIndex].GetName() == "task" {
+				task = metric.Label[taskLabelIndex].GetValue()
+			} else {
+				// Metric families normally have one label layout. Keep a defensive
+				// fallback for unchecked collectors with inconsistent metrics.
+				metricLabelsByName = make(map[string]struct{}, len(metric.Label))
+				for _, label := range metric.Label {
+					metricLabelsByName[label.GetName()] = struct{}{}
+					if label.GetName() == "task" {
+						task = label.GetValue()
+					}
 				}
 			}
 			labels, ok := metricLabels[task]
 			if !ok || task == "" {
 				continue
 			}
-			existing := make(map[string]struct{}, len(metric.Label))
-			for _, label := range metric.Label {
-				existing[label.GetName()] = struct{}{}
-			}
-			for name, value := range labels {
-				if _, exists := existing[name]; exists {
-					// Built-in labels always take precedence. Validation rejects all
-					// known conflicts; keep this guard for metrics added in the future.
-					continue
+			for _, label := range labels {
+				if _, exists := metricLabelsByName[label.GetName()]; exists {
+					return families, fmt.Errorf(
+						"task metric label %q conflicts with metric family %q",
+						label.GetName(), family.GetName())
 				}
-				metric.Label = append(metric.Label, &dto.LabelPair{
-					Name: &name, Value: &value,
-				})
 			}
+			// LabelPair values are immutable after registration and may be shared
+			// safely by all series for the same task.
+			metric.Label = append(metric.Label, labels...)
 		}
 	}
 	return families, nil
@@ -125,7 +153,17 @@ func registerTaskMetricLabels(task string, labels map[string]string) {
 	metricLabelsMu.Lock()
 	defer metricLabelsMu.Unlock()
 	if metricRefs[task] == 0 {
-		metricLabels[task] = maps.Clone(labels)
+		names := make([]string, 0, len(labels))
+		for name := range labels {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		pairs := make([]*dto.LabelPair, 0, len(names))
+		for _, name := range names {
+			value := labels[name]
+			pairs = append(pairs, &dto.LabelPair{Name: &name, Value: &value})
+		}
+		metricLabels[task] = pairs
 	}
 	metricRefs[task]++
 }

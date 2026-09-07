@@ -750,9 +750,14 @@ const (
 var reservedMetricLabels = map[string]struct{}{
 	// Labels used by DM task-scoped metrics. User-supplied labels must not
 	// change their meaning when they are added to a gathered metric.
-	"node": {}, "queueNo": {}, "queue_id": {}, "resumable_err": {},
-	"source_id": {}, "stage": {}, "table": {}, "target_schema": {},
-	"target_table": {}, "task": {}, "type": {}, "worker": {},
+	"kind": {}, "medium": {}, "name": {}, "node": {}, "phase": {},
+	"queueNo": {}, "queue_id": {}, "result": {}, "resumable_err": {},
+	"source_id": {}, "stage": {}, "state": {}, "table": {},
+	"target_schema": {}, "target_table": {}, "task": {}, "type": {},
+	"worker": {},
+	// Histograms and summaries add these labels during text encoding, after
+	// taskMetricGatherer has injected the custom labels.
+	"le": {}, "quantile": {},
 	// Labels added by Prometheus when metrics are scraped or stored.
 	"instance": {}, "job": {}, "__name__": {},
 }
