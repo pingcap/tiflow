@@ -424,7 +424,7 @@ func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 }
 
 func (s *testDDLSuite) TestParseStartTransactionTableOption(c *check.C) {
-	const sql = `CREATE TABLE "t" ("id" INT) ENGINE=InnoDB START TRANSACTION`
+	const sql = `CREATE TABLE "t" ("id" INT) ENGINE=InnoDB START TRANSACTION START TRANSACTION`
 
 	defaultParser := parser.New()
 	defaultParser.SetSQLMode(pmysql.ModeANSIQuotes)
