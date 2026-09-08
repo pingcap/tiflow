@@ -61,8 +61,7 @@ func TestWriteDDLEvent(t *testing.T) {
 	})
 	GetDBConnImpl = dbConnFactory
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000")
 	require.Nil(t, err)

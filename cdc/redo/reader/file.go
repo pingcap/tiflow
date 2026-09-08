@@ -390,10 +390,7 @@ func (r *reader) isTornEntry(data []byte) bool {
 	chunks := [][]byte{}
 	// split data on sector boundaries
 	for curOff < len(data) {
-		chunkLen := int(redo.MinSectorSize - (fileOff % redo.MinSectorSize))
-		if chunkLen > len(data)-curOff {
-			chunkLen = len(data) - curOff
-		}
+		chunkLen := min(int(redo.MinSectorSize-(fileOff%redo.MinSectorSize)), len(data)-curOff)
 		chunks = append(chunks, data[curOff:curOff+chunkLen])
 		fileOff += int64(chunkLen)
 		curOff += chunkLen

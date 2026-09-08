@@ -62,8 +62,7 @@ func newSharedClientForTestSharedRegionWorker() *SharedClient {
 // TiKV:   [Scan Start] [Send Prewrite2] [Send Commit] [Send Prewrite1] [Send Init]
 // TiCDC:                    [Recv Prewrite2]  [Recv Commit] [Recv Prewrite1] [Recv Init]
 func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	client := newSharedClientForTestSharedRegionWorker()
 	defer client.Close()
 
@@ -168,8 +167,7 @@ func TestSharedRegionWokerHandleEventEntryEventOutOfOrder(t *testing.T) {
 }
 
 func TestSharedRegionWorkerHandleResolvedTs(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	client := newSharedClientForTestSharedRegionWorker()
 	defer client.Close()
 

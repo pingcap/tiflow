@@ -64,8 +64,7 @@ func newForTest(ctx context.Context,
 func TestSinkFactory(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +

@@ -52,7 +52,7 @@ func TestSyncBroadcastMessage(t *testing.T) {
 
 	p := NewKafkaDDLProducer(ctx, changefeed, syncProducer)
 
-	for i := 0; i < kafka.DefaultMockPartitionNum; i++ {
+	for range kafka.DefaultMockPartitionNum {
 		syncProducer.(*kafka.MockSaramaSyncProducer).Producer.ExpectSendMessageAndSucceed()
 	}
 	err = p.SyncBroadcastMessage(ctx, kafka.DefaultMockTopicName,
@@ -116,8 +116,7 @@ func TestProducerSendMsgFailed(t *testing.T) {
 }
 
 func TestProducerDoubleClose(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	options := getOptions()
 
 	ctx = context.WithValue(ctx, "testing.T", t)

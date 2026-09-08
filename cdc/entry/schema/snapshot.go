@@ -1343,7 +1343,7 @@ type versionedID struct {
 	id  int64
 	tag uint64 // A transform of timestamp to reverse sort versions.
 	// the associated entity pointer.
-	target interface{}
+	target any
 }
 
 func versionedEntityNameLess(v1, v2 versionedEntityName) bool {
@@ -1370,18 +1370,18 @@ func newVersionedEntityName(prefix int64, entity string, tag uint64) versionedEn
 // newVersionedID creates an instance with target nil, which means it's deleted from the
 // associated snapshot.
 func newVersionedID(id int64, tag uint64) versionedID {
-	var target interface{} = nil
+	var target any = nil
 	return versionedID{id, tag, target}
 }
 
-func targetToTableInfo(target interface{}) *model.TableInfo {
+func targetToTableInfo(target any) *model.TableInfo {
 	if target == nil {
 		return nil
 	}
 	return target.(*model.TableInfo)
 }
 
-func targetToDBInfo(target interface{}) *timodel.DBInfo {
+func targetToDBInfo(target any) *timodel.DBInfo {
 	if target == nil {
 		return nil
 	}

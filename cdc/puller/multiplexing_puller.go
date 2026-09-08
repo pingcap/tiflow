@@ -202,7 +202,7 @@ func NewMultiplexingPuller(
 	mpuller.subscriptions.n = spanz.NewHashMap[subscription]()
 
 	mpuller.inputChs = make([]chan kv.MultiplexingEvent, 0, workerCount)
-	for i := 0; i < workerCount; i++ {
+	for range workerCount {
 		mpuller.inputChs = append(mpuller.inputChs, make(chan kv.MultiplexingEvent, inputChSize))
 	}
 	return mpuller
@@ -457,7 +457,7 @@ func (p *MultiplexingPuller) runResolvedTsAdvancer(ctx context.Context) error {
 
 		var event kv.MultiplexingEvent
 		var spans *model.ResolvedSpans
-		for i := 0; i < 128; i++ {
+		for range 128 {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

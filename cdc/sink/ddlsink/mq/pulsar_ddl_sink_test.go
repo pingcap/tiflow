@@ -54,8 +54,7 @@ func newPulsarConfig(t *testing.T, schema string) (*config.PulsarConfig, *url.UR
 // TestNewPulsarDDLSink tests the NewPulsarDDLSink
 func TestNewPulsarDDLSink(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	for _, schema := range pulsarSchemaList {
 		_, sinkURI := newPulsarConfig(t, schema)
 		changefeedID := model.DefaultChangeFeedID("test")
@@ -104,8 +103,7 @@ func TestNewPulsarDDLSink(t *testing.T) {
 // TestPulsarDDLSinkNewSuccess tests the NewPulsarDDLSink write a event to pulsar
 func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	for _, schema := range pulsarSchemaList {
 		_, sinkURI := newPulsarConfig(t, schema)
@@ -125,8 +123,7 @@ func TestPulsarDDLSinkNewSuccess(t *testing.T) {
 
 func TestPulsarWriteDDLEventToZeroPartition(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	for _, schema := range pulsarSchemaList {
 		_, sinkURI := newPulsarConfig(t, schema)

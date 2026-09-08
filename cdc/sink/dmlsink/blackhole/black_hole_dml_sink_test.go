@@ -37,7 +37,7 @@ func TestWriteEventsCallback(t *testing.T) {
 
 	count := 0
 	events := make([]*dmlsink.RowChangeCallbackableEvent, 0, 3000)
-	for i := 0; i < 3000; i++ {
+	for range 3000 {
 		events = append(events, &dmlsink.RowChangeCallbackableEvent{
 			Event: row,
 			Callback: func() {

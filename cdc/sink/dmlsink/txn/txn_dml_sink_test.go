@@ -64,7 +64,7 @@ func TestTxnSinkNolocking(t *testing.T) {
 	t.Parallel()
 
 	bes := make([]backend, 0, 4)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		bes = append(bes, &blackhole{blockOnEvents: 1})
 	}
 	errCh := make(chan error, 1)
@@ -77,7 +77,7 @@ func TestTxnSinkNolocking(t *testing.T) {
 		{Name: "a", Type: mysql.TypeLong},
 		{Name: "b", Type: mysql.TypeLong},
 	}, nil)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		sinkState := new(state.TableSinkState)
 		*sinkState = state.TableSinkSinking
 		e := &dmlsink.CallbackableEvent[*model.SingleTableTxn]{

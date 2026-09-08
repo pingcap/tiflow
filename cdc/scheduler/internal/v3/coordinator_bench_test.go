@@ -63,11 +63,11 @@ func BenchmarkCoordinatorInit(b *testing.B) {
 	) {
 		const captureCount = 8
 		captures = map[model.CaptureID]*model.CaptureInfo{}
-		for i := 0; i < captureCount; i++ {
+		for i := range captureCount {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 		}
 		currentTables = make([]model.TableID, 0, total)
-		for i := 0; i < total; i++ {
+		for i := range total {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		// Disable heartbeat.
@@ -99,14 +99,14 @@ func BenchmarkCoordinatorHeartbeat(b *testing.B) {
 		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, cfg)
 		captureM.SetInitializedForTests(true)
-		for i := 0; i < captureCount; i++ {
+		for i := range captureCount {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{
 				State: member.CaptureStateInitialized,
 			}
 		}
 		currentTables = make([]model.TableID, 0, total)
-		for i := 0; i < total; i++ {
+		for i := range total {
 			currentTables = append(currentTables, int64(10000+i))
 		}
 		coord = &coordinator{
@@ -134,7 +134,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		captureM := member.NewCaptureManager(
 			"", model.ChangeFeedID{}, schedulepb.OwnerRevision{}, cfg)
 		captureM.SetInitializedForTests(true)
-		for i := 0; i < captureCount; i++ {
+		for i := range captureCount {
 			captures[fmt.Sprint(i)] = &model.CaptureInfo{}
 			captureM.Captures[fmt.Sprint(i)] = &member.CaptureStatus{
 				State: member.CaptureStateInitialized,
@@ -143,7 +143,7 @@ func BenchmarkCoordinatorHeartbeatResponse(b *testing.B) {
 		replicationM := replication.NewReplicationManager(10, model.ChangeFeedID{})
 		currentTables = make([]model.TableID, 0, total)
 		heartbeatResp := make(map[model.CaptureID]*schedulepb.Message)
-		for i := 0; i < total; i++ {
+		for i := range total {
 			tableID := int64(10000 + i)
 			currentTables = append(currentTables, tableID)
 			captureID := fmt.Sprint(i % captureCount)

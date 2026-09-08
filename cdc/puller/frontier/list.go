@@ -145,7 +145,7 @@ func (l *skipList) InsertNextToNode(seekR seekResult, key []byte, value *fibonac
 		nexts:    make([]*skipListNode, height),
 	}
 
-	for level := 0; level < height; level++ {
+	for level := range height {
 		prev := seekR[level]
 		if prev == nil {
 			prev = &l.head

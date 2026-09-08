@@ -155,7 +155,7 @@ func NewMySQLBackends(
 
 	var stmtCache *lru.Cache
 	if cachePrepStmts {
-		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value interface{}) {
+		stmtCache, err = lru.NewWithEvict(prepStmtCacheSize, func(key, value any) {
 			stmt := value.(*sql.Stmt)
 			stmt.Close()
 		})
@@ -274,7 +274,7 @@ func (s *mysqlBackend) MaxFlushInterval() time.Duration {
 type preparedDMLs struct {
 	startTs         []model.Ts
 	sqls            []string
-	values          [][]interface{}
+	values          [][]any
 	callbacks       []dmlsink.CallbackFunc
 	rowCount        int
 	approximateSize int64
@@ -294,12 +294,12 @@ func convert2RowChanges(
 		tidbTableInfo = model.BuildTiDBTableInfoWithoutVirtualColumns(tidbTableInfo)
 	}
 
-	preValues := make([]interface{}, 0, len(row.PreColumns))
+	preValues := make([]any, 0, len(row.PreColumns))
 	for _, col := range row.PreColumns {
 		preValues = append(preValues, col.Value)
 	}
 
-	postValues := make([]interface{}, 0, len(row.Columns))
+	postValues := make([]any, 0, len(row.Columns))
 	for _, col := range row.Columns {
 		postValues = append(postValues, col.Value)
 	}
@@ -357,10 +357,7 @@ func (s *mysqlBackend) groupRowsByType(
 	event *dmlsink.TxnCallbackableEvent,
 	tableInfo *model.TableInfo,
 ) (insertRows, updateRows, deleteRows [][]*sqlmodel.RowChange) {
-	preAllocateSize := len(event.Event.Rows)
-	if preAllocateSize > s.cfg.MaxTxnRow {
-		preAllocateSize = s.cfg.MaxTxnRow
-	}
+	preAllocateSize := min(len(event.Event.Rows), s.cfg.MaxTxnRow)
 
 	insertRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
 	updateRow := make([]*sqlmodel.RowChange, 0, preAllocateSize)
@@ -418,7 +415,7 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	event *dmlsink.TxnCallbackableEvent,
 	tableInfo *model.TableInfo,
 	translateToInsert bool,
-) (sqls []string, values [][]interface{}) {
+) (sqls []string, values [][]any) {
 	insertRows, updateRows, deleteRows := s.groupRowsByType(event, tableInfo)
 
 	// handle delete
@@ -470,7 +467,7 @@ func (s *mysqlBackend) batchSingleTxnDmls(
 	return
 }
 
-func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]interface{}) {
+func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]any) {
 	size := 0
 	for _, r := range rows {
 		size += int(r.GetApproximateDataSize())
@@ -478,11 +475,11 @@ func (s *mysqlBackend) genUpdateSQL(rows ...*sqlmodel.RowChange) ([]string, [][]
 	if size < s.cfg.MaxMultiUpdateRowSize*len(rows) {
 		// use multi update in one SQL
 		sql, value := sqlmodel.GenUpdateSQL(rows...)
-		return []string{sql}, [][]interface{}{value}
+		return []string{sql}, [][]any{value}
 	}
 	// each row has one independent update SQL.
 	sqls := make([]string, 0, len(rows))
-	values := make([][]interface{}, 0, len(rows))
+	values := make([][]any, 0, len(rows))
 	for _, row := range rows {
 		sql, value := row.GenSQL(sqlmodel.DMLUpdate)
 		sqls = append(sqls, sql)
@@ -508,7 +505,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 	// TODO: use a sync.Pool to reduce allocations.
 	startTs := make([]uint64, 0, s.rows)
 	sqls := make([]string, 0, s.rows)
-	values := make([][]interface{}, 0, s.rows)
+	values := make([][]any, 0, s.rows)
 	callbacks := make([]dmlsink.CallbackFunc, 0, len(s.events))
 
 	// translateToInsert control the update and insert behavior.
@@ -569,7 +566,7 @@ func (s *mysqlBackend) prepareDMLs() *preparedDMLs {
 		quoteTable := firstRow.TableInfo.TableName.QuoteString()
 		for _, row := range event.Event.Rows {
 			var query string
-			var args []interface{}
+			var args []any
 			// Update Event
 			if len(row.PreColumns) != 0 && len(row.Columns) != 0 {
 				query, args = prepareUpdate(

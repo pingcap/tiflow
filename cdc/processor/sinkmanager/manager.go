@@ -219,9 +219,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 		m.sinkEg, sinkCtx = errgroup.WithContext(m.managerCtx)
 		m.startSinkWorkers(sinkCtx, m.sinkEg, splitTxn)
 		m.sinkEg.Go(func() error { return m.generateSinkTasks(sinkCtx) })
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
+		m.wg.Go(func() {
 			if err := m.sinkEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
 				log.Error("Worker handles or generates sink task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
@@ -232,16 +230,14 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				case <-m.managerCtx.Done():
 				}
 			}
-		}()
+		})
 	}
 	if m.redoDMLMgr != nil && m.redoEg == nil {
 		var redoCtx context.Context
 		m.redoEg, redoCtx = errgroup.WithContext(m.managerCtx)
 		m.startRedoWorkers(redoCtx, m.redoEg)
 		m.redoEg.Go(func() error { return m.generateRedoTasks(redoCtx) })
-		m.wg.Add(1)
-		go func() {
-			defer m.wg.Done()
+		m.wg.Go(func() {
 			if err := m.redoEg.Wait(); err != nil && !cerror.Is(err, context.Canceled) {
 				log.Error("Worker handles or generates redo task failed",
 					zap.String("namespace", m.changefeedID.Namespace),
@@ -252,7 +248,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 				case <-m.managerCtx.Done():
 				}
 			}
-		}()
+		})
 	}
 
 	close(m.ready)
@@ -287,7 +283,7 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 			log.Info("Sink manager is closing all table sinks",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID))
-			m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+			m.tableSinks.Range(func(span tablepb.Span, value any) bool {
 				value.(*tableSinkWrapper).closeTableSink()
 				m.sinkMemQuota.ClearTable(span)
 				return true
@@ -397,7 +393,7 @@ func (m *SinkManager) clearSinkFactory() {
 }
 
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool) {
-	for i := 0; i < sinkWorkerNum; i++ {
+	for range sinkWorkerNum {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
 			m.sinkMemQuota, splitTxn)
 		m.sinkWorkers = append(m.sinkWorkers, w)
@@ -406,7 +402,7 @@ func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, 
 }
 
 func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) {
-	for i := 0; i < redoWorkerNum; i++ {
+	for range redoWorkerNum {
 		w := newRedoWorker(m.changefeedID, m.sourceManager, m.redoMemQuota,
 			m.redoDMLMgr)
 		m.redoWorkers = append(m.redoWorkers, w)
@@ -417,9 +413,7 @@ func (m *SinkManager) startRedoWorkers(ctx context.Context, eg *errgroup.Group) 
 // backgroundGC is used to clean up the old data in the sorter.
 func (m *SinkManager) backgroundGC(errors chan<- error) {
 	ticker := time.NewTicker(time.Second)
-	m.wg.Add(1)
-	go func() {
-		defer m.wg.Done()
+	m.wg.Go(func() {
 		defer ticker.Stop()
 		for {
 			select {
@@ -473,7 +467,7 @@ func (m *SinkManager) backgroundGC(errors chan<- error) {
 				})
 			}
 		}
-	}()
+	})
 }
 
 func (m *SinkManager) getUpperBound(tableSinkUpperBoundTs model.Ts) sorter.Position {
@@ -810,7 +804,7 @@ func (m *SinkManager) UpdateReceivedSorterResolvedTs(span tablepb.Span, ts model
 
 // UpdateBarrierTs update all tableSink's barrierTs in the SinkManager
 func (m *SinkManager) UpdateBarrierTs(globalBarrierTs model.Ts, tableBarrier map[model.TableID]model.Ts) {
-	m.tableSinks.Range(func(span tablepb.Span, value interface{}) bool {
+	m.tableSinks.Range(func(span tablepb.Span, value any) bool {
 		barrierTs := globalBarrierTs
 		if tableBarrierTs, ok := tableBarrier[span.TableID]; ok && tableBarrierTs < globalBarrierTs {
 			barrierTs = tableBarrierTs
@@ -943,7 +937,7 @@ func (m *SinkManager) RemoveTable(span tablepb.Span) {
 // GetAllCurrentTableSpans returns all spans in the sinkManager.
 func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 	var spans []tablepb.Span
-	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
+	m.tableSinks.Range(func(key tablepb.Span, value any) bool {
 		spans = append(spans, key)
 		return true
 	})
@@ -953,7 +947,7 @@ func (m *SinkManager) GetAllCurrentTableSpans() []tablepb.Span {
 // GetAllCurrentTableSpansCount returns the table spans count in the sinkManager.
 func (m *SinkManager) GetAllCurrentTableSpansCount() int {
 	res := 0
-	m.tableSinks.Range(func(key tablepb.Span, value interface{}) bool {
+	m.tableSinks.Range(func(key tablepb.Span, value any) bool {
 		res++
 		return true
 	})

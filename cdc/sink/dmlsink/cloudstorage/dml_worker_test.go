@@ -82,7 +82,7 @@ func TestDMLWorkerRun(t *testing.T) {
 		},
 	}
 	tableInfo := model.WrapTableInfo(100, "test", 99, tidbTableInfo)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		frag := eventFragment{
 			seqNumber: uint64(i),
 			versionedTable: cloudstorage.VersionedTableName{
@@ -106,9 +106,9 @@ func TestDMLWorkerRun(t *testing.T) {
 			},
 			encodedMsgs: []*common.Message{
 				{
-					Value: []byte(fmt.Sprintf(`{"id":%d,"database":"test","table":"table1","pkNames":[],"isDdl":false,`+
+					Value: fmt.Appendf(nil, `{"id":%d,"database":"test","table":"table1","pkNames":[],"isDdl":false,`+
 						`"type":"INSERT","es":0,"ts":1663572946034,"sql":"","sqlType":{"c1":12,"c2":12},`+
-						`"data":[{"c1":"100","c2":"hello world"}],"old":null}`, i)),
+						`"data":[{"c1":"100","c2":"hello world"}],"old":null}`, i),
 				},
 			},
 		}
@@ -116,11 +116,9 @@ func TestDMLWorkerRun(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = d.run(ctx)
-	}()
+	})
 
 	time.Sleep(4 * time.Second)
 	// check whether files for table1 has been generated

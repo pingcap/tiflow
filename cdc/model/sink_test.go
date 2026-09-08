@@ -112,26 +112,26 @@ func TestRowChangedEventFuncs(t *testing.T) {
 func TestColumnValueString(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
-		val      interface{}
+		val      any
 		expected string
 	}{
-		{interface{}(nil), "null"},
-		{interface{}(true), "1"},
-		{interface{}(false), "0"},
-		{interface{}(123), "123"},
-		{interface{}(int8(-123)), "-123"},
-		{interface{}(int16(-123)), "-123"},
-		{interface{}(int32(-123)), "-123"},
-		{interface{}(int64(-123)), "-123"},
-		{interface{}(uint8(123)), "123"},
-		{interface{}(uint16(123)), "123"},
-		{interface{}(uint32(123)), "123"},
-		{interface{}(uint64(123)), "123"},
-		{interface{}(float32(123.01)), "123.01"},
-		{interface{}(float64(123.01)), "123.01"},
-		{interface{}("123.01"), "123.01"},
-		{interface{}([]byte("123.01")), "123.01"},
-		{interface{}(complex(1, 2)), "(1+2i)"},
+		{any(nil), "null"},
+		{any(true), "1"},
+		{any(false), "0"},
+		{any(123), "123"},
+		{any(int8(-123)), "-123"},
+		{any(int16(-123)), "-123"},
+		{any(int32(-123)), "-123"},
+		{any(int64(-123)), "-123"},
+		{any(uint8(123)), "123"},
+		{any(uint16(123)), "123"},
+		{any(uint32(123)), "123"},
+		{any(uint64(123)), "123"},
+		{any(float32(123.01)), "123.01"},
+		{any(float64(123.01)), "123.01"},
+		{any("123.01"), "123.01"},
+		{any([]byte("123.01")), "123.01"},
+		{any(complex(1, 2)), "(1+2i)"},
 	}
 	for _, tc := range testCases {
 		s := ColumnValueString(tc.val)

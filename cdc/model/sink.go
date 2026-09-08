@@ -671,7 +671,7 @@ type Column struct {
 	Charset   string         `msg:"charset"`
 	Collation string         `msg:"collation"`
 	Flag      ColumnFlagType `msg:"-"`
-	Value     interface{}    `msg:"-"`
+	Value     any            `msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `msg:"-"`
@@ -682,8 +682,8 @@ type ColumnData struct {
 	// ColumnID may be just a mock id, because we don't store it in redo log.
 	// So after restore from redo log, we need to give every a column a mock id.
 	// The only guarantee is that the column id is unique in a RowChangedEvent
-	ColumnID int64       `json:"column_id" msg:"column_id"`
-	Value    interface{} `json:"value" msg:"-"`
+	ColumnID int64 `json:"column_id" msg:"column_id"`
+	Value    any   `json:"value" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-" msg:"-"`
@@ -692,7 +692,7 @@ type ColumnData struct {
 // RedoColumn stores Column change
 type RedoColumn struct {
 	// Fields from Column and can't be marshaled directly in Column.
-	Value interface{} `msg:"column"`
+	Value any `msg:"column"`
 	// msgp transforms empty byte slice into nil, PTAL msgp#247.
 	ValueIsEmptyBytes bool   `msg:"value-is-empty-bytes"`
 	Flag              uint64 `msg:"flag"`
@@ -1018,7 +1018,7 @@ func BuildTiDBTableInfoImpl(
 }
 
 // ColumnValueString returns the string representation of the column value
-func ColumnValueString(c interface{}) string {
+func ColumnValueString(c any) string {
 	var data string
 	switch v := c.(type) {
 	case nil:
@@ -1382,7 +1382,7 @@ func (x ColumnDataX) GetFlag() ColumnFlagType {
 }
 
 // GetDefaultValue return default value.
-func (x ColumnDataX) GetDefaultValue() interface{} {
+func (x ColumnDataX) GetDefaultValue() any {
 	return x.info.GetDefaultValue()
 }
 

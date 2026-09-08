@@ -73,7 +73,7 @@ func (r *IndexValueDispatcher) DispatchRowChangedEvent(row *model.RowChangedEven
 			return 0, "", errors.ErrDispatcherFailed.GenWithStack(
 				"index not found when dispatch event, table: %v, index: %s", row.TableInfo.GetTableName(), r.IndexName)
 		}
-		for idx := 0; idx < len(names); idx++ {
+		for idx := range names {
 			col := dispatchCols[offsets[idx]]
 			if col == nil {
 				continue
