@@ -205,15 +205,15 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 	case *ast.DropDatabaseStmt:
 		return tr.upstreamTracker.DropSchema(tr.se, v)
 	case *ast.CreateTableStmt:
-		return tr.upstreamTracker.CreateTable(tr.se, v)
+		return tr.upstreamTracker.CreateTable(tr.se, MockRawFullTextConstraints(v, tr.logger))
 	case *ast.AlterTableStmt:
-		return tr.upstreamTracker.AlterTable(ctx, tr.se, v)
+		return tr.upstreamTracker.AlterTable(ctx, tr.se, mockRawFullTextAlterTable(v, tr.logger))
 	case *ast.RenameTableStmt:
 		return tr.upstreamTracker.RenameTable(tr.se, v)
 	case *ast.DropTableStmt:
 		return tr.upstreamTracker.DropTable(tr.se, v)
 	case *ast.CreateIndexStmt:
-		return tr.upstreamTracker.CreateIndex(tr.se, v)
+		return tr.upstreamTracker.CreateIndex(tr.se, mockRawFullTextIndex(v, tr.logger))
 	case *ast.DropIndexStmt:
 		return tr.upstreamTracker.DropIndex(tr.se, v)
 	case *ast.TruncateTableStmt:
@@ -223,6 +223,103 @@ func (tr *Tracker) Exec(ctx context.Context, db string, stmt ast.StmtNode) (errR
 		tr.logger.DPanic("unexpected statement type", zap.String("type", fmt.Sprintf("%T", v)))
 	}
 	return nil
+}
+
+// MockRawFullTextConstraints rewrites FULLTEXT indexes in a CREATE TABLE to
+// lightweight non-unique prefix indexes before building DM's TableInfo.
+//
+// TiDB's planner preprocessor normally rewrites ast.ConstraintFulltext into
+// the internal columnar-index representation. DM's schema trackers build
+// TableInfo directly from the parser AST, so an unprocessed FULLTEXT index on
+// a BLOB/TEXT column would otherwise be treated as a normal KV index and fail
+// with ErrBlobKeyWithoutLength. DM's mock sessions cannot build the real
+// columnar representation because they do not run in Starter deploy mode. A
+// non-unique prefix-index placeholder preserves the index identity for later
+// RENAME/DROP DDLs but is never selected as a DML row handle.
+// This is a temporary compatibility workaround until TiDB provides the full
+// normalization for direct TableInfo builders; see pingcap/tidb#70570.
+//
+// Do not modify the original statement because it may still be used to
+// execute the physical DDL downstream.
+func MockRawFullTextConstraints(stmt *ast.CreateTableStmt, logger log.Logger) *ast.CreateTableStmt {
+	var cloned *ast.CreateTableStmt
+	for i, constraint := range stmt.Constraints {
+		if constraint.Tp != ast.ConstraintFulltext {
+			continue
+		}
+		if cloned == nil {
+			stmtClone := *stmt
+			stmtClone.Constraints = append([]*ast.Constraint(nil), stmt.Constraints...)
+			cloned = &stmtClone
+		}
+		cloned.Constraints[i] = mockFullTextConstraint(constraint)
+		logFullTextRewrite(logger, stmt.Table, constraint.Name)
+	}
+	if cloned != nil {
+		return cloned
+	}
+	return stmt
+}
+
+func mockFullTextConstraint(constraint *ast.Constraint) *ast.Constraint {
+	cloned := *constraint
+	cloned.Tp = ast.ConstraintKey
+	cloned.Keys = mockFullTextIndexParts(constraint.Keys)
+	return &cloned
+}
+
+func logFullTextRewrite(logger log.Logger, table *ast.TableName, indexName string) {
+	logger.Info("represent FULLTEXT index as a non-unique prefix index in DM schema metadata",
+		zap.String("schema", table.Schema.O), zap.String("table", table.Name.O), zap.String("index", indexName))
+}
+
+func mockFullTextIndexParts(parts []*ast.IndexPartSpecification) []*ast.IndexPartSpecification {
+	cloned := make([]*ast.IndexPartSpecification, len(parts))
+	for i, part := range parts {
+		partClone := *part
+		if partClone.Length <= 0 {
+			partClone.Length = 1
+		}
+		cloned[i] = &partClone
+	}
+	return cloned
+}
+
+func mockRawFullTextIndex(stmt *ast.CreateIndexStmt, logger log.Logger) *ast.CreateIndexStmt {
+	if stmt.KeyType != ast.IndexKeyTypeFulltext {
+		return stmt
+	}
+	cloned := *stmt
+	cloned.KeyType = ast.IndexKeyTypeNone
+	cloned.IndexPartSpecifications = mockFullTextIndexParts(stmt.IndexPartSpecifications)
+	logFullTextRewrite(logger, stmt.Table, stmt.IndexName)
+	return &cloned
+}
+
+// mockRawFullTextAlterTable also prevents TiDB's schema tracker from silently
+// ignoring ADD FULLTEXT: its AlterTableAddConstraint dispatch skips
+// ConstraintFulltext instead of building an index or returning an error.
+func mockRawFullTextAlterTable(stmt *ast.AlterTableStmt, logger log.Logger) *ast.AlterTableStmt {
+	var cloned *ast.AlterTableStmt
+	for i, spec := range stmt.Specs {
+		if spec.Tp != ast.AlterTableAddConstraint || spec.Constraint == nil ||
+			spec.Constraint.Tp != ast.ConstraintFulltext {
+			continue
+		}
+		if cloned == nil {
+			stmtClone := *stmt
+			stmtClone.Specs = append([]*ast.AlterTableSpec(nil), stmt.Specs...)
+			cloned = &stmtClone
+		}
+		specClone := *spec
+		specClone.Constraint = mockFullTextConstraint(spec.Constraint)
+		cloned.Specs[i] = &specClone
+		logFullTextRewrite(logger, stmt.Table, spec.Constraint.Name)
+	}
+	if cloned != nil {
+		return cloned
+	}
+	return stmt
 }
 
 // GetTableInfo returns the schema associated with the table.
@@ -556,7 +653,9 @@ func (dt *downstreamTracker) getTableInfoByCreateStmt(tctx *tcontext.Context, ta
 
 	// suppress ErrTooLongKey
 	metaBuildCtx := ddl.NewMetaBuildContextWithSctx(dt.se, metabuild.WithSuppressTooLongIndexErr(true))
-	ti, err := ddl.BuildTableInfoWithStmt(metaBuildCtx, stmtNode.(*ast.CreateTableStmt), mysql.DefaultCharset, "", nil)
+	createTableStmt := MockRawFullTextConstraints(stmtNode.(*ast.CreateTableStmt),
+		tctx.L().WithFields(zap.String("tableID", tableID)))
+	ti, err := ddl.BuildTableInfoWithStmt(metaBuildCtx, createTableStmt, mysql.DefaultCharset, "", nil)
 	if err != nil {
 		return nil, dmterror.ErrSchemaTrackerCannotMockDownstreamTable.Delegate(err, createStr)
 	}
