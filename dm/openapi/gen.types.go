@@ -542,6 +542,9 @@ type Task struct {
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`
 
+	// Labels added to task-scoped metrics. At most 8 labels are allowed. Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__", and may contain at most 64 bytes. Values may contain at most 256 bytes. The following built-in names are reserved: __name__, instance, job, kind, le, medium, name, node, phase, quantile, queueNo, queue_id, result, resumable_err, source_id, stage, state, table, target_schema, target_table, task, type, and worker.
+	MetricLabels *Task_MetricLabels `json:"metric_labels,omitempty"`
+
 	// task name
 	Name string `json:"name"`
 
@@ -571,6 +574,11 @@ type Task struct {
 // Task_BinlogFilterRule defines model for Task.BinlogFilterRule.
 type Task_BinlogFilterRule struct {
 	AdditionalProperties map[string]TaskBinLogFilterRule `json:"-"`
+}
+
+// Labels added to task-scoped metrics. At most 8 labels are allowed. Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__", and may contain at most 64 bytes. Values may contain at most 256 bytes. The following built-in names are reserved: __name__, instance, job, kind, le, medium, name, node, phase, quantile, queueNo, queue_id, result, resumable_err, source_id, stage, state, table, target_schema, target_table, task, type, and worker.
+type Task_MetricLabels struct {
+	AdditionalProperties map[string]string `json:"-"`
 }
 
 // how to handle conflicted data
@@ -981,6 +989,59 @@ func (a *Task_BinlogFilterRule) UnmarshalJSON(b []byte) error {
 
 // Override default JSON handling for Task_BinlogFilterRule to handle AdditionalProperties
 func (a Task_BinlogFilterRule) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Task_MetricLabels. Returns the specified
+// element and whether it was found
+func (a Task_MetricLabels) Get(fieldName string) (value string, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Task_MetricLabels
+func (a *Task_MetricLabels) Set(fieldName string, value string) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]string)
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Task_MetricLabels to handle AdditionalProperties
+func (a *Task_MetricLabels) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]string)
+		for fieldName, fieldBuf := range object {
+			var fieldVal string
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Task_MetricLabels to handle AdditionalProperties
+func (a Task_MetricLabels) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 

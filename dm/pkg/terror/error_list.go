@@ -275,6 +275,9 @@ const (
 	codeConfigSecretKeyPath
 	codeConfigImportIntoShardingNotSupport
 	codeConfigImportIntoRequiresSharedStorage
+	// Keep this code aligned with master. 20070 belongs to
+	// codeConfigUnsupportedForeignKeyChecksOption, which is not in nextgen.
+	codeConfigInvalidMetricLabels ErrCode = 20071
 )
 
 // Binlog operation error code list.
@@ -991,6 +994,7 @@ var (
 	ErrConfigSecretKeyPath                      = New(codeConfigSecretKeyPath, ClassConfig, ScopeInternal, LevelHigh, "invalid secret key path or content: %v", "Please check whether the path is valid, and has required permission to read the file, and the key is correct.")
 	ErrConfigImportIntoShardingNotSupport       = New(codeConfigImportIntoShardingNotSupport, ClassConfig, ScopeInternal, LevelHigh, "import-into mode does not support sharding (multi-source) scenario", "Please use 'physical' or 'logical' mode for sharding scenarios, or disable sharding mode to use 'import-into'.")
 	ErrConfigImportIntoRequiresSharedStorage    = New(codeConfigImportIntoRequiresSharedStorage, ClassConfig, ScopeInternal, LevelHigh, "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'", "Please use a shared storage URI like s3://bucket/path")
+	ErrConfigInvalidMetricLabels                = New(codeConfigInvalidMetricLabels, ClassConfig, ScopeInternal, LevelMedium, "invalid metric labels: %s", "Please check the `metric-labels` config in the task configuration.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")
