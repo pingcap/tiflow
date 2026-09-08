@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
@@ -101,6 +102,8 @@ const (
 
 	unhandledEventSampleInterval = 5 * time.Minute
 	unhandledEventSampleFirst    = 1
+
+	maxSchemaFileReadConcurrency = 16
 )
 
 // waitXIDStatus represents the status for waiting XID event when pause/stop task.
@@ -1914,7 +1917,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
-		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
+		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
 			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
 		}
 	}
@@ -3041,12 +3044,17 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-	// TODO: delete this check after we support parallel reading the files to improve load speed
-	if !storage.IsLocalDiskPath(s.cfg.LoaderConfig.Dir) {
-		logger.Warn("skip load table structure from dump files for non-local-dir loader because it may be slow", zap.String("loaderDir", s.cfg.LoaderConfig.Dir))
-		return nil
+	dumpStorage := s.cfg.ExtStorage
+	if dumpStorage == nil {
+		var err error
+		dumpStorage, err = storage.CreateStorage(ctx, s.cfg.LoaderConfig.Dir)
+		if err != nil {
+			logger.Warn("fail to create dump storage", zap.Error(err))
+			return err
+		}
+		defer dumpStorage.Close()
 	}
-	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
+	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
 		logger.Warn("fail to get dump files", zap.Error(err))
 		return err
@@ -3092,9 +3100,29 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		return err
 	}
 
-	for _, dbAndFile := range tableFiles {
+	type schemaFileReadResult struct {
+		content []byte
+		err     error
+	}
+	readConcurrency := min(max(s.cfg.LoaderConfig.PoolSize, 1), maxSchemaFileReadConcurrency)
+	readResults, err := mydump.ParallelProcess(
+		ctx,
+		tableFiles,
+		readConcurrency,
+		func(ctx context.Context, dbAndFile [2]string) (schemaFileReadResult, error) {
+			content, readErr := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, dbAndFile[1], dumpStorage)
+			// Keep reading the remaining schema files and report the first error,
+			// which preserves the existing best-effort behavior.
+			return schemaFileReadResult{content: content, err: readErr}, nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	for i, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
+		content, err2 := readResults[i].content, readResults[i].err
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
@@ -3384,7 +3412,7 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
-// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 2. only balist, route/filter rules, syncerConfig and metric labels can be updated at this moment.
 // 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
@@ -3406,6 +3434,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	oldCfg.MetricLabels = newCfg.MetricLabels
 	oldCfg.To.Session = newCfg.To.Session // session is adjusted in `createDBs`
 
 	// support fields that changed in func `copyConfigFromSource`

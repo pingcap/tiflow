@@ -126,8 +126,8 @@ function DM_040_CASE() {
 	else
 		run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 			"query-status test" \
-			'ALTER TABLE `shardddl`.`tb` ADD COLUMN `col1` VARCHAR(10) CHARACTER SET UTF8' 1 \
-			"\`${shardddl1}\`.\`${tb1}\`\"" 1
+			"\"result\": true" 3
+		check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 	fi
 }
 
