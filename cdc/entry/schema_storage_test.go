@@ -931,20 +931,18 @@ func getAllHistoryDDLJob(storage tidbkv.Storage, f filter.Filter) ([]*timodel.Jo
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	for i, job := range jobs {
-		ignoreSchema := f.ShouldIgnoreSchema(job.SchemaName)
-		ignoreTable := f.ShouldIgnoreTable(job.SchemaName, job.TableName)
-		if ignoreSchema || ignoreTable {
-			log.Info("Ignore ddl job", zap.Stringer("job", job))
+	for _, job := range jobs {
+		if f.ShouldDiscardDDL(job.Type, job.SchemaName, job.TableName, job.StartTS) {
+			log.Info("Discard DDL job", zap.Stringer("job", job))
 			continue
 		}
 		// Set State from Synced to Done.
 		// Because jobs are put to history queue after TiDB alter its state from
 		// Done to Synced.
-		jobs[i].State = timodel.JobStateDone
+		job.State = timodel.JobStateDone
 		res = append(res, job)
 	}
-	return jobs, nil
+	return res, nil
 }
 
 // This test is used to show how the schemaStorage choose a handleKey of a table.
