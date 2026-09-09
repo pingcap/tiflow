@@ -636,6 +636,100 @@ func (s *testDDLSuite) TestMistakeOnlineDDLRegex(c *check.C) {
 	cluster.Stop()
 }
 
+func (s *testDDLSuite) TestGhostTableDDLWithoutGhostComment(c *check.C) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestGhostTableDDLWithoutGhostComment")))
+	p := parser.New()
+	testEC := &eventContext{tctx: tctx}
+
+	cluster, err := conn.NewCluster()
+	c.Assert(err, check.IsNil)
+	c.Assert(cluster.Start(), check.IsNil)
+	defer cluster.Stop()
+	dbCfg := config.GetDBConfigForTest()
+	dbCfg.Port = cluster.Port
+	dbCfg.Password = ""
+	cfg := s.newSubTaskCfg(dbCfg)
+
+	// Sub-case A: gh-ost cutover RENAME WITH /* gh-ost */ comment — stored ALTER
+	// must be applied to the real table (existing behavior preserved).
+	{
+		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
+		c.Assert(err, check.IsNil)
+		syncer := NewSyncer(cfg, nil, nil)
+		syncer.tctx = tctx
+		syncer.onlineDDL = plugin
+		c.Assert(plugin.Clear(tctx), check.IsNil)
+		c.Assert(syncer.genRouter(), check.IsNil)
+		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+
+		// First accumulate an ALTER on the ghost table.
+		// originSQL carries the /* gh-ost */ comment as gh-ost does in practice.
+		alterSQL := "ALTER TABLE `test`.`_t1_gho` ADD COLUMN `n` INT"
+		alterOriginSQL := "alter /* gh-ost */ table `test`.`_t1_gho` ADD COLUMN `n` INT"
+		qec := &queryEventContext{
+			eventContext: testEC,
+			ddlSchema:    "test",
+			originSQL:    alterOriginSQL,
+			p:            p,
+		}
+		sqls, err := ddlWorker.processOneDDL(qec, alterSQL)
+		c.Assert(err, check.IsNil)
+		c.Assert(sqls, check.HasLen, 0) // stored, not emitted yet
+
+		// Now run the cutover RENAME with the gh-ost comment in originSQL.
+		renameOrigin := "RENAME /* gh-ost */ TABLE `test`.`t1` TO `test`.`_t1_del`, `test`.`_t1_gho` TO `test`.`t1`"
+		renameSplit := "RENAME TABLE `test`.`_t1_gho` TO `test`.`t1`"
+		qec = &queryEventContext{
+			eventContext: testEC,
+			ddlSchema:    "test",
+			originSQL:    renameOrigin,
+			p:            p,
+		}
+		sqls, err = ddlWorker.processOneDDL(qec, renameSplit)
+		c.Assert(err, check.IsNil)
+		c.Assert(sqls, check.HasLen, 1)
+		c.Assert(sqls[0], check.Equals, "ALTER TABLE `test`.`t1` ADD COLUMN `n` INT")
+	}
+
+	// Sub-case B: manual RENAME WITHOUT gh-ost comment — must return nil (no
+	// error, no DDL emitted).
+	{
+		plugin, err := onlineddl.NewRealOnlinePlugin(tctx, cfg, nil)
+		c.Assert(err, check.IsNil)
+		syncer := NewSyncer(cfg, nil, nil)
+		syncer.tctx = tctx
+		syncer.onlineDDL = plugin
+		c.Assert(plugin.Clear(tctx), check.IsNil)
+		c.Assert(syncer.genRouter(), check.IsNil)
+		ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+
+		// Accumulate an ALTER on the ghost table.
+		alterSQL := "ALTER TABLE `test`.`_t1_gho` ADD COLUMN `n` INT"
+		qec := &queryEventContext{
+			eventContext: testEC,
+			ddlSchema:    "test",
+			originSQL:    alterSQL,
+			p:            p,
+		}
+		sqls, err := ddlWorker.processOneDDL(qec, alterSQL)
+		c.Assert(err, check.IsNil)
+		c.Assert(sqls, check.HasLen, 0)
+
+		// Manual cleanup rename — no gh-ost comment. Since ghost tables never
+		// exist in TiDB, the event must be silently ignored (nil returned).
+		renameSQL := "RENAME TABLE `test`.`_t1_gho` TO `test`.`will_be_deleted`"
+		qec = &queryEventContext{
+			eventContext: testEC,
+			ddlSchema:    "test",
+			originSQL:    renameSQL,
+			p:            p,
+		}
+		sqls, err = ddlWorker.processOneDDL(qec, renameSQL)
+		c.Assert(err, check.IsNil)
+		c.Assert(sqls, check.HasLen, 0)
+	}
+}
+
 func (s *testDDLSuite) TestDropSchemaInSharding(c *check.C) {
 	var (
 		targetTable = &filter.Table{

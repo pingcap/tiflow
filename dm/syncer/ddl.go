@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -51,6 +52,10 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
+
+// ghostCommentRegexp matches the /* gh-ost */ or /* gh-ost ... */ marker that
+// gh-ost embeds in its atomic RENAME TABLE cutover statement.
+var ghostCommentRegexp = regexp.MustCompile(`/\*\s*gh-ost[^*]*\*/`)
 
 type shardDDLStrategy interface {
 	// when preFilter returns true, it means we should skip this DDL
@@ -1269,6 +1274,23 @@ func (ddl *DDLWorker) processOneDDL(qec *queryEventContext, sql string) ([]strin
 	if ddl.onlineDDL == nil {
 		return []string{ddlInfo.originDDL}, nil
 	}
+
+	// Ghost/trash tables (_gho, _ghc, _del) never exist in the downstream
+	// because DM never replicates their creation. All genuine gh-ost statements
+	// carry a /* gh-ost */ comment; any DDL on these tables without it is a
+	// manual operation (e.g. operator cleanup) and must be silently ignored so
+	// that replication is not blocked.
+	if len(ddlInfo.sourceTables) > 0 && !ghostCommentRegexp.MatchString(qec.originSQL) {
+		if tp := ddl.onlineDDL.TableType(ddlInfo.sourceTables[0].Name); tp == onlineddl.GhostTable || tp == onlineddl.TrashTable {
+			ddl.logger.Info("ignoring DDL on ghost/trash table without gh-ost comment: table does not exist in downstream, likely a manual operation",
+				zap.String("table", ddlInfo.sourceTables[0].Name),
+				zap.String("tableType", string(tp)),
+				zap.String("statement", sql),
+			)
+			return nil, nil
+		}
+	}
+
 	// filter and save ghost table ddl
 	sqls, err := ddl.onlineDDL.Apply(qec.tctx, ddlInfo.sourceTables, ddlInfo.originDDL, ddlInfo.stmtCache, qec.p)
 	if err != nil {
