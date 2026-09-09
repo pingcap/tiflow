@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/check"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
+	pmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
@@ -140,6 +141,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 		"drop table `s1`.`t1`, `s2`.`t2`",
 		"drop table `s1`.`t1`, `s2`.`t2`, `xx`",
 		"create table `s1`.`t1` (id int)",
+		"create table `s1`.`t1` (`id` int) engine=InnoDB start transaction",
 		"create table `t1` (id int)",
 		"create table `t1` like `t2`",
 		"create table `s1`.`t1` like `t2`",
@@ -167,6 +169,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 		{"DROP TABLE IF EXISTS `s1`.`t1`"},
 		{"DROP TABLE IF EXISTS `s1`.`t1`"},
 		{"CREATE TABLE IF NOT EXISTS `s1`.`t1` (`id` INT)"},
+		{"CREATE TABLE IF NOT EXISTS `s1`.`t1` (`id` INT) ENGINE = InnoDB"},
 		{},
 		{},
 		{},
@@ -194,6 +197,7 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 		{"DROP TABLE IF EXISTS `xs1`.`t1`"},
 		{"DROP TABLE IF EXISTS `xs1`.`t1`"},
 		{"CREATE TABLE IF NOT EXISTS `xs1`.`t1` (`id` INT)"},
+		{"CREATE TABLE IF NOT EXISTS `xs1`.`t1` (`id` INT) ENGINE = InnoDB"},
 		{},
 		{},
 		{},
@@ -417,6 +421,38 @@ func (s *testDDLSuite) TestParseOneStmt(c *check.C) {
 		_, ok := stmt.(ast.DDLNode)
 		c.Assert(ok, check.Equals, cs.isDDL)
 	}
+}
+
+func (s *testDDLSuite) TestParseStartTransactionTableOption(c *check.C) {
+	const sql = `CREATE TABLE "t" ("id" INT) ENGINE=InnoDB START TRANSACTION START TRANSACTION`
+
+	defaultParser := parser.New()
+	defaultParser.SetSQLMode(pmysql.ModeANSIQuotes)
+	_, err := defaultParser.ParseOneStmt(sql, "", "")
+	c.Assert(err, check.NotNil)
+
+	tctx := tcontext.Background()
+	p := parser.New()
+	p.SetSQLMode(pmysql.ModeANSIQuotes)
+	qec := &queryEventContext{
+		eventContext: &eventContext{tctx: tctx},
+		ddlSchema:    "s1",
+		originSQL:    sql,
+		p:            p,
+	}
+	stmt, err := parseOneStmt(qec)
+	c.Assert(err, check.IsNil)
+
+	createTableStmt, ok := stmt.(*ast.CreateTableStmt)
+	c.Assert(ok, check.IsTrue)
+	c.Assert(createTableStmt.Options, check.HasLen, 1)
+	c.Assert(createTableStmt.Options[0].Tp, check.Equals, ast.TableOptionEngine)
+
+	splitDDLs, err := parserpkg.SplitDDL(stmt, qec.ddlSchema)
+	c.Assert(err, check.IsNil)
+	c.Assert(splitDDLs, check.DeepEquals, []string{
+		"CREATE TABLE IF NOT EXISTS `s1`.`t` (`id` INT) ENGINE = InnoDB",
+	})
 }
 
 func (s *testDDLSuite) TestResolveGeneratedColumnSQL(c *check.C) {

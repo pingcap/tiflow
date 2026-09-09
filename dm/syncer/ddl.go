@@ -951,7 +951,34 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	return nil
 }
 
+type startTxnOptionRemover struct{}
+
+func (startTxnOptionRemover) Enter(node ast.Node) bool {
+	stmt, ok := node.(*ast.CreateTableStmt)
+	if !ok {
+		return true
+	}
+
+	options := stmt.Options[:0]
+	for _, option := range stmt.Options {
+		if option.Tp != ast.TableOptionStartTransaction {
+			options = append(options, option)
+		}
+	}
+	stmt.Options = options
+	return true
+}
+
+func (startTxnOptionRemover) Leave(ast.Node) bool {
+	return true
+}
+
 func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
+	qec.p.SetParserConfig(parser.ParserConfig{
+		EnableWindowFunction:         true,
+		EnableStrictDoubleTypeCheck:  true,
+		EnableUnsupportedMySQLSyntax: true,
+	})
 	// We use Parse not ParseOneStmt here, because sometimes we got a commented out ddl which can't be parsed
 	// by ParseOneStmt(it's a limitation of tidb parser.)
 	qec.tctx.L().Info("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
@@ -964,6 +991,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	if len(stmts) == 0 {
 		return nil, nil
 	}
+	ast.Walk(stmts[0], &startTxnOptionRemover{})
 	return stmts[0], nil
 }
 
