@@ -18,7 +18,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/integralist/go-findroot/find"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/tests/mq_protocol_tests/framework"
@@ -51,11 +50,11 @@ func NewKafkaDockerEnv(dockerComposeFile string) *KafkaDockerEnv {
 	}
 	var file string
 	if dockerComposeFile == "" {
-		st, err := find.Repo()
+		resolvedFile, err := framework.ResolveRepoPath(dockerComposeFilePath)
 		if err != nil {
-			log.Fatal("Could not find git repo root", zap.Error(err))
+			log.Fatal("Could not find repo-local docker-compose file", zap.Error(err))
 		}
-		file = st.Path + dockerComposeFilePath
+		file = resolvedFile
 	} else {
 		file = dockerComposeFile
 	}
