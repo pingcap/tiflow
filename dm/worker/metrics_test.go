@@ -18,7 +18,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/pingcap/tiflow/dm/config"
@@ -26,11 +28,145 @@ import (
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
 var _ prometheus.Registerer = taskMetricGatherer{}
+
+func TestTaskWorkerCPUUsage(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	cpuGauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: "dm_worker_cpu_usage"})
+	state := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "dm_worker_task_state"},
+		[]string{"task", "source_id", "worker"})
+	registry.MustRegister(cpuGauge, state)
+	gatherer := taskMetricGatherer{Registerer: registry, gatherer: registry}
+	// Normalize label/series ordering for textual comparisons. Custom labels are
+	// appended by the gatherer, so their exposition order need not be lexical.
+	comparisonGatherer := prometheus.Gatherers{gatherer}
+	const task = "cpu-task-1"
+	cpuGauge.Set(125)
+	state.WithLabelValues(task, "source-1", "worker-1").Set(float64(pb.Stage_Running))
+	state.WithLabelValues("cpu-task-2", "source-1", "worker-1").Set(float64(pb.Stage_Paused))
+
+	// The metric is also available when no task has custom labels. Both tasks
+	// share the whole worker CPU sample, regardless of their different stages.
+	expected := `
+# HELP dm_task_worker_cpu_usage CPU usage of the worker hosting the task, in percent (100 means one CPU core). Shared worker CPU is repeated for each task, not attributed to the task.
+# TYPE dm_task_worker_cpu_usage gauge
+dm_task_worker_cpu_usage{source_id="source-1",task="cpu-task-1",worker="worker-1"} 125
+dm_task_worker_cpu_usage{source_id="source-1",task="cpu-task-2",worker="worker-1"} 125
+`
+	require.NoError(t, testutil.GatherAndCompare(comparisonGatherer, strings.NewReader(expected), "dm_task_worker_cpu_usage"))
+
+	registerTaskMetricLabels(task, map[string]string{"keyspace_name": "ks1"})
+	t.Cleanup(func() { unregisterTaskMetricLabels(task) })
+	expected = strings.Replace(expected,
+		`{source_id="source-1",task="cpu-task-1"`, `{keyspace_name="ks1",source_id="source-1",task="cpu-task-1"`, 1)
+	require.NoError(t, testutil.GatherAndCompare(comparisonGatherer, strings.NewReader(expected), "dm_task_worker_cpu_usage"))
+	families, err := gatherer.Gather()
+	require.NoError(t, err)
+	require.Equal(t, "ks1", metricLabelValue(t, families, "dm_worker_task_state", "task", task, "keyspace_name"))
+	require.Empty(t, metricLabelValue(t, families, "dm_worker_cpu_usage", "", "", "keyspace_name"))
+	var names []string
+	for _, family := range families {
+		names = append(names, family.GetName())
+	}
+	require.True(t, slices.IsSorted(names))
+
+	// Exercise the same HTTP exposition path used by the worker /metrics endpoint.
+	recorder := httptest.NewRecorder()
+	promhttp.HandlerFor(gatherer, promhttp.HandlerOpts{}).ServeHTTP(
+		recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Contains(t, recorder.Body.String(),
+		`dm_task_worker_cpu_usage{source_id="source-1",task="cpu-task-1",worker="worker-1",keyspace_name="ks1"} 125`)
+	require.Contains(t, recorder.Body.String(), "dm_worker_cpu_usage 125\n")
+
+	// A later sample and task label updates are reflected without cached series.
+	cpuGauge.Set(80)
+	replaceTaskMetricLabels(task, map[string]string{"keyspace_name": "ks2"})
+	expected = strings.ReplaceAll(expected, "125", "80")
+	expected = strings.ReplaceAll(expected, `keyspace_name="ks1"`, `keyspace_name="ks2"`)
+	require.NoError(t, testutil.GatherAndCompare(comparisonGatherer, strings.NewReader(expected), "dm_task_worker_cpu_usage"))
+
+	unregisterTaskMetricLabels(task)
+	expected = strings.ReplaceAll(expected, `keyspace_name="ks2",`, "")
+	require.NoError(t, testutil.GatherAndCompare(comparisonGatherer, strings.NewReader(expected), "dm_task_worker_cpu_usage"))
+	state.Reset()
+	require.NoError(t, testutil.GatherAndCompare(gatherer, strings.NewReader(""), "dm_task_worker_cpu_usage"))
+}
+
+func TestTaskWorkerCPUUsageLifecycle(t *testing.T) {
+	registry := prometheus.NewRegistry()
+	cpuGauge := prometheus.NewGauge(prometheus.GaugeOpts{Name: "dm_worker_cpu_usage"})
+	registry.MustRegister(cpuGauge, taskState)
+	gatherer := taskMetricGatherer{Registerer: registry, gatherer: registry}
+	const task, source = "cpu-lifecycle-task", "cpu-lifecycle-source"
+	cpuGauge.Set(50)
+	registerTaskMetricLabels(task, map[string]string{"keyspace_name": "ks-lifecycle"})
+	t.Cleanup(func() {
+		updateTaskMetric(task, source, pb.Stage_Stopped, "worker-2")
+		unregisterTaskMetricLabels(task)
+	})
+
+	for _, tc := range []struct {
+		stage  pb.Stage
+		worker string
+		exists bool
+	}{
+		{pb.Stage_New, "worker-1", true},
+		{pb.Stage_Running, "worker-1", true},
+		{pb.Stage_Paused, "worker-1", true},
+		{pb.Stage_Stopped, "worker-1", false},
+		{pb.Stage_Running, "worker-2", true}, // Rescheduled/restored on another worker.
+		{pb.Stage_Finished, "worker-2", false},
+	} {
+		t.Run(tc.stage.String()+"-"+tc.worker, func(t *testing.T) {
+			updateTaskMetric(task, source, tc.stage, tc.worker)
+			families, err := gatherer.Gather()
+			require.NoError(t, err)
+			var matches []*dto.Metric
+			for _, family := range families {
+				if family.GetName() == "dm_task_worker_cpu_usage" {
+					for _, metric := range family.Metric {
+						if labelValue(metric, "task") == task {
+							matches = append(matches, metric)
+						}
+					}
+				}
+			}
+			if !tc.exists {
+				require.Empty(t, matches)
+				return
+			}
+			require.Len(t, matches, 1)
+			require.Equal(t, float64(50), matches[0].GetGauge().GetValue())
+			require.Equal(t, map[string]string{
+				"task": task, "source_id": source, "worker": tc.worker, "keyspace_name": "ks-lifecycle",
+			}, metricLabelPairsMap(matches[0].Label))
+		})
+	}
+}
+
+func TestTaskWorkerCPUUsageMissingInputs(t *testing.T) {
+	for _, withCPU := range []bool{false, true} {
+		t.Run(strconv.FormatBool(withCPU), func(t *testing.T) {
+			registry := prometheus.NewRegistry()
+			if withCPU {
+				registry.MustRegister(prometheus.NewGauge(prometheus.GaugeOpts{Name: "dm_worker_cpu_usage"}))
+			} else {
+				state := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "dm_worker_task_state"},
+					[]string{"task", "source_id", "worker"})
+				registry.MustRegister(state)
+				state.WithLabelValues("cpu-task", "source", "worker").Set(2)
+			}
+			gatherer := taskMetricGatherer{Registerer: registry, gatherer: registry}
+			require.NoError(t, testutil.GatherAndCompare(gatherer, strings.NewReader(""), "dm_task_worker_cpu_usage"))
+		})
+	}
+}
 
 func TestTaskMetricGathererAddsLabels(t *testing.T) {
 	registry := prometheus.NewRegistry()
