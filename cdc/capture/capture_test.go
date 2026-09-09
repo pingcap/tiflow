@@ -21,16 +21,21 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	mock_processor "github.com/pingcap/tiflow/cdc/processor/mock"
 	"github.com/pingcap/tiflow/cdc/vars"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/orchestrator"
+	"github.com/pingcap/tiflow/pkg/p2p"
+	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/client/pkg/v3/logutil"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.etcd.io/etcd/client/v3/concurrency"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -245,4 +250,86 @@ func TestCampaignLiveness(t *testing.T) {
 	require.True(t, me.resignFlag)
 
 	wg.Wait()
+}
+
+type peerTrackingOwner struct {
+	owner.Owner
+	ticked chan struct{}
+}
+
+func (o *peerTrackingOwner) Tick(_ context.Context, state orchestrator.ReactorState) (orchestrator.ReactorState, error) {
+	select {
+	case o.ticked <- struct{}{}:
+	default:
+	}
+	return state, nil
+}
+
+func TestCampaignOwnerTracksPeersWithoutProcessor(t *testing.T) {
+	clientURL, etcdServer, err := etcd.SetupEmbedEtcd(t.TempDir())
+	require.NoError(t, err)
+	defer etcdServer.Close()
+	etcdCli, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{clientURL.String()},
+		DialTimeout: 3 * time.Second,
+	})
+	require.NoError(t, err)
+	defer etcdCli.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client, err := etcd.NewCDCEtcdClient(ctx, etcdCli, etcd.DefaultCDCClusterID)
+	require.NoError(t, err)
+	session, err := concurrency.NewSession(etcdCli)
+	require.NoError(t, err)
+	defer session.Close()
+
+	mo := mock_owner.NewMockOwner(gomock.NewController(t))
+	mo.EXPECT().AsyncStop()
+	o := &peerTrackingOwner{Owner: mo, ticked: make(chan struct{}, 1)}
+	cp := NewCapture4Test(nil)
+	cp.config = config.GetDefaultServerConfig()
+	cp.EtcdClient = client
+	cp.session = session
+	cp.election = newElection(session, etcd.CaptureOwnerKey(client.GetClusterID()))
+	cp.newOwner = func(*upstream.Manager, *config.SchedulerConfig, *vars.GlobalVars) owner.Owner {
+		return o
+	}
+	cp.MessageRouter = p2p.NewMessageRouter(cp.info.ID, cp.config.Security,
+		cp.config.Debug.Messages.ToMessageClientConfig())
+	defer cp.MessageRouter.Close()
+	cp.MessageServer = p2p.NewMessageServer(cp.info.ID, cp.config.Debug.Messages.ToMessageServerConfig())
+
+	// Run only the owner: peer discovery must not depend on processor ticks.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = cp.campaignOwner(ctx, vars.NewGlobalVars4Test())
+	}()
+	defer func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(10 * time.Second):
+			require.Fail(t, "owner did not exit")
+		}
+	}()
+	select {
+	case <-o.ticked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("owner did not start")
+	}
+
+	// Add a peer after the initial snapshot to exercise the owner's etcd watch.
+	peer := &model.CaptureInfo{ID: "new-peer", AdvertiseAddr: "127.0.0.1:1"}
+	require.NoError(t, client.PutCaptureInfo(ctx, peer, session.Lease()))
+	require.Eventually(t, func() bool {
+		return cp.MessageRouter.GetClient(peer.ID) != nil
+	}, 5*time.Second, 10*time.Millisecond, "owner did not register the new peer")
+
+	require.NoError(t, client.DeleteCaptureInfo(ctx, peer.ID))
+	// Peer removal waits for the reactor state's capture removal grace period.
+	require.Eventually(t, func() bool {
+		return cp.MessageRouter.GetClient(peer.ID) == nil
+	}, 10*time.Second, 10*time.Millisecond, "owner did not remove the departed peer")
 }
