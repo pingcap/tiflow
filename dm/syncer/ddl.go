@@ -951,9 +951,9 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	return nil
 }
 
-type startTransactionTableOptionRemover struct{}
+type startTxnOptionRemover struct{}
 
-func (startTransactionTableOptionRemover) Enter(node ast.Node) bool {
+func (startTxnOptionRemover) Enter(node ast.Node) bool {
 	stmt, ok := node.(*ast.CreateTableStmt)
 	if !ok {
 		return true
@@ -969,7 +969,7 @@ func (startTransactionTableOptionRemover) Enter(node ast.Node) bool {
 	return true
 }
 
-func (startTransactionTableOptionRemover) Leave(ast.Node) bool {
+func (startTxnOptionRemover) Leave(ast.Node) bool {
 	return true
 }
 
@@ -991,7 +991,7 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	if len(stmts) == 0 {
 		return nil, nil
 	}
-	ast.Walk(stmts[0], &startTransactionTableOptionRemover{})
+	ast.Walk(stmts[0], &startTxnOptionRemover{})
 	return stmts[0], nil
 }
 
