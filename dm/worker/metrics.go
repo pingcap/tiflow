@@ -153,6 +153,8 @@ func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 // task-state series. Deriving the series at gather time keeps their lifecycle in
 // sync with taskState, including paused tasks and stopped/finished task cleanup.
 // This is the whole worker's CPU usage, not CPU attributed to an individual task.
+// This derived metric is intended for TiDB Cloud only, allowing Cloud to select
+// worker CPU usage through task metric labels without worker-level configuration.
 func appendTaskWorkerCPUUsage(families []*dto.MetricFamily) []*dto.MetricFamily {
 	var cpuUsage *dto.Gauge
 	var taskMetrics []*dto.Metric
