@@ -2316,7 +2316,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		endLocation = s.streamerController.GetCurEndLocation()
 		lastTxnEndLocation = s.streamerController.GetTxnEndLocation()
 
-		if _, ok := e.Event.(*replication.GenericEvent); !ok {
+		switch e.Event.(type) {
+		case *replication.GenericEvent, *replication.HeartbeatEvent:
+		default:
 			lastEvent = e
 		}
 
@@ -2471,7 +2473,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if needContinue {
 				continue
 			}
-		case *replication.GenericEvent:
+		case *replication.GenericEvent, *replication.HeartbeatEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
 				// flush checkpoint even if there are no real binlog events
 				if s.checkpoint.LastFlushOutdated() {

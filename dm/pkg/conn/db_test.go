@@ -429,7 +429,7 @@ func TestAddGSetWithPurged(t *testing.T) {
 			getGSetFromString(t, "3ccc475b-2343-11e7-be21-6c0b84d59f30:6-14"),
 			mariaGTID,
 			nil,
-			errors.New("invalid GTID format, must UUID:interval[:interval]"),
+			errors.New("invalid GTID format, must UUID[:tag]:interval[[:tag]:interval]"),
 		},
 	}
 

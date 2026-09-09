@@ -413,7 +413,7 @@ workaround = ""
 tags = ["internal", "high"]
 
 [error.DM-functional-11063]
-message = "only one Interval in UUIDSet is supported, but got %d (%s)"
+message = "only one Interval in MysqlGTIDSet is supported, but got %d (%s)"
 description = ""
 workaround = ""
 tags = ["internal", "high"]

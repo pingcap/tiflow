@@ -20,6 +20,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -56,14 +57,30 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 	var anonymousGTID bool
 	switch flavor {
 	case gmysql.MySQLFlavor:
-		uuidSet := singleGTID.(*gmysql.UUIDSet)
+		mSet := singleGTID.(*gmysql.MysqlGTIDSet)
 		prevGSet, ok := previousGTIDs.(*gmysql.MysqlGTIDSet)
 		if !ok || prevGSet == nil {
 			return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(previousGTIDs)
 		}
+
+		var sid uuid.UUID
+		var tag gmysql.Tag
+		var intervals gmysql.IntervalSlice
+		for u, tags := range *mSet {
+			sid = u
+			for t, i := range tags {
+				tag = t
+				intervals = i
+			}
+		}
+
 		// latestGTID should be one of the latest previousGTIDs
-		prevGTID, ok := prevGSet.Sets[uuidSet.SID.String()]
-		if !ok || prevGTID.Intervals.Len() != 1 || prevGTID.Intervals[0].Stop != uuidSet.Intervals[0].Stop {
+		prevTags, ok := (*prevGSet)[sid]
+		if !ok {
+			return nil, terror.ErrBinlogLatestGTIDNotInPrev.Generate(latestGTID, previousGTIDs)
+		}
+		prevIntervals, ok := prevTags[tag]
+		if !ok || len(prevIntervals) != 1 || prevIntervals[0].Stop != intervals[0].Stop {
 			return nil, terror.ErrBinlogLatestGTIDNotInPrev.Generate(latestGTID, previousGTIDs)
 		}
 
@@ -86,11 +103,7 @@ func newGenerator(flavor, version string, serverID uint32, latestPos uint32, lat
 		if !ok || prevGSet == nil {
 			return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(previousGTIDs)
 		}
-		set, ok := prevGSet.Sets[mariaGTID.DomainID]
-		if !ok {
-			return nil, terror.ErrBinlogLatestGTIDNotInPrev.Generate(latestGTID, previousGTIDs)
-		}
-		prevGTID, ok := set[mariaGTID.ServerID]
+		prevGTID, ok := prevGSet.Sets[mariaGTID.DomainID]
 		if !ok || prevGTID.ServerID != mariaGTID.ServerID || prevGTID.SequenceNumber != mariaGTID.SequenceNumber {
 			return nil, terror.ErrBinlogLatestGTIDNotInPrev.Generate(latestGTID, previousGTIDs)
 		}
