@@ -19,6 +19,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -75,9 +76,10 @@ var (
 	metricRefs     = make(map[string]int)
 )
 
-// taskMetricGatherer injects labels at gather time because task metrics are
-// created across several DM and Lightning packages. Registrations are
-// reference-counted because multiple subtasks of the same task share labels.
+// taskMetricGatherer exposes task-associated worker CPU usage and injects labels
+// at gather time because task metrics are created across several DM and Lightning
+// packages. Registrations are reference-counted because multiple subtasks of the
+// same task share labels.
 type taskMetricGatherer struct {
 	prometheus.Registerer
 	gatherer prometheus.Gatherer
@@ -88,6 +90,7 @@ func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 	if err != nil {
 		return families, err
 	}
+	families = appendTaskWorkerCPUUsage(families)
 	metricLabelsMu.RLock()
 	defer metricLabelsMu.RUnlock()
 	if len(metricLabels) == 0 {
@@ -144,6 +147,51 @@ func (g taskMetricGatherer) Gather() ([]*dto.MetricFamily, error) {
 		}
 	}
 	return families, nil
+}
+
+// appendTaskWorkerCPUUsage associates the existing worker CPU sample with each
+// task-state series. Deriving the series at gather time keeps their lifecycle in
+// sync with taskState, including paused tasks and stopped/finished task cleanup.
+// This is the whole worker's CPU usage, not CPU attributed to an individual task.
+// This derived metric is intended for TiDB Cloud only, allowing Cloud to select
+// worker CPU usage through task metric labels without worker-level configuration.
+func appendTaskWorkerCPUUsage(families []*dto.MetricFamily) []*dto.MetricFamily {
+	var cpuUsage *dto.Gauge
+	var taskMetrics []*dto.Metric
+	for _, family := range families {
+		switch family.GetName() {
+		case "dm_worker_cpu_usage":
+			if len(family.Metric) == 1 {
+				cpuUsage = family.Metric[0].Gauge
+			}
+		case "dm_worker_task_state":
+			taskMetrics = family.Metric
+		}
+	}
+	if cpuUsage == nil || len(taskMetrics) == 0 {
+		return families
+	}
+
+	name := "dm_task_worker_cpu_usage"
+	help := "CPU usage of the worker hosting the task, in percent (100 means one CPU core). " +
+		"Shared worker CPU is repeated for each task, not attributed to the task."
+	family := &dto.MetricFamily{
+		Name:   &name,
+		Help:   &help,
+		Type:   dto.MetricType_GAUGE.Enum(),
+		Metric: make([]*dto.Metric, 0, len(taskMetrics)),
+	}
+	for _, metric := range taskMetrics {
+		family.Metric = append(family.Metric, &dto.Metric{
+			// Label values and the CPU sample are immutable. Clone the label slice
+			// so custom labels can be appended independently to both families.
+			Label: slices.Clone(metric.Label),
+			Gauge: cpuUsage,
+		})
+	}
+	// Preserve the ordering required by prometheus.Gatherer.
+	i := sort.Search(len(families), func(i int) bool { return families[i].GetName() >= name })
+	return slices.Insert(families, i, family)
 }
 
 func registerTaskMetricLabels(task string, labels map[string]string) {
