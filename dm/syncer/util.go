@@ -139,7 +139,75 @@ func str2TimezoneOrFromDB(tctx *tcontext.Context, tzStr string, dbCfg conn.Scope
 	return loc, tzStr, nil
 }
 
-func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location, baList *filter.Filter) (replication.BinlogSyncerConfig, error) {
+// rowsEventFilter skips decoding the rows of events from tables that the
+// block-allow list excludes. Each binlog stream has its own filter, so its
+// caches are only used by the goroutine reading that stream.
+type rowsEventFilter struct {
+	getBAList func() *filter.Filter
+
+	// cachedBAList is the list the caches below were filled from. Syncer.Update
+	// replaces the list, which makes the cached decisions stale.
+	cachedBAList *filter.Filter
+	// we don't track delete table events, so simply reset the cache if it's full
+	// TODO: use LRU or CLOCK cache if needed.
+	// NOTE: use Table as Key rather than TableID
+	// because TableID may change when upstream switches master, and also RenameTable will not change TableID.
+	allowListCache map[filter.Table]struct{}
+	blockListCache map[filter.Table]struct{}
+}
+
+func newRowsEventFilter(getBAList func() *filter.Filter) *rowsEventFilter {
+	f := &rowsEventFilter{getBAList: getBAList}
+	f.resetCache()
+	return f
+}
+
+func (f *rowsEventFilter) resetCache() {
+	f.allowListCache = make(map[filter.Table]struct{}, maxCapacity)
+	f.blockListCache = make(map[filter.Table]struct{}, maxCapacity)
+}
+
+func (f *rowsEventFilter) decode(re *replication.RowsEvent, data []byte) error {
+	pos, err := re.DecodeHeader(data)
+	if err != nil {
+		return err
+	}
+	baList := f.getBAList()
+	if baList != f.cachedBAList {
+		f.cachedBAList = baList
+		f.resetCache()
+	}
+	tb := filter.Table{
+		Schema: string(re.Table.Schema),
+		Name:   string(re.Table.Table),
+	}
+	if _, ok := f.blockListCache[tb]; ok {
+		return nil
+	} else if _, ok := f.allowListCache[tb]; ok {
+		return re.DecodeData(pos, data)
+	}
+
+	if skipByTable(baList, &tb) {
+		f.blockListCache = rememberTable(f.blockListCache, tb)
+		return nil
+	}
+
+	f.allowListCache = rememberTable(f.allowListCache, tb)
+	return re.DecodeData(pos, data)
+}
+
+func rememberTable(cache map[filter.Table]struct{}, tb filter.Table) map[filter.Table]struct{} {
+	if len(cache) >= maxCapacity {
+		cache = make(map[filter.Table]struct{}, maxCapacity)
+	}
+	cache[tb] = struct{}{}
+	return cache
+}
+
+// subtaskCfg2BinlogSyncerCfg generates the binlog syncer config. getBAList is
+// called for every rows event so that an updated block-allow list also takes
+// effect on streamers created from a config generated before the update.
+func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Location, getBAList func() *filter.Filter) (replication.BinlogSyncerConfig, error) {
 	var tlsConfig *tls.Config
 	var err error
 	if cfg.From.Security != nil {
@@ -158,43 +226,8 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 	}
 
 	var rowsEventDecodeFunc func(*replication.RowsEvent, []byte) error
-	if baList != nil {
-		// we don't track delete table events, so simply reset the cache if it's full
-		// TODO: use LRU or CLOCK cache if needed.
-		// NOTE: use Table as Key rather than TableID
-		// because TableID may change when upstream switches master, and also RenameTable will not change TableID.
-		allowListCache := make(map[filter.Table]struct{}, maxCapacity)
-		blockListCache := make(map[filter.Table]struct{}, maxCapacity)
-
-		rowsEventDecodeFunc = func(re *replication.RowsEvent, data []byte) error {
-			pos, err := re.DecodeHeader(data)
-			if err != nil {
-				return err
-			}
-			tb := filter.Table{
-				Schema: string(re.Table.Schema),
-				Name:   string(re.Table.Table),
-			}
-			if _, ok := blockListCache[tb]; ok {
-				return nil
-			} else if _, ok := allowListCache[tb]; ok {
-				return re.DecodeData(pos, data)
-			}
-
-			if skipByTable(baList, &tb) {
-				if len(blockListCache) >= maxCapacity {
-					blockListCache = make(map[filter.Table]struct{}, maxCapacity)
-				}
-				blockListCache[tb] = struct{}{}
-				return nil
-			}
-
-			if len(allowListCache) >= maxCapacity {
-				allowListCache = make(map[filter.Table]struct{}, maxCapacity)
-			}
-			allowListCache[tb] = struct{}{}
-			return re.DecodeData(pos, data)
-		}
+	if getBAList != nil {
+		rowsEventDecodeFunc = newRowsEventFilter(getBAList).decode
 	}
 
 	h := cfg.WorkerName
