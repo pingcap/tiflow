@@ -360,7 +360,6 @@ func TestGetOwnerRevision(t *testing.T) {
 
 	wg.Add(3)
 	for i := 0; i < 3; i++ {
-		i := i
 		go func() {
 			defer wg.Done()
 			sess, err := concurrency.NewSession(s.client.GetEtcdClient().Unwrap(),

@@ -98,7 +98,6 @@ func TestMasterMetaExtScan(t *testing.T) {
 	}
 
 	for i := range cases {
-		i := i
 		t.Run(fmt.Sprintf("subcase-%d", i), func(t *testing.T) {
 			t.Parallel()
 			var ext MasterMetaExt
