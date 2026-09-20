@@ -1240,6 +1240,12 @@ description = ""
 workaround = "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
 tags = ["internal", "medium"]
 
+[error.DM-config-20071]
+message = "invalid metric labels: %s"
+description = ""
+workaround = "Please check the `metric-labels` config in the task configuration."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

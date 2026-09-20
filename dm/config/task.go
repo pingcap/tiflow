@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"sort"
@@ -537,6 +538,10 @@ type TaskConfig struct {
 	IsSharding                bool   `yaml:"is-sharding" toml:"is-sharding" json:"is-sharding"`
 	ShardMode                 string `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
 	StrictOptimisticShardMode bool   `yaml:"strict-optimistic-shard-mode" toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
+
+	// MetricLabels are propagated to task-scoped metrics. They are opaque to DM.
+	MetricLabels map[string]string `yaml:"metric-labels,omitempty" toml:"metric-labels,omitempty" json:"metric-labels,omitempty"`
+
 	// treat it as hidden configuration
 	IgnoreCheckingItems []string `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
 	// we store detail status in meta
@@ -1250,6 +1255,7 @@ func (c *SyncerConfigForDowngrade) omitDefaultVals() {
 // When we add any new config item into SourceConfig, we should update it also.
 type TaskConfigForDowngrade struct {
 	Name                    string                               `yaml:"name"`
+	MetricLabels            map[string]string                    `yaml:"metric-labels,omitempty"`
 	TaskMode                string                               `yaml:"task-mode"`
 	IsSharding              bool                                 `yaml:"is-sharding"`
 	ShardMode               string                               `yaml:"shard-mode"`
@@ -1287,6 +1293,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 	targetDB := *taskConfig.TargetDB
 	return &TaskConfigForDowngrade{
 		Name:                      taskConfig.Name,
+		MetricLabels:              maps.Clone(taskConfig.MetricLabels),
 		TaskMode:                  taskConfig.TaskMode,
 		IsSharding:                taskConfig.IsSharding,
 		ShardMode:                 taskConfig.ShardMode,
