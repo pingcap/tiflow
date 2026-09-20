@@ -725,6 +725,103 @@ func testSimpleDumpSyncModeTask(
 	waitRow("c = 1", newDB)
 }
 
+// testStandaloneDumpLoadModeTask test the stand-alone dump and load mode,
+// similar to a "full" execution.
+func testStandaloneDumpLoadModeTask(
+	t *testing.T,
+	mysql, tidb *sql.DB,
+	db string,
+) {
+	ctx := context.Background()
+	noError := func(_ interface{}, err error) {
+		require.NoError(t, err)
+	}
+
+	httpClient, err := httputil.NewClient(nil)
+	require.NoError(t, err)
+
+	noError(tidb.Exec("drop database if exists " + db))
+	noError(mysql.Exec("drop database if exists " + db))
+
+	// full phase
+	noError(mysql.Exec("create database " + db))
+	noError(mysql.Exec("create table " + db + ".t1(c int primary key)"))
+	noError(mysql.Exec("insert into " + db + ".t1 values(1)"))
+
+	dmJobCfg, err := os.ReadFile("./dm-job.yaml")
+	require.NoError(t, err)
+	// start dump job
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("<placeholder>"), []byte(db))
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: all"), []byte("task-mode: dump"))
+
+	endpoint := os.Getenv(envS3Endpoint)
+	require.Greater(t, len(endpoint), 0, "empty endpoint in env %s", envS3Endpoint)
+
+	accessKeyID := os.Getenv(envS3AccessKeyID)
+	require.Greater(t, len(accessKeyID), 0, "empty access key ID in env %s", envS3AccessKeyID)
+
+	secretAccessKey := os.Getenv(envS3SecretAccessKey)
+	require.Greater(t, len(secretAccessKey), 0, "empty secret access key in env %s", envS3SecretAccessKey)
+
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("#    dir: ./dumped_data"), []byte(fmt.Sprintf("    dir: s3://engine-it/dumped_data_%s?force-path-style=1&access-key=%s&secret-access-key=%s&endpoint=%s", db, accessKeyID, secretAccessKey, endpoint)))
+	var jobID string
+	require.Eventually(t, func() bool {
+		var err error
+		jobID, err = e2e.CreateJobViaHTTP(ctx, masterAddr, tenantID, projectID,
+			pb.Job_DM, dmJobCfg)
+		return err == nil
+	}, time.Second*5, time.Millisecond*100)
+
+	waitRow := func(where string, db string) {
+		require.Eventually(t, func() bool {
+			//nolint:sqlclosecheck,rowserrcheck
+			rs, err := tidb.Query("select 1 from " + db + ".t1 where " + where)
+			if err != nil {
+				t.Logf("query error: %v", err)
+				return false
+			}
+			defer func(rs *sql.Rows) {
+				_ = rs.Close()
+			}(rs)
+			if !rs.Next() {
+				t.Log("no rows")
+				return false
+			}
+			if rs.Next() {
+				t.Log("more than one row")
+				return false
+			}
+			return true
+		}, 30*time.Second, 500*time.Millisecond)
+	}
+
+	// dump finished and job exits
+	require.Eventually(t, func() bool {
+		job, err := e2e.QueryJobViaHTTP(ctx, masterAddr, tenantID, projectID, jobID)
+		return err == nil && job.State == pb.Job_Finished
+	}, time.Second*30, time.Millisecond*100)
+
+	source1 := "mysql-replica-dump_load-01"
+
+	// start load job
+	dmJobCfg = bytes.ReplaceAll(dmJobCfg, []byte("task-mode: dump"), []byte("task-mode: \"load\""))
+	require.Eventually(t, func() bool {
+		var err error
+		jobID, err = e2e.CreateJobViaHTTP(ctx, masterAddr, tenantID, projectID, pb.Job_DM, dmJobCfg)
+		return err == nil
+	}, time.Second*5, time.Millisecond*100)
+
+	var jobStatus *dm.JobStatus
+	// wait load job online
+	require.Eventually(t, func() bool {
+		jobStatus, err = queryStatus(ctx, httpClient, jobID, []string{source1})
+		return err == nil && jobStatus.JobID == jobID
+	}, time.Second*5, time.Millisecond*100)
+
+	// check full phase
+	waitRow("c = 1", db)
+}
+
 func queryStatus(ctx context.Context, client *httputil.Client, jobID string, tasks []string) (*dm.JobStatus, error) {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
 	defer cancel()
