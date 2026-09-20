@@ -63,7 +63,7 @@ type Scheduler interface {
 
 	// Close scheduler and release resource.
 	// It is not thread-safe.
-	Close(ctx context.Context)
+	Close()
 }
 
 // Query is for scheduler related owner job.

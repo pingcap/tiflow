@@ -485,14 +485,14 @@ func (r *Manager) handleBurstBalanceTasks(
 		perCapture[task.CaptureID]++
 	}
 	fields := make([]zap.Field, 0)
-	for captureID, count := range perCapture {
-		fields = append(fields, zap.Int(captureID, count))
-	}
+	fields = append(fields, zap.String("namespace", r.changefeedID.Namespace))
+	fields = append(fields, zap.String("changefeed", r.changefeedID.ID))
 	fields = append(fields, zap.Int("addTable", len(task.AddTables)))
 	fields = append(fields, zap.Int("removeTable", len(task.RemoveTables)))
 	fields = append(fields, zap.Int("moveTable", len(task.MoveTables)))
-	fields = append(fields, zap.String("namespace", r.changefeedID.Namespace))
-	fields = append(fields, zap.String("changefeed", r.changefeedID.ID))
+	for captureID, count := range perCapture {
+		fields = append(fields, zap.Int(captureID, count))
+	}
 	log.Info("schedulerv3: handle burst balance task", fields...)
 
 	sentMsgs := make([]*schedulepb.Message, 0, len(task.AddTables))
