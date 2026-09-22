@@ -226,7 +226,8 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 	var err error
 	syncer := NewSyncer(cfg, nil, nil)
 	syncer.tctx = tctx
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, check.IsNil)
 

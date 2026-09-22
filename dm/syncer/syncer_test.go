@@ -292,7 +292,8 @@ func (s *testSyncerSuite) TestSelectDB(c *check.C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, check.IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	c.Assert(err, check.IsNil)
 	err = syncer.genRouter()
 	c.Assert(err, check.IsNil)
@@ -405,7 +406,8 @@ func (s *testSyncerSuite) TestSelectTable(c *check.C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, check.IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, check.IsNil)
 	c.Assert(syncer.genRouter(), check.IsNil)
@@ -442,7 +444,8 @@ func (s *testSyncerSuite) TestIgnoreDB(c *check.C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, check.IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	c.Assert(err, check.IsNil)
 	c.Assert(syncer.genRouter(), check.IsNil)
 	i := 0
@@ -543,7 +546,8 @@ func (s *testSyncerSuite) TestIgnoreTable(c *check.C) {
 	cfg, err := s.cfg.Clone()
 	c.Assert(err, check.IsNil)
 	syncer := NewSyncer(cfg, nil, nil)
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 	c.Assert(err, check.IsNil)
 	c.Assert(syncer.genRouter(), check.IsNil)
@@ -2321,6 +2325,122 @@ func TestUpdateClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
 	require.False(t, syncer.foreignKeyRouteTopologyChecked)
 }
 
+func TestUpdateRefreshesRowsEventDecodeBAList(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.BAList = &filter.Rules{DoTables: []*filter.Table{{Schema: "db", Name: "t1"}}}
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+	baList, err := filter.New(cfg.CaseSensitive, cfg.BAList)
+	require.NoError(t, err)
+	syncer.setBAList(baList)
+	syncer.syncCfg, err = subtaskCfg2BinlogSyncerCfg(syncer.cfg, syncer.timezone, syncer.getBAList)
+	require.NoError(t, err)
+	// The streamer keeps its own copy of the binlog syncer config, so the decode
+	// function captured here is what reads binlog events after the task resumes.
+	decodeFunc := syncer.syncCfg.RowsEventDecodeFunc
+
+	require.Empty(t, decodeRowsEventForTest(t, decodeFunc, "db", "t2"))
+
+	newCfg, err := cfg.Clone()
+	require.NoError(t, err)
+	newCfg.BAList = &filter.Rules{DoTables: []*filter.Table{
+		{Schema: "db", Name: "t1"},
+		{Schema: "db", Name: "t2"},
+	}}
+	require.NoError(t, syncer.Update(context.Background(), newCfg))
+
+	require.Len(t, decodeRowsEventForTest(t, decodeFunc, "db", "t2"), 1)
+	require.Len(t, decodeRowsEventForTest(t, syncer.syncCfg.RowsEventDecodeFunc, "db", "t2"), 1)
+}
+
+func TestUpdateRefreshesDDLWorkerRules(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.BAList = &filter.Rules{DoTables: []*filter.Table{{Schema: "db", Name: "t1"}}}
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+	require.NoError(t, syncer.genRouter())
+	var err error
+	baList, err := filter.New(cfg.CaseSensitive, cfg.BAList)
+	syncer.setBAList(baList)
+	require.NoError(t, err)
+	syncer.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
+	require.NoError(t, err)
+	syncer.ddlWorker = NewDDLWorker(&syncer.tctx.Logger, syncer)
+
+	newCfg, err := cfg.Clone()
+	require.NoError(t, err)
+	newCfg.BAList = &filter.Rules{DoTables: []*filter.Table{
+		{Schema: "db", Name: "t1"},
+		{Schema: "db", Name: "t2"},
+	}}
+	newCfg.RouteRules = []*router.TableRule{{
+		SchemaPattern: "db", TablePattern: "t1", TargetSchema: "db2", TargetTable: "t1",
+	}}
+	newCfg.FilterRules = []*bf.BinlogEventRule{{
+		SchemaPattern: "db", TablePattern: "t1", Events: []bf.EventType{bf.TruncateTable}, Action: bf.Ignore,
+	}}
+	require.NoError(t, syncer.Update(context.Background(), newCfg))
+
+	qec := &queryEventContext{
+		eventContext: &eventContext{tctx: tcontext.Background()},
+		ddlSchema:    "db",
+		p:            parser.New(),
+	}
+	ddlInfo, err := syncer.ddlWorker.genDDLInfo(qec, "ALTER TABLE db.t1 ADD COLUMN c INT")
+	require.NoError(t, err)
+	require.Equal(t, "`db2`.`t1`", ddlInfo.targetTables[0].String())
+
+	qec.originSQL = "ALTER TABLE db.t2 ADD COLUMN c INT"
+	ddlInfo, err = syncer.ddlWorker.genDDLInfo(qec, qec.originSQL)
+	require.NoError(t, err)
+	skipped, err := syncer.ddlWorker.skipQueryEvent(qec, ddlInfo)
+	require.NoError(t, err)
+	require.False(t, skipped)
+
+	skipped, err = skipByFilter(syncer.binlogFilter, &filter.Table{Schema: "db", Name: "t1"},
+		bf.TruncateTable, "TRUNCATE TABLE db.t1")
+	require.NoError(t, err)
+	require.True(t, skipped)
+}
+
+// decodeRowsEventForTest parses a single-row WRITE_ROWS event of schema.table
+// with decodeFunc and returns the decoded rows.
+func decodeRowsEventForTest(
+	t *testing.T,
+	decodeFunc func(*replication.RowsEvent, []byte) error,
+	schema, table string,
+) [][]interface{} {
+	t.Helper()
+	header := &replication.EventHeader{Timestamp: uint32(time.Now().Unix()), ServerID: 1}
+	formatDescEv, err := event.GenFormatDescriptionEvent(header, 4)
+	require.NoError(t, err)
+	latestGTID, err := gtid.ParserGTID(mysql.MySQLFlavor, "3ccc475b-2343-11e7-be21-6c0b84d59f30:14")
+	require.NoError(t, err)
+	dmlEvents, err := event.GenDMLEvents(mysql.MySQLFlavor, 1, formatDescEv.Header.LogPos, latestGTID,
+		replication.WRITE_ROWS_EVENTv2, 1, []*event.DMLData{{
+			TableID:    1,
+			Schema:     schema,
+			Table:      table,
+			ColumnType: []byte{mysql.MYSQL_TYPE_LONG},
+			Rows:       [][]interface{}{{int32(1)}},
+		}}, false, false, 0)
+	require.NoError(t, err)
+
+	parser := replication.NewBinlogParser()
+	parser.SetRowsEventDecodeFunc(decodeFunc)
+	_, err = parser.Parse(formatDescEv.RawData)
+	require.NoError(t, err)
+	for _, ev := range dmlEvents.Events {
+		parsed, err := parser.Parse(ev.RawData)
+		require.NoError(t, err)
+		if rowsEv, ok := parsed.Event.(*replication.RowsEvent); ok {
+			return rowsEv.Rows
+		}
+	}
+	require.FailNow(t, "no rows event generated")
+	return nil
+}
+
 func TestOperateSchemaSetSchemaClearsForeignKeyRouteTopologyCheckCache(t *testing.T) {
 	cfg := genDefaultSubTaskConfig4Test()
 	syncer := NewSyncer(cfg, nil, nil)
@@ -2704,7 +2824,8 @@ func TestUpdateFKHotUpdateGuardRejects(t *testing.T) {
 	var err error
 	syncer.tableRouter, err = regexprrouter.NewRegExprRouter(cfg.CaseSensitive, cfg.RouteRules)
 	require.NoError(t, err)
-	syncer.baList, err = filter.New(cfg.CaseSensitive, cfg.BAList)
+	baList, err := filter.New(cfg.CaseSensitive, cfg.BAList)
+	syncer.setBAList(baList)
 	require.NoError(t, err)
 	syncer.binlogFilter, err = bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
 	require.NoError(t, err)
