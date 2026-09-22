@@ -26,9 +26,9 @@ function run() {
 	TOPIC_NAME="ticdc-kafka-sink-error-resume-test-$RANDOM"
 	SINK_URI="kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&kafka-version=${KAFKA_VERSION}&max-message-bytes=10485760"
 
-	# Return an failpoint error to fail a kafka changefeed.
-	# Note we return one error for the failpoint, if owner retry changefeed frequently, it may break the test.
-	export GO_FAILPOINTS='github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer/KafkaSinkAsyncSendError=1*return(true)'
+	# Keep the sink failing until warning is observed, even when the first retry is immediate.
+	local failpoint='github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dmlproducer/KafkaSinkAsyncSendError'
+	export GO_FAILPOINTS="${failpoint}=return(true)"
 	run_cdc_server --workdir $WORK_DIR --binary $CDC_BINARY --addr "127.0.0.1:8300" --pd $pd_addr
 	changefeed_id=$(cdc cli changefeed create --pd=$pd_addr --sink-uri="$SINK_URI" 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
 	run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760"
@@ -39,6 +39,8 @@ function run() {
 	run_sql "INSERT INTO kafka_sink_error_resume.t1 VALUES ();"
 
 	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "warning" "last_warning" "kafka sink injected error"
+	# Disable the failpoint in the running server before checking recovery.
+	curl --fail --silent --show-error --max-time 20 -X DELETE "http://127.0.0.1:8300/debug/fail/${failpoint}"
 	cdc cli changefeed resume --changefeed-id=$changefeed_id --pd=$pd_addr
 	ensure $MAX_RETRIES check_changefeed_status 127.0.0.1:8300 $changefeed_id "normal"
 

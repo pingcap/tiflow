@@ -539,7 +539,7 @@ func (c *captureImpl) campaignOwner(ctx context.Context, globalVars *vars.Global
 		})
 
 		err = c.runEtcdWorker(ctx, owner.(orchestrator.Reactor),
-			orchestrator.NewGlobalState(c.EtcdClient.GetClusterID(), c.config.CaptureSessionTTL),
+			globalState,
 			ownerFlushInterval, util.RoleOwner.String())
 		c.owner.AsyncStop()
 		c.setOwner(nil)
