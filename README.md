@@ -26,3 +26,5 @@ You can also check out the [DeepWiki documentation](https://deepwiki.com/pingcap
 ## License
 
 **TiFlow** is under the Apache 2.0 license. See the [LICENSE](./LICENSE) file for details.
+
+<!-- VERSION_PLACEHOLDER: vrelease-nextgen-202609 -->
