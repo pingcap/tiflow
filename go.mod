@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.25.12
+go 1.25.14
 
 require (
 	cloud.google.com/go/storage v1.52.0
@@ -74,9 +74,9 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20260820070758-623e58e60fa9
 	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
-	github.com/pingcap/tidb v1.1.0-beta.0.20260917073426-5316d4357416
+	github.com/pingcap/tidb v1.1.0-beta.0.20260923092734-13103a00793a
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20260917073426-5316d4357416
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20260923082834-1869807c5fdb
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
@@ -91,7 +91,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20260903102657-08cbf831121a
+	github.com/tikv/client-go/v2 v2.0.8-0.20260921040125-5f38569c8cc0
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20260805103528-afa43111d149
 	github.com/tinylib/msgp v1.5.0
