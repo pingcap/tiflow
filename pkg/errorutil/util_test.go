@@ -23,6 +23,7 @@ import (
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/engine/framework/model"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 	v3rpc "go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	"go.etcd.io/etcd/raft/v3"
@@ -112,6 +113,7 @@ func TestIsRetryableDDLError(t *testing.T) {
 		{newMysqlErr(tmysql.ErrBadDB, "xx"), false},
 		{newMysqlErr(errno.ErrTableWithoutPrimaryKey, "Unable to create or change a table without a primary key"), false},
 		{mysql.ErrInvalidConn, true},
+		{cerror.ErrDDLStateNotFound.GenWithStackByArgs("none"), true},
 	}
 
 	for _, c := range cases {

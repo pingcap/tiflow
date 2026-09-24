@@ -121,6 +121,10 @@ func IsRetryableDDLError(err error) bool {
 		return true
 	}
 
+	if cerror.Is(err, cerror.ErrDDLStateNotFound) {
+		return true
+	}
+
 	err = errors.Cause(err)
 	mysqlErr, ok := err.(*gmysql.MySQLError)
 	if !ok {

@@ -275,6 +275,68 @@ func (m *DDLSink) execDDL(pctx context.Context, ddl *model.DDLEvent) error {
 	return nil
 }
 
+<<<<<<< HEAD
+=======
+func (m *DDLSink) waitDDLDone(ctx context.Context, ddl *model.DDLEvent, ddlCreateTime string) error {
+	ticker := time.NewTicker(5 * time.Second)
+	ticker1 := time.NewTicker(10 * time.Minute)
+	defer ticker.Stop()
+	defer ticker1.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		case <-ticker1.C:
+			log.Info("DDL is still running downstream, it blocks other DDL or DML events", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
+		}
+
+		state, err := getDDLStateFromTiDB(ctx, m.db, ddl.Query, ddlCreateTime)
+		if err != nil {
+			log.Error("Error when getting DDL state from TiDB", zap.Error(err))
+		}
+		switch state {
+		case timodel.JobStateDone, timodel.JobStateSynced:
+			log.Info("DDL replicate success", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime))
+			return nil
+		case timodel.JobStateCancelled, timodel.JobStateRollingback, timodel.JobStateRollbackDone, timodel.JobStateCancelling:
+			return errors.ErrExecDDLFailed.GenWithStackByArgs(ddl.Query)
+		case timodel.JobStateRunning, timodel.JobStateQueueing:
+			switch ddl.Type {
+			// returned immediately if not block dml
+			case timodel.ActionAddIndex:
+				log.Info("DDL is running downstream", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
+				return nil
+			}
+		default:
+			log.Warn("Unexpected DDL state, may not be found downstream, retry later", zap.String("ddl", ddl.Query), zap.String("ddlCreateTime", ddlCreateTime), zap.Any("ddlState", state))
+			return errors.ErrDDLStateNotFound.GenWithStackByArgs(state)
+		}
+	}
+}
+
+// WriteCheckpointTs does nothing.
+func (m *DDLSink) WriteCheckpointTs(_ context.Context, _ uint64, _ []*model.TableInfo) error {
+	// Only for RowSink for now.
+	return nil
+}
+
+// Close closes the database connection.
+func (m *DDLSink) Close() {
+	if m.statistics != nil {
+		m.statistics.Close()
+	}
+	if m.db != nil {
+		if err := m.db.Close(); err != nil {
+			log.Warn("MySQL ddl sink close db wit error",
+				zap.String("namespace", m.id.Namespace),
+				zap.String("changefeed", m.id.ID),
+				zap.Error(err))
+		}
+	}
+}
+
+>>>>>>> 1da8b3e23a (sink(ticdc): retry later when meet unexpected DDL state (#12483))
 func needSwitchDB(ddl *model.DDLEvent) bool {
 	if len(ddl.TableInfo.TableName.Schema) == 0 {
 		return false
@@ -325,4 +387,50 @@ func (m *DDLSink) Close() {
 				zap.Error(err))
 		}
 	}
+<<<<<<< HEAD
+=======
+	return ddlCreateTime
+}
+
+// getDDLStateFromTiDB retrieves the ddl job status of the ddl query from downstream tidb based on the ddl query and the approximate ddl create time.
+func getDDLStateFromTiDB(ctx context.Context, db *sql.DB, ddl string, createTime string) (timodel.JobState, error) {
+	// ddlCreateTime and createTime are both based on UTC timezone of downstream
+	showJobs := fmt.Sprintf(`SELECT JOB_ID, JOB_TYPE, SCHEMA_STATE, SCHEMA_ID, TABLE_ID, STATE, QUERY FROM information_schema.ddl_jobs
+	WHERE CREATE_TIME >= "%s" AND QUERY = "%s";`, createTime, ddl)
+	var jobsResults [][]string
+	err := retry.Do(ctx, func() error {
+		//nolint:rowserrcheck
+		jobsRows, err := db.QueryContext(ctx, showJobs)
+		if err != nil {
+			log.Warn("failed to query from downstream to get ddl state", zap.Error(err))
+			return err
+		}
+		jobsResults, err = export.GetSpecifiedColumnValuesAndClose(jobsRows, "QUERY", "STATE", "JOB_ID", "JOB_TYPE", "SCHEMA_STATE")
+		if err != nil {
+			log.Warn("get jobs results failed", zap.Error(err))
+			return err
+		}
+		return nil
+	}, retry.WithBackoffBaseDelay(pmysql.BackoffMaxDelay.Milliseconds()),
+		retry.WithBackoffMaxDelay(pmysql.BackoffMaxDelay.Milliseconds()),
+		retry.WithMaxTries(defaultDDLMaxRetry))
+	if err != nil {
+		return timodel.JobStateNone, err
+	}
+
+	if len(jobsResults) > 0 {
+		result := jobsResults[0]
+		state, jobID, jobType, schemaState := result[1], result[2], result[3], result[4]
+		log.Debug("Find ddl state in downstream",
+			zap.String("jobID", jobID),
+			zap.String("jobType", jobType),
+			zap.String("schemaState", schemaState),
+			zap.String("ddl", ddl),
+			zap.String("state", state),
+			zap.Any("jobsResults", jobsResults),
+		)
+		return timodel.StrToJobState(result[1]), nil
+	}
+	return timodel.JobStateNone, nil
+>>>>>>> 1da8b3e23a (sink(ticdc): retry later when meet unexpected DDL state (#12483))
 }
