@@ -30,6 +30,7 @@ const (
 	BinlogEnableChecking         = "binlog_enable"
 	BinlogFormatChecking         = "binlog_format"
 	BinlogRowImageChecking       = "binlog_row_image"
+	BinlogLegacyEventPosChecking = "binlog_legacy_event_pos"
 	TableSchemaChecking          = "table_schema"
 	ShardTableSchemaChecking     = "schema_of_shard_tables"
 	ShardAutoIncrementIDChecking = "auto_increment_ID"
@@ -63,6 +64,7 @@ var AllCheckingItems = map[string]string{
 	BinlogEnableChecking:         "binlog enable checking item",
 	BinlogFormatChecking:         "binlog format checking item",
 	BinlogRowImageChecking:       "binlog row image checking item",
+	BinlogLegacyEventPosChecking: "binlog legacy event pos checking item",
 	TableSchemaChecking:          "table schema compatibility checking item",
 	ShardTableSchemaChecking:     "consistent schema of shard tables checking item",
 	ShardAutoIncrementIDChecking: "conflict auto increment ID of shard tables checking item",
