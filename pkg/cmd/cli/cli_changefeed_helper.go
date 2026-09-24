@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
@@ -102,4 +103,23 @@ func confirmIgnoreIneligibleTables(cmd *cobra.Command) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func formatTableNames(tableNames []v2.TableName) string {
+	if len(tableNames) == 0 {
+		return "[]"
+	}
+
+	formatted := make([]string, 0, len(tableNames))
+	for _, tableName := range tableNames {
+		formatted = append(formatted, formatTableName(tableName))
+	}
+	return "[" + strings.Join(formatted, ", ") + "]"
+}
+
+func formatTableName(tableName v2.TableName) string {
+	if tableName.Schema != "" {
+		return tableName.Schema + "." + tableName.Table
+	}
+	return tableName.Table
 }

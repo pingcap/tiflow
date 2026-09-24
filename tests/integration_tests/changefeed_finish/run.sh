@@ -30,7 +30,7 @@ function run() {
 	now=$(cdc cli tso query --pd=http://$UP_PD_HOST_1:$UP_PD_PORT_1)
 	# 90s after now
 	target_ts=$(($now + 90 * 10 ** 3 * 2 ** 18))
-	changefeed_id=$(cdc cli changefeed create --sink-uri="$SINK_URI" --target-ts=$target_ts 2>&1 | tail -n2 | head -n1 | awk '{print $2}')
+	changefeed_id=$(cdc cli changefeed create --sink-uri="$SINK_URI" --target-ts=$target_ts 2>&1 | grep '^ID:' | head -n1 | awk '{print $2}')
 
 	case $SINK_TYPE in
 	kafka) run_kafka_consumer $WORK_DIR "kafka://127.0.0.1:9092/$TOPIC_NAME?protocol=open-protocol&partition-num=4&version=${KAFKA_VERSION}&max-message-bytes=10485760" ;;
