@@ -121,10 +121,10 @@ func topicName2SchemaSubjects(topicName, subjectSuffix string) string {
 }
 
 func (a *BatchEncoder) getValueSchemaCodec(
-	ctx context.Context, topic string, tableName model.TableName, tableVersion uint64, input avroEncodeInput,
+	ctx context.Context, topic string, tableName model.TableName, tableVersion uint64, input avroEncodeInput, op string,
 ) (*goavro.Codec, []byte, error) {
 	schemaGen := func() (string, error) {
-		schema, err := a.value2AvroSchema(tableName, input)
+		schema, err := a.value2AvroSchema(tableName, input, op)
 		if err != nil {
 			log.Error("avro: generating value schema failed", zap.Error(err))
 			return "", errors.Trace(err)
@@ -133,7 +133,8 @@ func (a *BatchEncoder) getValueSchemaCodec(
 	}
 
 	subject := topicName2SchemaSubjects(topic, valueSchemaSuffix)
-	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject,
+		tableVersion, op, schemaGen)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -153,7 +154,7 @@ func (a *BatchEncoder) getKeySchemaCodec(
 	}
 
 	subject := topicName2SchemaSubjects(topic, keySchemaSuffix)
-	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, schemaGen)
+	avroCodec, header, err := a.schemaM.GetCachedOrRegister(ctx, subject, tableVersion, keyOperation, schemaGen)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
@@ -161,31 +162,38 @@ func (a *BatchEncoder) getKeySchemaCodec(
 }
 
 func (a *BatchEncoder) encodeValue(ctx context.Context, topic string, e *model.RowChangedEvent) ([]byte, error) {
-	if e.IsDelete() {
+	isDelete := e.IsDelete()
+	if isDelete && !a.config.AvroIncludeBeforeValue {
 		return nil, nil
 	}
 
+	columns := e.Columns
+	if isDelete {
+		columns = e.PreColumns
+	}
 	input := avroEncodeInput{
 		TableInfo: e.TableInfo,
-		columns:   e.Columns,
+		columns:   columns,
 		colInfos:  e.TableInfo.GetColInfosForRowChangedEvent(),
 	}
 	if len(input.columns) == 0 {
 		return nil, nil
 	}
 
-	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.TableInfo.TableName, e.TableInfo.Version, input)
+	op := getOperation(e)
+	avroCodec, header, err := a.getValueSchemaCodec(ctx, topic, e.TableInfo.TableName, e.TableInfo.Version, input, op)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 
-	native, err := a.columns2AvroData(input)
+	native, err := a.nativeValue(e, op)
 	if err != nil {
 		log.Error("avro: converting value to native failed", zap.Error(err))
 		return nil, errors.Trace(err)
 	}
+
 	if a.config.EnableTiDBExtension {
-		native = a.nativeValueWithExtension(native, e)
+		native = a.nativeValueWithExtension(native, e, op)
 	}
 
 	bin, err := avroCodec.BinaryFromNative(nil, native)
@@ -315,6 +323,8 @@ func (a *BatchEncoder) Build() (messages []*common.Message) {
 const (
 	insertOperation = "c"
 	updateOperation = "u"
+	deleteOperation = "d"
+	keyOperation    = ""
 )
 
 func getOperation(e *model.RowChangedEvent) string {
@@ -322,20 +332,73 @@ func getOperation(e *model.RowChangedEvent) string {
 		return insertOperation
 	} else if e.IsUpdate() {
 		return updateOperation
+	} else if e.IsDelete() {
+		return deleteOperation
 	}
 	return ""
+}
+
+func (a *BatchEncoder) nativeValue(
+	e *model.RowChangedEvent,
+	op string,
+) (map[string]interface{}, error) {
+	native := make(map[string]interface{})
+	var (
+		before map[string]interface{}
+		err    error
+	)
+	if op != deleteOperation {
+		native, err = a.columns2AvroData(avroEncodeInput{
+			TableInfo: e.TableInfo,
+			columns:   e.Columns,
+			colInfos:  e.TableInfo.GetColInfosForRowChangedEvent(),
+		})
+		if err != nil {
+			log.Error("avro: converting after value to native failed", zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+	}
+	if a.config.AvroIncludeBeforeValue {
+		native[tidbBefore] = nil
+	}
+	if op != insertOperation && a.config.AvroIncludeBeforeValue {
+		before, err = a.columns2AvroData(avroEncodeInput{
+			TableInfo: e.TableInfo,
+			columns:   e.PreColumns,
+			colInfos:  e.TableInfo.GetColInfosForRowChangedEvent(),
+		})
+		if err != nil {
+			log.Error("avro: converting before value to native failed", zap.Error(err))
+			return nil, errors.Trace(err)
+		}
+		recordName := common.SanitizeName(e.TableInfo.TableName.Table)
+		if namespace := getAvroNamespace(a.namespace, e.TableInfo.TableName.Schema); namespace != "" {
+			recordName = namespace + "." + recordName
+		}
+		// The logical _tidb_before value is the before row itself. goavro
+		// requires this wrapper only to select the non-null branch of the
+		// nullable Avro record when encoding binary data.
+		native[tidbBefore] = goavro.Union(recordName, before)
+	}
+
+	return native, nil
 }
 
 func (a *BatchEncoder) nativeValueWithExtension(
 	native map[string]interface{},
 	e *model.RowChangedEvent,
+	op string,
 ) map[string]interface{} {
-	native[tidbOp] = getOperation(e)
+	native[tidbOp] = op
 	native[tidbCommitTs] = int64(e.CommitTs)
 	native[tidbPhysicalTime] = oracle.ExtractPhysical(e.CommitTs)
 
 	if a.config.EnableRowChecksum && e.Checksum != nil {
-		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(e.Checksum.Current), 10)
+		checksum := e.Checksum.Current
+		if op == deleteOperation {
+			checksum = e.Checksum.Previous
+		}
+		native[tidbRowLevelChecksum] = strconv.FormatUint(uint64(checksum), 10)
 		native[tidbCorrupted] = e.Checksum.Corrupted
 		native[tidbChecksumVersion] = e.Checksum.Version
 	}
@@ -354,6 +417,7 @@ const (
 	tidbOp           = "_tidb_op"
 	tidbCommitTs     = "_tidb_commit_ts"
 	tidbPhysicalTime = "_tidb_commit_physical_time"
+	tidbBefore       = "_tidb_before"
 
 	// row level checksum related fields
 	tidbRowLevelChecksum = "_tidb_row_level_checksum"
@@ -460,6 +524,9 @@ func sanitizeTopic(name string) string {
 func getAvroNamespace(namespace string, schema string) string {
 	ns := common.SanitizeName(namespace)
 	s := common.SanitizeName(schema)
+	if ns == "" {
+		return s
+	}
 	if s != "" {
 		return ns + "." + s
 	}
@@ -522,6 +589,34 @@ func (a *BatchEncoder) schemaWithExtension(
 	return top
 }
 
+func (a *BatchEncoder) schemaWithBeforeValue(
+	top *avroSchemaTop,
+	tableName model.TableName,
+	input avroEncodeInput,
+) (*avroSchemaTop, error) {
+	beforeValue, err := a.columns2AvroSchema(tableName, input)
+	if err != nil {
+		return nil, err
+	}
+	if top == nil {
+		// Delete values do not contain after columns. Keep the top-level
+		// table record and put the row image under _tidb_before.
+		top = &avroSchemaTop{
+			Tp:        "record",
+			Name:      common.SanitizeName(tableName.Table),
+			Namespace: getAvroNamespace(a.namespace, tableName.Schema),
+			Fields:    nil,
+		}
+	}
+
+	top.Fields = append(top.Fields, map[string]interface{}{
+		"name":    tidbBefore,
+		"type":    []interface{}{"null", beforeValue},
+		"default": nil,
+	})
+	return top, nil
+}
+
 func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroEncodeInput) (*avroSchemaTop, error) {
 	top := &avroSchemaTop{
 		Tp:        "record",
@@ -578,14 +673,27 @@ func (a *BatchEncoder) columns2AvroSchema(tableName model.TableName, input avroE
 	return top, nil
 }
 
-func (a *BatchEncoder) value2AvroSchema(tableName model.TableName, input avroEncodeInput) (string, error) {
+func (a *BatchEncoder) value2AvroSchema(tableName model.TableName, input avroEncodeInput, op string) (string, error) {
 	if a.config.EnableRowChecksum {
 		sort.Sort(&input)
 	}
 
-	top, err := a.columns2AvroSchema(tableName, input)
-	if err != nil {
-		return "", err
+	var (
+		top *avroSchemaTop
+		err error
+	)
+	if op != deleteOperation {
+		top, err = a.columns2AvroSchema(tableName, input)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	if a.config.AvroIncludeBeforeValue {
+		top, err = a.schemaWithBeforeValue(top, tableName, input)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if a.config.EnableTiDBExtension {

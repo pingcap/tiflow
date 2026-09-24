@@ -178,6 +178,17 @@ alter table t1 add column col json not null;
 alter table t1 modify column col json default null;
 insert into t1(id) values(2);
 
+create table t2(
+    id int primary key,
+    v int,
+    note varchar(32)
+);
+
+insert into t2 values(1, 10, 'before-delete');
+insert into t2 values(2, 20, 'keep');
+update t2 set v = 11, note = 'updated-before-delete' where id = 1;
+delete from t2 where id = 1;
+
 create table finish_mark
 (
     id int PRIMARY KEY
