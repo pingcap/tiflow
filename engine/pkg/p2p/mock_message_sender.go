@@ -50,7 +50,7 @@ func (m *MockMessageSender) SendToNodeB(
 	ctx context.Context,
 	targetNodeID NodeID,
 	topic Topic,
-	message interface{},
+	message any,
 ) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -77,7 +77,7 @@ func (m *MockMessageSender) SendToNode(
 	_ context.Context,
 	targetNodeID NodeID,
 	topic Topic,
-	message interface{},
+	message any,
 ) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -104,7 +104,7 @@ func (m *MockMessageSender) SendToNode(
 }
 
 // TryPop tries to get a message from message sender
-func (m *MockMessageSender) TryPop(targetNodeID NodeID, topic Topic) (interface{}, bool) {
+func (m *MockMessageSender) TryPop(targetNodeID NodeID, topic Topic) (any, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

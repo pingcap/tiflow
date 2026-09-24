@@ -16,6 +16,7 @@ package rpcutil
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"time"
 
@@ -208,10 +209,8 @@ func NormalizeError() grpc.UnaryServerInterceptor {
 // allowList is a list of methods that will be logged. limiter is used to limit the log rate.
 func Logger(allowList []string, limiter *rate.Limiter) grpc.UnaryServerInterceptor {
 	allow := func(method string) bool {
-		for _, m := range allowList {
-			if m == method {
-				return true
-			}
+		if slices.Contains(allowList, method) {
+			return true
 		}
 		return limiter.Allow()
 	}

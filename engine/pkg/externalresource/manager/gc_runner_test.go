@@ -77,12 +77,9 @@ func newGCRunnerTestHelperWithMeta(meta pkgOrm.ResourceClient) *gcRunnerTestHelp
 }
 
 func (h *gcRunnerTestHelper) Start() {
-	h.wg.Add(1)
-	go func() {
-		defer h.wg.Done()
-
+	h.wg.Go(func() {
 		h.errCh <- h.Runner.Run(h.ctx)
-	}()
+	})
 }
 
 func (h *gcRunnerTestHelper) Close() {
@@ -257,7 +254,7 @@ func TestGCRunnerMultiple(t *testing.T) {
 
 	resources := []string{"/local/resource", "/s3/resource"}
 	const numResources = 1000
-	for i := 0; i < numResources; i++ {
+	for i := range numResources {
 		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 			ID:        fmt.Sprintf("%s-%d", resources[rand.Intn(2)], i),
 			Job:       "job-1",
@@ -369,7 +366,7 @@ func testGCExecutors(t *testing.T, helper *gcRunnerTestHelper) {
 		require.NoError(t, err)
 	}
 	const numResources = 1000
-	for i := 0; i < numResources; i++ {
+	for i := range numResources {
 		workerID := rand.Intn(4)
 		err := helper.Meta.CreateResource(context.Background(), &resModel.ResourceMeta{
 			ID:        fmt.Sprintf("%s-%d", resources[rand.Intn(2)], i),

@@ -122,8 +122,8 @@ func (m *ResourceMeta) ToQueryResourceResponse() *pb.QueryResourceResponse {
 }
 
 // Map is used in gorm update
-func (m *ResourceMeta) Map() map[string]interface{} {
-	return map[string]interface{}{
+func (m *ResourceMeta) Map() map[string]any {
+	return map[string]any{
 		"project_id":  m.ProjectID,
 		"tenant_id":   m.TenantID,
 		"id":          m.ID,

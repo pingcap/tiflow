@@ -466,7 +466,7 @@ func (m *Master) OnWorkerOffline(worker framework.WorkerHandle, reason error) er
 }
 
 // OnWorkerMessage implements MasterImpl.OnWorkerMessage
-func (m *Master) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (m *Master) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message any) error {
 	log.Info("FakeMaster: OnWorkerMessage",
 		zap.String("topic", topic),
 		zap.Any("message", message))

@@ -77,12 +77,12 @@ type message struct {
 	ID      messageID
 	Type    messageType
 	Command string
-	Payload interface{}
+	Payload any
 }
 
 // client defines an interface that supports send message
 type client interface {
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error
 }
 
 // messageMatcher implement a simple synchronous request/response message matcher since the lib currently only support asynchronous message.
@@ -108,11 +108,11 @@ func (m *messageMatcher) sendRequest(
 	clientCtx context.Context,
 	topic p2p.Topic,
 	command string,
-	req interface{},
+	req any,
 	client client,
-) (interface{}, error) {
+) (any, error) {
 	msg := message{ID: m.allocID(), Type: requestTp, Command: command, Payload: req}
-	respCh := make(chan interface{}, 1)
+	respCh := make(chan any, 1)
 	m.pendings.Store(msg.ID, respCh)
 	defer m.pendings.Delete(msg.ID)
 
@@ -132,20 +132,20 @@ func (m *messageMatcher) sendRequest(
 }
 
 // sendResponse sends a response with message ID.
-func (m *messageMatcher) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, command string, resp interface{}, client client) error {
+func (m *messageMatcher) sendResponse(ctx context.Context, topic p2p.Topic, id messageID, command string, resp any, client client) error {
 	msg := message{ID: id, Type: responseTp, Command: command, Payload: resp}
 	return client.SendMessage(ctx, topic, msg, false /* nonblock */)
 }
 
 // onResponse receives and pairs a response message.
-func (m *messageMatcher) onResponse(id messageID, resp interface{}) error {
+func (m *messageMatcher) onResponse(id messageID, resp any) error {
 	respCh, ok := m.pendings.Load(id)
 	if !ok {
 		return errors.Errorf("request %d not found", id)
 	}
 
 	select {
-	case respCh.(chan interface{}) <- resp:
+	case respCh.(chan any) <- resp:
 		return nil
 	default:
 	}
@@ -163,8 +163,8 @@ type MessageAgent interface {
 	// RemoveClient is used when client is offline permanently, or the new client
 	// with this clientID should be treated as a different client.
 	RemoveClient(clientID string) error
-	SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error
-	SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error)
+	SendMessage(ctx context.Context, clientID string, command string, msg any) error
+	SendRequest(ctx context.Context, clientID string, command string, req any) (any, error)
 }
 
 type clientGroup struct {
@@ -188,7 +188,7 @@ type MessageAgentImpl struct {
 	clients               clientGroup
 	// when receive message/request/response,
 	// the corresponding processing method of commandHandler will be called according to the command name.
-	commandHandler interface{}
+	commandHandler any
 	id             string
 }
 
@@ -198,7 +198,7 @@ type MessageAgentImpl struct {
 // MessageFuncType: func(ctx context.Context, msg *interface{}) error {}
 // RequestFuncType(1): func(ctx context.Context, req *interface{}) (resp *interface{}, err error) {}
 // RequestFuncType(2): func(ctx context.Context, req *interface{}) (resp *interface{}) {}
-func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) MessageAgent {
+func NewMessageAgentImpl(id string, commandHandler any, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) MessageAgent {
 	agent := &MessageAgentImpl{
 		messageMatcher: newMessageMatcher(),
 		clients: clientGroup{
@@ -223,12 +223,10 @@ func NewMessageAgentImpl(id string, commandHandler interface{}, messageHandlerMa
 		},
 	)
 	agent.ctx, agent.cancel = context.WithCancel(context.Background())
-	agent.wg.Add(1)
-	go func() {
-		defer agent.wg.Done()
+	agent.wg.Go(func() {
 		err := agent.pool.Run(agent.ctx)
 		agent.logger.Info("workerpool exited", zap.Error(err))
-	}()
+	})
 	return agent
 }
 
@@ -308,7 +306,7 @@ func (agent *MessageAgentImpl) getClient(clientID string) (client, error) {
 }
 
 // SendMessage send message asynchronously.
-func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
+func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string, command string, msg any) error {
 	client, err := agent.getClient(clientID)
 	if err != nil {
 		return err
@@ -322,7 +320,7 @@ func (agent *MessageAgentImpl) SendMessage(ctx context.Context, clientID string,
 // SendRequest send request synchronously.
 // caller should add its own retry mechanism if needed.
 // caller should persist the request itself if needed.
-func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
+func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string, command string, req any) (any, error) {
 	agent.clients.mu.RLock()
 	client, ok := agent.clients.clients[clientID]
 	clientCtx, ok2 := agent.clients.ctxs[clientID]
@@ -341,7 +339,7 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string,
 }
 
 // sendResponse send response asynchronously.
-func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string, msgID messageID, command string, resp interface{}) error {
+func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string, msgID messageID, command string, resp any) error {
 	client, err := agent.getClient(clientID)
 	if err != nil {
 		return err
@@ -356,7 +354,7 @@ func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string
 // Forward the response to the corresponding request.
 // According to the command, the corresponding message processing function of commandHandler will be called.
 // According to the command, the corresponding request processing function of commandHandler will be called, and send the response to caller.
-func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
+func (agent *MessageAgentImpl) onMessage(topic string, msg any) error {
 	agent.logger.Debug("on message", zap.String("topic", topic), zap.Any("msg", msg))
 	m, ok := msg.(*message)
 	if !ok {
@@ -375,7 +373,7 @@ func (agent *MessageAgentImpl) onMessage(topic string, msg interface{}) error {
 }
 
 // handleResponse receive response.
-func (agent *MessageAgentImpl) handleResponse(id messageID, command string, resp interface{}) error {
+func (agent *MessageAgentImpl) handleResponse(id messageID, command string, resp any) error {
 	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("response handler for command %s not found", command)
@@ -394,7 +392,7 @@ func (agent *MessageAgentImpl) handleResponse(id messageID, command string, resp
 }
 
 // handleRequest receive request, call request handler and send response.
-func (agent *MessageAgentImpl) handleRequest(clientID string, msgID messageID, command string, req interface{}) error {
+func (agent *MessageAgentImpl) handleRequest(clientID string, msgID messageID, command string, req any) error {
 	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("request handler for command %s not found", command)
@@ -425,7 +423,7 @@ func (agent *MessageAgentImpl) handleRequest(clientID string, msgID messageID, c
 }
 
 // handle message receive message and call message handler.
-func (agent *MessageAgentImpl) handleMessage(command string, msg interface{}) error {
+func (agent *MessageAgentImpl) handleMessage(command string, msg any) error {
 	handler := reflect.ValueOf(agent.commandHandler).MethodByName(command)
 	if !handler.IsValid() {
 		return errors.Errorf("message handler for command %s not found", command)

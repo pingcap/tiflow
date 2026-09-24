@@ -106,7 +106,7 @@ func NewCase(ctx context.Context, addr string, name string, cfgPath string) (*Ca
 	for range c.sources {
 		generators := make(map[string]sqlgen.SQLGenerator)
 		mcps := make(map[string]*mcp.ModificationCandidatePool)
-		for i := 0; i < tableNum; i++ {
+		for i := range tableNum {
 			tableName := fmt.Sprintf("tb%d", i)
 			tableConfig := &sqlconfig.TableConfig{
 				DatabaseName: c.name,
@@ -194,7 +194,7 @@ func (c *Case) genFullData() error {
 				return err
 			}
 			sqls := make([]string, 0, rowNum)
-			for j := 0; j < rowNum; j++ {
+			for range rowNum {
 				sql, uk, err := generator.GenInsertRow()
 				if err != nil {
 					return err
@@ -244,7 +244,7 @@ func (c *Case) diffData(ctx context.Context) (bool, error) {
 }
 
 func (c *Case) diffDataLoop(ctx context.Context) error {
-	for i := 0; i < diffTimes; i++ {
+	for range diffTimes {
 		select {
 		case <-ctx.Done():
 			return nil
@@ -329,7 +329,7 @@ func (c *Case) genIncrData(ctx context.Context) error {
 		tableName := c.tables[rand.Intn(tableNum)]
 
 		sqls := make([]string, 0, batch)
-		for i := 0; i < batch; i++ {
+		for range batch {
 			sql, err := c.randDML(source, tableName, deleteKeys)
 			if err != nil {
 				return err

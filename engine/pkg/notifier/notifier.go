@@ -83,11 +83,9 @@ func NewNotifier[T any]() *Notifier[T] {
 		synchronizeCh: make(chan struct{}),
 	}
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		ret.run()
-	}()
+	})
 	return ret
 }
 

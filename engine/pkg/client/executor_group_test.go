@@ -104,14 +104,12 @@ func TestGetExecutorBlocked(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer cancel()
 		cli, err := group.GetExecutorClientB(ctx, "executor-1")
 		require.NoError(t, err)
 		require.NotNil(t, cli)
-	}()
+	})
 
 	time.Sleep(10 * time.Millisecond)
 	err := group.AddExecutor("executor-1", "test-addr:1234")
@@ -202,12 +200,10 @@ func TestGetExecutorBCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, err := group.GetExecutorClientB(ctx, "executor-1")
 		require.Error(t, err)
-	}()
+	})
 
 	time.Sleep(10 * time.Millisecond)
 	cancel()

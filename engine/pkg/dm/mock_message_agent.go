@@ -35,7 +35,7 @@ func GenerateTopic(senderID, receiverID string) string {
 }
 
 // GenerateResponse generate mock response message.
-func GenerateResponse(id messageID, command string, msg interface{}) interface{} {
+func GenerateResponse(id messageID, command string, msg any) any {
 	resp := message{ID: id, Type: responseTp, Command: command, Payload: msg}
 	// nolint:errcheck
 	bytes, _ := json.Marshal(resp)
@@ -58,14 +58,14 @@ func (m *MockMessageAgent) UpdateClient(clientID string, client client) error { 
 func (m *MockMessageAgent) RemoveClient(clientID string) error { return nil }
 
 // SendMessage implement MessageAgent.SendMessage.
-func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, command string, msg interface{}) error {
+func (m *MockMessageAgent) SendMessage(ctx context.Context, clientID string, command string, msg any) error {
 	m.Lock()
 	defer m.Unlock()
 	return m.Called().Error(0)
 }
 
 // SendRequest implement MessageAgent.SendRequest.
-func (m *MockMessageAgent) SendRequest(ctx context.Context, clientID string, command string, req interface{}) (interface{}, error) {
+func (m *MockMessageAgent) SendRequest(ctx context.Context, clientID string, command string, req any) (any, error) {
 	m.Lock()
 	defer m.Unlock()
 	args := m.Called(ctx, clientID, command, req)

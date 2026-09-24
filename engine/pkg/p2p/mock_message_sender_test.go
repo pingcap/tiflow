@@ -33,11 +33,11 @@ func TestMockMessageSender(t *testing.T) {
 	_, ok := sender.TryPop("dummy", "dummy")
 	require.False(t, ok)
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		topicID := fmt.Sprintf("topic-%d", i)
-		for j := 0; j < 50; j++ {
+		for j := range 50 {
 			nodeID := fmt.Sprintf("node-%d", j)
-			for k := 0; k < 50; k++ {
+			for k := range 50 {
 				ok, err := sender.SendToNode(context.TODO(), nodeID, topicID, &msgForTesting{k})
 				require.True(t, ok)
 				require.NoError(t, err)
@@ -45,11 +45,11 @@ func TestMockMessageSender(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		topicID := fmt.Sprintf("topic-%d", i)
-		for j := 0; j < 50; j++ {
+		for j := range 50 {
 			nodeID := fmt.Sprintf("node-%d", j)
-			for k := 0; k < 50; k++ {
+			for k := range 50 {
 				msg, ok := sender.TryPop(nodeID, topicID)
 				require.True(t, ok)
 				require.Equal(t, &msgForTesting{k}, msg)
