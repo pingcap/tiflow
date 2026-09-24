@@ -2044,6 +2044,57 @@ func (t *testSchedulerSuite) TestOperateValidatorTask() {
 	t.validatorStageMatch(s, subtaskCfg.Name, subtaskCfg.SourceID, pb.Stage_Stopped) // stage not changed
 }
 
+type schedulerRPCClient func(context.Context, *workerrpc.Request) (*workerrpc.Response, error)
+
+func (f schedulerRPCClient) SendRequest(ctx context.Context, req *workerrpc.Request, _ time.Duration) (*workerrpc.Response, error) {
+	return f(ctx, req)
+}
+
+func (f schedulerRPCClient) Close() error { return nil }
+
+func (t *testSchedulerSuite) TestUpdateSubTasksChecksStageOfAllSources() {
+	defer t.clearTestInfoOperation()
+
+	logger := log.L()
+	s := NewScheduler(&logger, security.Security{})
+	s.started.Store(true)
+	s.etcdCli = t.etcdTestCli
+	var cfg1 config.SubTaskConfig
+	t.Require().NoError(cfg1.Decode(config.SampleSubtaskConfig, true))
+	cfg1.Name, cfg1.SourceID = "task", "source1"
+	cfg2 := cfg1
+	cfg2.SourceID = "source2"
+	s.subTaskCfgs.Store(cfg1.Name, map[string]config.SubTaskConfig{cfg1.SourceID: cfg1, cfg2.SourceID: cfg2})
+	stages := map[string]ha.Stage{
+		cfg1.SourceID: ha.NewSubTaskStage(pb.Stage_Stopped, cfg1.SourceID, cfg1.Name),
+		cfg2.SourceID: ha.NewSubTaskStage(pb.Stage_Running, cfg2.SourceID, cfg2.Name),
+	}
+	s.expectSubTaskStages.Store(cfg1.Name, stages)
+	// workers always accept the update, so only the scheduler checks can reject it.
+	worker := NewMockWorker(schedulerRPCClient(func(context.Context, *workerrpc.Request) (*workerrpc.Response, error) {
+		return &workerrpc.Response{CheckSubtasksCanUpdate: &pb.CheckSubtasksCanUpdateResponse{Success: true}}, nil
+	}))
+	s.bounds[cfg1.SourceID], s.bounds[cfg2.SourceID] = worker, worker
+	ctx := context.Background()
+
+	// every source must be stopped, independent of the order in the request.
+	for _, cfgs := range [][]config.SubTaskConfig{{cfg1, cfg2}, {cfg2, cfg1}} {
+		t.True(terror.ErrSchedulerSubTaskCfgUpdate.Equal(s.UpdateSubTasks(ctx, cfgs...)))
+	}
+
+	// another operation on the same task makes the stages unreliable.
+	stages[cfg2.SourceID] = ha.NewSubTaskStage(pb.Stage_Paused, cfg2.SourceID, cfg2.Name)
+	release, err := s.AcquireSubtaskLatch(cfg1.Name)
+	t.Require().NoError(err)
+	t.True(terror.ErrSchedulerLatchInUse.Equal(s.UpdateSubTasks(ctx, cfg1, cfg2)))
+	release()
+
+	cfg1.Batch++
+	cfg2.Batch++
+	t.NoError(s.UpdateSubTasks(ctx, cfg1, cfg2))
+	t.Equal(cfg2.Batch, s.getSubTaskCfgByTaskSource(cfg2.Name, cfg2.SourceID).Batch)
+}
+
 func (t *testSchedulerSuite) TestUpdateSubTasksAndSourceCfg() {
 	defer t.clearTestInfoOperation()
 
