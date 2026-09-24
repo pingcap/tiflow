@@ -380,6 +380,38 @@ func TestParser(t *testing.T) {
 	}
 }
 
+func TestParserSpecificCreateTableOptions(t *testing.T) {
+	t.Parallel()
+
+	cases := []string{
+		"create table t2 (id int primary key, c1 varchar(255)) transactional=0",
+		"CREATE TABLE `help_topic` (`help_topic_id` int unsigned NOT NULL) ENGINE=Aria DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci PAGE_CHECKSUM=1 TRANSACTIONAL=0 COMMENT='help topics'",
+		"create table t_auto (id int primary key) AUTOEXTEND_SIZE=4M",
+	}
+	for _, sql := range cases {
+		t.Run(sql, func(t *testing.T) {
+			t.Parallel()
+			p := parser.New()
+
+			stmts, err := Parse(p, sql, "", "")
+			require.NoError(t, err)
+			require.Len(t, stmts, 1)
+
+			splitDDLs, err := SplitDDL(stmts[0], "test")
+			require.NoError(t, err)
+			require.Len(t, splitDDLs, 1)
+
+			stmts, err = Parse(p, splitDDLs[0], "", "")
+			require.NoError(t, err)
+			require.Len(t, stmts, 1)
+
+			tableNames, err := FetchDDLTables("test", stmts[0], conn.LCTableNamesSensitive)
+			require.NoError(t, err)
+			require.Len(t, tableNames, 1)
+		})
+	}
+}
+
 func TestError(t *testing.T) {
 	t.Parallel()
 	p := parser.New()
