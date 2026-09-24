@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/ddl"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -222,7 +223,7 @@ func (p *ddlJobPullerImpl) handleRawKVEntry(ctx context.Context, ddlRawKV *model
 			zap.String("table", job.TableName),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("query", job.Query),
+			logutil.ZapRedactString("query", job.Query),
 			zap.Any("job", job))
 	}
 
@@ -315,7 +316,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("table", job.TableName),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS),
-			zap.String("query", job.Query),
+			logutil.ZapRedactString("query", job.Query),
 			zap.Uint64("pullerResolvedTs", p.getResolvedTs()))
 		return true, nil
 	}
@@ -327,7 +328,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
+				logutil.ZapRedactString("query", job.Query),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS))
 		}
@@ -337,7 +338,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
+				logutil.ZapRedactString("query", job.Query),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Error(err))
@@ -351,7 +352,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
+			logutil.ZapRedactString("query", job.Query),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 			zap.Error(err))
@@ -371,7 +372,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				zap.String("changefeed", p.changefeedID.ID),
 				zap.String("schema", job.SchemaName),
 				zap.String("table", job.TableName),
-				zap.String("query", job.Query),
+				logutil.ZapRedactString("query", job.Query),
 				zap.Uint64("startTs", job.StartTS),
 				zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 				zap.Error(err))
@@ -390,7 +391,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 				"the number of `TableInfo` in `Job.BinlogInfo.MultipleTableInfos`",
 				zap.Int("numQueries", len(querys)),
 				zap.Int("numTableInfos", len(job.BinlogInfo.MultipleTableInfos)),
-				zap.String("Job.Query", job.Query),
+				logutil.ZapRedactString("Job.Query", job.Query),
 				zap.Any("Job.BinlogInfo.MultipleTableInfos", job.BinlogInfo.MultipleTableInfos),
 				zap.Error(cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()))
 			return false, cerror.ErrTiDBUnexpectedJobMeta.GenWithStackByArgs()
@@ -452,7 +453,7 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
-			zap.String("query", job.Query),
+			logutil.ZapRedactString("query", job.Query),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishedTs", job.BinlogInfo.FinishedTS))
 	default:
@@ -585,7 +586,7 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 			log.Info("RenameTables is filtered",
 				zap.Int64("tableID", tableInfo.ID),
 				zap.String("schema", info.OldSchemaName.O),
-				zap.String("query", job.Query))
+				logutil.ZapRedactString("query", job.Query))
 			continue
 		}
 		if shouldDiscardOldTable && !shouldDiscardNewTable {
@@ -676,7 +677,7 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 			zap.String("schema", job.SchemaName),
 			zap.String("table", job.TableName),
 
-			zap.String("query", job.Query),
+			logutil.ZapRedactString("query", job.Query),
 			zap.Uint64("startTs", job.StartTS),
 			zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 			zap.Int64("jobID", job.ID))
@@ -691,7 +692,7 @@ func (h *ddlPullerImpl) addToPending(job *timodel.Job) {
 		zap.String("changefeed", h.changefeedID.ID),
 		zap.String("schema", job.SchemaName),
 		zap.String("table", job.TableName),
-		zap.String("query", job.Query),
+		logutil.ZapRedactString("query", job.Query),
 		zap.Uint64("startTs", job.StartTS),
 		zap.Uint64("finishTs", job.BinlogInfo.FinishedTS),
 		zap.Int64("jobID", job.ID))
