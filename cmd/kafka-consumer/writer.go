@@ -77,23 +77,99 @@ type partitionProgress struct {
 	// tableSinkMap -> [tableID]tableSink
 	tableSinkMap sync.Map
 
+<<<<<<< HEAD
 	eventGroups map[int64]*eventsGroup
 	decoder     codec.RowEventDecoder
+=======
+	tableSinkMap map[model.TableID]tablesink.TableSink
+	eventGroups  map[model.TableID]*eventsGroup
+	decoder      codec.RowEventDecoder
+}
+
+func newPartitionProgress(partition int32, decoder codec.RowEventDecoder) *partitionProgress {
+	return &partitionProgress{
+		partition:    partition,
+		eventGroups:  make(map[model.TableID]*eventsGroup),
+		tableSinkMap: make(map[model.TableID]tablesink.TableSink),
+		decoder:      decoder,
+	}
+}
+
+func (p *partitionProgress) updateWatermark(newWatermark uint64, offset kafka.Offset) {
+	watermark := p.loadWatermark()
+	if newWatermark >= watermark {
+		p.watermark = newWatermark
+		p.watermarkOffset = offset
+		log.Info("watermark received", zap.Int32("partition", p.partition), zap.Any("offset", offset),
+			zap.Uint64("watermark", newWatermark))
+		return
+	}
+	fields := []zap.Field{
+		zap.Int32("partition", p.partition),
+		zap.Uint64("newWatermark", newWatermark),
+		zap.Any("offset", offset),
+		zap.Uint64("watermark", watermark),
+		zap.Any("watermarkOffset", p.watermarkOffset),
+	}
+
+	// TiCDC only guarantees at-least-once delivery. Duplicate MQ delivery can
+	// replay old resolved/checkpoint markers, making the resolved ts appear to
+	// fall back. This is unexpected but tolerable, so the consumer keeps the
+	// larger watermark.
+	if offset > p.watermarkOffset {
+		log.Warn("partition resolved ts fall back from newer offset: unexpected but tolerable under at-least-once delivery, ignore it", fields...)
+		return
+	}
+	log.Warn("partition resolved ts fall back, ignore it since consumer read old offset message", fields...)
+}
+
+func (p *partitionProgress) loadWatermark() uint64 {
+	return p.watermark
+>>>>>>> 431c2afbed (kafka-consumer(ticdc): tolerate replayed resolved and DDL events (#12596))
 }
 
 type writer struct {
 	option *option
 
+<<<<<<< HEAD
 	ddlList              []*model.DDLEvent
 	ddlWithMaxCommitTs   *model.DDLEvent
 	ddlSink              ddlsink.Sink
 	fakeTableIDGenerator *fakeTableIDGenerator
+=======
+	ddlList            []*model.DDLEvent
+	ddlWithMaxCommitTs *model.DDLEvent
+	// ddlKeysWithMaxCommitTs records every logical DDL seen at the current
+	// maximum CommitTs, so replayed prefixes of split DDL sequences can be
+	// ignored without collapsing distinct DDLs that share the same CommitTs.
+	ddlKeysWithMaxCommitTs map[ddlEventKey]struct{}
+	ddlSink                ddlsink.Sink
+>>>>>>> 431c2afbed (kafka-consumer(ticdc): tolerate replayed resolved and DDL events (#12596))
 
 	// sinkFactory is used to create table sink for each table.
 	sinkFactory *eventsinkfactory.SinkFactory
 	progresses  []*partitionProgress
 
 	eventRouter *dispatcher.EventRouter
+}
+
+// ddlEventKey identifies a logical DDL even if the Kafka replay decodes it
+// into a fresh DDLEvent object. The MQ codecs preserve StartTs/CommitTs/Query/Seq,
+// which is enough to distinguish split DDLs while still recognizing replays.
+type ddlEventKey struct {
+	startTs  uint64
+	commitTs uint64
+	query    string
+	seq      uint64
+}
+
+func newDDLEventKey(ddl *model.DDLEvent) ddlEventKey {
+	return ddlEventKey{
+		startTs:  ddl.StartTs,
+		commitTs: ddl.CommitTs,
+		query:    ddl.Query,
+		seq:      ddl.Seq,
+	}
 }
 
 func newWriter(ctx context.Context, o *option) *writer {
@@ -174,17 +250,27 @@ func (w *writer) appendDDL(ddl *model.DDLEvent) {
 		return
 	}
 
-	// A rename tables DDL job contains multiple DDL events with same CommitTs.
-	// So to tell if a DDL is redundant or not, we must check the equivalence of
-	// the current DDL and the DDL with max CommitTs.
-	if ddl == w.ddlWithMaxCommitTs {
-		log.Warn("ignore redundant DDL, the DDL is equal to ddlWithMaxCommitTs",
+	ddlKey := newDDLEventKey(ddl)
+	if w.ddlWithMaxCommitTs == nil || ddl.CommitTs > w.ddlWithMaxCommitTs.CommitTs {
+		w.ddlKeysWithMaxCommitTs = make(map[ddlEventKey]struct{})
+	}
+
+	// The DDL with max CommitTs may be one event in a split DDL job, so we must
+	// remember every logical DDL already seen at that CommitTs rather than only
+	// comparing against the last decoded event object.
+	if _, duplicated := w.ddlKeysWithMaxCommitTs[ddlKey]; duplicated {
+		log.Warn("ignore redundant DDL, the DDL has already been seen at max CommitTs",
 			zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
 		return
 	}
 
 	w.ddlList = append(w.ddlList, ddl)
 	w.ddlWithMaxCommitTs = ddl
+<<<<<<< HEAD
+=======
+	w.ddlKeysWithMaxCommitTs[ddlKey] = struct{}{}
+	log.Info("DDL message received", zap.Any("offset", offset), zap.Uint64("commitTs", ddl.CommitTs), zap.String("DDL", ddl.Query))
+>>>>>>> 431c2afbed (kafka-consumer(ticdc): tolerate replayed resolved and DDL events (#12596))
 }
 
 func (w *writer) getFrontDDL() *model.DDLEvent {
