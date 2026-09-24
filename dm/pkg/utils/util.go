@@ -129,7 +129,7 @@ func DecodeBinlogPosition(pos string) (*mysql.Position, error) {
 
 // WaitSomething waits for something done with `true`.
 func WaitSomething(backoff int, waitTime time.Duration, fn func() bool) bool {
-	for i := 0; i < backoff; i++ {
+	for range backoff {
 		if fn() {
 			return true
 		}

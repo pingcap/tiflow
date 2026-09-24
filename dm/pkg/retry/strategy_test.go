@@ -38,7 +38,7 @@ func TestFiniteRetryStrategy(t *testing.T) {
 	}
 	ctx := tcontext.Background()
 
-	operateFn := func(*tcontext.Context) (interface{}, error) {
+	operateFn := func(*tcontext.Context) (any, error) {
 		return nil, terror.ErrDBDriverError.Generate("test database error")
 	}
 
@@ -63,7 +63,7 @@ func TestFiniteRetryStrategy(t *testing.T) {
 	params.IsRetryableFn = func(int, error) bool {
 		return dbutil.IsRetryableError(err)
 	}
-	operateFn = func(*tcontext.Context) (interface{}, error) {
+	operateFn = func(*tcontext.Context) (any, error) {
 		mysqlErr := driver.ErrBadConn
 		return nil, terror.ErrDBInvalidConn.Delegate(mysqlErr, "test invalid connection")
 	}
@@ -79,7 +79,7 @@ func TestFiniteRetryStrategy(t *testing.T) {
 	require.True(t, terror.ErrDBInvalidConn.Equal(err))
 
 	retValue := "success"
-	operateFn = func(*tcontext.Context) (interface{}, error) {
+	operateFn = func(*tcontext.Context) (any, error) {
 		return retValue, nil
 	}
 	ret, opCount, err := strategy.Apply(ctx, params, operateFn)

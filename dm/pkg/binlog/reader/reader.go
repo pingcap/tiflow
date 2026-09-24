@@ -36,7 +36,7 @@ type Reader interface {
 	Close() error
 
 	// Status returns the status of the reader.
-	Status() interface{}
+	Status() any
 }
 
 // Streamer provides the ability to get binlog event from remote server or local file.

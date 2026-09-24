@@ -115,7 +115,8 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 	if config.Net != "" {
 		net = config.Net
 	}
-	dsn := fmt.Sprintf("%s:%s@%s(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
+	var dsn strings.Builder
+	fmt.Fprintf(&dsn, "%s:%s@%s(%s)/?charset=utf8mb4&interpolateParams=true&maxAllowedPacket=0",
 		config.User, config.Password, net, hostPort)
 
 	doFuncInClose := func() {}
@@ -139,7 +140,7 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 			if err != nil {
 				return nil, terror.ErrConnRegistryTLSConfig.Delegate(err)
 			}
-			dsn += "&tls=" + name
+			dsn.WriteString("&tls=" + name)
 
 			doFuncInClose = func() {
 				mysql.DeregisterTLSConfig(name)
@@ -151,10 +152,10 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 	rawCfg := config.RawDBCfg
 	if rawCfg != nil {
 		if rawCfg.ReadTimeout != "" {
-			dsn += fmt.Sprintf("&readTimeout=%s", rawCfg.ReadTimeout)
+			dsn.WriteString(fmt.Sprintf("&readTimeout=%s", rawCfg.ReadTimeout))
 		}
 		if rawCfg.WriteTimeout != "" {
-			dsn += fmt.Sprintf("&writeTimeout=%s", rawCfg.WriteTimeout)
+			dsn.WriteString(fmt.Sprintf("&writeTimeout=%s", rawCfg.WriteTimeout))
 		}
 		maxIdleConns = rawCfg.MaxIdleConns
 	}
@@ -167,14 +168,14 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 		if strings.ToLower(key) == "foreign_key_checks" {
 			setFK = true
 		}
-		dsn += fmt.Sprintf("&%s='%s'", key, url.QueryEscape(val))
+		fmt.Fprintf(&dsn, "&%s='%s'", key, url.QueryEscape(val))
 	}
 
 	if !setFK {
-		dsn += "&foreign_key_checks=0"
+		dsn.WriteString("&foreign_key_checks=0")
 	}
 
-	db, err := sql.Open("mysql", dsn)
+	db, err := sql.Open("mysql", dsn.String())
 	if err != nil {
 		return nil, terror.DBErrorAdapt(err, config.Scope, terror.ErrDBDriverError)
 	}
@@ -290,7 +291,7 @@ func (d *BaseDB) GetBaseConn(ctx context.Context) (*BaseConn, error) {
 }
 
 // TODO: retry can be done inside the BaseDB.
-func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...interface{}) (sql.Result, error) {
+func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...any) (sql.Result, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("exec context",
 			zap.String("query", utils.TruncateString(query, -1)),
@@ -300,7 +301,7 @@ func (d *BaseDB) ExecContext(tctx *tcontext.Context, query string, args ...inter
 }
 
 // TODO: retry can be done inside the BaseDB.
-func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...any) (*sql.Rows, error) {
 	if tctx.L().Core().Enabled(zap.DebugLevel) {
 		tctx.L().Debug("query context",
 			zap.String("query", utils.TruncateString(query, -1)),
@@ -309,8 +310,8 @@ func (d *BaseDB) QueryContext(tctx *tcontext.Context, query string, args ...inte
 	return d.DB.QueryContext(tctx.Ctx, query, args...)
 }
 
-func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args [][]interface{}, retryer retry.Retryer) error {
-	workFunc := func(tctx *tcontext.Context) (interface{}, error) {
+func (d *BaseDB) DoTxWithRetry(tctx *tcontext.Context, queries []string, args [][]any, retryer retry.Retryer) error {
+	workFunc := func(tctx *tcontext.Context) (any, error) {
 		var (
 			err error
 			tx  *sql.Tx

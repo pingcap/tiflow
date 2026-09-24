@@ -14,6 +14,7 @@
 package pessimism
 
 import (
+	"maps"
 	"sync"
 
 	"github.com/pingcap/tiflow/dm/master/metrics"
@@ -137,9 +138,7 @@ func (l *Lock) Ready() map[string]bool {
 	defer l.mu.RUnlock()
 
 	ret := make(map[string]bool, len(l.ready))
-	for k, v := range l.ready {
-		ret[k] = v
-	}
+	maps.Copy(ret, l.ready)
 	return ret
 }
 

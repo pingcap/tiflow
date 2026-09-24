@@ -169,7 +169,7 @@ func (t *testForEtcd) TestUpgradeToVer3(c *check.C) {
 	c.Assert(resp.Kvs, check.HasLen, 1)
 	c.Assert(string(resp.Kvs[0].Value), check.Equals, newVal)
 
-	for i := 0; i < 500; i++ {
+	for i := range 500 {
 		key := common.UpstreamConfigKeyAdapterV1.Encode(fmt.Sprintf("%s-%d", source, i))
 		val := fmt.Sprintf("%s-%d", oldVal, i)
 		_, err := etcdTestCli.Put(ctx, key, val)
@@ -183,7 +183,7 @@ func (t *testForBigTxn) TestUpgradeToVer3(c *check.C) {
 	oldVal := "test"
 	ctx := context.Background()
 
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		key := common.UpstreamConfigKeyAdapterV1.Encode(fmt.Sprintf("%s-%d", source, i))
 		val := fmt.Sprintf("%s-%d", oldVal, i)
 		_, err := bigTxnTestCli.Put(ctx, key, val)

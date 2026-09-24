@@ -61,7 +61,7 @@ func NewParams(retryCount int, firstRetryDuration time.Duration, backoffStrategy
 // OperateFunc the function we can retry
 //
 //	return: (result of operation, error of operation)
-type OperateFunc func(*tcontext.Context) (interface{}, error)
+type OperateFunc func(*tcontext.Context) (any, error)
 
 // Strategy define different kind of retry strategy.
 type Strategy interface {
@@ -71,7 +71,7 @@ type Strategy interface {
 	Apply(ctx *tcontext.Context,
 		params Params,
 		operateFn OperateFunc,
-	) (interface{}, int, error)
+	) (any, int, error)
 }
 
 // FiniteRetryStrategy will retry `RetryCount` times when failed to operate DB.
@@ -79,7 +79,7 @@ type FiniteRetryStrategy struct{}
 
 // Apply for FiniteRetryStrategy, it waits `FirstRetryDuration` before it starts first retry, and then rest of retries wait time depends on BackoffStrategy.
 func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params, operateFn OperateFunc,
-) (ret interface{}, i int, err error) {
+) (ret any, i int, err error) {
 	for ; i < params.RetryCount; i++ {
 		ret, err = operateFn(ctx)
 		if err != nil {
@@ -111,7 +111,7 @@ func (*FiniteRetryStrategy) Apply(ctx *tcontext.Context, params Params, operateF
 // Retryer retries operateFn until success or reaches retry limit
 // todo: merge with Strategy when refactor
 type Retryer interface {
-	Apply(ctx *tcontext.Context, operateFn OperateFunc) (interface{}, int, error)
+	Apply(ctx *tcontext.Context, operateFn OperateFunc) (any, int, error)
 }
 
 // FiniteRetryer wraps params.
@@ -120,6 +120,6 @@ type FiniteRetryer struct {
 	Params *Params
 }
 
-func (s *FiniteRetryer) Apply(ctx *tcontext.Context, operateFn OperateFunc) (ret interface{}, i int, err error) {
+func (s *FiniteRetryer) Apply(ctx *tcontext.Context, operateFn OperateFunc) (ret any, i int, err error) {
 	return s.FiniteRetryStrategy.Apply(ctx, *s.Params, operateFn)
 }

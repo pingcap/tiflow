@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -764,12 +766,7 @@ func GetColumnName(lockID, ddl string, tp ast.AlterTableType) (string, error) {
 }
 
 func contains(s []string, e string) bool {
-	for _, a := range s {
-		if a == e {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, e)
 }
 
 // checkAddDropColumn check for ALTER TABLE ADD/DROP COLUMN statement
@@ -1175,9 +1172,7 @@ func (l *Lock) resolveTables() {
 	l.conflictTables = make(map[string]map[string]map[string]schemacmp.Table)
 	for source, schemaTables := range l.finalTables {
 		for schema, tables := range schemaTables {
-			for table, ti := range tables {
-				l.tables[source][schema][table] = ti
-			}
+			maps.Copy(l.tables[source][schema], tables)
 		}
 	}
 }

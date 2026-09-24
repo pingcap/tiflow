@@ -55,11 +55,11 @@ func TestExampleWorkerPool(t *testing.T) {
 	pool := NewWorkerPool[job, int64](func(result int64) {
 		sum += result
 	})
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		worker := &baseAdder{base: 666}
 		pool.Go(worker.add)
 	}
-	for i := 0; i < jobNum; i++ {
+	for range jobNum {
 		pool.PutJob(job{inc: &incrementer})
 	}
 
@@ -95,11 +95,11 @@ func TestExampleWorkerPoolError(t *testing.T) {
 	pool := NewWorkerPool[job, int64](func(result int64) {
 		sum += result
 	})
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		worker := &baseAdder{base: 666}
 		pool.Go(worker.addAndError)
 	}
-	for i := 0; i < jobNum; i++ {
+	for i := range jobNum {
 		ok := pool.PutJob(job{inc: &incrementer})
 		if !ok {
 			require.GreaterOrEqual(t, int64(i), errorAt)

@@ -17,12 +17,12 @@ import "reflect"
 
 // IsNil tests whether the passed in value is nil.
 // ref https://github.com/golang/go/blob/87113f7eadf6d8b12279709f05c0359b54b194ea/src/reflect/value.go#L1049.
-func IsNil(vi interface{}) (result bool) {
+func IsNil(vi any) (result bool) {
 	if vi == nil {
 		result = true
 	} else {
 		switch v := reflect.ValueOf(vi); v.Kind() {
-		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.UnsafePointer, reflect.Slice:
+		case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.UnsafePointer, reflect.Slice:
 			return v.IsNil()
 		}
 	}
