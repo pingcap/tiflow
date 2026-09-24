@@ -37,8 +37,7 @@ func TestReaderNewReader(t *testing.T) {
 
 func TestFileReaderRead(t *testing.T) {
 	dir := t.TempDir()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	uri, err := url.Parse(fmt.Sprintf("file://%s", dir))
 	require.NoError(t, err)

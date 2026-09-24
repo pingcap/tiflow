@@ -25,12 +25,12 @@ import (
 // prepareUpdate builds a parametrics UPDATE statement as following
 // sql: `UPDATE `test`.`t` SET {} = ?, {} = ? WHERE {} = ?, {} = {} LIMIT 1`
 // `WHERE` conditions come from `preCols` and SET clause targets come from `cols`.
-func prepareUpdate(quoteTable string, preCols, cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (string, []interface{}) {
+func prepareUpdate(quoteTable string, preCols, cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (string, []any) {
 	var builder strings.Builder
 	builder.WriteString("UPDATE " + quoteTable + " SET ")
 
 	columnNames := make([]string, 0, len(cols))
-	args := make([]interface{}, 0, len(cols)+len(preCols))
+	args := make([]any, 0, len(cols)+len(preCols))
 	for _, col := range cols {
 		colx := model.GetColumnDataX(col, tb)
 		if colx.ColumnData == nil || colx.GetFlag().IsGeneratedColumn() {
@@ -55,7 +55,7 @@ func prepareUpdate(quoteTable string, preCols, cols []*model.ColumnData, tb *mod
 	if len(wargs) == 0 {
 		return "", nil
 	}
-	for i := 0; i < len(colNames); i++ {
+	for i := range colNames {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
@@ -79,10 +79,10 @@ func prepareReplace(
 	tb *model.TableInfo,
 	appendPlaceHolder bool,
 	translateToInsert bool,
-) (string, []interface{}) {
+) (string, []any) {
 	var builder strings.Builder
 	columnNames := make([]string, 0, len(cols))
-	args := make([]interface{}, 0, len(cols))
+	args := make([]any, 0, len(cols))
 	for _, col := range cols {
 		colx := model.GetColumnDataX(col, tb)
 		if colx.ColumnData == nil || colx.GetFlag().IsGeneratedColumn() {
@@ -112,7 +112,7 @@ func prepareReplace(
 // representation. Because if we use the byte array respresentation, the go-sql-driver
 // will automatically set `_binary` charset for that column, which is not expected.
 // See https://github.com/go-sql-driver/mysql/blob/ce134bfc/connection.go#L267
-func appendQueryArgs(args []interface{}, col model.ColumnDataX) []interface{} {
+func appendQueryArgs(args []any, col model.ColumnDataX) []any {
 	switch v := col.Value.(type) {
 	case []byte:
 		cst := col.GetCharset()
@@ -130,7 +130,7 @@ func appendQueryArgs(args []interface{}, col model.ColumnDataX) []interface{} {
 
 // prepareDelete builds a parametric DELETE statement as following
 // sql: `DELETE FROM `test`.`t` WHERE x = ? AND y >= ? LIMIT 1`
-func prepareDelete(quoteTable string, cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (string, []interface{}) {
+func prepareDelete(quoteTable string, cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (string, []any) {
 	var builder strings.Builder
 	builder.WriteString("DELETE FROM " + quoteTable + " WHERE ")
 
@@ -138,8 +138,8 @@ func prepareDelete(quoteTable string, cols []*model.ColumnData, tb *model.TableI
 	if len(wargs) == 0 {
 		return "", nil
 	}
-	args := make([]interface{}, 0, len(wargs))
-	for i := 0; i < len(colNames); i++ {
+	args := make([]any, 0, len(wargs))
+	for i := range colNames {
 		if i > 0 {
 			builder.WriteString(" AND ")
 		}
@@ -157,7 +157,7 @@ func prepareDelete(quoteTable string, cols []*model.ColumnData, tb *model.TableI
 
 // whereSlice builds a parametric WHERE clause as following
 // sql: `WHERE {} = ? AND {} > ?`
-func whereSlice(cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (colNames []string, args []interface{}) {
+func whereSlice(cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bool) (colNames []string, args []any) {
 	// Try to use unique key values when available
 	for _, col := range cols {
 		colx := model.GetColumnDataX(col, tb)
@@ -170,7 +170,7 @@ func whereSlice(cols []*model.ColumnData, tb *model.TableInfo, forceReplicate bo
 	// if no explicit row id but force replicate, use all key-values in where condition
 	if len(colNames) == 0 && forceReplicate {
 		colNames = make([]string, 0, len(cols))
-		args = make([]interface{}, 0, len(cols))
+		args = make([]any, 0, len(cols))
 		for _, col := range cols {
 			colx := model.GetColumnDataX(col, tb)
 			colNames = append(colNames, colx.GetName())
@@ -198,7 +198,7 @@ func buildColumnList(names []string) string {
 func placeHolder(n int) string {
 	var builder strings.Builder
 	builder.Grow((n-1)*2 + 1)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if i > 0 {
 			builder.WriteString(",")
 		}

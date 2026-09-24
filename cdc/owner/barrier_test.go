@@ -56,7 +56,7 @@ func TestBarrierRandom(t *testing.T) {
 	b.Update(barrierType(maxBarrierType), model.Ts(maxBarrierTs))
 	expectedBarriers[barrierType(maxBarrierType)] = model.Ts(maxBarrierTs)
 
-	for i := 0; i < 100000; i++ {
+	for range 100000 {
 		switch rand.Intn(2) {
 		case 0:
 			tp := barrierType(rand.Intn(maxBarrierType))

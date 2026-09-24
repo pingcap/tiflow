@@ -143,8 +143,7 @@ func TestHandleRenameTable(t *testing.T) {
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	go ddlJobPuller.Run(ctx)
 	go func() {
@@ -559,12 +558,10 @@ func TestDDLPuller(t *testing.T) {
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := p.Run(ctx)
 		require.True(t, errors.ErrorEqual(err, context.Canceled))
-	}()
+	})
 	defer wg.Wait()
 	defer p.Close()
 
@@ -690,15 +687,13 @@ func TestResolvedTsStuck(t *testing.T) {
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := p.Run(ctx)
 		if errors.Cause(err) == context.Canceled {
 			err = nil
 		}
 		require.Nil(t, err)
-	}()
+	})
 	defer wg.Wait()
 	defer p.Close()
 

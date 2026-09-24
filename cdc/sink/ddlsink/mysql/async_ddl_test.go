@@ -69,8 +69,7 @@ func TestWaitAsynExecDone(t *testing.T) {
 	})
 	GetDBConnImpl = dbConnFactory
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	sinkURI, err := url.Parse("mysql://root:@127.0.0.1:4000")
 	require.NoError(t, err)
 	replicateCfg := config.GetDefaultReplicaConfig()

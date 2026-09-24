@@ -15,6 +15,7 @@ package middleware
 
 import (
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -152,14 +153,8 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 		return errors.ErrCredentialNotFound.GenWithStackByArgs(errMsg)
 	}
 
-	allowed := false
 	serverCfg := config.GetGlobalServerConfig()
-	for _, user := range serverCfg.Security.ClientAllowedUser {
-		if user == username {
-			allowed = true
-			break
-		}
-	}
+	allowed := slices.Contains(serverCfg.Security.ClientAllowedUser, username)
 	if !allowed {
 		errMsg := "The user is not allowed."
 		if username == "" {

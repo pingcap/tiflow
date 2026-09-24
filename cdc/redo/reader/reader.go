@@ -325,7 +325,7 @@ type logHeap []*logWithIdx
 
 func newLogHeap(fileReaders []fileReader) (logHeap, error) {
 	h := logHeap{}
-	for i := 0; i < len(fileReaders); i++ {
+	for i := range fileReaders {
 		rl, err := fileReaders[i].Read()
 		if err != nil {
 			if err != io.EOF {
@@ -387,11 +387,11 @@ func (h logHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *logHeap) Push(x interface{}) {
+func (h *logHeap) Push(x any) {
 	*h = append(*h, x.(*logWithIdx))
 }
 
-func (h *logHeap) Pop() interface{} {
+func (h *logHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]

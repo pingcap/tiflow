@@ -99,11 +99,7 @@ func (m *regionCountSplitter) split(
 		}
 		start = end
 		step := stepper.Step()
-		if end+step < len(regions) {
-			end = end + step
-		} else {
-			end = len(regions)
-		}
+		end = min(end+step, len(regions))
 	}
 	// Make sure spans does not exceed [startKey, endKey).
 	spans[0].StartKey = span.StartKey

@@ -14,7 +14,7 @@
 package txn
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -195,7 +195,7 @@ func TestGenKeys(t *testing.T) {
 	}}
 	for _, tc := range testCases {
 		keys := genTxnKeys(tc.txn)
-		sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
+		slices.Sort(keys)
 		require.Equal(t, tc.expected, keys)
 	}
 }

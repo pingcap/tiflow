@@ -883,10 +883,10 @@ func (o *ownerImpl) updateGCSafepoint(
 // to prevent upstream TiDB GC from removing data that is still needed by TiCDC.
 // GcSafepoint is the minimum checkpointTs of all changefeeds that replicating a same upstream TiDB cluster.
 func (o *ownerImpl) calculateGCSafepoint(state *orchestrator.GlobalReactorState) (
-	map[uint64]uint64, map[uint64]interface{},
+	map[uint64]uint64, map[uint64]any,
 ) {
 	minCheckpointTsMap := make(map[uint64]uint64)
-	forceUpdateMap := make(map[uint64]interface{})
+	forceUpdateMap := make(map[uint64]any)
 
 	for changefeedID, changefeedState := range state.Changefeeds {
 		if changefeedState.Info == nil || !changefeedState.Info.NeedBlockGC() {

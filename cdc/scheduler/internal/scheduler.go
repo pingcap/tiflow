@@ -72,5 +72,5 @@ type Scheduler interface {
 type Query struct {
 	CaptureID model.CaptureID
 
-	Resp interface{}
+	Resp any
 }

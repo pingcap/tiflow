@@ -14,6 +14,8 @@
 package columnselector
 
 import (
+	"slices"
+
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/mq/dispatcher"
@@ -166,12 +168,10 @@ func (c *ColumnSelector) VerifyTables(
 				partitionDispatcher := eventRouter.GetPartitionDispatcher(table.TableName.Schema, table.TableName.Table)
 				switch v := partitionDispatcher.(type) {
 				case *partition.ColumnsDispatcher:
-					for _, col := range v.Columns {
-						if col == columnInfo.Name.O {
-							return errors.ErrColumnSelectorFailed.GenWithStack(
-								"the filtered out column is used in the column dispatcher, "+
-									"table: %v, column: %s", table.TableName, columnInfo.Name)
-						}
+					if slices.Contains(v.Columns, columnInfo.Name.O) {
+						return errors.ErrColumnSelectorFailed.GenWithStack(
+							"the filtered out column is used in the column dispatcher, "+
+								"table: %v, column: %s", table.TableName, columnInfo.Name)
 					}
 				default:
 				}
