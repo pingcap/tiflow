@@ -16,13 +16,18 @@ package syncer
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/retry"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"github.com/stretchr/testify/require"
@@ -147,7 +152,8 @@ func TestHandleSpecialDDLError(t *testing.T) {
 	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
 
 	for _, cs := range cases {
-		err2 := syncer.handleSpecialDDLError(tctx, cs.err, cs.ddls, cs.index, conn2, -1)
+		err2 := syncer.handleSpecialDDLError(
+			tctx, cs.err, cs.ddls, cs.index, conn2, -1, binlog.Location{}, binlog.Location{})
 		if cs.handled {
 			require.NoError(t, err2)
 		} else {
@@ -182,7 +188,8 @@ func TestHandleSpecialDDLError(t *testing.T) {
 	mock.ExpectExec(dropColumnWithIndex).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 
-	handledErr := syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2, -1)
+	handledErr := syncer.handleSpecialDDLError(
+		tctx, execErr, ddls, 0, conn2, -1, binlog.Location{}, binlog.Location{})
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.NoError(t, handledErr)
 
@@ -192,9 +199,86 @@ func TestHandleSpecialDDLError(t *testing.T) {
 	mock.ExpectQuery("SELECT count\\(\\*\\) FROM information_schema.statistics WHERE.*").WillReturnRows(
 		sqlmock.NewRows([]string{"count(*)"}).AddRow(2))
 
-	handledErr = syncer.handleSpecialDDLError(tctx, execErr, ddls, 0, conn2, -1)
+	handledErr = syncer.handleSpecialDDLError(
+		tctx, execErr, ddls, 0, conn2, -1, binlog.Location{}, binlog.Location{})
 	require.NoError(t, mock.ExpectationsWereMet())
 	require.Error(t, execErr, handledErr)
+}
+
+func TestWaitAsyncDDLCanceled(t *testing.T) {
+	const ddlSQL = "ALTER TABLE `test`.`t` ADD COLUMN `c` INT"
+
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("task", "worker", "source")
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, db.Close()) })
+	sqlConn, err := db.Conn(context.Background())
+	require.NoError(t, err)
+	dbConn := dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(sqlConn, &retry.FiniteRetryStrategy{}))
+	mock.ExpectQuery("ADMIN SHOW DDL JOBS 10").WillReturnRows(
+		sqlmock.NewRows([]string{"JOB_ID", "CREATE_TIME", "STATE"}).
+			AddRow(1, "2026-08-03 18:00:00", "running"))
+	mock.ExpectQuery("ADMIN SHOW DDL JOB QUERIES LIMIT 10 OFFSET 0").WillReturnRows(
+		sqlmock.NewRows([]string{"JOB_ID", "QUERY"}).AddRow(1, ddlSQL))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	tctx := tcontext.Background().WithContext(ctx)
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- syncer.handleSpecialDDLError(
+			tctx,
+			mysql.ErrInvalidConn,
+			[]string{ddlSQL},
+			0,
+			dbConn,
+			1,
+			binlog.Location{},
+			binlog.Location{},
+		)
+	}()
+
+	require.Eventually(t, func() bool {
+		return mock.ExpectationsWereMet() == nil
+	}, time.Second, 10*time.Millisecond)
+	cancel()
+
+	select {
+	case err = <-errCh:
+		require.True(t, utils.IsContextCanceledError(err), err)
+		require.NotEqual(t, mysql.ErrInvalidConn, errors.Cause(err))
+	case <-time.After(time.Second):
+		t.Fatal("waitAsyncDDL did not stop after its context was canceled")
+	}
+}
+
+func TestReconcileAsyncDDLMismatchIsBarrier(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	syncer := NewSyncer(cfg, nil, nil)
+	startLocation := binlog.MustZeroLocation(cfg.Flavor)
+	currentLocation := startLocation.Clone()
+	currentLocation.Position.Pos++
+	info := syncer.setAsyncDDLReconcileInfo(
+		[]string{"ALTER TABLE `old_target`.`t` ADD COLUMN `c` INT"},
+		0,
+		1,
+		startLocation,
+		currentLocation,
+	)
+
+	reconciled, err := syncer.reconcileAsyncDDL(
+		tcontext.Background(),
+		[]string{"ALTER TABLE `new_target`.`t` ADD COLUMN `c` INT"},
+		startLocation,
+		currentLocation,
+		nil,
+	)
+	require.True(t, reconciled)
+	require.True(t, terror.ErrDBUnExpect.Equal(err), err)
+	require.Same(t, info, syncer.getAsyncDDLReconcileInfo())
+	require.False(t, syncer.asyncDDLResolved(info))
 }
 
 func TestIsConnectionRefusedError(t *testing.T) {
