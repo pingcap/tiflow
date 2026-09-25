@@ -2780,3 +2780,88 @@ func TestUpdateFKHotUpdateGuardAllows(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, skipped)
 }
+
+func TestResetAfterWorkerCountUpdateResizesJobTSArray(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 1
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+
+	// Increase, decrease, then increase again on the same paused syncer.
+	for _, count := range []int{4, 2, 5} {
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.WorkerCount = count
+		require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
+		require.NoError(t, syncer.Update(context.Background(), newCfg))
+		syncer.reset()
+
+		require.Len(t, syncer.workerJobTSArray, count+workerJobTSArrayInitSize)
+		for i := range count {
+			// Flush jobs clear the timestamp of every DML queue, including new ones.
+			require.NotPanics(t, func() { syncer.updateReplicationJobTS(nil, dmlWorkerJobIdx(i)) })
+		}
+	}
+}
+
+type workerCountDBProvider func(conn.ScopedDBConfig) (*conn.BaseDB, error)
+
+func (f workerCountDBProvider) Apply(cfg conn.ScopedDBConfig) (*conn.BaseDB, error) {
+	return f(cfg)
+}
+
+func TestResetDMLDBsAfterWorkerCountUpdate(t *testing.T) {
+	originalProvider := conn.DefaultDBProvider
+	t.Cleanup(func() { conn.DefaultDBProvider = originalProvider })
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.WorkerCount = 1
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.timezone = time.UTC
+	tctx := tcontext.Background()
+
+	newPool := func() (*conn.BaseDB, sqlmock.Sqlmock) {
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		return conn.NewBaseDBForTest(db), mock
+	}
+	pool, mock := newPool()
+	conn.DefaultDBProvider = workerCountDBProvider(func(conn.ScopedDBConfig) (*conn.BaseDB, error) {
+		return pool, nil
+	})
+	var err error
+	syncer.toDB, syncer.toDBConns, err = dbconn.CreateConns(tctx, cfg,
+		conn.DownstreamDBConfig(&cfg.To), cfg.WorkerCount, nil, "")
+	require.NoError(t, err)
+
+	// Increase, decrease, then increase again on the same paused syncer.
+	for _, count := range []int{4, 2, 5} {
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.WorkerCount = count
+		require.NoError(t, syncer.Update(context.Background(), newCfg))
+
+		oldPool := syncer.toDB
+		oldConns := syncer.toDBConns
+		// A connection failure must retain the old pool so that resuming can retry.
+		conn.DefaultDBProvider = workerCountDBProvider(func(conn.ScopedDBConfig) (*conn.BaseDB, error) {
+			return nil, errors.New("downstream unavailable")
+		})
+		require.Error(t, syncer.resetDMLDBs(tctx))
+		require.Same(t, oldPool, syncer.toDB)
+		require.Equal(t, oldConns, syncer.toDBConns)
+
+		newDB, newMock := newPool()
+		conn.DefaultDBProvider = workerCountDBProvider(func(conn.ScopedDBConfig) (*conn.BaseDB, error) {
+			return newDB, nil
+		})
+		mock.ExpectClose()
+		require.NoError(t, syncer.resetDMLDBs(tctx))
+		require.NoError(t, mock.ExpectationsWereMet())
+		require.Same(t, newDB, syncer.toDB)
+		require.Len(t, syncer.toDBConns, count)
+		mock = newMock
+	}
+	mock.ExpectClose()
+	require.NoError(t, syncer.toDB.Close())
+	require.NoError(t, mock.ExpectationsWereMet())
+}

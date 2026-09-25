@@ -684,6 +684,14 @@ func (s *Syncer) reset() {
 		s.streamerController.Close()
 	}
 	s.secondsBehindMaster.Store(0)
+	// The worker count may have changed while paused. All processing goroutines
+	// have stopped before reset, so resize their timestamp slots before restarting.
+	if len(s.workerJobTSArray) != s.cfg.WorkerCount+workerJobTSArrayInitSize {
+		s.workerJobTSArray = make([]*atomic.Int64, s.cfg.WorkerCount+workerJobTSArrayInitSize)
+		for i := range s.workerJobTSArray {
+			s.workerJobTSArray[i] = atomic.NewInt64(0)
+		}
+	}
 	for _, jobTS := range s.workerJobTSArray {
 		jobTS.Store(0)
 	}
@@ -716,14 +724,31 @@ func (s *Syncer) reset() {
 	}
 }
 
-func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
-	var err error
-
-	for i := 0; i < len(s.toDBConns); i++ {
-		err = s.toDBConns[i].ResetConn(tctx)
+func (s *Syncer) resetDMLDBs(tctx *tcontext.Context) error {
+	// The worker count may have changed while paused, and each DML worker uses
+	// its own connection, so recreate the connections with the new count.
+	if len(s.toDBConns) != s.cfg.WorkerCount {
+		toDB, toDBConns, err := s.createDMLDBs(tctx)
 		if err != nil {
 			return terror.WithScope(err, terror.ScopeDownstream)
 		}
+		// the new connections are ready, so the old ones can be closed
+		dbconn.CloseBaseDB(tctx, s.toDB)
+		s.toDB, s.toDBConns = toDB, toDBConns
+		return nil
+	}
+	for _, dbConn := range s.toDBConns {
+		if err := dbConn.ResetConn(tctx); err != nil {
+			return terror.WithScope(err, terror.ScopeDownstream)
+		}
+	}
+	return nil
+}
+
+func (s *Syncer) resetDBs(tctx *tcontext.Context) error {
+	err := s.resetDMLDBs(tctx)
+	if err != nil {
+		return err
 	}
 
 	if s.onlineDDL != nil {
@@ -3217,6 +3242,16 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	return firstErr
 }
 
+// createDMLDBs creates one downstream connection per DML worker.
+func (s *Syncer) createDMLDBs(tctx *tcontext.Context) (*conn.BaseDB, []*dbconn.DBConn, error) {
+	dbCfg := s.cfg.To
+	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
+		SetReadTimeout(maxDMLConnectionTimeout).
+		SetMaxIdleConns(s.cfg.WorkerCount)
+	return dbconn.CreateConns(tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg),
+		s.cfg.WorkerCount, s.cfg.IOTotalBytes, s.cfg.UUID)
+}
+
 func (s *Syncer) createDBs(ctx context.Context) error {
 	var err error
 	dbCfg := s.cfg.From
@@ -3261,12 +3296,7 @@ func (s *Syncer) createDBs(ctx context.Context) error {
 		s.cfg.To.Session["sql_mode"] = sqlModes
 	}
 
-	dbCfg = s.cfg.To
-	dbCfg.RawDBCfg = dbconfig.DefaultRawDBConfig().
-		SetReadTimeout(maxDMLConnectionTimeout).
-		SetMaxIdleConns(s.cfg.WorkerCount)
-
-	s.toDB, s.toDBConns, err = dbconn.CreateConns(s.tctx, s.cfg, conn.DownstreamDBConfig(&dbCfg), s.cfg.WorkerCount, s.cfg.IOTotalBytes, s.cfg.UUID)
+	s.toDB, s.toDBConns, err = s.createDMLDBs(s.tctx)
 	if err != nil {
 		dbconn.CloseUpstreamConn(s.tctx, s.fromDB) // release resources acquired before return with error
 		return err
