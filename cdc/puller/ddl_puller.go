@@ -415,6 +415,25 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		job.BinlogInfo.MultipleTableInfos = newMultiTableInfos
 		job.Query = strings.Join(newQuerys, "")
 	case timodel.ActionRenameTable:
+
+		// Note: preTableInfo may not be accurate for rename table.
+		// after pr: https://github.com/pingcap/tidb/pull/43341,
+		// assume there is a table `test.t` and a ddl: `rename table t to test2.t;`, and its commit ts is `100`.
+		// if you get a ddl snapshot at ts `99`, table `t` is already in `test2`.
+		// so preTableInfo.TableName.Schema will also be `test2`.
+		if len(job.InvolvingSchemaInfo) == 0 {
+			log.Warn("rename table ddl job has no involving schema info, do nothing",
+				zap.String("namespace", p.changefeedID.Namespace),
+				zap.String("changefeed", p.changefeedID.ID),
+				zap.String("schema", job.SchemaName),
+				zap.String("table", job.TableName),
+				zap.String("query", job.Query))
+		} else {
+			job.Query = fmt.Sprintf("RENAME TABLE `%s`.`%s` TO `%s`.`%s`",
+				job.InvolvingSchemaInfo[0].Database, job.InvolvingSchemaInfo[0].Table,
+				job.SchemaName, job.TableName)
+		}
+
 		oldTable, ok := snap.PhysicalTableByID(job.TableID)
 		if !ok {
 			// 1. If we can not find the old table, and the new table name is in filter rule, return error.
