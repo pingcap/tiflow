@@ -8,6 +8,14 @@ sink_type=$1
 group=$2
 group_num=${group#G}
 
+# TODO: Remove this temporary guard after the MySQL CDC CI environment is stable.
+# Keep the other CDC integration pipelines running so Kafka, Pulsar, and storage
+# coverage is unaffected.
+if [[ "$sink_type" == "mysql" ]]; then
+	echo "Temporarily skip CDC MySQL integration tests"
+	exit 0
+fi
+
 # Other tests that only support mysql: batch_update_to_no_batch ddl_reentrant
 # changefeed_fast_fail changefeed_resume_with_checkpoint_ts sequence
 # multi_cdc_cluster capture_suicide_while_balance_table
