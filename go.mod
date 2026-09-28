@@ -2,6 +2,16 @@ module github.com/pingcap/tiflow
 
 go 1.26.8
 
+// Keep the Go 1.25 default behaviors that Go 1.26 changed:
+//   - urlstrictcolons=0: the sink URI may carry several Kafka broker endpoints
+//     in the host part, e.g. kafka://h1:p1,h2:p2/topic.
+//   - tlssecpmlkem=0: skip the new hybrid post-quantum TLS key exchanges that
+//     old Kafka/PD/S3 endpoints may not support.
+godebug (
+	tlssecpmlkem=0
+	urlstrictcolons=0
+)
+
 require (
 	cloud.google.com/go/storage v1.52.0
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3
