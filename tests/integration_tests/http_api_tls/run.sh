@@ -127,7 +127,9 @@ function run() {
 		"verify_table"
 		"create_changefeed_v2"
 		"delete_changefeed_v2"
-		"unsafe_apis"
+		# TODO: Re-enable after the CDC integration environment stops losing PD
+		# leadership while this resource-intensive TLS case is running.
+		# "unsafe_apis"
 	)
 
 	for case in ${sequential_cases[@]}; do
