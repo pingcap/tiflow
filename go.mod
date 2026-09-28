@@ -7,7 +7,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.6.3
 	github.com/BurntSushi/toml v1.6.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/IBM/sarama v1.61.0
+	github.com/IBM/sarama v1.61.1
 	github.com/KimMachineGun/automemlimit v0.2.4
 	github.com/VividCortex/mysqlerr v1.0.0
 	github.com/apache/pulsar-client-go v0.13.0
@@ -60,7 +60,7 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/klauspost/compress v1.20.0
+	github.com/klauspost/compress v1.20.1
 	github.com/labstack/gommon v0.4.0
 	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/mailru/easyjson v0.7.7
@@ -68,7 +68,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
-	github.com/pierrec/lz4/v4 v4.1.30
+	github.com/pierrec/lz4/v4 v4.1.31
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20260508054701-306e305bcf41
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
