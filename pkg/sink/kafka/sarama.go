@@ -55,8 +55,7 @@ func NewSaramaConfig(ctx context.Context, o *Options) (*sarama.Config, error) {
 
 	// Keep a bounded producer retry budget to tolerate transient broker-side
 	// connection failures such as stale connections or broken pipe errors.
-	// The PingCAP Sarama fork includes the partition-muting ordering fix, while
-	// Net.MaxOpenRequests=1 below remains an extra ordering guard.
+	// Net.MaxOpenRequests=1 below remains an ordering guard.
 	config.Producer.Retry.Max = o.MaxRetry
 
 	// make sure sarama producer flush messages as soon as possible.

@@ -78,8 +78,9 @@ func NewErrorRetry(
 func (r *ErrorRetry) GetRetryBackoff(err error) (time.Duration, error) {
 	// reset firstRetryTime when the last error is too long ago
 	// it means the last error is retry success, and the sink is running well for some time
-	if r.lastInternalError == nil ||
-		time.Since(r.lastErrorRetryTime) >= r.errGCInterval {
+	isFirstRetry := r.lastInternalError == nil ||
+		time.Since(r.lastErrorRetryTime) >= r.errGCInterval
+	if isFirstRetry {
 		log.Debug("reset firstRetryTime",
 			zap.Time("lastErrorRetryTime", r.lastErrorRetryTime),
 			zap.Time("now", time.Now()))
@@ -97,6 +98,10 @@ func (r *ErrorRetry) GetRetryBackoff(err error) (time.Duration, error) {
 
 	r.lastInternalError = err
 	r.lastErrorRetryTime = time.Now()
+	if isFirstRetry {
+		// Retry immediately when a new series of errors starts.
+		return 0, nil
+	}
 
 	// interval is in range [defaultBackoffBaseInS, defaultBackoffMaxInS)
 	interval := time.Second * time.Duration(
