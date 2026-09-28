@@ -74,9 +74,15 @@ require (
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
 	github.com/pingcap/kvproto v0.0.0-20260602101655-f8184e7702eb
 	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
+<<<<<<< HEAD
 	github.com/pingcap/tidb v1.1.0-beta.0.20260616034257-3adc8ec71ef3
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
 	github.com/pingcap/tidb/pkg/parser v0.0.0-20260616034257-3adc8ec71ef3
+=======
+	github.com/pingcap/tidb v1.1.0-beta.0.20260923092734-13103a00793a
+	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20260923082834-1869807c5fdb
+>>>>>>> a3d73eef06 (deps(all): update TiDB and parser dependencies (#12863))
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
@@ -91,7 +97,11 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
+<<<<<<< HEAD
 	github.com/tikv/client-go/v2 v2.0.8-0.20260602013621-8804d7c60a7e
+=======
+	github.com/tikv/client-go/v2 v2.0.8-0.20260921040125-5f38569c8cc0
+>>>>>>> a3d73eef06 (deps(all): update TiDB and parser dependencies (#12863))
 	github.com/tikv/pd v1.1.0-beta.0.20240407022249-7179657d129b
 	github.com/tikv/pd/client v0.0.0-20260601035915-3ef6a3b10c84
 	github.com/tinylib/msgp v1.1.6
@@ -371,7 +381,11 @@ require (
 	github.com/pingcap/fn v1.0.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
+<<<<<<< HEAD
 	github.com/pingcap/tipb v0.0.0-20260515142222-a4d204a193b4 // indirect
+=======
+	github.com/pingcap/tipb v0.0.0-20260908093239-fed7bc47c39d // indirect
+>>>>>>> a3d73eef06 (deps(all): update TiDB and parser dependencies (#12863))
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
