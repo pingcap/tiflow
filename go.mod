@@ -1,12 +1,22 @@
 module github.com/pingcap/tiflow
 
-go 1.25.14
+go 1.26.8
+
+// Keep the Go 1.25 default behaviors that Go 1.26 changed:
+//   - urlstrictcolons=0: the sink URI may carry several Kafka broker endpoints
+//     in the host part, e.g. kafka://h1:p1,h2:p2/topic.
+//   - tlssecpmlkem=0: skip the new hybrid post-quantum TLS key exchanges that
+//     old Kafka/PD/S3 endpoints may not support.
+godebug (
+	tlssecpmlkem=0
+	urlstrictcolons=0
+)
 
 require (
 	cloud.google.com/go/storage v1.50.0
 	github.com/BurntSushi/toml v1.5.0
 	github.com/DATA-DOG/go-sqlmock v1.5.0
-	github.com/IBM/sarama v1.41.2
+	github.com/IBM/sarama v1.61.1
 	github.com/KimMachineGun/automemlimit v0.2.4
 	github.com/VividCortex/mysqlerr v1.0.0
 	github.com/apache/pulsar-client-go v0.13.0
@@ -59,7 +69,11 @@ require (
 	github.com/jcmturner/gokrb5/v8 v8.4.4
 	github.com/jmoiron/sqlx v1.3.3
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
+<<<<<<< HEAD
 	github.com/klauspost/compress v1.18.5
+=======
+	github.com/klauspost/compress v1.20.1
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	github.com/labstack/gommon v0.4.0
 	github.com/linkedin/goavro/v2 v2.11.1
 	github.com/mailru/easyjson v0.7.7
@@ -67,7 +81,11 @@ require (
 	github.com/modern-go/reflect2 v1.0.2
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/phayes/freeport v0.0.0-20180830031419-95f893ade6f2
+<<<<<<< HEAD
 	github.com/pierrec/lz4/v4 v4.1.26
+=======
+	github.com/pierrec/lz4/v4 v4.1.31
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
@@ -85,12 +103,18 @@ require (
 	github.com/shirou/gopsutil/v3 v3.24.5
 	github.com/shopspring/decimal v1.3.0
 	github.com/soheilhy/cmux v0.1.5
+<<<<<<< HEAD
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/files v0.0.0-20210815190702-a29dd2bc99b2
 	github.com/swaggo/gin-swagger v1.2.0
 	github.com/swaggo/swag v1.16.3
+=======
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
+	github.com/stretchr/testify v1.12.1
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
 	github.com/tikv/client-go/v2 v2.0.8-0.20260615130046-a2b634d170d9
@@ -114,12 +138,21 @@ require (
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.1
+<<<<<<< HEAD
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/net v0.56.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.21.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/text v0.39.0
+=======
+	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
+	golang.org/x/net v0.59.0
+	golang.org/x/oauth2 v0.36.0
+	golang.org/x/sync v0.23.0
+	golang.org/x/sys v0.48.0
+	golang.org/x/text v0.42.0
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	golang.org/x/time v0.14.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260414002931-afd174a4e478
@@ -173,9 +206,12 @@ require (
 	github.com/cncf/xds/go v0.0.0-20260202195803-dba9d589def2 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
+<<<<<<< HEAD
 	github.com/dolthub/maphash v0.1.0 // indirect
 	github.com/dolthub/swiss v0.2.1 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
+=======
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	github.com/envoyproxy/go-control-plane/envoy v1.37.0 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.3.3 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -239,10 +275,16 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.22.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.22.0 // indirect
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
+<<<<<<< HEAD
 	golang.org/x/arch v0.20.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260625142307-59b4966ccb57 // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20250303144028-a0af3efb3deb // indirect
+=======
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
+	golang.org/x/arch v0.3.0 // indirect
+	google.golang.org/genproto v0.0.0-20250324211829-b45e905df463 // indirect
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.29.11 // indirect
 	k8s.io/apimachinery v0.29.11 // indirect
@@ -298,8 +340,12 @@ require (
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dvsekhvalnov/jose2go v1.7.0 // indirect
+<<<<<<< HEAD
 	github.com/eapache/go-resiliency v1.4.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
+=======
+	github.com/eapache/go-resiliency v1.7.0 // indirect
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/go-ole/go-ole v1.3.0 // indirect
@@ -374,9 +420,14 @@ require (
 	github.com/pingcap/tipb v0.0.0-20260605083900-f9f651ef5fbc // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+<<<<<<< HEAD
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20221212215047-62379fc7944b // indirect
 	github.com/prometheus/common v0.65.0 // indirect
+=======
+	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
+	github.com/prometheus/common v0.65.0
+>>>>>>> 4e37e157a4 (bump sarama to v1.61.0 and go to v1.26.8 (#12873))
 	github.com/prometheus/procfs v0.19.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
@@ -389,7 +440,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spkg/bom v1.0.0 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/tiancaiamao/appdash v0.0.0-20181126055449-889f96f722a2 // indirect
 	github.com/tiancaiamao/gp v0.0.0-20221230034425-4025bc8a4d4a // indirect
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
@@ -419,10 +470,10 @@ require (
 	go.opentelemetry.io/otel/sdk v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
-	golang.org/x/crypto v0.53.0 // indirect
-	golang.org/x/mod v0.37.0 // indirect
-	golang.org/x/term v0.44.0
-	golang.org/x/tools v0.47.0 // indirect
+	golang.org/x/crypto v0.57.0 // indirect
+	golang.org/x/mod v0.41.0 // indirect
+	golang.org/x/term v0.46.0
+	golang.org/x/tools v0.49.0 // indirect
 	google.golang.org/api v0.230.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
@@ -435,8 +486,6 @@ require (
 	sourcegraph.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0 // indirect
 	sourcegraph.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67 // indirect
 )
-
-replace github.com/IBM/sarama v1.41.2 => github.com/pingcap/sarama v1.41.2-pingcap-20260508
 
 // Fix https://github.com/pingcap/tiflow/issues/4961
 replace github.com/benbjohnson/clock v1.3.5 => github.com/benbjohnson/clock v1.1.0
