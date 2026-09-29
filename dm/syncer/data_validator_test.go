@@ -104,10 +104,12 @@ func TestValidatorStartStopAndInitialize(t *testing.T) {
 
 	// validator already running
 	validator := NewContinuousDataValidator(cfg, syncerObj, false)
+	require.Nil(t, validator.vmetric)
 	validator.stage = pb.Stage_Running
 	validator.Start(pb.Stage_InvalidStage)
 	// if validator already running, Start will return immediately, so we check validator.ctx which has not initialized.
 	require.Nil(t, validator.ctx)
+	require.Nil(t, validator.vmetric)
 
 	// failed to init
 	cfg.From = dbconfig.DBConfig{
@@ -133,11 +135,20 @@ func TestValidatorStartStopAndInitialize(t *testing.T) {
 
 	// normal start & stop
 	validator = NewContinuousDataValidator(cfg, syncerObj, false)
+	require.Nil(t, validator.vmetric)
 	validator.persistHelper.schemaInitialized.Store(true)
 	validator.Start(pb.Stage_Running)
 	defer validator.Stop() // in case assert failed before Stop
+	require.NotNil(t, validator.vmetric)
+	firstMetric := validator.vmetric
 	require.Equal(t, pb.Stage_Running, validator.Stage())
 	require.True(t, validator.Started())
+	validator.Stop()
+	require.Equal(t, pb.Stage_Stopped, validator.Stage())
+	validator.Start(pb.Stage_Running)
+	require.Equal(t, pb.Stage_Running, validator.Stage())
+	require.NotNil(t, validator.vmetric)
+	require.NotSame(t, firstMetric, validator.vmetric)
 	validator.Stop()
 	require.Equal(t, pb.Stage_Stopped, validator.Stage())
 
