@@ -288,7 +288,7 @@ func (m *Dumpling) status() *pb.DumpStatus {
 		FinishedBytes:     dumpStatus.FinishedBytes,
 		FinishedRows:      dumpStatus.FinishedRows,
 		EstimateTotalRows: dumpStatus.EstimateTotalRows,
-		Progress:          dumpStatus.Progress,
+		Progress:          normalizeDumpProgress(dumpStatus.Progress),
 		Bps:               int64(dumpStatus.CurrentSpeedBPS),
 	}
 	var estimateProgress string
@@ -307,6 +307,15 @@ func (m *Dumpling) status() *pb.DumpStatus {
 		zap.Int64("bps", s.Bps),
 	)
 	return s
+}
+
+// normalizeDumpProgress keeps DM's status API compatible with the progress
+// format exposed before the embedded Dumpling implementation changed it.
+func normalizeDumpProgress(progress string) string {
+	if progress == "100 %" {
+		return "100.00 %"
+	}
+	return progress
 }
 
 // Type implements Unit.Type.
