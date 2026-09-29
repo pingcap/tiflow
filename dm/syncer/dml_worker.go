@@ -355,7 +355,7 @@ func (w *DMLWorker) executeBatchJobs(queueID int, jobs []*job, disableForeignKey
 		}
 	})
 
-	if w.judgeKeyNotFound(affect, jobs) {
+	if err == nil && w.judgeKeyNotFound(affect, jobs) {
 		// throw an error if needed in the future.
 		// err = terror.ErrDBExecuteFailed.Delegate(errors.New("key not found"), "mock")
 		w.logger.Warn("no matching record is found to update/delete, ER_KEY_NOT_FOUND", zap.Int("affect", affect), zap.Int("jobs", len(jobs)), zap.Stringer("start from", jobs[0].startLocation), zap.Stringer("end at", jobs[len(jobs)-1].currentLocation))
