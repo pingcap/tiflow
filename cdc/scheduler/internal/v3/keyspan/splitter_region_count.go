@@ -16,13 +16,13 @@ package keyspan
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"math"
 	"time"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 )
@@ -84,8 +84,8 @@ func (m *regionCountSplitter) split(
 				zap.String("changefeed", m.changefeedID.ID),
 				zap.String("span", span.String()),
 				zap.Stringer("lastSpan", &spans[len(spans)-1]),
-				zap.String("startKey", hex.EncodeToString(startKey)),
-				zap.String("endKey", hex.EncodeToString(endKey)))
+				logutil.ZapRedactKey("startKey", startKey),
+				logutil.ZapRedactKey("endKey", endKey))
 			return []tablepb.Span{span}
 		}
 		spans = append(spans, tablepb.Span{

@@ -16,7 +16,6 @@ package entry
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -38,6 +37,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 )
@@ -134,7 +134,7 @@ func (m *mounter) DecodeEvent(ctx context.Context, event *model.PolymorphicEvent
 
 func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.RawKVEntry) (*model.RowChangedEvent, error) {
 	if !bytes.HasPrefix(raw.Key, tablePrefix) {
-		log.Error("unexpected key prefix found in row kv entry", zap.String("key", hex.EncodeToString(raw.Key)), zap.Any("eventCommitTs", raw.CRTs), zap.Any("eventStartTs", raw.StartTs))
+		log.Error("unexpected key prefix found in row kv entry", logutil.ZapRedactKey("key", raw.Key), zap.Any("eventCommitTs", raw.CRTs), zap.Any("eventStartTs", raw.StartTs))
 		return nil, nil
 	}
 	// checksumKey is only used to calculate raw checksum if necessary.
@@ -178,7 +178,7 @@ func (m *mounter) unmarshalAndMountRowChanged(ctx context.Context, raw *model.Ra
 			}
 			log.Error("can not found table schema",
 				zap.Uint64("ts", raw.CRTs),
-				zap.String("key", hex.EncodeToString(raw.Key)),
+				logutil.ZapRedactKey("key", raw.Key),
 				zap.Int64("tableID", physicalTableID))
 			return nil, cerror.ErrSnapshotTableNotFound.GenWithStackByArgs(physicalTableID)
 		}
