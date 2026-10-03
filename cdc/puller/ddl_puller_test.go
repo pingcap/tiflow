@@ -339,6 +339,86 @@ func TestHandleRenameTable(t *testing.T) {
 	}
 }
 
+func TestHandleRenameTableAcrossDatabases(t *testing.T) {
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	defer helper.Close()
+
+	startTs := uint64(10)
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(startTs)
+
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{
+		"test1.*",
+		"test2.*",
+	}
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go ddlJobPuller.Run(ctx)
+	go func() {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ddlJobPuller.Output():
+		}
+	}()
+
+	job := helper.DDL2Job("create database test1;")
+	inputDDL(t, ddlJobPullerImpl, job)
+	inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
+	waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+	job = helper.DDL2Job("create database test2;")
+	inputDDL(t, ddlJobPullerImpl, job)
+	inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
+	waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+	job = helper.DDL2Job("create database test3;")
+	inputDDL(t, ddlJobPullerImpl, job)
+	inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
+	waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+	job = helper.DDL2Job("create table test1.rename_table_across_databases(id int primary key)")
+	inputDDL(t, ddlJobPullerImpl, job)
+	inputTs(t, ddlJobPullerImpl, job.BinlogInfo.FinishedTS+1)
+	waitResolvedTs(t, ddlJobPuller, job.BinlogInfo.FinishedTS+1)
+
+	helper.Tk().MustExec("use test1;")
+	job = helper.DDL2Job("rename table rename_table_across_databases to test2.rename_table_across_databases")
+	skip, err := ddlJobPullerImpl.handleJob(job)
+	require.NoError(t, err)
+	require.False(t, skip)
+	require.Equal(t, "RENAME TABLE `test1`.`rename_table_across_databases` TO `test2`.`rename_table_across_databases`", job.Query)
+
+	helper.Tk().MustExec("use test2;")
+	job = helper.DDL2Job("rename table rename_table_across_databases to test1.rename_table_across_databases")
+	skip, err = ddlJobPullerImpl.handleJob(job)
+	require.NoError(t, err)
+	require.False(t, skip)
+	require.Equal(t, "RENAME TABLE `test2`.`rename_table_across_databases` TO `test1`.`rename_table_across_databases`", job.Query)
+
+	// rename to test3
+	helper.Tk().MustExec("use test1;")
+	job = helper.DDL2Job("rename table rename_table_across_databases to test3.rename_table_across_databases")
+	skip, err = ddlJobPullerImpl.handleJob(job)
+	require.NoError(t, err)
+	require.False(t, skip)
+	require.Equal(t, "RENAME TABLE `test1`.`rename_table_across_databases` TO `test3`.`rename_table_across_databases`", job.Query)
+
+	// rename from test 3 to test1
+	helper.Tk().MustExec("use test3;")
+	job = helper.DDL2Job("rename table rename_table_across_databases to test1.rename_table_across_databases")
+	skip, err = ddlJobPullerImpl.handleJob(job)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ErrSyncRenameTableFailed")
+	require.Equal(t, "RENAME TABLE `test3`.`rename_table_across_databases` TO `test1`.`rename_table_across_databases`", job.Query)
+}
+
 func TestHandleJob(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
