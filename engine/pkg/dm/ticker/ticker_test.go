@@ -34,10 +34,8 @@ func TestDefaultTicker(t *testing.T) {
 	tickError := errors.New("tick error")
 	dummyTicker.SetResult([]error{tickError, tickError, nil})
 
-	wg.Add(1)
 	// run task manager
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.NewTicker(50 * time.Millisecond)
 		for {
 			select {
@@ -47,7 +45,7 @@ func TestDefaultTicker(t *testing.T) {
 				dummyTicker.DoTick(ctx)
 			}
 		}
-	}()
+	})
 
 	// first tick when start
 	require.Eventually(t, dummyTicker.ResultAllMeet, 5*time.Second, 100*time.Millisecond)

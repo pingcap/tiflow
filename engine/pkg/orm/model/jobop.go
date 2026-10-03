@@ -46,8 +46,8 @@ type JobOp struct {
 }
 
 // Map is used for update in orm model
-func (op *JobOp) Map() map[string]interface{} {
-	return map[string]interface{}{
+func (op *JobOp) Map() map[string]any {
+	return map[string]any{
 		"op": op.Op,
 	}
 }

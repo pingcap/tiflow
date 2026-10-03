@@ -162,11 +162,11 @@ var (
 	nameOfBaseJobMaster = getTypeNameOfVarPtr(new(framework.BaseJobMaster))
 )
 
-func getTypeNameOfVarPtr(v interface{}) string {
+func getTypeNameOfVarPtr(v any) string {
 	return reflect.TypeOf(v).Elem().Name()
 }
 
-func implHasMember(impl interface{}, memberName string) bool {
+func implHasMember(impl any, memberName string) bool {
 	defer func() {
 		if v := recover(); v != nil {
 			log.Panic("wrong use of implHasMember",
@@ -176,7 +176,7 @@ func implHasMember(impl interface{}, memberName string) bool {
 	return reflect.ValueOf(impl).Elem().FieldByName(memberName) != reflect.Value{}
 }
 
-func setImplMember(impl interface{}, memberName string, value interface{}) {
+func setImplMember(impl any, memberName string, value any) {
 	defer func() {
 		if v := recover(); v != nil {
 			log.Panic("wrong use of setImplMember",

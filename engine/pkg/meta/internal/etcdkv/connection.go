@@ -48,7 +48,7 @@ type clientConnImpl struct {
 }
 
 // GetConn implements GetConn of ClientConn
-func (cc *clientConnImpl) GetConn() (interface{}, error) {
+func (cc *clientConnImpl) GetConn() (any, error) {
 	cc.rwLock.RLock()
 	defer cc.rwLock.RUnlock()
 

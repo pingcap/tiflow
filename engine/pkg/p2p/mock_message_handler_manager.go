@@ -63,7 +63,7 @@ func (m *MockMessageHandlerManager) AssertNoHandler(t *testing.T, topic Topic) {
 
 // InvokeHandler gets the handler of given topic and invoke the handler to
 // simulate to send message from given sender
-func (m *MockMessageHandlerManager) InvokeHandler(t *testing.T, topic Topic, senderID NodeID, message interface{}) error {
+func (m *MockMessageHandlerManager) InvokeHandler(t *testing.T, topic Topic, senderID NodeID, message any) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 

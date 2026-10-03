@@ -81,7 +81,7 @@ type mockRunningHandle struct {
 }
 
 // SendMessage implements RunningHandle.SendMessage
-func (rh mockRunningHandle) SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error {
+func (rh mockRunningHandle) SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error {
 	h := rh.handler
 	if h.IsTombstone {
 		return errors.ErrSendingMessageToTombstone.GenWithStackByCause(h.WorkerID)

@@ -26,7 +26,7 @@ type (
 	WorkerType = frameModel.WorkerType
 
 	// WorkerConfig stores worker config in any type
-	WorkerConfig = interface{}
+	WorkerConfig = any
 
 	// WorkerHandle alias to master.WorkerHandle
 	WorkerHandle = master.WorkerHandle

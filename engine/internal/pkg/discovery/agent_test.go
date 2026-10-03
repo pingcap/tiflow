@@ -72,13 +72,10 @@ func TestAgent(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		err := agent.Run(ctx)
 		require.ErrorIs(t, err, context.Canceled)
-	}()
+	})
 
 	initialSnap := Snapshot{
 		"master-1": Node{

@@ -488,10 +488,8 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 	workerAgent.On("CreateWorker").Return(worker2, nil).Once()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 	// run worker manager
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.NewTicker(50 * time.Millisecond)
 		for {
 			select {
@@ -501,7 +499,7 @@ func (t *testDMJobmasterSuite) TestWorkerManager() {
 				workerManager.DoTick(ctx)
 			}
 		}
-	}()
+	})
 
 	// first check
 	require.Eventually(t.T(), func() bool {
@@ -618,7 +616,7 @@ type MockWorkerAgent struct {
 }
 
 func (mockAgent *MockWorkerAgent) CreateWorker(
-	workerType framework.WorkerType, taskCfg interface{},
+	workerType framework.WorkerType, taskCfg any,
 	opts ...framework.CreateWorkerOpt,
 ) (frameModel.WorkerID, error) {
 	mockAgent.Lock()

@@ -122,7 +122,7 @@ type MasterImpl interface {
 	OnWorkerOffline(worker WorkerHandle, reason error) error
 
 	// OnWorkerMessage is called when a customized message is received.
-	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error
+	OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message any) error
 
 	// OnWorkerStatusUpdated is called as the consequence of worker's UpdateStatus.
 	// Return:

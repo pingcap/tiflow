@@ -30,7 +30,7 @@ func TestGenerateNodeID(t *testing.T) {
 	)
 
 	ids := make(map[string]struct{})
-	for i := 0; i < genCount; i++ {
+	for range genCount {
 		id := generateNodeID(name)
 		require.True(t, strings.HasPrefix(id, name+"-"))
 		ids[id] = struct{}{}

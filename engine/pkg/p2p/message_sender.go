@@ -28,10 +28,10 @@ type MessageSender interface {
 
 	// SendToNode sends a message to a given node. Returns whether it is successful and a possible error.
 	// A `would-block` error will not be returned. (false, nil) would be returned instead.
-	SendToNode(ctx context.Context, targetNodeID NodeID, topic Topic, message interface{}) (bool, error)
+	SendToNode(ctx context.Context, targetNodeID NodeID, topic Topic, message any) (bool, error)
 
 	// SendToNodeB sends a message to a given node in a blocking way
-	SendToNodeB(ctx context.Context, targetNodeID NodeID, topic Topic, message interface{}) error
+	SendToNodeB(ctx context.Context, targetNodeID NodeID, topic Topic, message any) error
 }
 
 type messageSenderImpl struct {
@@ -46,7 +46,7 @@ func NewMessageSender(router MessageRouter) MessageSender {
 // SendToNodeB implements MessageSender.SendToNodeB
 // Note the blocking send may have performance issue, BE CAUTION when using this function.
 func (m *messageSenderImpl) SendToNodeB(
-	ctx context.Context, targetNodeID NodeID, topic Topic, message interface{},
+	ctx context.Context, targetNodeID NodeID, topic Topic, message any,
 ) error {
 	client := m.router.GetClient(targetNodeID)
 	if client == nil {
@@ -58,7 +58,7 @@ func (m *messageSenderImpl) SendToNodeB(
 	return err
 }
 
-func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID, topic Topic, message interface{}) (bool, error) {
+func (m *messageSenderImpl) SendToNode(ctx context.Context, targetNodeID NodeID, topic Topic, message any) (bool, error) {
 	client := m.router.GetClient(targetNodeID)
 	if client == nil {
 		return false, nil

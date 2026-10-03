@@ -71,12 +71,12 @@ func TestSliceQueueManyElements(t *testing.T) {
 	const numElems = 10000
 
 	q := NewSliceQueue[int]()
-	for i := 0; i < numElems; i++ {
+	for i := range numElems {
 		q.Push(i)
 	}
 	require.Equal(t, numElems, q.Size())
 
-	for i := 0; i < numElems; i++ {
+	for i := range numElems {
 		val, ok := q.Pop()
 		require.True(t, ok)
 		require.Equal(t, i, val)
@@ -84,12 +84,12 @@ func TestSliceQueueManyElements(t *testing.T) {
 	require.Equal(t, 0, q.Size())
 
 	// Repeat the test
-	for i := 0; i < numElems; i++ {
+	for i := range numElems {
 		q.Push(i)
 	}
 	require.Equal(t, numElems, q.Size())
 
-	for i := 0; i < numElems; i++ {
+	for i := range numElems {
 		val, ok := q.Pop()
 		require.True(t, ok)
 		require.Equal(t, i, val)
@@ -102,19 +102,13 @@ func TestSliceQueueConcurrentWriteAndRead(t *testing.T) {
 
 	q := NewSliceQueue[int]()
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		for i := 0; i < numElems; i++ {
+	wg.Go(func() {
+		for i := range numElems {
 			q.Push(i)
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		counter := 0
 		for {
 			<-q.C
@@ -131,7 +125,7 @@ func TestSliceQueueConcurrentWriteAndRead(t *testing.T) {
 				}
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 	require.Equal(t, 0, q.Size())

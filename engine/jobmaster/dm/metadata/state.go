@@ -26,7 +26,7 @@ import (
 )
 
 // state represents the state which need to be stored in metadata.
-type state interface{}
+type state any
 
 // stateFactory creates a type of state.
 type stateFactory interface {
@@ -158,12 +158,12 @@ func (f *frameworkMetaStore) cloneState() (state, error) {
 	return clone, nil
 }
 
-var stateTp = reflect.TypeOf((*state)(nil)).Elem()
+var stateTp = reflect.TypeFor[state]()
 
 // checkAllFieldsIsPublic check all fields of a state is public.
 func checkAllFieldsIsPublic(state state) bool {
 	v := reflect.ValueOf(state)
-	if v.Kind() == reflect.Ptr {
+	if v.Kind() == reflect.Pointer {
 		v = v.Elem()
 	}
 	if v.Kind() != reflect.Struct {

@@ -110,7 +110,7 @@ func TestLeaderResolverFrequentUpdate(t *testing.T) {
 	_, err := leaderResolver.Build(resolver.Target{}, mockConn, resolver.BuildOptions{})
 	require.NoError(t, err)
 
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		leaderResolver.UpdateServerList(map[string]bool{
 			"leader":     true,
 			"follower-1": false,
@@ -150,7 +150,7 @@ func TestLeaderResolverUpdateAfterClose(t *testing.T) {
 
 	// Updating the server list after the resolver is closed
 	// should not panic or deadlock.
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		leaderResolver.UpdateServerList(map[string]bool{
 			"leader":     true,
 			"follower-1": false,

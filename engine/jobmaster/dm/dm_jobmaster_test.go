@@ -192,7 +192,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
-	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+	dmpkg.NewMessageAgent = func(id string, commandHandler any, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
 		return mockMessageAgent
 	}
 	defer func() {
@@ -284,7 +284,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		Result: &dmpb.ProcessResult{IsCanceled: false},
 		Status: loadStatusBytes,
 	}
-	jm.workerManager.workerStatusMap.Range(func(key, val interface{}) bool {
+	jm.workerManager.workerStatusMap.Range(func(key, val any) bool {
 		if val.(runtime.WorkerStatus).ID == worker1 {
 			taskStatus1.Task = key.(string)
 		} else {
@@ -382,11 +382,9 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	mockMessageAgent.On("SendMessage").Return(nil).Twice()
 	mockBaseJobmaster.On("Exit").Return(nil).Once()
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t.T(), jm.OnCancel(context.Background()))
-	}()
+	})
 	require.Eventually(t.T(), func() bool {
 		mockMessageAgent.Lock()
 		if len(mockMessageAgent.Calls) == 4 {
@@ -419,7 +417,7 @@ func TestDuplicateFinishedState(t *testing.T) {
 	mockCheckpointAgent := &MockCheckpointAgent{}
 	checkpoint.NewCheckpointAgent = func(string, *zap.Logger) checkpoint.Agent { return mockCheckpointAgent }
 	mockMessageAgent := &dmpkg.MockMessageAgent{}
-	dmpkg.NewMessageAgent = func(id string, commandHandler interface{}, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
+	dmpkg.NewMessageAgent = func(id string, commandHandler any, messageHandlerManager p2p.MessageHandlerManager, pLogger *zap.Logger) dmpkg.MessageAgent {
 		return mockMessageAgent
 	}
 	defer func() {
