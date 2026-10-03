@@ -83,12 +83,17 @@ func (r *RowChange) IsIdentityUpdated() bool {
 
 	r.lazyInitWhereHandle()
 	pre, post := r.IdentityValues()
+	return colValsUpdated(pre, post)
+}
+
+// colValsUpdated returns true when any value of pre differs from post.
+func colValsUpdated(pre, post []any) bool {
 	if len(pre) != len(post) {
 		// should not happen
 		return true
 	}
 	for i := range pre {
-		if pre[i] != post[i] {
+		if !colValEqual(pre[i], post[i]) {
 			return true
 		}
 	}
@@ -102,26 +107,14 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 	}
 
 	r.lazyInitWhereHandle()
-	identityUpdated := func(pre, post []any) bool {
-		if len(pre) != len(post) {
-			// should not happen
-			return true
-		}
-		for i := range pre {
-			if pre[i] != post[i] {
-				return true
-			}
-		}
-		return false
-	}
 
 	if idx := r.whereHandle.UniqueNotNullIdx; idx != nil {
 		pre, post := r.identityValuesByIndex(idx, r.preValues, r.postValues)
-		if identityUpdated(pre, post) {
+		if colValsUpdated(pre, post) {
 			return true
 		}
 	} else {
-		if identityUpdated(r.preValues, r.postValues) {
+		if colValsUpdated(r.preValues, r.postValues) {
 			return true
 		}
 	}
@@ -147,7 +140,7 @@ func (r *RowChange) IsPrimaryOrUniqueKeyUpdated() bool {
 			continue
 		}
 		pre, post := r.identityValuesByIndex(idx, preValues, postValues)
-		if identityUpdated(pre, post) {
+		if colValsUpdated(pre, post) {
 			return true
 		}
 	}
