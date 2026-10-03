@@ -75,7 +75,7 @@ func (pc *MySQLVersionChecker) checkVersion(value string, result *Result) *Error
 	needVersion := SupportedVersion["mysql"]
 	if conn.IsMariaDB(value) {
 		err := NewWarn("Migrating from MariaDB is still experimental.")
-		err.Instruction = "It is recommended that you upgrade MariaDB to 10.1.2 or a later version."
+		err.Instruction = "It is recommended that you verify compatibility before performing data migration because migrating from MariaDB is still experimental. Otherwise data inconsistency or task exceptions might occur."
 		return err
 	}
 	if IsTiDBFromVersion(value) {
