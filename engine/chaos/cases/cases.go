@@ -26,7 +26,6 @@ var cases = []caseFn{runFakeJobCase, runDMJobCases}
 func runCases(ctx context.Context, cfg *config) error {
 	errg, ctx := errgroup.WithContext(ctx)
 	for _, fn := range cases {
-		fn := fn
 		errg.Go(func() error {
 			return fn(ctx, cfg)
 		})
