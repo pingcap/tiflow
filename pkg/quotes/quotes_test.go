@@ -72,3 +72,22 @@ func TestEscapeName(t *testing.T) {
 		require.Equal(t, testCase.expected, escaped)
 	}
 }
+
+func TestUnquoteName(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name     string
+		expected string
+	}{
+		{"tbl", "tbl"},
+		{"`tbl`", "tbl"},
+		{"`t``bl`", "t`bl"},
+		{"`t````bl`", "t``bl"},
+		{"", ""},
+	}
+	for _, testCase := range cases {
+		unquoted := UnquoteName(testCase.name)
+		require.Equal(t, testCase.expected, unquoted)
+	}
+}

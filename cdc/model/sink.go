@@ -1130,10 +1130,12 @@ func (d *DDLEvent) FromJobWithArgs(
 
 		// Note that partition name should be parsed from original query, not the upperQuery.
 		partName := strings.TrimSpace(job.Query[idx1:idx2])
+		partName = quotes.UnquoteName(partName)
 		// The tableInfo is the partition table, preTableInfo is non partition table.
-		d.Query = fmt.Sprintf("ALTER TABLE `%s`.`%s` EXCHANGE PARTITION `%s` WITH TABLE `%s`.`%s`",
-			tableInfo.TableName.Schema, tableInfo.TableName.Table, partName,
-			preTableInfo.TableName.Schema, preTableInfo.TableName.Table)
+		d.Query = fmt.Sprintf("ALTER TABLE %s EXCHANGE PARTITION %s WITH TABLE %s",
+			quotes.QuoteSchema(tableInfo.TableName.Schema, tableInfo.TableName.Table),
+			quotes.QuoteName(partName),
+			quotes.QuoteSchema(preTableInfo.TableName.Schema, preTableInfo.TableName.Table))
 
 		if strings.HasSuffix(upperQuery, "WITHOUT VALIDATION") {
 			d.Query += " WITHOUT VALIDATION"

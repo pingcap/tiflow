@@ -401,6 +401,68 @@ func TestExchangeTablePartition(t *testing.T) {
 	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
 }
 
+func TestExchangeTablePartitionQuotedName(t *testing.T) {
+	ft := types.NewFieldType(mysql.TypeUnspecified)
+	ft.SetFlag(mysql.PriKeyFlag | mysql.UniqueFlag)
+	job := &timodel.Job{
+		ID:         71,
+		TableID:    69,
+		SchemaName: "test1",
+		Type:       timodel.ActionExchangeTablePartition,
+		StartTS:    432853521879007233,
+		Query:      "alter table t1 exchange partition `p``0` with table t2 without validation",
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 432853521879007238,
+		},
+	}
+
+	preTableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "test2",
+			Table:   "t2",
+			TableID: 67,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   67,
+			Name: pmodel.CIStr{O: "t1"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:        1,
+					Name:      pmodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
+				},
+			},
+		},
+	}
+	tableInfo := &TableInfo{
+		TableName: TableName{
+			Schema:  "test1",
+			Table:   "t1",
+			TableID: 69,
+		},
+		TableInfo: &timodel.TableInfo{
+			ID:   69,
+			Name: pmodel.CIStr{O: "t10"},
+			Columns: []*timodel.ColumnInfo{
+				{
+					ID:        1,
+					Name:      pmodel.CIStr{O: "id"},
+					FieldType: *ft,
+					State:     timodel.StatePublic,
+				},
+			},
+		},
+	}
+
+	event := &DDLEvent{}
+	event.FromJob(job, preTableInfo, tableInfo)
+	require.Equal(t,
+		"ALTER TABLE `test1`.`t1` EXCHANGE PARTITION `p``0` WITH TABLE `test2`.`t2` WITHOUT VALIDATION",
+		event.Query)
+	require.Equal(t, event.Type, timodel.ActionExchangeTablePartition)
+}
+
 func TestSortRowChangedEvent(t *testing.T) {
 	events := []*RowChangedEvent{
 		{
