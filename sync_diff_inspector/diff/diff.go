@@ -98,6 +98,7 @@ type Diff struct {
 	checkThreadCount int
 	splitThreadCount int
 	exportFixSQL     bool
+	checkStructOnly  bool
 	sqlWg            sync.WaitGroup
 	checkpointWg     sync.WaitGroup
 
@@ -119,6 +120,7 @@ func NewDiff(ctx context.Context, cfg *config.Config) (diff *Diff, err error) {
 		checkThreadCount: cfg.CheckThreadCount,
 		splitThreadCount: cfg.SplitThreadCount,
 		exportFixSQL:     cfg.ExportFixSQL,
+		checkStructOnly:  cfg.CheckStructOnly,
 		sqlCh:            make(chan *ChunkDML, splitter.DefaultChannelBuffer),
 		cp:               new(checkpoints.Checkpoint),
 		report:           report.NewReport(&cfg.Task),
@@ -135,7 +137,9 @@ func NewDiff(ctx context.Context, cfg *config.Config) (diff *Diff, err error) {
 func (df *Diff) PrintSummary(ctx context.Context) bool {
 	// Stop updating progress bar so that summary won't be flushed.
 	progress.Close()
-	df.report.CalculateTotalSize(ctx, df.downstream.GetDB())
+	if !df.checkStructOnly {
+		df.report.CalculateTotalSize(ctx, df.downstream.GetDB())
+	}
 	err := df.report.CommitSummary()
 	if err != nil {
 		log.Fatal("failed to commit report", zap.Error(err))
