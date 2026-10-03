@@ -521,7 +521,7 @@ func GenTableMapEvent(header *replication.EventHeader, latestPos uint32, tableID
 //
 // ref: https://dev.mysql.com/doc/internals/en/rows-event.html
 // ref: http://blog.51cto.com/yanzongshuai/2090894
-func GenRowsEvent(header *replication.EventHeader, latestPos uint32, eventType replication.EventType, tableID uint64, rowsFlags uint16, rows [][]interface{}, columnType []byte, tableMapEv *replication.BinlogEvent) (*replication.BinlogEvent, error) {
+func GenRowsEvent(header *replication.EventHeader, latestPos uint32, eventType replication.EventType, tableID uint64, rowsFlags uint16, rows [][]any, columnType []byte, tableMapEv *replication.BinlogEvent) (*replication.BinlogEvent, error) {
 	switch eventType {
 	case replication.WRITE_ROWS_EVENTv0, replication.WRITE_ROWS_EVENTv1, replication.WRITE_ROWS_EVENTv2,
 		replication.UPDATE_ROWS_EVENTv0, replication.UPDATE_ROWS_EVENTv1, replication.UPDATE_ROWS_EVENTv2,

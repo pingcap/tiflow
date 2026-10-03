@@ -155,7 +155,7 @@ type Error struct {
 	level      ErrLevel
 	message    string
 	workaround string
-	args       []interface{}
+	args       []any
 	rawCause   error
 	stack      errors.StackTracer
 }
@@ -279,7 +279,7 @@ func (e *Error) Equal(err error) bool {
 func (e *Error) SetMessage(message string) *Error {
 	err := *e
 	err.message = message
-	err.args = append([]interface{}{}, e.args...)
+	err.args = append([]any{}, e.args...)
 	return &err
 }
 
@@ -289,17 +289,17 @@ func (e *Error) New(message string) error {
 }
 
 // Generate generates a new *Error with the same class and code, and new arguments.
-func (e *Error) Generate(args ...interface{}) error {
+func (e *Error) Generate(args ...any) error {
 	return e.stackLevelGeneratef(1, e.message, args...)
 }
 
 // Generatef generates a new *Error with the same class and code, and a new formatted message.
-func (e *Error) Generatef(format string, args ...interface{}) error {
+func (e *Error) Generatef(format string, args ...any) error {
 	return e.stackLevelGeneratef(1, format, args...)
 }
 
 // stackLevelGeneratef is an inner interface to generate new *Error.
-func (e *Error) stackLevelGeneratef(stackSkipLevel int, format string, args ...interface{}) error {
+func (e *Error) stackLevelGeneratef(stackSkipLevel int, format string, args ...any) error {
 	return &Error{
 		code:       e.code,
 		class:      e.class,
@@ -314,7 +314,7 @@ func (e *Error) stackLevelGeneratef(stackSkipLevel int, format string, args ...i
 
 // Delegate creates a new *Error with the same fields of the give *Error,
 // except for new arguments, it also sets the err as raw cause of *Error.
-func (e *Error) Delegate(err error, args ...interface{}) error {
+func (e *Error) Delegate(err error, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -339,7 +339,7 @@ func (e *Error) Delegate(err error, args ...interface{}) error {
 }
 
 // AnnotateDelegate resets the message of *Error and Delegate with error and new args.
-func (e *Error) AnnotateDelegate(err error, message string, args ...interface{}) error {
+func (e *Error) AnnotateDelegate(err error, message string, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -362,7 +362,7 @@ func Annotate(err error, message string) error {
 }
 
 // Annotatef tries to convert err to *Error and adds a message to it.
-func Annotatef(err error, format string, args ...interface{}) error {
+func Annotatef(err error, format string, args ...any) error {
 	if err == nil {
 		return nil
 	}

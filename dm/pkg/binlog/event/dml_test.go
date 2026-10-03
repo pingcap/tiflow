@@ -43,8 +43,8 @@ func TestGenDMLEvent(t *testing.T) {
 	require.Nil(t, result)
 
 	// single INSERT without batch
-	insertRows1 := make([][]interface{}, 0, 1)
-	insertRows1 = append(insertRows1, []interface{}{int32(11), "string column value"})
+	insertRows1 := make([][]any, 0, 1)
+	insertRows1 = append(insertRows1, []any{int32(11), "string column value"})
 	insertDMLData := []*DMLData{
 		{
 			TableID:    11,
@@ -69,8 +69,8 @@ func TestGenDMLEvent(t *testing.T) {
 	xid++
 
 	// multi INSERT with batch
-	insertRows2 := make([][]interface{}, 0, 2)
-	insertRows2 = append(insertRows2, []interface{}{int32(101), "string column value a"}, []interface{}{int32(102), "string column value b"})
+	insertRows2 := make([][]any, 0, 2)
+	insertRows2 = append(insertRows2, []any{int32(101), "string column value a"}, []any{int32(102), "string column value b"})
 	insertDMLData = append(insertDMLData, &DMLData{
 		TableID:    12,
 		Schema:     "db2",
@@ -91,8 +91,8 @@ func TestGenDMLEvent(t *testing.T) {
 	xid++
 
 	// single UPDATE
-	updateRows := make([][]interface{}, 0, 2)
-	updateRows = append(updateRows, []interface{}{int32(21), "old string"}, []interface{}{int32(21), "new string"})
+	updateRows := make([][]any, 0, 2)
+	updateRows = append(updateRows, []any{int32(21), "old string"}, []any{int32(21), "new string"})
 	updateDMLData := []*DMLData{
 		{
 			TableID:    21,
@@ -121,8 +121,8 @@ func TestGenDMLEvent(t *testing.T) {
 	require.Nil(t, err)
 
 	// single DELETE
-	deleteRows := make([][]interface{}, 0, 1)
-	deleteRows = append(deleteRows, []interface{}{int32(31), "string a"})
+	deleteRows := make([][]any, 0, 1)
+	deleteRows = append(deleteRows, []any{int32(31), "string a"})
 	deleteDMLData := []*DMLData{
 		{
 			TableID:    31,

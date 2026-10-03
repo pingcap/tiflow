@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -222,7 +223,7 @@ func (c *TablesChecker) Check(ctx context.Context) *Result {
 		ctx, everyOptHandler,
 	)
 
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		worker := &tablesCheckerWorker{c: c}
 		worker.downstreamParser, err = dbutil.GetParserForDB(ctx, c.downstreamDB.DB)
 		if err != nil {
@@ -312,13 +313,7 @@ func (c *TablesChecker) checkAST(
 		}
 	}
 	// check primary/unique key
-	hasUnique := false
-	for _, cst := range upstreamStmt.Constraints {
-		if c.checkUnique(cst) {
-			hasUnique = true
-			break
-		}
-	}
+	hasUnique := slices.ContainsFunc(upstreamStmt.Constraints, c.checkUnique)
 	if !hasUnique {
 		options = append(options, &incompatibilityOption{
 			state:       StateWarning,
@@ -585,7 +580,7 @@ func (c *ShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 	eg, checkCtx := errgroup.WithContext(ctx)
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		eg.Go(func() error {
 			return c.checkShardingTable(checkCtx, r)
 		})
@@ -824,7 +819,7 @@ func (c *OptimisticShardingTablesChecker) Check(ctx context.Context) *Result {
 		return r
 	}
 	eg, checkCtx := errgroup.WithContext(ctx)
-	for i := 0; i < concurrency; i++ {
+	for range concurrency {
 		eg.Go(func() error {
 			return c.checkTable(checkCtx, r)
 		})

@@ -121,7 +121,7 @@ func TestAutoSplit4TxnTooLarge(t *testing.T) {
 
 	mockTxn := func(size int) {
 		mock.ExpectBegin()
-		for i := 0; i < size; i++ {
+		for range size {
 			mock.ExpectExec(dml).WillReturnResult(sqlmock.NewResult(1, 1))
 		}
 		if size == 1 {
@@ -138,14 +138,14 @@ func TestAutoSplit4TxnTooLarge(t *testing.T) {
 	mockTxn(1) // [2]
 	mockTxn(1) // [3]
 	txn := []string{dml, dml, dml}
-	args := [][]interface{}{nil, nil, nil}
+	args := [][]any{nil, nil, nil}
 
 	err = baseConn.ExecuteSQLsAutoSplit(tctx, nil, "test", txn, args...)
 	require.NoError(t, err)
 
 	mockTxnAlwaysError := func(size int) {
 		mock.ExpectBegin()
-		for i := 0; i < size; i++ {
+		for range size {
 			mock.ExpectExec(dml).WillReturnResult(sqlmock.NewResult(1, 1))
 		}
 		mock.ExpectCommit().WillReturnError(errTxnTooLarge)

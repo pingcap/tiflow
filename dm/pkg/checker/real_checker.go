@@ -47,12 +47,12 @@ type Error struct {
 }
 
 // NewError creates a pointer to Error, the parameters could be used as in Sprintf.
-func NewError(description string, args ...interface{}) *Error {
+func NewError(description string, args ...any) *Error {
 	return &Error{Severity: StateFailure, ShortErr: fmt.Sprintf(description, args...)}
 }
 
 // NewWarn creates a pointer to Error, the parameters could be used as in Sprintf.
-func NewWarn(description string, args ...interface{}) *Error {
+func NewWarn(description string, args ...any) *Error {
 	return &Error{Severity: StateWarning, ShortErr: fmt.Sprintf(description, args...)}
 }
 
@@ -104,9 +104,7 @@ func Do(ctx context.Context, checkers []RealChecker) (*Results, error) {
 
 	resultCh := make(chan *Result)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			result := <-resultCh
 			switch result.State {
@@ -126,7 +124,7 @@ func Do(ctx context.Context, checkers []RealChecker) (*Results, error) {
 				return
 			}
 		}
-	}()
+	})
 
 	for i, checker := range checkers {
 		wg.Add(1)

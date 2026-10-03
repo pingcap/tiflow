@@ -60,7 +60,7 @@ func TestTError(t *testing.T) {
 
 	setMsgErr := err.SetMessage(messageArgs)
 	require.Equal(t, messageArgs, setMsgErr.getMsg())
-	setMsgErr.args = []interface{}{"1062"}
+	setMsgErr.args = []any{"1062"}
 	require.Equal(t, fmt.Sprintf(messageArgs, setMsgErr.args...), setMsgErr.getMsg())
 
 	// test Error Generate/Generatef
@@ -141,12 +141,12 @@ func TestTErrorStackTrace(t *testing.T) {
 	testCases := []struct {
 		fn               string
 		message          string
-		args             []interface{}
+		args             []any
 		stackFingerprint string
 	}{
 		{"new", "new error", nil, ".*\\(\\*Error\\)\\.New"},
-		{"generate", "", []interface{}{"parma1"}, ".*\\(\\*Error\\)\\.Generate"},
-		{"generatef", "generatef error %s %d", []interface{}{"param1", 12}, ".*\\(\\*Error\\)\\.Generatef"},
+		{"generate", "", []any{"parma1"}, ".*\\(\\*Error\\)\\.Generate"},
+		{"generatef", "generatef error %s %d", []any{"param1", 12}, ".*\\(\\*Error\\)\\.Generatef"},
 	}
 
 	for _, tc := range testCases {
