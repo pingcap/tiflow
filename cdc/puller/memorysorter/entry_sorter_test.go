@@ -104,12 +104,10 @@ func TestEntrySorter(t *testing.T) {
 	es := NewEntrySorter(model.GenerateChangeFeedID("test", "test-cf"))
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := es.Run(ctx)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 	for _, tc := range testCases {
 		for _, entry := range tc.input {
 			es.AddEntry(ctx, model.NewPolymorphicEvent(entry))
@@ -130,17 +128,13 @@ func TestEntrySorterRandomly(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := es.Run(ctx)
 		require.Equal(t, context.Canceled, errors.Cause(err))
-	}()
+	})
 
 	maxTs := uint64(1000000)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
@@ -148,7 +142,7 @@ func TestEntrySorterRandomly(t *testing.T) {
 			} else {
 				opType = model.OpTypeDelete
 			}
-			for i := 0; i < 1000; i++ {
+			for range 1000 {
 				entry := &model.RawKVEntry{
 					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(int64(maxTs-resolvedTs))),
 					OpType: opType,
@@ -158,7 +152,7 @@ func TestEntrySorterRandomly(t *testing.T) {
 			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
 		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
-	}()
+	})
 	var lastTs uint64
 	var resolvedTs uint64
 	lastOpType := model.OpTypePut
@@ -361,20 +355,16 @@ func BenchmarkSorter(b *testing.B) {
 	es := NewEntrySorter(model.GenerateChangeFeedID("test", "test-cf"))
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := es.Run(ctx)
 		if errors.Cause(err) != context.Canceled {
 			panic(errors.Annotate(err, "unexpected error"))
 		}
-	}()
+	})
 
 	maxTs := uint64(10000000)
 	b.ResetTimer()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for resolvedTs := uint64(1); resolvedTs <= maxTs; resolvedTs += 400 {
 			var opType model.OpType
 			if rand.Intn(2) == 0 {
@@ -382,7 +372,7 @@ func BenchmarkSorter(b *testing.B) {
 			} else {
 				opType = model.OpTypeDelete
 			}
-			for i := 0; i < 100000; i++ {
+			for range 100000 {
 				entry := &model.RawKVEntry{
 					CRTs:   uint64(int64(resolvedTs) + rand.Int63n(1000)),
 					OpType: opType,
@@ -392,7 +382,7 @@ func BenchmarkSorter(b *testing.B) {
 			es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, resolvedTs))
 		}
 		es.AddEntry(ctx, model.NewResolvedPolymorphicEvent(0, maxTs))
-	}()
+	})
 	var resolvedTs uint64
 	for entry := range es.Output() {
 		if entry.IsResolved() {

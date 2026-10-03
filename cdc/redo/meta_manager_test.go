@@ -63,7 +63,7 @@ func TestInitAndWriteMeta(t *testing.T) {
 
 	var notRemoveFiles []string
 	require.NoError(t, err)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		fileName := "dummy" + getChangefeedMatcher(changefeedID) + strconv.Itoa(i)
 		err = extStorage.WriteFile(ctx, fileName, []byte{})
 		require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestPreCleanupAndWriteMeta(t *testing.T) {
 	// write delete mark to simulate a deleted changefeed
 	err = extStorage.WriteFile(ctx, getDeletedChangefeedMarker(changefeedID), []byte{})
 	require.NoError(t, err)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		fileName := "dummy" + getChangefeedMatcher(changefeedID) + strconv.Itoa(i)
 		err = extStorage.WriteFile(ctx, fileName, []byte{})
 		require.NoError(t, err)
@@ -319,8 +319,7 @@ func TestGCAndCleanup(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, eg.Wait(), context.Canceled)
 
-	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
-	defer cleanupCancel()
+	cleanupCtx := t.Context()
 	m.Cleanup(cleanupCtx)
 	ret, err := extStorage.FileExists(cleanupCtx, getDeletedChangefeedMarker(changefeedID))
 	require.NoError(t, err)

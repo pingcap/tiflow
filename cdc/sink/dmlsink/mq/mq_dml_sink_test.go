@@ -33,8 +33,7 @@ import (
 func TestNewKafkaDMLSinkFailed(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
@@ -58,8 +57,7 @@ func TestNewKafkaDMLSinkFailed(t *testing.T) {
 }
 
 func TestWriteEvents(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
@@ -95,7 +93,7 @@ func TestWriteEvents(t *testing.T) {
 	}
 
 	events := make([]*dmlsink.CallbackableEvent[*model.SingleTableTxn], 0, 3000)
-	for i := 0; i < 3000; i++ {
+	for range 3000 {
 		events = append(events, &dmlsink.TxnCallbackableEvent{
 			Event: &model.SingleTableTxn{
 				Rows: []*model.RowChangedEvent{row},

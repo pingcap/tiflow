@@ -1023,9 +1023,7 @@ func (c *component[R]) spawn(ctx context.Context) {
 	c.warnings = make(chan error, 16)
 
 	changefeedID := c.changefeedID
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		err := c.r.Run(c.ctx, c.warnings)
 		if err != nil && errors.Cause(err) != context.Canceled {
 			log.Error("processor sub-component fails",
@@ -1038,7 +1036,7 @@ func (c *component[R]) spawn(ctx context.Context) {
 			case c.errors <- err:
 			}
 		}
-	}()
+	})
 	c.r.WaitForReady(ctx)
 	log.Info("processor sub-component starts",
 		zap.String("namespace", changefeedID.Namespace),

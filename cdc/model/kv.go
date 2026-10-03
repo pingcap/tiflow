@@ -46,7 +46,7 @@ type RegionFeedEvent struct {
 }
 
 // GetValue returns the underlying value
-func (e *RegionFeedEvent) GetValue() interface{} {
+func (e *RegionFeedEvent) GetValue() any {
 	if e.Val != nil {
 		return e.Val
 	} else if e.Resolved != nil {

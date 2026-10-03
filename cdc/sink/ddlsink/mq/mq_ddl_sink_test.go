@@ -31,8 +31,7 @@ func TestNewKafkaDDLSinkFailed(t *testing.T) {
 	t.Parallel()
 
 	changefeedID := model.DefaultChangeFeedID("test")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
@@ -56,8 +55,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 	t.Parallel()
 
 	changefeedID := model.DefaultChangeFeedID("test")
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// partition-number is 2, so only send DDL events to 2 partitions.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
@@ -98,8 +96,7 @@ func TestWriteDDLEventToAllPartitions(t *testing.T) {
 func TestWriteDDLEventToZeroPartition(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
 		"&max-message-bytes=1048576&partition-num=1" +
@@ -141,8 +138,7 @@ func TestWriteDDLEventToZeroPartition(t *testing.T) {
 func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// partition-num is set to 2, so send checkpoint to 2 partitions.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
@@ -178,8 +174,7 @@ func TestWriteCheckpointTsToDefaultTopic(t *testing.T) {
 func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Notice: auto create topic is true. Auto created topic will have 1 partition.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +
@@ -243,8 +238,7 @@ func TestWriteCheckpointTsToTableTopics(t *testing.T) {
 func TestWriteCheckpointTsWhenCanalJsonTiDBExtensionIsDisable(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	// Notice: tidb extension is disabled.
 	uriTemplate := "kafka://%s/%s?kafka-version=0.9.0.0&max-batch-size=1" +

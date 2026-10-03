@@ -74,7 +74,7 @@ func NewPulsarDMLProducerMock(
 		producerCacheSize = int(*pulsarConfig.PulsarProducerCacheSize)
 	}
 
-	producers, err := lru.NewWithEvict(producerCacheSize, func(key interface{}, value interface{}) {
+	producers, err := lru.NewWithEvict(producerCacheSize, func(key any, value any) {
 		// remove producer
 		pulsarProducer, ok := value.(pulsar.Producer)
 		if ok && pulsarProducer != nil {

@@ -758,7 +758,7 @@ func (r *Manager) logSlowTableInfo(currentPDTime time.Time) {
 	})
 
 	num := r.slowTableHeap.Len()
-	for i := 0; i < num; i++ {
+	for range num {
 		table := heap.Pop(&r.slowTableHeap).(*ReplicationSet)
 		log.Info("schedulerv3: slow table",
 			zap.String("namespace", r.changefeedID.Namespace),
