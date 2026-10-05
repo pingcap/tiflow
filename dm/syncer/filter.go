@@ -131,7 +131,7 @@ func skipByFilter(binlogFilter *bf.BinlogEvent, table *filter.Table, et bf.Event
 }
 
 func (s *Syncer) skipByTable(table *filter.Table) bool {
-	return skipByTable(s.baList, table)
+	return skipByTable(s.getBAList(), table)
 }
 
 // skipByTable returns true when
