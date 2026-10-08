@@ -345,6 +345,12 @@ function test_json_expression() {
 
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
+	# sync-diff treats 2500 and 2500.0 as equal, so check the JSON types explicitly
+	run_sql_tidb "select count(*) from all_mode.t_json_double where json_type(doc->'$.amount') = 'DOUBLE' and json_type(doc->'$.pct') = 'DOUBLE' and json_type(doc->'$.qty') = 'INTEGER';"
+	check_contains "count(*): 2"
+	run_sql_tidb "select count(*) from all_mode.t_json_double where id = 2 and json_type(doc->'$.zero') = 'DOUBLE' and json_type(doc->'$.rate') = 'DOUBLE' and json_type(doc->'$.arr[0]') = 'DOUBLE' and json_type(doc->'$.arr[2]') = 'INTEGER';"
+	check_contains "count(*): 1"
+
 	cleanup_process
 	cleanup_data all_mode
 	echo "[$(date)] <<<<<< finish test_json_expression >>>>>>"
