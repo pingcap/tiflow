@@ -54,5 +54,7 @@ func SetDefaultBinlogParserCfg(parser *replication.BinlogParser) {
 	parser.SetUseDecimal(false)
 	// keep the trailing ".0" of whole-number JSON doubles, otherwise the
 	// downstream parses them as JSON integers.
+	// TODO: upgrade go-mysql and use RenderJSONAsMySQLText to also keep
+	// other JSON values such as DECIMAL.
 	parser.SetUseFloatWithTrailingZero(true)
 }
