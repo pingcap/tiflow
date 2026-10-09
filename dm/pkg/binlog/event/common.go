@@ -19,6 +19,7 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -118,12 +119,11 @@ func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet g
 
 	switch flavor {
 	case gmysql.MySQLFlavor:
-		uuidSet := singleGTID.(*gmysql.UUIDSet)
-		interval := uuidSet.Intervals[0]
+		single := singleGTID.(*singleMySQLGTID)
 		if anonymous {
 			gtidEv, err = GenAnonymousGTIDEvent(header, latestPos, defaultGTIDFlags, defaultLastCommitted, defaultSequenceNumber)
 		} else {
-			gtidEv, err = GenGTIDEvent(header, latestPos, defaultGTIDFlags, uuidSet.SID.String(), interval.Start, defaultLastCommitted, defaultSequenceNumber)
+			gtidEv, err = GenGTIDEvent(header, latestPos, defaultGTIDFlags, single.sid.String(), single.interval.Start, defaultLastCommitted, defaultSequenceNumber)
 		}
 	case gmysql.MariaDBFlavor:
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
@@ -153,26 +153,27 @@ func GTIDIncrease(flavor string, gSet gmysql.GTIDSet) (gmysql.GTIDSet, error) {
 
 	switch flavor {
 	case gmysql.MySQLFlavor:
-		uuidSet := singleGTID.(*gmysql.UUIDSet)
-		uuidSet.Intervals[0].Start++
-		uuidSet.Intervals[0].Stop++
-		gtidSet := new(gmysql.MysqlGTIDSet)
-		gtidSet.Sets = map[string]*gmysql.UUIDSet{uuidSet.SID.String(): uuidSet}
-		clone = gtidSet
+		single := singleGTID.(*singleMySQLGTID)
+		gtidSet := gmysql.NewMysqlGTIDSet()
+		gtidSet.AddGTIDWithTag(single.sid, single.tag, single.interval.Start+1)
+		clone = &gtidSet
 	case gmysql.MariaDBFlavor:
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
 		mariaGTID.SequenceNumber++
 		gtidSet := new(gmysql.MariadbGTIDSet)
-		gtidSet.Sets = map[uint32]map[uint32]*gmysql.MariadbGTID{
-			mariaGTID.DomainID: {
-				mariaGTID.ServerID: mariaGTID,
-			},
-		}
+		gtidSet.Sets = map[uint32]*gmysql.MariadbGTID{mariaGTID.DomainID: mariaGTID}
 		clone = gtidSet
 	default:
 		err = terror.ErrBinlogGTIDSetNotValid.Generate(gSet, flavor)
 	}
 	return clone, err
+}
+
+// singleMySQLGTID is a MySQL GTID set which contains only one GTID.
+type singleMySQLGTID struct {
+	sid      uuid.UUID
+	tag      gmysql.Tag
+	interval gmysql.Interval
 }
 
 // verifySingleGTID verifies gSet whether only containing a single valid GTID.
@@ -187,37 +188,39 @@ func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(gSet)
 		}
-		if len(mysqlGTIDs.Sets) != 1 {
-			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(mysqlGTIDs.Sets), gSet)
+		if len(*mysqlGTIDs) != 1 {
+			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(*mysqlGTIDs), gSet)
 		}
-		var uuidSet *gmysql.UUIDSet
-		for _, uuidSet = range mysqlGTIDs.Sets {
+		single := &singleMySQLGTID{}
+		var tags map[gmysql.Tag]gmysql.IntervalSlice
+		for single.sid, tags = range *mysqlGTIDs {
 		}
-		intervals := uuidSet.Intervals
+		if len(tags) != 1 {
+			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(tags), gSet)
+		}
+		var intervals gmysql.IntervalSlice
+		for single.tag, intervals = range tags {
+		}
 		if intervals.Len() != 1 {
 			return nil, terror.ErrBinlogOnlyOneIntervalInUUID.Generate(intervals.Len(), gSet)
 		}
-		interval := intervals[0]
-		if interval.Stop != interval.Start+1 {
-			return nil, terror.ErrBinlogIntervalValueNotValid.Generate(interval, gSet)
+		single.interval = intervals[0]
+		if single.interval.Stop != single.interval.Start+1 {
+			return nil, terror.ErrBinlogIntervalValueNotValid.Generate(single.interval, gSet)
 		}
-		return uuidSet, nil
+		return single, nil
 	case gmysql.MariaDBFlavor:
 		mariaGTIDs, ok := gSet.(*gmysql.MariadbGTIDSet)
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(gSet)
 		}
-		gtidCount := 0
+		if len(mariaGTIDs.Sets) != 1 {
+			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(mariaGTIDs.Sets), gSet)
+		}
 		var mariaGTID *gmysql.MariadbGTID
-		for _, set := range mariaGTIDs.Sets {
-			gtidCount += len(set)
-			for _, mariaGTID = range set {
-			}
+		for _, mariaGTID = range mariaGTIDs.Sets {
 		}
-		if gtidCount != 1 {
-			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(gtidCount, gSet)
-		}
-		return mariaGTID, nil
+		return mariaGTID.Clone(), nil
 	default:
 		return nil, terror.ErrBinlogGTIDSetNotValid.Generate(gSet, flavor)
 	}
