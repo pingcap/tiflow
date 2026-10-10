@@ -363,6 +363,16 @@ func (c *StreamerController) GetEvent(tctx *tcontext.Context) (*replication.Binl
 		return nil, pb.ErrorOp_InvalidErrorOp, err
 	}
 
+	// TODO: support tagged GTIDs. DM doesn't record them in the locations, so
+	// the transactions with tagged GTIDs would be replicated again after resume.
+	if ev, ok := event.Event.(*replication.GtidTaggedLogEvent); ok {
+		gtid := ""
+		if gset, err2 := ev.GTIDNext(); err2 == nil {
+			gtid = gset.String()
+		}
+		return nil, pb.ErrorOp_InvalidErrorOp, terror.ErrSyncerTaggedGTIDNotSupported.Generate(gtid)
+	}
+
 	if suffix != 0 {
 		c.locations.curStartLocation = c.upstream.curStartLocation
 		c.locations.curStartLocation.Suffix = suffix - 1

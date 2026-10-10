@@ -470,6 +470,7 @@ const (
 	codeSyncerGetEvent
 	codeSyncerDownstreamTableNotFound
 	codeSyncerReprocessWithSafeModeFail
+	codeSyncerTaggedGTIDNotSupported
 )
 
 // DM-master error code.
@@ -1174,6 +1175,7 @@ var (
 	ErrSyncerDownstreamTableNotFound        = New(codeSyncerDownstreamTableNotFound, ClassSyncUnit, ScopeInternal, LevelHigh, "downstream table %s not found", "")
 	ErrSyncerCancelledDDL                   = New(codeSyncerCancelledDDL, ClassSyncUnit, ScopeInternal, LevelHigh, "DDL %s executed in background and met error", "Please manually check the error from TiDB and handle it.")
 	ErrSyncerReprocessWithSafeModeFail      = New(codeSyncerReprocessWithSafeModeFail, ClassSyncUnit, ScopeInternal, LevelMedium, "your `safe-mode-duration` in task.yaml is set to 0s, the task can't be re-processed without safe mode currently", "Please stop and re-start this task. If you want to start task successfully, you need set `safe-mode-duration` greater than `0s`.")
+	ErrSyncerTaggedGTIDNotSupported         = New(codeSyncerTaggedGTIDNotSupported, ClassSyncUnit, ScopeUpstream, LevelHigh, "tagged GTID %s is not supported", "Please don't use tagged GTIDs in the upstream.")
 
 	// DM-master error.
 	ErrMasterSQLOpNilRequest        = New(codeMasterSQLOpNilRequest, ClassDMMaster, ScopeInternal, LevelMedium, "nil request not valid", "")
