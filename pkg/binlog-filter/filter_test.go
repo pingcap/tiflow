@@ -26,7 +26,6 @@ func TestFilter(t *testing.T) {
 		{"Test_1_*", "abc*", []EventType{DeleteEvent, InsertEvent, CreateIndex, DropIndex, DropView}, []string{"^DROP\\s+PROCEDURE", "^CREATE\\s+PROCEDURE"}, nil, Ignore},
 		{"xxx_*", "abc_*", []EventType{AllDML, NoneDDL}, nil, nil, Ignore},
 		{"yyy_*", "abc_*", []EventType{EventType("ALL DML")}, nil, nil, Do},
-		{"Test_1_*", "abc*", []EventType{"wrong event"}, []string{"^DROP\\s+PROCEDURE", "^CREATE\\s+PROCEDURE"}, nil, Ignore},
 		{"cdc", "t1", []EventType{RebaseAutoID}, nil, nil, Ignore},
 	}
 
@@ -57,7 +56,8 @@ func TestFilter(t *testing.T) {
 	filter, err := NewBinlogEvent(false, rules)
 	require.NoError(t, err)
 
-	// insert duplicate rules
+	// insert duplicate rules: AddRule itself (unlike NewBinlogEvent) never
+	// composes same-key Ignore rules, so any key collision is an error.
 	for _, rule := range rules {
 		err = filter.AddRule(rule)
 		require.Error(t, err)
@@ -130,6 +130,177 @@ func TestFilter(t *testing.T) {
 	require.NoError(t, err)
 	_, err = filter.Filter("test_1_a", "abc", InsertEvent, "")
 	require.Error(t, err)
+}
+
+func ignoreAddColumn(schemaPattern, tablePattern, column string) *BinlogEventRule {
+	return &BinlogEventRule{
+		SchemaPattern: schemaPattern,
+		TablePattern:  tablePattern,
+		SQLPattern:    []string{"ADD COLUMN " + column},
+		Action:        Ignore,
+	}
+}
+
+func addColumnAction(t *testing.T, filter *BinlogEvent, column string) ActionType {
+	t.Helper()
+	action, err := filter.Filter("db", "t", NullEvent, "alter table t add column "+column+" int")
+	require.NoError(t, err)
+	return action
+}
+
+func TestSameKeyIgnoreComposition(t *testing.T) {
+	ruleA := ignoreAddColumn("*", "", "a_col")
+	ruleB := ignoreAddColumn("*", "", "b_col")
+	ruleC := ignoreAddColumn("*", "", "c_col")
+
+	check := func(filter *BinlogEvent) {
+		require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+		require.Equal(t, Ignore, addColumnAction(t, filter, "b_col"))
+		require.Equal(t, Ignore, addColumnAction(t, filter, "c_col"))
+		// Distinguishes composing each rule's own condition from treating
+		// the whole key as Ignore.
+		require.Equal(t, Do, addColumnAction(t, filter, "d_col"))
+	}
+
+	filterABC, err := NewBinlogEvent(false, []*BinlogEventRule{ruleA, ruleB, ruleC})
+	require.NoError(t, err)
+	check(filterABC)
+
+	filterCBA, err := NewBinlogEvent(false, []*BinlogEventRule{ruleC, ruleB, ruleA})
+	require.NoError(t, err)
+	check(filterCBA)
+}
+
+func TestSameKeyMixedActionRejected(t *testing.T) {
+	ignoreRule := ignoreAddColumn("*", "", "a_col")
+
+	doRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
+	_, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, doRule})
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+
+	errorRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN c_col"}, Action: Error}
+	_, err = NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, errorRule})
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+}
+
+func TestSameKeyAliasedRangePatternRejected(t *testing.T) {
+	// "[ab]" and "[ba]" name one trie key but read back as only the first
+	// spelling, so the rules at that key cannot be listed. Composing blind
+	// would let a Do rule through, so both orders must be rejected.
+	ignoreRule := ignoreAddColumn("[ab]", "", "a_col")
+	doRule := &BinlogEventRule{SchemaPattern: "[ba]", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
+
+	_, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, doRule})
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+
+	_, err = NewBinlogEvent(false, []*BinlogEventRule{doRule, ignoreRule})
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+}
+
+func TestUnusableRuleSkipped(t *testing.T) {
+	unusable := &BinlogEventRule{SchemaPattern: "*", Events: []EventType{"wrong event"}, Action: Ignore}
+	filter, err := NewBinlogEvent(false, []*BinlogEventRule{unusable, ignoreAddColumn("*", "", "a_col")})
+	require.NoError(t, err)
+	require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+}
+
+func TestCaseSensitiveComposition(t *testing.T) {
+	ruleUpper := ignoreAddColumn("DB", "", "a_col")
+	ruleLower := ignoreAddColumn("db", "", "b_col")
+
+	filter, err := NewBinlogEvent(false, []*BinlogEventRule{ruleUpper, ruleLower})
+	require.NoError(t, err)
+	require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+	require.Equal(t, Ignore, addColumnAction(t, filter, "b_col"))
+}
+
+func TestAddRuleDoesNotComposeAcrossLevels(t *testing.T) {
+	filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("*", "", "a_col")})
+	require.NoError(t, err)
+
+	require.Error(t, filter.AddRule(ignoreAddColumn("*", "", "s_col")))
+	require.Equal(t, Do, addColumnAction(t, filter, "s_col"))
+
+	sourceDoRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN s2_col"}, Action: Do}
+	require.Error(t, filter.AddRule(sourceDoRule))
+}
+
+func TestMergeLowerPriorityRules(t *testing.T) {
+	t.Run("composes within the merged set", func(t *testing.T) {
+		filter, err := NewBinlogEvent(false, nil)
+		require.NoError(t, err)
+
+		lowerA := ignoreAddColumn("*", "", "a_col")
+		lowerB := ignoreAddColumn("*", "", "b_col")
+		added, skipped, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lowerA, lowerB})
+		require.NoError(t, err)
+		require.Equal(t, []*BinlogEventRule{lowerA, lowerB}, added)
+		require.Empty(t, skipped)
+		require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+		require.Equal(t, Ignore, addColumnAction(t, filter, "b_col"))
+		require.Equal(t, Do, addColumnAction(t, filter, "c_col"))
+	})
+
+	t.Run("existing key wins over the whole group", func(t *testing.T) {
+		filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("*", "", "a_col")})
+		require.NoError(t, err)
+
+		lowerA := ignoreAddColumn("*", "", "s1_col")
+		lowerB := ignoreAddColumn("*", "", "s2_col")
+		added, skipped, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lowerA, lowerB})
+		require.NoError(t, err)
+		require.Empty(t, added)
+		require.Equal(t, []*BinlogEventRule{lowerA, lowerB}, skipped)
+		require.Equal(t, Do, addColumnAction(t, filter, "s1_col"))
+		require.Equal(t, Do, addColumnAction(t, filter, "s2_col"))
+	})
+
+	t.Run("existing key wins when spelled differently", func(t *testing.T) {
+		filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("[ab]", "", "a_col")})
+		require.NoError(t, err)
+
+		lower := ignoreAddColumn("[ba]", "", "s_col")
+		added, skipped, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lower})
+		require.NoError(t, err)
+		require.Empty(t, added)
+		require.Equal(t, []*BinlogEventRule{lower}, skipped)
+	})
+
+	t.Run("keys are exact", func(t *testing.T) {
+		filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("*", "", "a_col")})
+		require.NoError(t, err)
+
+		lower := ignoreAddColumn("*", "*", "s_col")
+		added, _, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lower})
+		require.NoError(t, err)
+		require.Equal(t, []*BinlogEventRule{lower}, added)
+		require.Equal(t, Ignore, addColumnAction(t, filter, "s_col"))
+	})
+
+	t.Run("added keeps the input order", func(t *testing.T) {
+		lower := []*BinlogEventRule{
+			ignoreAddColumn("db3", "", "c_col"),
+			ignoreAddColumn("db1", "", "a_col"),
+			ignoreAddColumn("db2", "t", "b_col"),
+			ignoreAddColumn("db1", "", "d_col"),
+		}
+		for range 20 {
+			filter, err := NewBinlogEvent(false, nil)
+			require.NoError(t, err)
+			added, _, err := filter.MergeLowerPriorityRules(lower)
+			require.NoError(t, err)
+			require.Equal(t, lower, added)
+		}
+	})
+
+	t.Run("mixed actions in the merged set are rejected", func(t *testing.T) {
+		filter, err := NewBinlogEvent(false, nil)
+		require.NoError(t, err)
+
+		doRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
+		_, _, err = filter.MergeLowerPriorityRules([]*BinlogEventRule{ignoreAddColumn("*", "", "a_col"), doRule})
+		require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+	})
 }
 
 func TestCaseSensitive(t *testing.T) {

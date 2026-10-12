@@ -14,6 +14,7 @@
 package filter
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 
@@ -244,7 +245,18 @@ type BinlogEvent struct {
 	caseSensitive bool
 }
 
-// NewBinlogEvent returns a binlog event filter
+// NewBinlogEvent returns a binlog event filter built from one rule set,
+// such as one task configuration's or one source configuration's rules.
+//
+// Rules within that set may share a (schema-pattern, table-pattern) key
+// only when all of them are Ignore rules: they narrow what gets skipped,
+// so applying all of them is unambiguous. Sharing a key with any other
+// action is rejected, rather than silently keeping one of the rules.
+//
+// A rule that cannot be used at all, such as one naming an unknown event
+// or carrying an uncompilable sql-pattern, is skipped with a warning.
+// Configurations holding such a rule have always loaded, and must keep
+// loading, since they may already be persisted.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
@@ -252,15 +264,97 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 	}
 
 	for _, rule := range rules {
-		if err := b.AddRule(rule); err != nil {
-			log.Error("invalid binlog event rule", zap.Any("rule", rule), zap.Error(err))
+		conflict, err := b.addRuleComposingIgnores(rule)
+		if conflict {
+			return nil, err
+		}
+		if err != nil {
+			log.Warn("skip unusable binlog event rule", zap.Any("rule", rule), zap.Error(err))
 		}
 	}
 
 	return b, nil
 }
 
-// AddRule adds a rule into binlog event filter
+// MergeLowerPriorityRules merges rules into b, where b's existing rules take
+// precedence: every rule whose key b already uses is skipped, whatever its
+// action. Rules at the remaining keys are added, with same-key Ignore rules
+// composed as in NewBinlogEvent. Both returned slices follow the order of
+// rules.
+func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, skipped []*BinlogEventRule, err error) {
+	lower, err := NewBinlogEvent(b.caseSensitive, rules)
+	if err != nil {
+		return nil, nil, err
+	}
+	// Group by trie node rather than by pattern string: reconstructed
+	// patterns do not always round-trip, so "[ab]" and "[ba]" name one key
+	// but read back as two.
+	groupOf := lower.ruleGroups()
+
+	claimed := make(map[int]bool, len(groupOf))
+	for _, rule := range rules {
+		group, ok := groupOf[rule]
+		if !ok {
+			continue // skipped by NewBinlogEvent above
+		}
+
+		if claimed[group] {
+			// Already proven free of b's rules, and lower validated the
+			// group as composable, so this cannot conflict.
+			if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
+				return nil, nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+			}
+			added = append(added, rule)
+			continue
+		}
+
+		// Let the trie decide whether b already uses this key.
+		err = b.AddRule(rule)
+		switch {
+		case err == nil:
+			claimed[group] = true
+			added = append(added, rule)
+		case errors.IsAlreadyExists(errors.Cause(err)):
+			skipped = append(skipped, rule)
+		default:
+			return nil, nil, err
+		}
+	}
+
+	return added, skipped, nil
+}
+
+// ruleGroups maps each rule in b to an id shared by exactly the rules
+// stored under the same key.
+func (b *BinlogEvent) ruleGroups() map[*BinlogEventRule]int {
+	schemaRules, tableRules := b.AllRules()
+
+	groups := make(map[*BinlogEventRule]int)
+	group := 0
+	collect := func(raw []any) {
+		for _, r := range raw {
+			if rule, ok := r.(*BinlogEventRule); ok {
+				groups[rule] = group
+			}
+		}
+		group++
+	}
+	for _, raw := range schemaRules {
+		collect(raw)
+	}
+	for _, tables := range tableRules {
+		for _, raw := range tables {
+			collect(raw)
+		}
+	}
+	return groups
+}
+
+// AddRule adds a rule into binlog event filter. A rule already present at
+// the same (schema-pattern, table-pattern) key is always reported as an
+// error here, regardless of action. See NewBinlogEvent for the same-key
+// Ignore composition applied when building a filter from a whole rule set,
+// and MergeLowerPriorityRules for merging one set into another.
 func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 	if b == nil || rule == nil {
 		return nil
@@ -273,15 +367,96 @@ func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 		rule.ToLower()
 	}
 
-	err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Insert)
-	if err != nil {
+	if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Insert); err != nil {
 		return errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 	}
 
 	return nil
 }
 
-// UpdateRule updates binlog event filter rule
+// addRuleComposingIgnores behaves like AddRule, except that a collision with
+// an existing same-key rule composes same-key Ignore rules instead of always
+// failing. It reports whether the error, if any, is such a collision that
+// cannot be composed.
+func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict bool, err error) {
+	err = b.AddRule(rule)
+	if err == nil {
+		return false, nil
+	}
+	if !errors.IsAlreadyExists(errors.Cause(err)) {
+		return false, err
+	}
+
+	// AddRule already validated and normalized rule (case-folding included)
+	// before hitting the collision, so rule.SchemaPattern/TablePattern below
+	// are the same key AddRule just failed to insert.
+	existing := b.rulesAtKey(rule.SchemaPattern, rule.TablePattern)
+	// An empty result means the lookup disagrees with the trie about this
+	// key, since AddRule just found it occupied. Composing would then risk
+	// joining rules we cannot see, so refuse instead.
+	if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
+		return true, errors.Errorf(
+			"rule %s conflicts with existing rule(s) %s at the same key (schema-pattern=%q, table-pattern=%q): "+
+				"multiple rules at the same key are only supported when all of them are Ignore rules",
+			formatRule(rule), formatRules(existing), rule.SchemaPattern, rule.TablePattern)
+	}
+
+	if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
+		return false, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+	}
+
+	return false, nil
+}
+
+// rulesAtKey returns the rules currently stored at the exact
+// (schemaPattern, tablePattern) key, without wildcard matching against real
+// schema/table values.
+func (b *BinlogEvent) rulesAtKey(schemaPattern, tablePattern string) []*BinlogEventRule {
+	schemaRules, tableRules := b.AllRules()
+
+	var raw []any
+	if len(tablePattern) == 0 {
+		raw = schemaRules[schemaPattern]
+	} else {
+		raw = tableRules[schemaPattern][tablePattern]
+	}
+
+	rules := make([]*BinlogEventRule, 0, len(raw))
+	for _, r := range raw {
+		if br, ok := r.(*BinlogEventRule); ok {
+			rules = append(rules, br)
+		}
+	}
+	return rules
+}
+
+func allIgnoreRules(rules []*BinlogEventRule) bool {
+	for _, r := range rules {
+		if r.Action != Ignore {
+			return false
+		}
+	}
+	return true
+}
+
+// formatRule renders a rule's user-facing fields for error messages,
+// skipping the unexported compiled regexp.
+func formatRule(rule *BinlogEventRule) string {
+	return fmt.Sprintf("{schema-pattern:%s table-pattern:%s events:%v sql-pattern:%v action:%s}",
+		rule.SchemaPattern, rule.TablePattern, rule.Events, rule.SQLPattern, rule.Action)
+}
+
+func formatRules(rules []*BinlogEventRule) string {
+	parts := make([]string, 0, len(rules))
+	for _, r := range rules {
+		parts = append(parts, formatRule(r))
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
+}
+
+// UpdateRule updates binlog event filter rule. This replaces every rule at
+// the (schema-pattern, table-pattern) key with just rule, including sibling
+// Ignore rules composed there.
 func (b *BinlogEvent) UpdateRule(rule *BinlogEventRule) error {
 	if b == nil || rule == nil {
 		return nil
@@ -302,7 +477,9 @@ func (b *BinlogEvent) UpdateRule(rule *BinlogEventRule) error {
 	return nil
 }
 
-// RemoveRule removes a rule from binlog event filter
+// RemoveRule removes a rule from binlog event filter. This clears every
+// rule at the (schema-pattern, table-pattern) key, not just rule itself,
+// including sibling Ignore rules composed there.
 func (b *BinlogEvent) RemoveRule(rule *BinlogEventRule) error {
 	if b == nil || rule == nil {
 		return nil
