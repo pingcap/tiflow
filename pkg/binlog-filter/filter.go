@@ -339,8 +339,10 @@ func (b *BinlogEvent) groupRules() map[*BinlogEventRule]int {
 	groups := make(map[*BinlogEventRule]int)
 	group := 0
 	collect := func(raw []any) {
-		for _, rule := range toRules(raw) {
-			groups[rule] = group
+		for _, r := range raw {
+			if rule, ok := r.(*BinlogEventRule); ok {
+				groups[rule] = group
+			}
 		}
 		group++
 	}
@@ -375,16 +377,6 @@ func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 	}
 
 	return nil
-}
-
-func toRules(raw []any) []*BinlogEventRule {
-	rules := make([]*BinlogEventRule, 0, len(raw))
-	for _, r := range raw {
-		if rule, ok := r.(*BinlogEventRule); ok {
-			rules = append(rules, rule)
-		}
-	}
-	return rules
 }
 
 func allIgnoreRules(rules []*BinlogEventRule) bool {
