@@ -245,18 +245,11 @@ type BinlogEvent struct {
 	caseSensitive bool
 }
 
-// NewBinlogEvent returns a binlog event filter built from one rule set,
-// such as one task configuration's or one source configuration's rules.
-//
-// Rules within that set may share a (schema-pattern, table-pattern) key
-// only when all of them are Ignore rules: they narrow what gets skipped,
-// so applying all of them is unambiguous. Sharing a key with any other
-// action is rejected, rather than silently keeping one of the rules.
-//
-// A rule that cannot be used at all, such as one naming an unknown event
-// or carrying an uncompilable sql-pattern, is skipped with a warning.
-// Configurations holding such a rule have always loaded, and must keep
-// loading, since they may already be persisted.
+// NewBinlogEvent returns a binlog event filter built from one rule set. Rules
+// may share a (schema-pattern, table-pattern) key only when all of them are
+// Ignore, since each one only narrows what gets skipped; any other mix at one
+// key is rejected. A rule that cannot be used at all is skipped with a
+// warning, as such a rule may already sit in a persisted configuration.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
@@ -276,11 +269,9 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 	return b, nil
 }
 
-// MergeLowerPriorityRules merges rules into b, where b's existing rules take
-// precedence: every rule whose key b already uses is skipped, whatever its
-// action. Rules at the remaining keys are added, with same-key Ignore rules
-// composed as in NewBinlogEvent. Both returned slices follow the order of
-// rules.
+// MergeLowerPriorityRules merges rules into b, where b's existing rules keep
+// every key they already use. The rest are added, composing same-key Ignore
+// rules as NewBinlogEvent does. Both returned slices follow rules' order.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, skipped []*BinlogEventRule, err error) {
 	lower, err := NewBinlogEvent(b.caseSensitive, rules)
 	if err != nil {
@@ -350,11 +341,9 @@ func (b *BinlogEvent) ruleGroups() map[*BinlogEventRule]int {
 	return groups
 }
 
-// AddRule adds a rule into binlog event filter. A rule already present at
-// the same (schema-pattern, table-pattern) key is always reported as an
-// error here, regardless of action. See NewBinlogEvent for the same-key
-// Ignore composition applied when building a filter from a whole rule set,
-// and MergeLowerPriorityRules for merging one set into another.
+// AddRule adds a rule into binlog event filter. Unlike NewBinlogEvent and
+// MergeLowerPriorityRules it never composes: a rule already present at the
+// same (schema-pattern, table-pattern) key is always an error.
 func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 	if b == nil || rule == nil {
 		return nil
@@ -374,10 +363,9 @@ func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 	return nil
 }
 
-// addRuleComposingIgnores behaves like AddRule, except that a collision with
-// an existing same-key rule composes same-key Ignore rules instead of always
-// failing. It reports whether the error, if any, is such a collision that
-// cannot be composed.
+// addRuleComposingIgnores behaves like AddRule, except that same-key Ignore
+// rules compose instead of colliding. It reports whether a collision that
+// cannot be composed is what failed.
 func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict bool, err error) {
 	err = b.AddRule(rule)
 	if err == nil {
@@ -387,13 +375,11 @@ func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict b
 		return false, err
 	}
 
-	// AddRule already validated and normalized rule (case-folding included)
-	// before hitting the collision, so rule.SchemaPattern/TablePattern below
-	// are the same key AddRule just failed to insert.
+	// AddRule case-folded rule before colliding, so this is the same key.
 	existing := b.rulesAtKey(rule.SchemaPattern, rule.TablePattern)
-	// An empty result means the lookup disagrees with the trie about this
-	// key, since AddRule just found it occupied. Composing would then risk
-	// joining rules we cannot see, so refuse instead.
+	// AddRule just found the key occupied, so an empty result means the
+	// lookup cannot see what is there, and composing blind would risk
+	// joining a rule we never checked.
 	if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
 		return true, errors.Errorf(
 			"rule %s conflicts with existing rule(s) %s at the same key (schema-pattern=%q, table-pattern=%q): "+
