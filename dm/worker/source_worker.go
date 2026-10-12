@@ -1159,17 +1159,16 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 		return err
 	}
 
-	for _, filterRule := range sourceCfg.Filters {
-		if err = filter.AddRule(filterRule); err != nil {
-			// task level config has higher priority
-			if errors.IsAlreadyExists(errors.Cause(err)) {
-				log.L().Warn("filter config already exist in source config, overwrite it", log.ShortError(err))
-				continue
-			}
-			return err
-		}
-		cfg.FilterRules = append(cfg.FilterRules, filterRule)
+	// Task rules overwrite source rules at the same key; the rest all apply.
+	added, skipped, err := filter.MergeLowerPriorityRules(sourceCfg.Filters)
+	if err != nil {
+		return err
 	}
+	if len(skipped) > 0 {
+		log.L().Warn("filter config already exist in task config, overwrite it",
+			zap.Any("overwritten-source-rules", skipped))
+	}
+	cfg.FilterRules = append(cfg.FilterRules, added...)
 	return nil
 }
 
