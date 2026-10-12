@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/common"
@@ -548,7 +549,9 @@ func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 	}
-	return s.sourceStatus
+	// QueryStatus appends the current source error to this snapshot. Do not share
+	// the saved Result, or repeated queries will accumulate errors in it.
+	return *proto.Clone(&s.sourceStatus).(*pb.SourceStatus)
 }
 
 // TODO: move some call to setWorker/getOrStartWorker.
