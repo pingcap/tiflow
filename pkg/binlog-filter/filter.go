@@ -322,10 +322,9 @@ func (b *BinlogEvent) ruleGroups() map[*BinlogEventRule]int {
 	groups := make(map[*BinlogEventRule]int)
 	group := 0
 	collect := func(raw []any) {
-		for _, r := range raw {
-			if rule, ok := r.(*BinlogEventRule); ok {
-				groups[rule] = group
-			}
+		rules, _ := toRules(raw)
+		for _, rule := range rules {
+			groups[rule] = group
 		}
 		group++
 	}
@@ -375,9 +374,9 @@ func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict b
 	}
 
 	// AddRule case-folded rule before colliding, so this is the same key.
-	existing := b.rulesAtKey(rule.SchemaPattern, rule.TablePattern)
-	// Empty means the lookup cannot see what AddRule just collided with.
-	if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
+	existing, allRules := b.rulesAtKey(rule.SchemaPattern, rule.TablePattern)
+	// Empty or unreadable means we cannot see what AddRule collided with.
+	if !allRules || len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
 		return true, errors.Errorf(
 			"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
 				"are only supported when all of them are Ignore rules",
@@ -391,10 +390,10 @@ func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict b
 	return false, nil
 }
 
-// rulesAtKey returns the rules currently stored at the exact
-// (schemaPattern, tablePattern) key, without wildcard matching against real
-// schema/table values.
-func (b *BinlogEvent) rulesAtKey(schemaPattern, tablePattern string) []*BinlogEventRule {
+// rulesAtKey returns the rules stored at the exact (schemaPattern,
+// tablePattern) key, without wildcard matching against real schema/table
+// values, and whether that key holds nothing but rules.
+func (b *BinlogEvent) rulesAtKey(schemaPattern, tablePattern string) ([]*BinlogEventRule, bool) {
 	schemaRules, tableRules := b.AllRules()
 
 	var raw []any
@@ -403,14 +402,22 @@ func (b *BinlogEvent) rulesAtKey(schemaPattern, tablePattern string) []*BinlogEv
 	} else {
 		raw = tableRules[schemaPattern][tablePattern]
 	}
+	return toRules(raw)
+}
 
+// toRules converts stored values back into rules, reporting whether every one
+// of them was a rule: the trie stores any, and BinlogEvent exposes it, so a
+// caller can put something else there.
+func toRules(raw []any) ([]*BinlogEventRule, bool) {
 	rules := make([]*BinlogEventRule, 0, len(raw))
 	for _, r := range raw {
-		if br, ok := r.(*BinlogEventRule); ok {
-			rules = append(rules, br)
+		rule, ok := r.(*BinlogEventRule)
+		if !ok {
+			return rules, false
 		}
+		rules = append(rules, rule)
 	}
-	return rules
+	return rules, true
 }
 
 func allIgnoreRules(rules []*BinlogEventRule) bool {

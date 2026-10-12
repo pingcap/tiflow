@@ -197,6 +197,19 @@ func TestSameKeyAliasedRangePatternRejected(t *testing.T) {
 	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
 }
 
+func TestComposeRefusesUnreadableKey(t *testing.T) {
+	// The trie stores any and BinlogEvent exposes it, so a key can hold
+	// something that is not a rule. Composing there would join rules the
+	// action check never saw.
+	filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("*", "", "a_col")})
+	require.NoError(t, err)
+	require.NoError(t, filter.Selector.Insert("*", "", "not a rule", selector.Append))
+
+	conflict, err := filter.addRuleComposingIgnores(ignoreAddColumn("*", "", "b_col"))
+	require.True(t, conflict)
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+}
+
 func TestUnusableRuleSkipped(t *testing.T) {
 	unusable := &BinlogEventRule{SchemaPattern: "*", Events: []EventType{"wrong event"}, Action: Ignore}
 	filter, err := NewBinlogEvent(false, []*BinlogEventRule{unusable, ignoreAddColumn("*", "", "a_col")})
