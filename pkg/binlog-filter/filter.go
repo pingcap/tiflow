@@ -14,7 +14,6 @@
 package filter
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -377,14 +376,12 @@ func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict b
 
 	// AddRule case-folded rule before colliding, so this is the same key.
 	existing := b.rulesAtKey(rule.SchemaPattern, rule.TablePattern)
-	// AddRule just found the key occupied, so an empty result means the
-	// lookup cannot see what is there, and composing blind would risk
-	// joining a rule we never checked.
+	// Empty means the lookup cannot see what AddRule just collided with.
 	if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
 		return true, errors.Errorf(
-			"rule %s conflicts with existing rule(s) %s at the same key (schema-pattern=%q, table-pattern=%q): "+
-				"multiple rules at the same key are only supported when all of them are Ignore rules",
-			formatRule(rule), formatRules(existing), rule.SchemaPattern, rule.TablePattern)
+			"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
+				"are only supported when all of them are Ignore rules",
+			rule.SchemaPattern, rule.TablePattern)
 	}
 
 	if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
@@ -423,21 +420,6 @@ func allIgnoreRules(rules []*BinlogEventRule) bool {
 		}
 	}
 	return true
-}
-
-// formatRule renders a rule's user-facing fields for error messages,
-// skipping the unexported compiled regexp.
-func formatRule(rule *BinlogEventRule) string {
-	return fmt.Sprintf("{schema-pattern:%s table-pattern:%s events:%v sql-pattern:%v action:%s}",
-		rule.SchemaPattern, rule.TablePattern, rule.Events, rule.SQLPattern, rule.Action)
-}
-
-func formatRules(rules []*BinlogEventRule) string {
-	parts := make([]string, 0, len(rules))
-	for _, r := range rules {
-		parts = append(parts, formatRule(r))
-	}
-	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // UpdateRule updates binlog event filter rule. This replaces every rule at
