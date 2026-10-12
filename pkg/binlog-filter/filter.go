@@ -268,8 +268,10 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 	return b, nil
 }
 
-// MergeLowerPriorityRules merges rules into b. For b's existing rules, keep them unchanged.
-// The rest are added, composing same-key Ignore rules as NewBinlogEvent does.
+// MergeLowerPriorityRules merges rules into b, where b's existing rules win
+// the keys they occupy: rules colliding there are dropped, and the rest are
+// added, composing same-key Ignore rules as NewBinlogEvent does. Both
+// returned slices follow rules' order.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, skipped []*BinlogEventRule, err error) {
 	lower, err := NewBinlogEvent(b.caseSensitive, rules)
 	if err != nil {
@@ -285,6 +287,7 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 		}
 
 		if addedGroups[group] {
+			// b has none at this key, and lower proved the group composable.
 			if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
 				return nil, nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 			}
@@ -307,7 +310,9 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 	return added, skipped, nil
 }
 
-// groupRules maps rules to an id shared by exactly the rules stored under the same key.
+// groupRules maps rules to an id shared by exactly the rules stored under the
+// same key. The grouping comes from the trie because a pattern string does not
+// name a key uniquely: "[ab]" and "[ba]" land on one node.
 func (b *BinlogEvent) groupRules() map[*BinlogEventRule]int {
 	schemaRules, tableRules := b.AllRules()
 
