@@ -255,18 +255,18 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 		caseSensitive: caseSensitive,
 	}
 
-	ruleMaps := make(map[[2]string][]*BinlogEventRule, len(rules))
+	rulesAtKey := make(map[[2]string][]*BinlogEventRule, len(rules))
 	for _, rule := range rules {
 		if rule == nil {
 			continue
 		}
 
-		// AddRule case-folded rule, so we get the key used.
 		err := b.AddRule(rule)
+		// AddRule case-folded rule before inserting, so this is that key.
 		key := [2]string{rule.SchemaPattern, rule.TablePattern}
 
 		if err == nil {
-			ruleMaps[key] = append(ruleMaps[key], rule)
+			rulesAtKey[key] = append(rulesAtKey[key], rule)
 			continue
 		}
 
@@ -275,7 +275,7 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 			continue
 		}
 
-		existing := ruleMaps[key]
+		existing := rulesAtKey[key]
 		// Empty means AddRule collided with a key spelled differently.
 		if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
 			return nil, errors.Errorf(
@@ -286,7 +286,7 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 		if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
 			return nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 		}
-		ruleMaps[key] = append(ruleMaps[key], rule)
+		rulesAtKey[key] = append(rulesAtKey[key], rule)
 	}
 
 	return b, nil
