@@ -1021,6 +1021,16 @@ func TestCopyConfigFromSourceRejectsMixedActionSourceGroup(t *testing.T) {
 	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
 }
 
+func TestCopyConfigFromSourceRejectsUnusableSourceRule(t *testing.T) {
+	unusable := &bf.BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: "Nonsense"}
+	sourceCfg := &config.SourceConfig{
+		Filters: []*bf.BinlogEventRule{ignoreAddColumnRule("db9", "", "a_col"), unusable},
+	}
+	subTaskCfg := &config.SubTaskConfig{}
+
+	require.Error(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+}
+
 func TestCopyConfigFromSourceEmptyFilters(t *testing.T) {
 	taskRule := ignoreAddColumnRule("*", "", "a_col")
 	subTaskCfg := &config.SubTaskConfig{FilterRules: []*bf.BinlogEventRule{taskRule}}

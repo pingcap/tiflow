@@ -250,6 +250,13 @@ type BinlogEvent struct {
 // key is rejected. A rule that cannot be used at all is skipped with a
 // warning, as such a rule may already sit in a persisted configuration.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
+	return newBinlogEvent(caseSensitive, rules, true)
+}
+
+// newBinlogEvent builds the filter. With skipUnusable, a rule that cannot be
+// used at all is skipped with a warning instead of failing the whole set,
+// which callers loading an already-persisted configuration need.
+func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, skipUnusable bool) (*BinlogEvent, error) {
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
 		caseSensitive: caseSensitive,
@@ -271,6 +278,9 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 		}
 
 		if !errors.IsAlreadyExists(errors.Cause(err)) {
+			if !skipUnusable {
+				return nil, err
+			}
 			log.Warn("skip unusable binlog event rule", zap.Any("rule", rule), zap.Error(err))
 			continue
 		}
@@ -295,9 +305,11 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 // MergeLowerPriorityRules merges rules into b, where b's existing rules win
 // the keys they occupy: rules colliding there are dropped, and the rest are
 // added, composing same-key Ignore rules as NewBinlogEvent does. Both
-// returned slices follow rules' order.
+// returned slices follow rules' order. Unlike NewBinlogEvent, a rule that
+// cannot be used at all fails the merge rather than being skipped, so that a
+// malformed rule is not quietly missing from the result.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, skipped []*BinlogEventRule, err error) {
-	lower, err := NewBinlogEvent(b.caseSensitive, rules)
+	lower, err := newBinlogEvent(b.caseSensitive, rules, false)
 	if err != nil {
 		return nil, nil, err
 	}
