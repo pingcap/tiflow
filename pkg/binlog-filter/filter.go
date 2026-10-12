@@ -255,14 +255,34 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 		caseSensitive: caseSensitive,
 	}
 
+	atKey := make(map[[2]string][]*BinlogEventRule, len(rules))
 	for _, rule := range rules {
-		conflict, err := b.addRuleComposingIgnores(rule)
-		if conflict {
-			return nil, err
+		if rule == nil {
+			continue
 		}
-		if err != nil {
+
+		err := b.AddRule(rule)
+		if err != nil && !errors.IsAlreadyExists(errors.Cause(err)) {
 			log.Warn("skip unusable binlog event rule", zap.Any("rule", rule), zap.Error(err))
+			continue
 		}
+		// AddRule case-folded rule, so this is the key it used.
+		key := [2]string{rule.SchemaPattern, rule.TablePattern}
+
+		if err != nil {
+			existing := atKey[key]
+			// Empty means AddRule collided with a key spelled differently.
+			if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
+				return nil, errors.Errorf(
+					"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
+						"are only supported when all of them are Ignore rules",
+					rule.SchemaPattern, rule.TablePattern)
+			}
+			if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
+				return nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+			}
+		}
+		atKey[key] = append(atKey[key], rule)
 	}
 
 	return b, nil
@@ -355,44 +375,6 @@ func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 	}
 
 	return nil
-}
-
-// addRuleComposingIgnores behaves like AddRule, except that same-key Ignore
-// rules compose instead of colliding. It reports whether a collision that
-// cannot be composed is what failed.
-func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (bool, error) {
-	err := b.AddRule(rule)
-	if err == nil {
-		return false, nil
-	}
-	if !errors.IsAlreadyExists(errors.Cause(err)) {
-		return false, err
-	}
-
-	// AddRule case-folded rule before colliding, so this is the same key.
-	existing := b.rulesAtKey(rule.SchemaPattern, rule.TablePattern)
-	// Empty means the lookup cannot see what AddRule just collided with.
-	if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
-		return true, errors.Errorf(
-			"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
-				"are only supported when all of them are Ignore rules",
-			rule.SchemaPattern, rule.TablePattern)
-	}
-
-	if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
-		return false, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
-	}
-
-	return false, nil
-}
-
-// rulesAtKey returns the rules stored at the (schemaPattern, tablePattern) key.
-func (b *BinlogEvent) rulesAtKey(schemaPattern, tablePattern string) []*BinlogEventRule {
-	schemaRules, tableRules := b.AllRules()
-	if len(tablePattern) == 0 {
-		return toRules(schemaRules[schemaPattern])
-	}
-	return toRules(tableRules[schemaPattern][tablePattern])
 }
 
 func toRules(raw []any) []*BinlogEventRule {

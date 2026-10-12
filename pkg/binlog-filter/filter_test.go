@@ -197,6 +197,12 @@ func TestSameKeyAliasedRangePatternRejected(t *testing.T) {
 	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
 }
 
+func TestNilRuleSkipped(t *testing.T) {
+	filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("*", "", "a_col"), nil})
+	require.NoError(t, err)
+	require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+}
+
 func TestUnusableRuleSkipped(t *testing.T) {
 	unusable := &BinlogEventRule{SchemaPattern: "*", Events: []EventType{"wrong event"}, Action: Ignore}
 	filter, err := NewBinlogEvent(false, []*BinlogEventRule{unusable, ignoreAddColumn("*", "", "a_col")})
