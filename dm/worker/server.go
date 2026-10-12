@@ -549,9 +549,7 @@ func (s *Server) getSourceStatus(needLock bool) pb.SourceStatus {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 	}
-	// QueryStatus appends the current source error to this snapshot. Do not share
-	// the saved Result, or repeated queries will accumulate errors in it.
-	return *proto.Clone(&s.sourceStatus).(*pb.SourceStatus)
+	return s.sourceStatus
 }
 
 // TODO: move some call to setWorker/getOrStartWorker.
@@ -825,6 +823,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 	if sourceErr := w.getSourceStatusErr(); sourceErr != nil {
 		if resp.SourceStatus.Result == nil {
 			resp.SourceStatus.Result = &pb.ProcessResult{}
+		} else {
+			// Do not append the current error to the saved source result.
+			resp.SourceStatus.Result = proto.Clone(resp.SourceStatus.Result).(*pb.ProcessResult)
 		}
 		resp.SourceStatus.Result.Errors = append(resp.SourceStatus.Result.Errors, sourceErr)
 	}
