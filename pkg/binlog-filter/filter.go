@@ -268,29 +268,23 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 	return b, nil
 }
 
-// MergeLowerPriorityRules merges rules into b, where b's existing rules keep
-// every key they already use. The rest are added, composing same-key Ignore
-// rules as NewBinlogEvent does. Both returned slices follow rules' order.
+// MergeLowerPriorityRules merges rules into b. For b's existing rules, keep them unchanged.
+// The rest are added, composing same-key Ignore rules as NewBinlogEvent does.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, skipped []*BinlogEventRule, err error) {
 	lower, err := NewBinlogEvent(b.caseSensitive, rules)
 	if err != nil {
 		return nil, nil, err
 	}
-	// Group by trie node rather than by pattern string: reconstructed
-	// patterns do not always round-trip, so "[ab]" and "[ba]" name one key
-	// but read back as two.
-	groupOf := lower.ruleGroups()
+	groupOf := lower.groupRules()
 
-	claimed := make(map[int]bool, len(groupOf))
+	addedGroups := make(map[int]bool, len(groupOf))
 	for _, rule := range rules {
 		group, ok := groupOf[rule]
 		if !ok {
-			continue // skipped by NewBinlogEvent above
+			continue // skipped by NewBinlogEvent
 		}
 
-		if claimed[group] {
-			// Already proven free of b's rules, and lower validated the
-			// group as composable, so this cannot conflict.
+		if addedGroups[group] {
 			if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
 				return nil, nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 			}
@@ -298,11 +292,10 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 			continue
 		}
 
-		// Let the trie decide whether b already uses this key.
 		err = b.AddRule(rule)
 		switch {
 		case err == nil:
-			claimed[group] = true
+			addedGroups[group] = true
 			added = append(added, rule)
 		case errors.IsAlreadyExists(errors.Cause(err)):
 			skipped = append(skipped, rule)
@@ -314,9 +307,8 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 	return added, skipped, nil
 }
 
-// ruleGroups maps each rule in b to an id shared by exactly the rules
-// stored under the same key.
-func (b *BinlogEvent) ruleGroups() map[*BinlogEventRule]int {
+// groupRules maps rules to an id shared by exactly the rules stored under the same key.
+func (b *BinlogEvent) groupRules() map[*BinlogEventRule]int {
 	schemaRules, tableRules := b.AllRules()
 
 	groups := make(map[*BinlogEventRule]int)
@@ -363,8 +355,8 @@ func (b *BinlogEvent) AddRule(rule *BinlogEventRule) error {
 // addRuleComposingIgnores behaves like AddRule, except that same-key Ignore
 // rules compose instead of colliding. It reports whether a collision that
 // cannot be composed is what failed.
-func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict bool, err error) {
-	err = b.AddRule(rule)
+func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (bool, error) {
+	err := b.AddRule(rule)
 	if err == nil {
 		return false, nil
 	}
@@ -389,22 +381,15 @@ func (b *BinlogEvent) addRuleComposingIgnores(rule *BinlogEventRule) (conflict b
 	return false, nil
 }
 
-// rulesAtKey returns the rules stored at the exact (schemaPattern,
-// tablePattern) key, without wildcard matching against real schema/table
-// values.
+// rulesAtKey returns the rules stored at the (schemaPattern, tablePattern) key.
 func (b *BinlogEvent) rulesAtKey(schemaPattern, tablePattern string) []*BinlogEventRule {
 	schemaRules, tableRules := b.AllRules()
-
-	var raw []any
 	if len(tablePattern) == 0 {
-		raw = schemaRules[schemaPattern]
-	} else {
-		raw = tableRules[schemaPattern][tablePattern]
+		return toRules(schemaRules[schemaPattern])
 	}
-	return toRules(raw)
+	return toRules(tableRules[schemaPattern][tablePattern])
 }
 
-// toRules converts stored values back into rules, skipping anything else.
 func toRules(raw []any) []*BinlogEventRule {
 	rules := make([]*BinlogEventRule, 0, len(raw))
 	for _, r := range raw {
