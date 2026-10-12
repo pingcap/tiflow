@@ -255,34 +255,38 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 		caseSensitive: caseSensitive,
 	}
 
-	atKey := make(map[[2]string][]*BinlogEventRule, len(rules))
+	ruleMaps := make(map[[2]string][]*BinlogEventRule, len(rules))
 	for _, rule := range rules {
 		if rule == nil {
 			continue
 		}
 
+		// AddRule case-folded rule, so we get the key used.
 		err := b.AddRule(rule)
-		if err != nil && !errors.IsAlreadyExists(errors.Cause(err)) {
+		key := [2]string{rule.SchemaPattern, rule.TablePattern}
+
+		if err == nil {
+			ruleMaps[key] = append(ruleMaps[key], rule)
+			continue
+		}
+
+		if !errors.IsAlreadyExists(errors.Cause(err)) {
 			log.Warn("skip unusable binlog event rule", zap.Any("rule", rule), zap.Error(err))
 			continue
 		}
-		// AddRule case-folded rule, so this is the key it used.
-		key := [2]string{rule.SchemaPattern, rule.TablePattern}
 
-		if err != nil {
-			existing := atKey[key]
-			// Empty means AddRule collided with a key spelled differently.
-			if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
-				return nil, errors.Errorf(
-					"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
-						"are only supported when all of them are Ignore rules",
-					rule.SchemaPattern, rule.TablePattern)
-			}
-			if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
-				return nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
-			}
+		existing := ruleMaps[key]
+		// Empty means AddRule collided with a key spelled differently.
+		if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
+			return nil, errors.Errorf(
+				"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
+					"are only supported when all of them are Ignore rules",
+				rule.SchemaPattern, rule.TablePattern)
 		}
-		atKey[key] = append(atKey[key], rule)
+		if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
+			return nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+		}
+		ruleMaps[key] = append(ruleMaps[key], rule)
 	}
 
 	return b, nil
