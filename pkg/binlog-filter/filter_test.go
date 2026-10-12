@@ -238,10 +238,10 @@ func TestMergeLowerPriorityRules(t *testing.T) {
 
 		lowerA := ignoreAddColumn("*", "", "a_col")
 		lowerB := ignoreAddColumn("*", "", "b_col")
-		added, skipped, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lowerA, lowerB})
+		added, overwritten, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lowerA, lowerB})
 		require.NoError(t, err)
 		require.Equal(t, []*BinlogEventRule{lowerA, lowerB}, added)
-		require.Empty(t, skipped)
+		require.Empty(t, overwritten)
 		require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
 		require.Equal(t, Ignore, addColumnAction(t, filter, "b_col"))
 		require.Equal(t, Do, addColumnAction(t, filter, "c_col"))
@@ -253,10 +253,10 @@ func TestMergeLowerPriorityRules(t *testing.T) {
 
 		lowerA := ignoreAddColumn("*", "", "s1_col")
 		lowerB := ignoreAddColumn("*", "", "s2_col")
-		added, skipped, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lowerA, lowerB})
+		added, overwritten, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lowerA, lowerB})
 		require.NoError(t, err)
 		require.Empty(t, added)
-		require.Equal(t, []*BinlogEventRule{lowerA, lowerB}, skipped)
+		require.Equal(t, []*BinlogEventRule{lowerA, lowerB}, overwritten)
 		require.Equal(t, Do, addColumnAction(t, filter, "s1_col"))
 		require.Equal(t, Do, addColumnAction(t, filter, "s2_col"))
 	})
@@ -266,10 +266,10 @@ func TestMergeLowerPriorityRules(t *testing.T) {
 		require.NoError(t, err)
 
 		lower := ignoreAddColumn("[ba]", "", "s_col")
-		added, skipped, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lower})
+		added, overwritten, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lower})
 		require.NoError(t, err)
 		require.Empty(t, added)
-		require.Equal(t, []*BinlogEventRule{lower}, skipped)
+		require.Equal(t, []*BinlogEventRule{lower}, overwritten)
 	})
 
 	t.Run("keys are exact", func(t *testing.T) {

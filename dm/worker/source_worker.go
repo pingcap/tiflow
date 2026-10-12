@@ -1160,13 +1160,13 @@ func copyConfigFromSource(cfg *config.SubTaskConfig, sourceCfg *config.SourceCon
 	}
 
 	// Task rules overwrite source rules at the same key; the rest all apply.
-	added, skipped, err := filter.MergeLowerPriorityRules(sourceCfg.Filters)
+	added, overwritten, err := filter.MergeLowerPriorityRules(sourceCfg.Filters)
 	if err != nil {
 		return err
 	}
-	if len(skipped) > 0 {
+	if len(overwritten) > 0 {
 		log.L().Warn("filter config already exist in task config, overwrite it",
-			zap.Any("overwritten-source-rules", skipped))
+			zap.Any("overwritten-source-rules", overwritten))
 	}
 	cfg.FilterRules = append(cfg.FilterRules, added...)
 	return nil

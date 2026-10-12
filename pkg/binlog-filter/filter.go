@@ -303,12 +303,12 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, skipUnusable b
 }
 
 // MergeLowerPriorityRules merges rules into b, where b's existing rules win
-// the keys they occupy: rules colliding there are dropped, and the rest are
-// added, composing same-key Ignore rules as NewBinlogEvent does. Both
+// the keys they occupy: rules colliding there are overwritten, and the rest
+// are added, composing same-key Ignore rules as NewBinlogEvent does. Both
 // returned slices follow rules' order. Unlike NewBinlogEvent, a rule that
 // cannot be used at all fails the merge rather than being skipped, so that a
 // malformed rule is not quietly missing from the result.
-func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, skipped []*BinlogEventRule, err error) {
+func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, overwritten []*BinlogEventRule, err error) {
 	lower, err := newBinlogEvent(b.caseSensitive, rules, false)
 	if err != nil {
 		return nil, nil, err
@@ -319,7 +319,7 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 	for _, rule := range rules {
 		group, ok := groupOf[rule]
 		if !ok {
-			continue // skipped by NewBinlogEvent
+			continue // nil rule
 		}
 
 		if addedGroups[group] {
@@ -337,13 +337,13 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 			addedGroups[group] = true
 			added = append(added, rule)
 		case errors.IsAlreadyExists(errors.Cause(err)):
-			skipped = append(skipped, rule)
+			overwritten = append(overwritten, rule)
 		default:
 			return nil, nil, err
 		}
 	}
 
-	return added, skipped, nil
+	return added, overwritten, nil
 }
 
 // groupRules maps rules to an id shared by exactly the rules stored under the
