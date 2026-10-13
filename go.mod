@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.26.8
+go 1.26.9
 
 // Keep the Go 1.25 default behaviors that Go 1.26 changed:
 //   - urlstrictcolons=0: the sink URI may carry several Kafka broker endpoints
@@ -123,7 +123,7 @@ require (
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.1
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.36.0
 	golang.org/x/sync v0.23.0
 	golang.org/x/sys v0.48.0
