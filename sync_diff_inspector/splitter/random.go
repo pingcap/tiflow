@@ -229,7 +229,7 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 			lowerBounds[i] = bound.Lower
 			upperBounds[i] = bound.Upper
 		}
-		log.Info("failpoint print-chunk-info injected (random splitter)", zap.Strings("lowerBounds", lowerBounds), zap.Strings("upperBounds", upperBounds), zap.String("indexCode", c.Index.ToString()))
+		log.Info("failpoint print-chunk-info injected (random splitter)", logutil.ZapRedactStrings("lowerBounds", lowerBounds), logutil.ZapRedactStrings("upperBounds", upperBounds), zap.String("indexCode", c.Index.ToString()))
 	})
 	return c, nil
 }

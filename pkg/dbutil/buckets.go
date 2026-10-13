@@ -36,8 +36,28 @@ type (
 	QueryExecutor = tidbdbutil.QueryExecutor
 )
 
+type getBucketsInfoOptions struct {
+	decodeErrorField func(error) zap.Field
+}
+
+// GetBucketsInfoOption customizes bucket decoding diagnostics.
+type GetBucketsInfoOption func(*getBucketsInfoOptions)
+
+// WithBucketDecodeErrorField customizes the error field in bucket decoding
+// warnings, allowing callers to redact sensitive bounds contained in errors.
+// Without this option, decoding errors are logged with zap.Error.
+func WithBucketDecodeErrorField(field func(error) zap.Field) GetBucketsInfoOption {
+	return func(opts *getBucketsInfoOptions) {
+		opts.decodeErrorField = field
+	}
+}
+
 // GetBucketsInfo selects from stats_buckets in TiDB.
-func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string, tableInfo *model.TableInfo) (map[string][]Bucket, error) {
+func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string, tableInfo *model.TableInfo, opts ...GetBucketsInfoOption) (map[string][]Bucket, error) {
+	options := getBucketsInfoOptions{decodeErrorField: zap.Error}
+	for _, opt := range opts {
+		opt(&options)
+	}
 	buckets := make(map[string][]Bucket)
 
 	indices := tidbdbutil.FindAllIndex(tableInfo)
@@ -125,7 +145,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			lowerBoundStr, decodeErr = decodeIndexBound(lowerBoundBytes, idxColumnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode lower_bound for index",
-					zap.Error(decodeErr),
+					options.decodeErrorField(decodeErr),
 					zap.Int64("histID", histID.Int64))
 				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
 			}
@@ -133,7 +153,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			upperBoundStr, decodeErr = decodeIndexBound(upperBoundBytes, idxColumnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode upper_bound for index",
-					zap.Error(decodeErr),
+					options.decodeErrorField(decodeErr),
 					zap.Int64("histID", histID.Int64))
 				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
 			}
@@ -153,7 +173,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			lowerBoundStr, decodeErr = decodeColumnBound(lowerBoundBytes, columnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode lower_bound for column",
-					zap.Error(decodeErr),
+					options.decodeErrorField(decodeErr),
 					zap.Int64("histID", histID.Int64))
 				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
 			}
@@ -161,7 +181,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			upperBoundStr, decodeErr = decodeColumnBound(upperBoundBytes, columnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode upper_bound for column",
-					zap.Error(decodeErr),
+					options.decodeErrorField(decodeErr),
 					zap.Int64("histID", histID.Int64))
 				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
 			}

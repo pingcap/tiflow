@@ -568,7 +568,7 @@ func (df *Diff) binSearch(ctx context.Context, targetSource source.Source, table
 		// the midValues may be empty when downstream has much less rows in this chunk.
 		return tableRange, nil
 	}
-	log.Debug("mid values", logutil.ZapRedactReflect("mid values", midValues), zap.Reflect("indices", indexColumns), logutil.ZapRedactReflect("bounds", tableRange.ChunkRange.Bounds))
+	log.Debug("mid values", logutil.ZapRedactReflect("mid values", midValues), logutil.ZapRedactReflect("indices", indexColumns), logutil.ZapRedactReflect("bounds", tableRange.ChunkRange.Bounds))
 	log.Debug("table ranges", logutil.ZapRedactReflect("original range", tableRange))
 	for i := range indexColumns {
 		log.Debug("update tableRange", zap.String("field", indexColumns[i].Name.O), dmlog.ZapRedactString("value", midValues[indexColumns[i].Name.O]))

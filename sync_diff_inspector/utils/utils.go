@@ -877,7 +877,7 @@ func GetCountAndMD5Checksum(
 	*/
 	columnNames := make([]string, 0, len(tbInfo.Columns))
 	columnIsNull := make([]string, 0, len(tbInfo.Columns))
-	log.Debug("table columns", zap.Any("columns", tbInfo.Columns))
+	log.Debug("table columns", logutil.ZapRedactReflect("columns", tbInfo.Columns))
 	for _, col := range tbInfo.Columns {
 		if col.Hidden {
 			continue

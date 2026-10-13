@@ -34,7 +34,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
-	"go.uber.org/zap"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 )
 
 const (
@@ -89,7 +89,7 @@ func getDMTaskCfg(dmAddr, task string) ([]*SubTaskConfig, error) {
 		subTaskCfgs = append(subTaskCfgs, subtaskCfg)
 	}
 
-	log.Info("dm sub task configs", zap.Reflect("cfgs", subTaskCfgs))
+	log.Info("dm sub task configs", logutil.ZapRedactReflect("cfgs", subTaskCfgs))
 	return subTaskCfgs, nil
 }
 
