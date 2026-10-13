@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -181,7 +182,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			log.Warn("global checksum stopped due to table error, remaining tables skipped",
 				zap.String("table", dbutil.TableName(schema, table)),
 				zap.Int("remaining", len(tables)-tableIndex-1),
-				zap.Error(err))
+				logutil.ZapRedactError(err))
 			break
 		}
 

@@ -24,7 +24,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -41,14 +43,27 @@ type RandomIterator struct {
 	dbConn *sql.DB
 }
 
-// a wrapper for get row count to integrate failpoint.
+// getRowCount counts rows with redaction-aware query logging and a failpoint.
 func getRowCount(ctx context.Context, db dbutil.QueryExecutor, schemaName string, tableName string, where string, args []any) (int64, error) {
 	failpoint.Inject("getRowCount", func(val failpoint.Value) {
 		if count, ok := val.(int); ok {
 			failpoint.Return(int64(count), nil)
 		}
 	})
-	return dbutil.GetRowCount(ctx, db, schemaName, tableName, where, args)
+	query := fmt.Sprintf("SELECT COUNT(1) cnt FROM %s", dbutil.TableName(schemaName, tableName))
+	if len(where) > 0 {
+		query += fmt.Sprintf(" WHERE %s", where)
+	}
+	log.Debug("get row count", dmlog.ZapRedactString("sql", query), logutil.ZapRedactReflect("args", args))
+
+	var cnt sql.NullInt64
+	if err := db.QueryRowContext(ctx, query, args...).Scan(&cnt); err != nil {
+		return 0, errors.Trace(err)
+	}
+	if !cnt.Valid {
+		return 0, errors.NotFoundf("table `%s`.`%s`", schemaName, tableName)
+	}
+	return cnt.Int64, nil
 }
 
 // NewRandomIterator return a new iterator
@@ -287,7 +302,7 @@ func splitRangeByRandom(ctx context.Context, db *sql.DB, chunk *chunk.Range, cou
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debug("get split values by random", zap.Stringer("chunk", chunk), zap.Int("random values num", len(randomValues)))
+	log.Debug("get split values by random", logutil.ZapRedactStringer("chunk", chunk), zap.Int("random values num", len(randomValues)))
 	for i := 0; i <= len(randomValues); i++ {
 		newChunk := chunk.Copy()
 
@@ -306,6 +321,6 @@ func splitRangeByRandom(ctx context.Context, db *sql.DB, chunk *chunk.Range, cou
 		}
 		chunks = append(chunks, newChunk)
 	}
-	log.Debug("split range by random", zap.Stringer("origin chunk", chunk), zap.Int("split num", len(chunks)))
+	log.Debug("split range by random", logutil.ZapRedactStringer("origin chunk", chunk), zap.Int("split num", len(chunks)))
 	return chunks, nil
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	tiflowdbutil "github.com/pingcap/tiflow/pkg/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -201,7 +202,7 @@ NEXTINDEX:
 			// the random splitter.
 			return errors.NotFoundf("index %s in buckets info", index.Name.O)
 		}
-		log.Debug("buckets for index", zap.String("index", index.Name.O), zap.Reflect("buckets", buckets))
+		log.Debug("buckets for index", zap.String("index", index.Name.O), logutil.ZapRedactReflect("buckets", buckets))
 
 		s.buckets = bucket
 		s.indexColumns = indexColumns
