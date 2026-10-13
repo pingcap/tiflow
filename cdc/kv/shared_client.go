@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/txnutil"
@@ -305,7 +306,7 @@ func (s *SharedClient) Subscribe(subID SubscriptionID, span tablepb.Span, startT
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", rt.subscriptionID),
-		zap.String("span", rt.span.String()))
+		logutil.ZapRedactString("span", rt.span.String()))
 }
 
 // Unsubscribe the given table span. All covered regions will be deregistered asynchronously.
@@ -321,7 +322,7 @@ func (s *SharedClient) Unsubscribe(subID SubscriptionID) {
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", rt.subscriptionID),
-			zap.String("span", rt.span.String()))
+			logutil.ZapRedactString("span", rt.span.String()))
 		return
 	}
 	log.Warn("event feed unsubscribes table, but not found",
@@ -458,7 +459,7 @@ func (s *SharedClient) handleRegions(ctx context.Context, eg *errgroup.Group) er
 				zap.Uint64("streamID", stream.streamID),
 				zap.Any("subscriptionID", region.subscribedTable.subscriptionID),
 				zap.Uint64("regionID", region.verID.GetID()),
-				zap.String("span", region.span.String()),
+				logutil.ZapRedactString("span", region.span.String()),
 				zap.String("addr", store.storeAddr))
 		}
 	}
@@ -561,7 +562,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 			zap.String("namespace", s.changefeed.Namespace),
 			zap.String("changefeed", s.changefeed.ID),
 			zap.Any("subscriptionID", subscribedTable.subscriptionID),
-			zap.Any("span", nextSpan))
+			logutil.ZapRedactAny("span", nextSpan))
 
 		backoff := tikv.NewBackoffer(ctx, tikvRequestMaxBackoff)
 		regions, err := s.regionCache.BatchLoadRegionsWithKeyRange(backoff, nextSpan.StartKey, nextSpan.EndKey, limit)
@@ -570,7 +571,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.String("span", nextSpan.String()),
+				logutil.ZapRedactString("span", nextSpan.String()),
 				zap.Error(err))
 			backoffBeforeLoad = true
 			continue
@@ -588,7 +589,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 				zap.String("namespace", s.changefeed.Namespace),
 				zap.String("changefeed", s.changefeed.ID),
 				zap.Any("subscriptionID", subscribedTable.subscriptionID),
-				zap.String("span", nextSpan.String()))
+				logutil.ZapRedactString("span", nextSpan.String()))
 			backoffBeforeLoad = true
 			continue
 		}
@@ -607,7 +608,7 @@ func (s *SharedClient) divideSpanAndScheduleRegionRequests(
 					zap.String("namespace", s.changefeed.Namespace),
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscribedTable.subscriptionID),
-					zap.String("span", nextSpan.String()))
+					logutil.ZapRedactString("span", nextSpan.String()))
 			}
 
 			verID := tikv.NewRegionVerID(regionMeta.Id, regionMeta.RegionEpoch.ConfVer, regionMeta.RegionEpoch.Version)
@@ -877,7 +878,7 @@ func (s *SharedClient) logSlowRegions(ctx context.Context) error {
 					zap.String("changefeed", s.changefeed.ID),
 					zap.Any("subscriptionID", subscriptionID),
 					zap.Int64("tableID", rt.span.TableID),
-					zap.Any("holes", attr.UnLockedRanges))
+					logutil.ZapRedactAny("holes", attr.UnLockedRanges))
 			}
 		}
 		s.totalSpans.RUnlock()
@@ -921,7 +922,7 @@ func (r *subscribedTable) resolveStaleLocks(s *SharedClient, targetTs uint64) {
 		zap.String("namespace", s.changefeed.Namespace),
 		zap.String("changefeed", s.changefeed.ID),
 		zap.Any("subscriptionID", r.subscriptionID),
-		zap.Any("ranges", res))
+		logutil.ZapRedactAny("ranges", res))
 }
 
 type sharedClientMetrics struct {

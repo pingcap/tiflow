@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
@@ -96,7 +97,7 @@ func validateAndAdjustBound(
 		log.Panic("Task upperbound must be a ResolvedTs",
 			zap.String("namespace", changefeedID.Namespace),
 			zap.String("changefeed", changefeedID.ID),
-			zap.Stringer("span", span),
+			logutil.ZapRedactStringer("span", span),
 			zap.Any("upperBound", upperBound))
 	}
 	return lowerBound, upperBound

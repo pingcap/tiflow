@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -308,7 +309,7 @@ func (r *progressTracker) doCheckClosed() bool {
 	for now > lastCheck+int64(warnDuration.Seconds()) {
 		if r.lastCheckClosed.CompareAndSwap(lastCheck, now) {
 			log.Warn("Close table doesn't return in time, may be stuck",
-				zap.Stringer("span", &r.span),
+				logutil.ZapRedactStringer("span", &r.span),
 				zap.Int("trackingCount", trackingCount),
 				zap.Any("lastMinResolvedTs", resolvedTs))
 			break

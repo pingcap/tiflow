@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/metrics/txn"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
@@ -226,7 +227,7 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 
 	dmls := s.prepareDMLs()
 	log.Debug("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Any("rows", s.rows),
-		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+		zap.Strings("sqls", dmls.sqls), logutil.ZapRedactAny("values", dmls.values))
 
 	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
@@ -273,7 +274,7 @@ func (s *mysqlBackend) MaxFlushInterval() time.Duration {
 
 type preparedDMLs struct {
 	startTs         []model.Ts
-	sqls            []string
+	sqls            []string // Generated SQL templates contain placeholders, never row values.
 	values          [][]interface{}
 	callbacks       []dmlsink.CallbackFunc
 	rowCount        int
@@ -636,7 +637,7 @@ func (s *mysqlBackend) multiStmtExecute(
 	multiStmtSQL := strings.Join(dmls.sqls, ";")
 
 	log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
-		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
+		zap.String("sql", multiStmtSQL), logutil.ZapRedactAny("args", multiStmtArgs))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	start := time.Now()
@@ -663,7 +664,7 @@ func (s *mysqlBackend) sequenceExecute(
 	for i, query := range dmls.sqls {
 		args := dmls.values[i]
 		log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
-			zap.String("sql", query), zap.Any("args", args))
+			zap.String("sql", query), logutil.ZapRedactAny("args", args))
 		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
 
 		var prepStmt *sql.Stmt
@@ -710,7 +711,7 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 		log.Error("unexpected number of sqls and values",
 			zap.String("changefeed", s.changefeed),
 			zap.Strings("sqls", dmls.sqls),
-			zap.Any("values", dmls.values))
+			logutil.ZapRedactAny("values", dmls.values))
 		return cerror.ErrUnexpected.FastGenByArgs("unexpected number of sqls and values")
 	}
 
@@ -814,6 +815,8 @@ func wrapMysqlTxnError(err error) error {
 	return cerror.WrapError(cerror.ErrMySQLTxnError, err)
 }
 
+// logDMLTxnErr keeps generated SQL templates and transaction metadata readable.
+// Callers must keep row values in separate arguments, never interpolate them into query.
 func logDMLTxnErr(
 	err error, start time.Time, changefeed string,
 	query string, count int, startTs []model.Ts,

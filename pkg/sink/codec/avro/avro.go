@@ -33,6 +33,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
 	"github.com/tikv/client-go/v2/oracle"
@@ -217,13 +219,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
+		log.Error("avro encoding key failed", zap.Error(err), logutil.ZapRedactAny("event", e))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
+		log.Error("avro encoding value failed", zap.Error(err), logutil.ZapRedactAny("event", e))
 		return errors.Trace(err)
 	}
 
@@ -638,7 +640,7 @@ func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]inter
 		}
 	}
 
-	log.Debug("rowToAvroData", zap.Any("data", ret))
+	log.Debug("rowToAvroData", logutil.ZapRedactAny("data", ret))
 	return ret, nil
 }
 
@@ -923,7 +925,15 @@ func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (interface{}, str
 		if v, ok := col.Value.(string); ok {
 			n, err := strconv.ParseInt(v, 10, 32)
 			if err != nil {
-				log.Info("avro encoder parse year value failed", zap.String("value", v), zap.Error(err))
+				// NumError includes the input in its message. Redact a copy so
+				// both this diagnostic and subsequent logs of the returned error
+				// protect the value while retaining the parsing error cause.
+				if numErr, ok := err.(*strconv.NumError); ok {
+					redactedErr := *numErr
+					redactedErr.Num = redact.String(numErr.Num)
+					err = &redactedErr
+				}
+				log.Info("avro encoder parse year value failed", logutil.ZapRedactString("value", v), zap.Error(err))
 				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 			}
 			return int32(n), "int", nil
@@ -935,7 +945,7 @@ func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (interface{}, str
 		}
 		return nil, "", cerror.ErrAvroEncodeFailed
 	default:
-		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.GetType()))
+		log.Error("unknown mysql type", logutil.ZapRedactAny("value", col.Value), zap.Any("mysqlType", col.GetType()))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }
