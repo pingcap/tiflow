@@ -171,30 +171,41 @@ func TestSameKeyIgnoreComposition(t *testing.T) {
 	check(filterCBA)
 }
 
-func TestSameKeyMixedActionRejected(t *testing.T) {
+func TestValidateRulesRejectsMixedActionAtOneKey(t *testing.T) {
 	ignoreRule := ignoreAddColumn("*", "", "a_col")
-
 	doRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
-	_, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, doRule})
-	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
-
 	errorRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN c_col"}, Action: Error}
-	_, err = NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, errorRule})
-	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, doRule}),
+		"only supported when all of them are Ignore rules")
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, errorRule}),
+		"only supported when all of them are Ignore rules")
+	require.NoError(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, ignoreAddColumn("*", "", "d_col")}))
 }
 
-func TestSameKeyAliasedRangePatternRejected(t *testing.T) {
+func TestValidateRulesRejectsAliasedRangePattern(t *testing.T) {
 	// "[ab]" and "[ba]" name one trie key but read back as only the first
 	// spelling, so the rules at that key cannot be listed. Composing blind
 	// would let a Do rule through, so both orders must be rejected.
 	ignoreRule := ignoreAddColumn("[ab]", "", "a_col")
 	doRule := &BinlogEventRule{SchemaPattern: "[ba]", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
 
-	_, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, doRule})
-	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, doRule}),
+		"only supported when all of them are Ignore rules")
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{doRule, ignoreRule}),
+		"only supported when all of them are Ignore rules")
+}
 
-	_, err = NewBinlogEvent(false, []*BinlogEventRule{doRule, ignoreRule})
-	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+func TestLoadingKeepsFirstRuleAtNonComposableKey(t *testing.T) {
+	// Such a configuration may already be persisted, so loading it must keep
+	// working; rejecting it belongs to ValidateRules.
+	ignoreRule := ignoreAddColumn("*", "", "a_col")
+	doRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
+
+	filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreRule, doRule})
+	require.NoError(t, err)
+	require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+	require.Equal(t, Do, addColumnAction(t, filter, "b_col"))
 }
 
 func TestNilRuleSkipped(t *testing.T) {
@@ -299,13 +310,26 @@ func TestMergeLowerPriorityRules(t *testing.T) {
 		}
 	})
 
-	t.Run("mixed actions in the merged set are rejected", func(t *testing.T) {
+	t.Run("a group it cannot compose keeps the first rule", func(t *testing.T) {
 		filter, err := NewBinlogEvent(false, nil)
 		require.NoError(t, err)
 
+		lower := ignoreAddColumn("*", "", "a_col")
 		doRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
-		_, _, err = filter.MergeLowerPriorityRules([]*BinlogEventRule{ignoreAddColumn("*", "", "a_col"), doRule})
-		require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+		added, _, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{lower, doRule})
+		require.NoError(t, err)
+		require.Equal(t, []*BinlogEventRule{lower}, added)
+		require.Equal(t, Ignore, addColumnAction(t, filter, "a_col"))
+		require.Equal(t, Do, addColumnAction(t, filter, "b_col"))
+	})
+
+	t.Run("a rule it cannot use fails the merge", func(t *testing.T) {
+		filter, err := NewBinlogEvent(false, nil)
+		require.NoError(t, err)
+
+		unusable := &BinlogEventRule{SchemaPattern: "*", Events: []EventType{"wrong event"}, Action: Ignore}
+		_, _, err = filter.MergeLowerPriorityRules([]*BinlogEventRule{unusable})
+		require.Error(t, err)
 	})
 }
 

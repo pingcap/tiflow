@@ -1010,15 +1010,16 @@ func TestCopyConfigFromSourceMergesCaseSensitive(t *testing.T) {
 	require.Equal(t, bf.Do, addColumnActionFor(t, subTaskCfg, "db", "t", "s_col"))
 }
 
-func TestCopyConfigFromSourceRejectsMixedActionSourceGroup(t *testing.T) {
+func TestCopyConfigFromSourceKeepsFirstRuleAtNonComposableKey(t *testing.T) {
+	keptRule := ignoreAddColumnRule("*", "", "a_col")
 	doRule := &bf.BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: bf.Do}
-	sourceCfg := &config.SourceConfig{
-		Filters: []*bf.BinlogEventRule{ignoreAddColumnRule("*", "", "a_col"), doRule},
-	}
+	sourceCfg := &config.SourceConfig{Filters: []*bf.BinlogEventRule{keptRule, doRule}}
 	subTaskCfg := &config.SubTaskConfig{}
 
-	err := copyConfigFromSource(subTaskCfg, sourceCfg, false)
-	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+	require.NoError(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+	require.Equal(t, []*bf.BinlogEventRule{keptRule}, subTaskCfg.FilterRules)
+	require.Equal(t, bf.Ignore, addColumnActionFor(t, subTaskCfg, "db", "t", "a_col"))
+	require.Equal(t, bf.Do, addColumnActionFor(t, subTaskCfg, "db", "t", "b_col"))
 }
 
 func TestCopyConfigFromSourceRejectsUnusableSourceRule(t *testing.T) {
