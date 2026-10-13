@@ -1,4 +1,4 @@
-FROM golang:1.25-alpine as builder
+FROM golang:1.26.9-alpine as builder
 MAINTAINER siddontang
 
 RUN apk add --no-cache git make
