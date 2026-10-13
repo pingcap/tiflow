@@ -253,29 +253,34 @@ type BinlogEvent struct {
 // configuration comes through here and such a configuration has always
 // loaded. Use ValidateRules where a configuration is submitted.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
-	return newBinlogEvent(caseSensitive, rules, rejections{})
+	return newBinlogEvent(caseSensitive, rules, tolerateAll)
 }
 
 // ValidateRules reports the rules NewBinlogEvent would have to leave out, as
 // an error naming what to fix. Only a path where someone is submitting a
 // configuration may use it.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
-	_, err := newBinlogEvent(caseSensitive, rules, rejections{unusable: true, nonComposable: true})
+	_, err := newBinlogEvent(caseSensitive, rules, rejectAll)
 	return err
 }
 
-// rejections says which rules a build refuses outright instead of logging the
-// problem and leaving the rule out of the filter.
-type rejections struct {
-	// unusable is a rule that cannot be applied at all, such as one naming an
-	// unknown event or carrying an uncompilable sql-pattern.
-	unusable bool
-	// nonComposable is a rule sharing a key with a rule it cannot compose
-	// with; leaving it out keeps only the first rule at that key in effect.
-	nonComposable bool
-}
+// strictness says how much of what a build cannot apply it refuses outright,
+// rather than logging the problem and leaving the rule out of the filter.
+type strictness int
 
-func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, reject rejections) (*BinlogEvent, error) {
+const (
+	// tolerateAll never fails on rule content. Paths loading an
+	// already-persisted configuration need this.
+	tolerateAll strictness = iota
+	// rejectUnusable fails on a rule that cannot be applied at all, such as
+	// one naming an unknown event or carrying an uncompilable sql-pattern.
+	rejectUnusable
+	// rejectAll also fails on a rule that cannot compose with the rule
+	// already at its key.
+	rejectAll
+)
+
+func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, strict strictness) (*BinlogEvent, error) {
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
 		caseSensitive: caseSensitive,
@@ -297,7 +302,7 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, reject rejecti
 		}
 
 		if !errors.IsAlreadyExists(errors.Cause(err)) {
-			if reject.unusable {
+			if strict >= rejectUnusable {
 				return nil, err
 			}
 			log.Warn("skip unusable binlog event rule", zap.Any("rule", rule), zap.Error(err))
@@ -307,7 +312,7 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, reject rejecti
 		existing := rulesAtKey[key]
 		// Empty means AddRule collided with a key spelled differently.
 		if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
-			if reject.nonComposable {
+			if strict >= rejectAll {
 				return nil, errors.Errorf(
 					"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
 						"are only supported when all of them are Ignore rules",
@@ -333,7 +338,7 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, reject rejecti
 // cannot be used at all fails the merge rather than being skipped, so that a
 // malformed rule is not quietly missing from the result.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, overwritten []*BinlogEventRule, err error) {
-	lower, err := newBinlogEvent(b.caseSensitive, rules, rejections{unusable: true})
+	lower, err := newBinlogEvent(b.caseSensitive, rules, rejectUnusable)
 	if err != nil {
 		return nil, nil, err
 	}
