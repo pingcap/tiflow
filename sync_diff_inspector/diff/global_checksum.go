@@ -99,7 +99,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			checkpointState.Upstream.Done = true
 			checkpointState.Downstream.Done = true
 			if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
-				log.Warn("failed to save checksum checkpoint", zap.Error(err))
+				log.Warn("failed to save checksum checkpoint", logutil.ZapRedactError(err))
 			}
 			df.checksumCheckpoint = checkpointState
 			continue
@@ -119,7 +119,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 
 		flushCkpt := func(ctx context.Context) {
 			if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
-				log.Warn("fail to flush checksum checkpoint", zap.Error(err))
+				log.Warn("fail to flush checksum checkpoint", logutil.ZapRedactError(err))
 			}
 		}
 
