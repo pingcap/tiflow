@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/puller/frontier"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
@@ -82,7 +83,7 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
 				zap.String("tableName", p.tableName),
-				zap.Any("spans", p.spans))
+				logutil.ZapRedactAny("spans", p.spans))
 		}
 		p.tsTracker.Forward(resolvedSpan.Region, resolvedSpan.Span, e.ResolvedTs)
 		if e.ResolvedTs > p.maxIngressResolvedTs.Load() {
@@ -96,7 +97,7 @@ func (p *tableProgress) handleResolvedSpans(ctx context.Context, e *model.Resolv
 			zap.String("namespace", p.changefeed.Namespace),
 			zap.String("changefeed", p.changefeed.ID),
 			zap.String("tableName", p.tableName),
-			zap.Any("tableID", p.spans),
+			logutil.ZapRedactAny("tableID", p.spans),
 			zap.Uint64("resolvedTs", resolvedTs),
 			zap.Duration("duration", time.Since(p.start)),
 		)
@@ -233,7 +234,7 @@ func (p *MultiplexingPuller) subscribe(
 			log.Panic("redundant subscription",
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
-				zap.String("span", span.String()))
+				logutil.ZapRedactString("span", span.String()))
 		}
 	}
 
@@ -300,7 +301,7 @@ func (p *MultiplexingPuller) unsubscribe(spans []tablepb.Span) {
 			log.Panic("unexist unsubscription",
 				zap.String("namespace", p.changefeed.Namespace),
 				zap.String("changefeed", p.changefeed.ID),
-				zap.String("span", span.String()))
+				logutil.ZapRedactString("span", span.String()))
 		}
 	}
 	if len(progress.spans) != len(spans) {
