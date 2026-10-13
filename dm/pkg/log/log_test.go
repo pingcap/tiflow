@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
 	lightningLog "github.com/pingcap/tidb/pkg/lightning/log"
@@ -238,6 +239,108 @@ func BenchmarkBaseline(b *testing.B) {
 		subLogger := logger.With(zap.String("key2", "value2"))
 		subLogger.Info("test-test-test")
 	}
+}
+
+type redactInfoLogConfig struct {
+	RedactInfoLog RedactInfoLogType `toml:"redact-info-log" json:"redact-info-log"`
+}
+
+func TestRedactInfoLogTypeSet(t *testing.T) {
+	cases := []struct {
+		input   string
+		want    RedactInfoLogType
+		wantErr bool
+	}{
+		{input: "false", want: RedactInfoLogOFF},
+		{input: "true", want: RedactInfoLogON},
+		{input: "marker", want: RedactInfoLogMarker},
+		{input: "invalid", wantErr: true},
+		{input: "", wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.input, func(t *testing.T) {
+			var got RedactInfoLogType
+			err := got.Set(tc.input)
+			if tc.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestRedactInfoLogTypeJSON(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want RedactInfoLogType
+	}{
+		{name: "false", raw: `false`, want: RedactInfoLogOFF},
+		{name: "true", raw: `true`, want: RedactInfoLogON},
+		{name: "marker", raw: `"marker"`, want: RedactInfoLogMarker},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got RedactInfoLogType
+			require.NoError(t, json.Unmarshal([]byte(tc.raw), &got))
+			require.Equal(t, tc.want, got)
+		})
+	}
+
+	var got RedactInfoLogType
+	require.EqualError(t, json.Unmarshal([]byte(`"unknown"`), &got), invalidRedactInfoLogTypeErrMsg)
+	require.EqualError(t, json.Unmarshal([]byte(`1`), &got), invalidRedactInfoLogTypeErrMsg)
+}
+
+func TestRedactInfoLogTypeTOML(t *testing.T) {
+	cases := []struct {
+		name    string
+		raw     string
+		want    RedactInfoLogType
+		encoded string
+	}{
+		{name: "false", raw: "redact-info-log = false\n", want: RedactInfoLogOFF, encoded: "redact-info-log = false\n"},
+		{name: "true", raw: "redact-info-log = true\n", want: RedactInfoLogON, encoded: "redact-info-log = true\n"},
+		{name: "marker", raw: "redact-info-log = \"marker\"\n", want: RedactInfoLogMarker, encoded: "redact-info-log = \"marker\"\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var cfg redactInfoLogConfig
+			_, err := toml.Decode(tc.raw, &cfg)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, cfg.RedactInfoLog)
+
+			encoded, err := toml.Marshal(cfg)
+			require.NoError(t, err)
+			require.Equal(t, tc.encoded, string(encoded))
+		})
+	}
+
+	var cfg redactInfoLogConfig
+	_, err := toml.Decode("redact-info-log = \"unknown\"\n", &cfg)
+	require.Error(t, err)
+	_, err = toml.Decode("redact-info-log = 1\n", &cfg)
+	require.Error(t, err)
+}
+
+func TestZapRedactString(t *testing.T) {
+	orig := getRedactType()
+	t.Cleanup(func() { SetRedactType(orig) })
+
+	input := "secret ‹value›"
+
+	SetRedactType(RedactInfoLogOFF)
+	require.Equal(t, zap.String("argument", input), ZapRedactString("argument", input))
+
+	SetRedactType(RedactInfoLogON)
+	field := ZapRedactString("argument", input)
+	require.Equal(t, zap.String("argument", "?"), field)
+	require.NotContains(t, field.String, input)
+
+	SetRedactType(RedactInfoLogMarker)
+	require.Equal(t, zap.String("argument", "‹secret ‹‹value›››"), ZapRedactString("argument", input))
 }
 
 func BenchmarkWithCtx(b *testing.B) {
