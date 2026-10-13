@@ -1,4 +1,4 @@
-FROM golang:1.26.8
+FROM golang:1.26.9
 
 RUN apt-get -y -q update && \
     apt-get -y -q install software-properties-common && \
