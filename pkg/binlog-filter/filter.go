@@ -263,19 +263,16 @@ const (
 // NewBinlogEvent returns a binlog event filter built from rules. Rules sharing
 // a (schema-pattern, table-pattern) key all apply when all of them are Ignore,
 // since each one only narrows what gets skipped. Any rule the filter cannot
-// apply is left out with a warning.
-//
-// Leaving a rule out rather than failing is deliberate: every path that loads
-// a persisted configuration builds its filter here, and those rules were
-// never validated back when the configuration was accepted. Submission paths
-// call ValidateRules instead.
+// apply is deliberately left out with a warning, so an existing task or source
+// whose configuration is already invalid can still start.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
 	return newBinlogEvent(caseSensitive, rules, tolerateAll)
 }
 
-// ValidateRules returns an error describing the first rule NewBinlogEvent
-// would leave out. Only call it where a configuration is being submitted: one
-// already persisted must stay loadable.
+// ValidateRules returns an error for the first rule that cannot be applied,
+// either on its own or alongside the rule already at its key. Only a
+// submission path may call it: a configuration already persisted must stay
+// loadable.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
 	_, err := newBinlogEvent(caseSensitive, rules, rejectAll)
 	return err
