@@ -24,9 +24,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/collate"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/diff"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
@@ -61,6 +63,8 @@ func main() {
 		return
 	}
 
+	dmlog.SetRedactLog(cfg.RedactInfoLog)
+
 	conf := new(log.Config)
 	conf.Level = cfg.LogLevel
 
@@ -87,7 +91,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	log.Info("", zap.Stringer("config", cfg))
+	log.Info("", logutil.ZapRedactStringer("config", cfg))
 
 	ctx := context.Background()
 	if !checkSyncState(ctx, cfg) {
@@ -106,8 +110,8 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 	d, err := diff.NewDiff(ctx, cfg)
 	if err != nil {
 		fmt.Printf("An error occurred while initializing diff: %s, please check log info in %s for full details\n",
-			err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
-		log.Fatal("failed to initialize diff process", zap.Error(err))
+			dmlog.RedactString(err.Error()), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+		log.Fatal("failed to initialize diff process", logutil.ZapRedactError(err))
 		return false
 	}
 	defer d.Close()
@@ -116,8 +120,8 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		err = d.StructEqual(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table structure: %s, please check log info in %s for full details\n",
-				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
-			log.Fatal("failed to check structure difference", zap.Error(err))
+				dmlog.RedactString(err.Error()), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+			log.Fatal("failed to check structure difference", logutil.ZapRedactError(err))
 			return false
 		}
 	} else {
@@ -130,8 +134,8 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		err = d.Equal(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table data: %s, please check log info in %s for full details\n",
-				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
-			log.Fatal("failed to check data difference", zap.Error(err))
+				dmlog.RedactString(err.Error()), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+			log.Fatal("failed to check data difference", logutil.ZapRedactError(err))
 			return false
 		}
 	} else {

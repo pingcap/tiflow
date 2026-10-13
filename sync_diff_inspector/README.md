@@ -8,6 +8,7 @@ sync-diff-inspector is a tool for comparing two database's data.
 Usage of diff:
   -V, --version                  print version of sync_diff_inspector
   -L, --log-level string         log level: debug, info, warn, error, fatal (default "info")
+      --redact-info-log          whether to enable the log redaction
   -C, --config string            Config file
   -T, --template string          <dm|norm> export a template config file
       --dm-addr string           the address of DM
@@ -17,6 +18,8 @@ Usage of diff:
 ```
 
 For more details you can read the [config.toml](./config/config.toml), [config_sharding.toml](./config/config_sharding.toml) and [config_dm.toml](./config/config_dm.toml).
+
+Enable log redaction with `--redact-info-log` or the top-level TOML setting `redact-info-log = true`. It is disabled by default, and an explicit command-line value overrides the configuration file. When enabled, sensitive diagnostic fields are replaced with `?`, including SQL and arguments, row values, chunk and histogram bounds, configuration dumps, column metadata, and comparison errors. Database queries, checkpoints, and generated fix SQL use the original values.
 
 ## Documents
 - `zh`: [Overview in Chinese](https://docs.pingcap.com/zh/tidb/stable/sync-diff-inspector-overview)

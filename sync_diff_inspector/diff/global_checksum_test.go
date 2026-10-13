@@ -14,6 +14,7 @@
 package diff
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -21,8 +22,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
@@ -32,6 +36,8 @@ import (
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type mockChecksumIterator struct {
@@ -235,6 +241,58 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	require.NotNil(t, src.startRange.ChunkRange)
 	require.Equal(t, 3, src.startRange.ChunkRange.Index.ChunkIndex)
 	require.NotSame(t, state.LastRange, src.startRange.ChunkRange)
+}
+
+func TestGlobalChecksumQueryErrorRedaction(t *testing.T) {
+	queryErr := errors.New("Error 1064: syntax error near 'private-range-value'")
+	for _, enabled := range []bool{false, true} {
+		t.Run(map[bool]string{false: "disabled", true: "enabled"}[enabled], func(t *testing.T) {
+			previous := dmlog.IsRedactLogEnabled()
+			dmlog.SetRedactLog(enabled)
+			t.Cleanup(func() { dmlog.SetRedactLog(previous) })
+			core, observed := observer.New(zap.WarnLevel)
+			t.Cleanup(log.ReplaceGlobals(zap.New(core), &log.ZapProperties{}))
+
+			checkpointDir := t.TempDir()
+			tables := []*common.TableDiff{{Schema: "test", Table: "tbl"}}
+			newSource := func(info *source.ChecksumInfo) *mockChecksumSource {
+				return &mockChecksumSource{
+					iterator: &mockChecksumIterator{chunks: []*chunk.Range{{
+						Index: &chunk.CID{ChunkCnt: 1},
+					}}},
+					tables: tables,
+					infos:  map[int]*source.ChecksumInfo{0: info},
+				}
+			}
+			df := &Diff{
+				upstream:         newSource(&source.ChecksumInfo{Err: queryErr}),
+				downstream:       newSource(&source.ChecksumInfo{Count: 1, Checksum: 1}),
+				checkThreadCount: 1,
+				cp:               new(checkpoints.Checkpoint),
+				report:           report.NewReport(&config.TaskConfig{OutputDir: checkpointDir}),
+				CheckpointDir:    checkpointDir,
+			}
+			df.report.Init(tables, nil, nil)
+			progress.Init(1, 0)
+			progress.SetOutput(io.Discard)
+			t.Cleanup(progress.Close)
+
+			require.NoError(t, df.equalByGlobalChecksum(context.Background()))
+			entries := observed.FilterMessage("global checksum stopped due to table error, remaining tables skipped").All()
+			require.Len(t, entries, 1)
+			var summary bytes.Buffer
+			require.NoError(t, df.report.Print(&summary))
+			if enabled {
+				require.Equal(t, "?", entries[0].ContextMap()["error"])
+				require.NotContains(t, fmt.Sprint(entries[0].ContextMap()), "private-range-value")
+				require.NotContains(t, summary.String(), "private-range-value")
+			} else {
+				require.Equal(t, queryErr.Error(), entries[0].ContextMap()["error"])
+				require.Contains(t, summary.String(), queryErr.Error())
+			}
+			require.Same(t, queryErr, errors.Cause(df.report.TableResults["test"]["tbl"].MeetError))
+		})
+	}
 }
 
 func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {
