@@ -244,21 +244,22 @@ type BinlogEvent struct {
 	caseSensitive bool
 }
 
-// NewBinlogEvent returns a binlog event filter built from one rule set. Rules
-// sharing a (schema-pattern, table-pattern) key all apply when all of them are
-// Ignore, since each one only narrows what gets skipped; a rule that cannot be
-// applied, there or anywhere, is left out with a warning.
+// NewBinlogEvent returns a binlog event filter built from rules. Rules sharing
+// a (schema-pattern, table-pattern) key all apply when all of them are Ignore,
+// since each one only narrows what gets skipped. Any rule the filter cannot
+// apply is left out with a warning.
 //
-// No rule makes this fail, because every path loading an already-persisted
-// configuration comes through here and such a configuration has always
-// loaded. Use ValidateRules where a configuration is submitted.
+// Leaving a rule out rather than failing is deliberate: every path that loads
+// a persisted configuration builds its filter here, and those rules were
+// never validated back when the configuration was accepted. Submission paths
+// call ValidateRules instead.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
 	return newBinlogEvent(caseSensitive, rules, tolerateAll)
 }
 
-// ValidateRules reports the rules NewBinlogEvent would have to leave out, as
-// an error naming what to fix. Only a path where someone is submitting a
-// configuration may use it.
+// ValidateRules returns an error describing the first rule NewBinlogEvent
+// would leave out. Only call it where a configuration is being submitted: one
+// already persisted must stay loadable.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
 	_, err := newBinlogEvent(caseSensitive, rules, rejectAll)
 	return err
