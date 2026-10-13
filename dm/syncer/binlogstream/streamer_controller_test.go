@@ -30,6 +30,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/stretchr/testify/require"
 )
@@ -124,6 +125,37 @@ type expectedInfo struct {
 	suffix int
 	data   []byte
 	op     pb.ErrorOp
+}
+
+func TestGetEventWithTaggedGTID(t *testing.T) {
+	sid := uuid.MustParse("3ccc475b-2343-11e7-be21-6c0b84d59f30")
+	upstream := &mockStream{
+		events: []*replication.BinlogEvent{
+			{
+				Header: &replication.EventHeader{LogPos: 1010, EventSize: 10, EventType: replication.GTID_EVENT},
+				Event:  &replication.GTIDEvent{SID: sid[:], GNO: 15},
+			},
+			{
+				Header: &replication.EventHeader{LogPos: 1020, EventSize: 10, EventType: replication.GTID_TAGGED_LOG_EVENT},
+				Event: &replication.GtidTaggedLogEvent{
+					GTIDEvent: replication.GTIDEvent{SID: sid[:], Tag: mysql.NewTag("Job1"), GNO: 3},
+				},
+			},
+		},
+	}
+	controller := NewStreamerController4Test(&mockStreamProducer{upstream}, upstream)
+	loc := binlog.Location{Position: mysql.Position{Name: "bin.000001", Pos: 1000}}
+	controller.streamModifier.reset(loc)
+	controller.upstream.locationRecorder.reset(loc)
+
+	tctx := tcontext.Background()
+	e, _, err := controller.GetEvent(tctx)
+	require.NoError(t, err)
+	require.IsType(t, &replication.GTIDEvent{}, e.Event)
+
+	_, _, err = controller.GetEvent(tctx)
+	require.True(t, terror.ErrSyncerTaggedGTIDNotSupported.Equal(err), err)
+	require.ErrorContains(t, err, "3ccc475b-2343-11e7-be21-6c0b84d59f30:job1:3")
 }
 
 func TestGetEventWithInject(t *testing.T) {

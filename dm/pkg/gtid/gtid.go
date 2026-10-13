@@ -55,20 +55,41 @@ func ParserGTID(flavor, gtidStr string) (mysql.GTIDSet, error) {
 		if IsZeroMariaDBGTIDSet(gtidStr) {
 			gtid, err = mysql.ParseGTIDSet(fla, "")
 		} else {
-			gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
+			gtid, err = parseMariaDBGTIDSet(gtidStr)
 		}
 	case "":
 		fla = mysql.MySQLFlavor
 		gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
 		if err != nil {
-			fla = mysql.MariaDBFlavor
-			gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
+			gtid, err = parseMariaDBGTIDSet(gtidStr)
 		}
 	default:
 		err = terror.ErrNotSupportedFlavor.Generate(flavor)
 	}
 
 	return gtid, err
+}
+
+// parseMariaDBGTIDSet parses a MariaDB GTID set and keeps one GTID for each
+// domain. The GTID set saved by older versions of DM may contain multiple GTIDs
+// in one domain, e.g. "0-10-200,0-9-100" after the server ID changes. go-mysql
+// keeps the last one of each domain, which may be the older one, so we keep the
+// one with the largest sequence number.
+func parseMariaDBGTIDSet(gtidStr string) (mysql.GTIDSet, error) {
+	gSet := &mysql.MariadbGTIDSet{Sets: make(map[uint32]*mysql.MariadbGTID)}
+	if gtidStr == "" {
+		return gSet, nil
+	}
+	for _, s := range strings.Split(gtidStr, ",") {
+		g, err := mysql.ParseMariadbGTID(s)
+		if err != nil {
+			return nil, err
+		}
+		if old, ok := gSet.Sets[g.DomainID]; !ok || g.SequenceNumber > old.SequenceNumber {
+			gSet.Sets[g.DomainID] = g
+		}
+	}
+	return gSet, nil
 }
 
 // ZeroGTIDSet returns an empty GTID set. The flavor must be specified.

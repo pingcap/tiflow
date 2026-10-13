@@ -761,6 +761,19 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 		},
 	})
 
+	// HeartbeatEvent, decoded by go-mysql when RawModeEnabled is not true
+	heartbeatHeader := *header
+	ev = &replication.BinlogEvent{Header: &heartbeatHeader, Event: &replication.HeartbeatEvent{Version: 1}}
+	ev.Header.EventType = replication.HEARTBEAT_EVENT
+	cases = append(cases, Case{
+		event: ev,
+		result: preprocessResult{
+			Ignore:       true,
+			IgnoreReason: ignoreReasonHeartbeat,
+			LogPos:       ev.Header.LogPos,
+		},
+	})
+
 	// other event type without LOG_EVENT_ARTIFICIAL_F
 	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet, false, 0)
 	c.Assert(err, check.IsNil)
