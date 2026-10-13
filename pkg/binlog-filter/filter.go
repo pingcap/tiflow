@@ -269,10 +269,8 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 	return newBinlogEvent(caseSensitive, rules, tolerateAll)
 }
 
-// ValidateRules returns an error for the first rule that cannot be applied,
-// either on its own or alongside the rule already at its key. Only a
-// submission path may call it: a configuration already persisted must stay
-// loadable.
+// ValidateRules returns an error for the first rule that cannot be applied.
+// Only a submission path may call it: a persisted config must stay loadable.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
 	_, err := newBinlogEvent(caseSensitive, rules, rejectAll)
 	return err
