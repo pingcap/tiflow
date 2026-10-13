@@ -244,6 +244,22 @@ type BinlogEvent struct {
 	caseSensitive bool
 }
 
+// strictness says how much of what a build cannot apply it refuses outright,
+// rather than logging the problem and leaving the rule out of the filter.
+type strictness int
+
+const (
+	// tolerateAll never fails on rule content. Paths loading an
+	// already-persisted configuration need this.
+	tolerateAll strictness = iota
+	// rejectUnusable fails on a rule that cannot be applied at all, such as
+	// one naming an unknown event or carrying an uncompilable sql-pattern.
+	rejectUnusable
+	// rejectAll also fails on a rule that cannot compose with the rule
+	// already at its key.
+	rejectAll
+)
+
 // NewBinlogEvent returns a binlog event filter built from rules. Rules sharing
 // a (schema-pattern, table-pattern) key all apply when all of them are Ignore,
 // since each one only narrows what gets skipped. Any rule the filter cannot
@@ -264,22 +280,6 @@ func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
 	_, err := newBinlogEvent(caseSensitive, rules, rejectAll)
 	return err
 }
-
-// strictness says how much of what a build cannot apply it refuses outright,
-// rather than logging the problem and leaving the rule out of the filter.
-type strictness int
-
-const (
-	// tolerateAll never fails on rule content. Paths loading an
-	// already-persisted configuration need this.
-	tolerateAll strictness = iota
-	// rejectUnusable fails on a rule that cannot be applied at all, such as
-	// one naming an unknown event or carrying an uncompilable sql-pattern.
-	rejectUnusable
-	// rejectAll also fails on a rule that cannot compose with the rule
-	// already at its key.
-	rejectAll
-)
 
 func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, strict strictness) (*BinlogEvent, error) {
 	b := &BinlogEvent{
