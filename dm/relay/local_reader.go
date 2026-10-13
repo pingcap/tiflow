@@ -28,6 +28,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/binlog/common"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/reader"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -80,9 +81,7 @@ type BinlogReader struct {
 func newBinlogReader(logger log.Logger, cfg *BinlogReaderConfig, relay Process) *BinlogReader {
 	ctx, cancel := context.WithCancel(context.Background()) // only can be canceled in `Close`
 	parser := replication.NewBinlogParser()
-	parser.SetVerifyChecksum(true)
-	// use string representation of decimal, to replicate the exact value
-	parser.SetUseDecimal(false)
+	common.SetDefaultBinlogParserCfg(parser)
 	parser.SetRowsEventDecodeFunc(cfg.RowsEventDecodeFunc)
 	if cfg.Timezone != nil {
 		parser.SetTimestampStringLocation(cfg.Timezone)

@@ -34,6 +34,9 @@ func SetDefaultReplicationCfg(cfg *replication.BinlogSyncerConfig, retryCount in
 	// after https://github.com/go-mysql-org/go-mysql/pull/598 we could use `false` to improve performance without
 	// losing precision.
 	cfg.UseDecimal = false
+	// keep the trailing ".0" of whole-number JSON doubles, otherwise the
+	// downstream parses them as JSON integers.
+	cfg.UseFloatWithTrailingZero = true
 	cfg.VerifyChecksum = true
 	cfg.MaxReconnectAttempts = retryCount
 	if retryCount == 1 {
@@ -41,4 +44,17 @@ func SetDefaultReplicationCfg(cfg *replication.BinlogSyncerConfig, retryCount in
 	}
 	cfg.ReadTimeout = SlaveReadTimeout
 	cfg.HeartbeatPeriod = MasterHeartbeatPeriod
+}
+
+// SetDefaultBinlogParserCfg sets some default value for BinlogParser, the
+// decoding options should be consistent with SetDefaultReplicationCfg.
+func SetDefaultBinlogParserCfg(parser *replication.BinlogParser) {
+	parser.SetVerifyChecksum(true)
+	// use string representation of decimal, to replicate the exact value
+	parser.SetUseDecimal(false)
+	// keep the trailing ".0" of whole-number JSON doubles, otherwise the
+	// downstream parses them as JSON integers.
+	// TODO: upgrade go-mysql and use RenderJSONAsMySQLText to also keep
+	// other JSON values such as DECIMAL.
+	parser.SetUseFloatWithTrailingZero(true)
 }

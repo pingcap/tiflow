@@ -591,7 +591,7 @@ func TestGenRowsEvent(t *testing.T) {
 		gmysql.MYSQL_TYPE_DATETIME, gmysql.MYSQL_TYPE_DATETIME2,
 		gmysql.MYSQL_TYPE_TIME, gmysql.MYSQL_TYPE_TIME2,
 		gmysql.MYSQL_TYPE_YEAR, gmysql.MYSQL_TYPE_ENUM, gmysql.MYSQL_TYPE_SET,
-		gmysql.MYSQL_TYPE_BLOB, gmysql.MYSQL_TYPE_JSON, gmysql.MYSQL_TYPE_GEOMETRY,
+		gmysql.MYSQL_TYPE_BLOB, gmysql.MYSQL_TYPE_GEOMETRY,
 	}
 	for i := range unsupportedTypes {
 		columnType = unsupportedTypes[i : i+1]
