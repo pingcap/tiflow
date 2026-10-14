@@ -254,26 +254,30 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 	return b, err
 }
 
-// ValidateRules returns an error for the first non-composable same-key group.
-// Only a submission path may call it: a persisted config must stay loadable.
+// ValidateRules returns the first conflict between rules at one key. Only a
+// submission path may call it: a persisted config must stay loadable.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
-	_, notComposed, err := newBinlogEvent(caseSensitive, rules)
-	if err != nil || len(notComposed) == 0 {
+	_, res, err := newBinlogEvent(caseSensitive, rules)
+	if err != nil || len(res.conflicts) == 0 {
 		return err
 	}
-	rule := notComposed[0]
-	return errors.Errorf(
-		"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
-			"are only supported when all of them are Ignore rules",
-		rule.SchemaPattern, rule.TablePattern)
+	return res.conflicts[0]
 }
 
-// newBinlogEvent builds the filter and names the rules it left out because
-// they share a key with a rule they cannot compose with. A rule it cannot
-// apply at all is only logged, since rejecting one, such as an event name an
-// older DM accepted, once blocked an upgrade outright: pingcap/tiflow#10282.
-func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, []*BinlogEventRule, error) {
-	var notComposed []*BinlogEventRule
+// buildResult says what a build did with the rules it was given.
+type buildResult struct {
+	// keyOf names the key each rule went in at. A rule missing from it was
+	// left out, either as unusable or by one of conflicts.
+	keyOf map[*BinlogEventRule][2]string
+	// conflicts says why each rule left out at an occupied key was left out.
+	conflicts []error
+}
+
+// newBinlogEvent builds the filter. A rule it cannot apply at all is only
+// logged, since rejecting one, such as an event name an older DM accepted,
+// once blocked an upgrade outright: pingcap/tiflow#10282.
+func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, buildResult, error) {
+	res := buildResult{keyOf: make(map[*BinlogEventRule][2]string, len(rules))}
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
 		caseSensitive: caseSensitive,
@@ -291,6 +295,7 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 
 		if err == nil {
 			rulesAtKey[key] = append(rulesAtKey[key], rule)
+			res.keyOf[rule] = key
 			continue
 		}
 
@@ -299,21 +304,40 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 			continue
 		}
 
-		existing := rulesAtKey[key]
-		// Empty means AddRule collided with a key spelled differently.
-		if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
-			log.Warn("leave out binlog event rule, it cannot compose with the rule already at its key",
-				zap.Any("rule", rule))
-			notComposed = append(notComposed, rule)
+		if conflict := keyConflict(rule, rulesAtKey[key]); conflict != nil {
+			log.Warn("leave out binlog event rule", zap.Any("rule", rule), zap.Error(conflict))
+			res.conflicts = append(res.conflicts, conflict)
 			continue
 		}
 		if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
-			return nil, nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+			return nil, buildResult{}, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 		}
 		rulesAtKey[key] = append(rulesAtKey[key], rule)
+		res.keyOf[rule] = key
 	}
 
-	return b, notComposed, nil
+	return b, res, nil
+}
+
+// keyConflict says why rule cannot join existing, the rules already at its
+// key, or nil when it can: each Ignore rule there only narrows what gets
+// skipped. An empty existing means the key was written another way, since
+// patterns such as "[ab]" and "[ba]" name one key but read back as one of
+// them, leaving the rules there impossible to list.
+func keyConflict(rule *BinlogEventRule, existing []*BinlogEventRule) error {
+	switch {
+	case len(existing) == 0:
+		return errors.Errorf(
+			"rule (schema-pattern=%q, table-pattern=%q) names the same key as a rule that "+
+				"writes the pattern differently; write the pattern the same way in both",
+			rule.SchemaPattern, rule.TablePattern)
+	case rule.Action != Ignore || !allIgnoreRules(existing):
+		return errors.Errorf(
+			"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
+				"are only supported when all of them are Ignore rules",
+			rule.SchemaPattern, rule.TablePattern)
+	}
+	return nil
 }
 
 // MergeLowerPriorityRules merges rules into b, where b's existing rules win
@@ -322,20 +346,19 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 // returned slices follow rules' order, and leave out whatever the filter
 // cannot apply.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, overwritten []*BinlogEventRule, err error) {
-	lower, _, err := newBinlogEvent(b.caseSensitive, rules)
+	_, lower, err := newBinlogEvent(b.caseSensitive, rules)
 	if err != nil {
 		return nil, nil, err
 	}
-	groupOf := lower.groupRules()
 
-	addedGroups := make(map[int]bool, len(groupOf))
+	addedKeys := make(map[[2]string]bool, len(lower.keyOf))
 	for _, rule := range rules {
-		group, ok := groupOf[rule]
+		key, ok := lower.keyOf[rule]
 		if !ok {
-			continue // nil, or left out as non-composable
+			continue // nil, unusable, or in conflict with another rule here
 		}
 
-		if addedGroups[group] {
+		if addedKeys[key] {
 			// b has none at this key, and lower proved the group composable.
 			if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
 				return nil, nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
@@ -347,7 +370,7 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 		err = b.AddRule(rule)
 		switch {
 		case err == nil:
-			addedGroups[group] = true
+			addedKeys[key] = true
 			added = append(added, rule)
 		case errors.IsAlreadyExists(errors.Cause(err)):
 			overwritten = append(overwritten, rule)
@@ -357,33 +380,6 @@ func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, 
 	}
 
 	return added, overwritten, nil
-}
-
-// groupRules maps rules to an id shared by exactly the rules stored under the
-// same key. The grouping comes from the trie because a pattern string does not
-// name a key uniquely: "[ab]" and "[ba]" land on one node.
-func (b *BinlogEvent) groupRules() map[*BinlogEventRule]int {
-	schemaRules, tableRules := b.AllRules()
-
-	groups := make(map[*BinlogEventRule]int)
-	group := 0
-	collect := func(raw []any) {
-		for _, r := range raw {
-			if rule, ok := r.(*BinlogEventRule); ok {
-				groups[rule] = group
-			}
-		}
-		group++
-	}
-	for _, raw := range schemaRules {
-		collect(raw)
-	}
-	for _, tables := range tableRules {
-		for _, raw := range tables {
-			collect(raw)
-		}
-	}
-	return groups
 }
 
 // AddRule adds a rule into binlog event filter. Unlike NewBinlogEvent and

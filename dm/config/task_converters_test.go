@@ -93,7 +93,8 @@ func TestOpenAPITaskAliasedKey(t *testing.T) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	require.NoError(t, err)
 	// "[ab]" and "[ba]" are one key that reads back under one spelling, so the
-	// rules there cannot be listed and composed, even though both are Ignore.
+	// rules there cannot be listed and composed. Every rule this path builds is
+	// an Ignore rule, so this is the only conflict it can report.
 	filtered := task.TableMigrateRule[0]
 	require.NotNil(t, filtered.BinlogFilterRule)
 	filtered.Source.Schema = "[ab]"
@@ -116,7 +117,7 @@ func TestOpenAPITaskAliasedKey(t *testing.T) {
 	}
 
 	_, err = OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
-	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+	require.ErrorContains(t, err, "write the pattern the same way in both")
 }
 
 func TestValidateMetricLabels(t *testing.T) {

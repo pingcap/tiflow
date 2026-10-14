@@ -192,15 +192,16 @@ func TestValidateRulesUnusable(t *testing.T) {
 
 func TestValidateRulesAliasedKey(t *testing.T) {
 	// "[ab]" and "[ba]" name one trie key but read back as only the first
-	// spelling, so the rules at that key cannot be listed. Composing blind
-	// would let a Do rule through, so both orders must be rejected.
+	// spelling, so the rules at that key cannot be listed, whatever their
+	// actions. The error has to say that rather than blame the actions.
 	ignoreRule := ignoreAddColumn("[ab]", "", "a_col")
+	alsoIgnore := ignoreAddColumn("[ba]", "", "b_col")
 	doRule := &BinlogEventRule{SchemaPattern: "[ba]", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
 
-	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, doRule}),
-		"only supported when all of them are Ignore rules")
-	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{doRule, ignoreRule}),
-		"only supported when all of them are Ignore rules")
+	const sameWay = "write the pattern the same way in both"
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, alsoIgnore}), sameWay)
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, doRule}), sameWay)
+	require.ErrorContains(t, ValidateRules(false, []*BinlogEventRule{doRule, ignoreRule}), sameWay)
 }
 
 func TestLoadKeepsFirstRule(t *testing.T) {
