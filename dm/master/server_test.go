@@ -2924,7 +2924,7 @@ func (t *testMasterSuite) TestGetLatestMeta() {
 	require.Equal(t.T(), meta.BinLogGTID, "1-2-100")
 }
 
-func TestCheckAndAdjustSourceConfigRejectsMixedActionAtOneKey(t *testing.T) {
+func TestSourceConfigMixedAction(t *testing.T) {
 	_, err := conn.MockDefaultDBProvider()
 	require.NoError(t, err)
 	defer func() { conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{} }()

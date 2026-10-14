@@ -61,7 +61,7 @@ func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 	testShardAndFilterTaskToSubTaskConfigs(c)
 }
 
-func TestTaskConfigToSubTaskConfigsRejectsMixedActionAtOneKey(t *testing.T) {
+func TestTaskConfigMixedAction(t *testing.T) {
 	const sourceID = "mysql-replica-01"
 	newTask := func(actionOfSecondRule bf.ActionType) *TaskConfig {
 		cfg := NewTaskConfig()
@@ -89,7 +89,7 @@ func TestTaskConfigToSubTaskConfigsRejectsMixedActionAtOneKey(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestOpenAPITaskToSubTaskConfigsRejectsAliasedRangePattern(t *testing.T) {
+func TestOpenAPITaskAliasedKey(t *testing.T) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	require.NoError(t, err)
 	// "[ab]" and "[ba]" are one key that reads back under one spelling, so the

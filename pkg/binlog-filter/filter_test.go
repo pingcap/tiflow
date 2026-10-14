@@ -171,7 +171,7 @@ func TestSameKeyIgnoreComposition(t *testing.T) {
 	check(filterCBA)
 }
 
-func TestValidateRulesRejectsMixedActionAtOneKey(t *testing.T) {
+func TestValidateRulesMixedAction(t *testing.T) {
 	ignoreRule := ignoreAddColumn("*", "", "a_col")
 	doRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: Do}
 	errorRule := &BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN c_col"}, Action: Error}
@@ -183,14 +183,14 @@ func TestValidateRulesRejectsMixedActionAtOneKey(t *testing.T) {
 	require.NoError(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, ignoreAddColumn("*", "", "d_col")}))
 }
 
-func TestValidateRulesToleratesUnusableRule(t *testing.T) {
+func TestValidateRulesUnusable(t *testing.T) {
 	usable := ignoreAddColumn("*", "", "a_col")
 	unusable := &BinlogEventRule{SchemaPattern: "db9", Events: []EventType{"truncate"}, Action: Ignore}
 
 	require.NoError(t, ValidateRules(false, []*BinlogEventRule{usable, unusable}))
 }
 
-func TestValidateRulesRejectsAliasedRangePattern(t *testing.T) {
+func TestValidateRulesAliasedKey(t *testing.T) {
 	// "[ab]" and "[ba]" name one trie key but read back as only the first
 	// spelling, so the rules at that key cannot be listed. Composing blind
 	// would let a Do rule through, so both orders must be rejected.
@@ -203,7 +203,7 @@ func TestValidateRulesRejectsAliasedRangePattern(t *testing.T) {
 		"only supported when all of them are Ignore rules")
 }
 
-func TestLoadingKeepsFirstRuleAtNonComposableKey(t *testing.T) {
+func TestLoadKeepsFirstRule(t *testing.T) {
 	// Such a configuration may already be persisted, so loading it must keep
 	// working; rejecting it belongs to ValidateRules.
 	ignoreRule := ignoreAddColumn("*", "", "a_col")
@@ -238,7 +238,7 @@ func TestCaseSensitiveComposition(t *testing.T) {
 	require.Equal(t, Ignore, addColumnAction(t, filter, "b_col"))
 }
 
-func TestAddRuleDoesNotComposeAcrossLevels(t *testing.T) {
+func TestAddRuleNoCompose(t *testing.T) {
 	filter, err := NewBinlogEvent(false, []*BinlogEventRule{ignoreAddColumn("*", "", "a_col")})
 	require.NoError(t, err)
 
