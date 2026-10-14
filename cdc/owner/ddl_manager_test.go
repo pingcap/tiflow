@@ -133,7 +133,7 @@ func TestBarriers(t *testing.T) {
 	// test tableBarrier limit
 	dm.pendingDDLs = make(map[model.TableName][]*model.DDLEvent)
 	dm.ddlResolvedTs = 1024
-	for i := 0; i < 512; i++ {
+	for i := range 512 {
 		tableID := int64(i)
 		tableName := model.TableName{Table: fmt.Sprintf("test_%d", i), TableID: tableID}
 		dm.pendingDDLs[tableName] = append(dm.pendingDDLs[tableName],

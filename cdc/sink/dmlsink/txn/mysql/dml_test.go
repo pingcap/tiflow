@@ -31,7 +31,7 @@ func TestPrepareUpdate(t *testing.T) {
 		preCols      []*model.Column
 		cols         []*model.Column
 		expectedSQL  string
-		expectedArgs []interface{}
+		expectedArgs []any
 	}{
 		{
 			quoteTable:   "`test`.`t1`",
@@ -66,7 +66,7 @@ func TestPrepareUpdate(t *testing.T) {
 				{Name: "b", Type: mysql.TypeVarchar, Flag: 0, Value: "test2"},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1",
-			expectedArgs: []interface{}{1, "test2", 1},
+			expectedArgs: []any{1, "test2", 1},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -110,7 +110,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{2, "test2", 1, "test"},
+			expectedArgs: []any{2, "test2", 1, "test"},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -154,7 +154,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
+			expectedArgs: []any{2, []byte("世界"), 1, []byte("你好")},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -201,7 +201,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{2, []byte("世界"), 1, []byte("你好")},
+			expectedArgs: []any{2, []byte("世界"), 1, []byte("你好")},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -248,7 +248,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{2, "世界", 1, "你好"},
+			expectedArgs: []any{2, "世界", 1, "你好"},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -279,7 +279,7 @@ func TestPrepareUpdate(t *testing.T) {
 				},
 			},
 			expectedSQL:  "UPDATE `test`.`t1` SET `a` = ?, `b` = ? WHERE `a` = ? LIMIT 1",
-			expectedArgs: []interface{}{1, "[1,2,3,4,5]", 1},
+			expectedArgs: []any{1, "[1,2,3,4,5]", 1},
 		},
 	}
 	for _, tc := range testCases {
@@ -297,7 +297,7 @@ func TestPrepareDelete(t *testing.T) {
 		quoteTable   string
 		preCols      []*model.Column
 		expectedSQL  string
-		expectedArgs []interface{}
+		expectedArgs []any
 	}{
 		{
 			quoteTable:   "`test`.`t1`",
@@ -322,7 +322,7 @@ func TestPrepareDelete(t *testing.T) {
 				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? LIMIT 1",
-			expectedArgs: []interface{}{1},
+			expectedArgs: []any{1},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -347,7 +347,7 @@ func TestPrepareDelete(t *testing.T) {
 				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{1, "test"},
+			expectedArgs: []any{1, "test"},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -371,7 +371,7 @@ func TestPrepareDelete(t *testing.T) {
 				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{1, []byte("你好")},
+			expectedArgs: []any{1, []byte("你好")},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -397,7 +397,7 @@ func TestPrepareDelete(t *testing.T) {
 				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{1, []byte("你好")},
+			expectedArgs: []any{1, []byte("你好")},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -423,7 +423,7 @@ func TestPrepareDelete(t *testing.T) {
 				},
 			},
 			expectedSQL:  "DELETE FROM `test`.`t1` WHERE `a` = ? AND `b` = ? LIMIT 1",
-			expectedArgs: []interface{}{1, "你好"},
+			expectedArgs: []any{1, "你好"},
 		},
 	}
 	for _, tc := range testCases {
@@ -440,7 +440,7 @@ func TestWhereSlice(t *testing.T) {
 		cols             []*model.Column
 		forceReplicate   bool
 		expectedColNames []string
-		expectedArgs     []interface{}
+		expectedArgs     []any
 	}{
 		{
 			cols:             []*model.Column{},
@@ -465,7 +465,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   false,
 			expectedColNames: []string{"a"},
-			expectedArgs:     []interface{}{1},
+			expectedArgs:     []any{1},
 		},
 		{
 			cols: []*model.Column{
@@ -489,13 +489,13 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   false,
 			expectedColNames: []string{"a", "b"},
-			expectedArgs:     []interface{}{1, "test"},
+			expectedArgs:     []any{1, "test"},
 		},
 		{
 			cols:             []*model.Column{},
 			forceReplicate:   true,
 			expectedColNames: []string{},
-			expectedArgs:     []interface{}{},
+			expectedArgs:     []any{},
 		},
 		{
 			cols: []*model.Column{
@@ -514,7 +514,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a"},
-			expectedArgs:     []interface{}{1},
+			expectedArgs:     []any{1},
 		},
 		{
 			cols: []*model.Column{
@@ -539,7 +539,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b"},
-			expectedArgs:     []interface{}{1, "test"},
+			expectedArgs:     []any{1, "test"},
 		},
 		{
 			cols: []*model.Column{
@@ -558,7 +558,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b"},
-			expectedArgs:     []interface{}{1, "test"},
+			expectedArgs:     []any{1, "test"},
 		},
 		{
 			cols: []*model.Column{
@@ -583,7 +583,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b", "c"},
-			expectedArgs:     []interface{}{1, "test", 100},
+			expectedArgs:     []any{1, "test", 100},
 		},
 		{
 			cols: []*model.Column{
@@ -608,7 +608,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   false,
 			expectedColNames: []string{"a", "b"},
-			expectedArgs:     []interface{}{1, []byte("你好")},
+			expectedArgs:     []any{1, []byte("你好")},
 		},
 		{
 			cols: []*model.Column{
@@ -634,7 +634,7 @@ func TestWhereSlice(t *testing.T) {
 			},
 			forceReplicate:   true,
 			expectedColNames: []string{"a", "b", "c"},
-			expectedArgs:     []interface{}{1, "你好", 100},
+			expectedArgs:     []any{1, "你好", 100},
 		},
 	}
 	for i, tc := range testCases {
@@ -651,7 +651,7 @@ func TestMapReplace(t *testing.T) {
 		quoteTable    string
 		cols          []*model.Column
 		expectedQuery string
-		expectedArgs  []interface{}
+		expectedArgs  []any
 	}{
 		{
 			quoteTable: "`test`.`t1`",
@@ -679,7 +679,7 @@ func TestMapReplace(t *testing.T) {
 				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`,`d`) VALUES ",
-			expectedArgs:  []interface{}{1, "varchar", uint8(255)},
+			expectedArgs:  []any{1, "varchar", uint8(255)},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -706,7 +706,7 @@ func TestMapReplace(t *testing.T) {
 				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`,`c`,`d`) VALUES ",
-			expectedArgs:  []interface{}{1, "varchar", 1, uint8(255)},
+			expectedArgs:  []any{1, "varchar", 1, uint8(255)},
 		},
 		{
 			quoteTable: "`test`.`t1`",
@@ -741,7 +741,7 @@ func TestMapReplace(t *testing.T) {
 				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`,`c`,`d`,`e`) VALUES ",
-			expectedArgs: []interface{}{
+			expectedArgs: []any{
 				1, "你好", "世界", []byte("你好,世界"),
 				[]byte("你好,世界"),
 			},
@@ -761,12 +761,12 @@ func TestMapReplace(t *testing.T) {
 				},
 			},
 			expectedQuery: "REPLACE INTO `test`.`t1` (`a`,`b`) VALUES ",
-			expectedArgs:  []interface{}{"[1,-2,0.3,-4.4,55]", "[1,2,3,4,5]"},
+			expectedArgs:  []any{"[1,-2,0.3,-4.4,55]", "[1,2,3,4,5]"},
 		},
 	}
 	for _, tc := range testCases {
 		// multiple times to verify the stability of column sequence in query string
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			datas, info := model.Columns2ColumnDataForTest(tc.cols)
 			query, args := prepareReplace(tc.quoteTable, datas, info, false, false)
 			require.Equal(t, tc.expectedQuery, query)

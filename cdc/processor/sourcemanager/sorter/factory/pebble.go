@@ -92,12 +92,12 @@ type pebbleLogger struct{ id int }
 
 var _ pebble.Logger = (*pebbleLogger)(nil)
 
-func (logger *pebbleLogger) Infof(format string, args ...interface{}) {
+func (logger *pebbleLogger) Infof(format string, args ...any) {
 	// Do not output low-level pebble log to TiCDC log.
 	log.Debug(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
 }
 
-func (logger *pebbleLogger) Fatalf(format string, args ...interface{}) {
+func (logger *pebbleLogger) Fatalf(format string, args ...any) {
 	log.Panic(fmt.Sprintf(format, args...), zap.Int("db", logger.id))
 }
 

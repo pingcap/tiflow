@@ -441,7 +441,7 @@ func TestHandleRenameTables(t *testing.T) {
 	newTableNames := []pmodel.CIStr{pmodel.NewCIStr("x"), pmodel.NewCIStr("y")}
 	oldTableNames := []pmodel.CIStr{pmodel.NewCIStr("oldx"), pmodel.NewCIStr("oldy")}
 	oldSchemaNames := []pmodel.CIStr{pmodel.NewCIStr("db_1"), pmodel.NewCIStr("db_2")}
-	args := []interface{}{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames}
+	args := []any{oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames}
 	rawArgs, err := json.Marshal(args)
 	require.Nil(t, err)
 	job := &timodel.Job{

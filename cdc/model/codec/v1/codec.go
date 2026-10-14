@@ -80,8 +80,8 @@ type Column struct {
 	Type    byte                 `json:"type" msg:"type"`
 	Charset string               `json:"charset" msg:"charset"`
 	Flag    model.ColumnFlagType `json:"flag" msg:"-"`
-	Value   interface{}          `json:"value" msg:"value"`
-	Default interface{}          `json:"default" msg:"-"`
+	Value   any                  `json:"value" msg:"value"`
+	Default any                  `json:"default" msg:"-"`
 
 	// ApproximateBytes is approximate bytes consumed by the column.
 	ApproximateBytes int `json:"-"`

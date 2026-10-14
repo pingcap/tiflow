@@ -69,12 +69,12 @@ func TestProducerAck(t *testing.T) {
 	require.NotNil(t, producer)
 
 	messageCount := 20
-	for i := 0; i < messageCount; i++ {
+	for range messageCount {
 		asyncProducer.(*kafka.MockSaramaAsyncProducer).AsyncProducer.ExpectInputAndSucceed()
 	}
 
 	count := atomic.NewInt64(0)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err = producer.AsyncSendMessage(ctx, kafka.DefaultMockTopicName, int32(0), &common.Message{
 			Key:   []byte("test-key-1"),
 			Value: []byte("test-value"),
@@ -168,16 +168,14 @@ func TestProducerSendMsgFailed(t *testing.T) {
 		}
 	}(t)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case <-ctx.Done():
 			t.Errorf("TestProducerSendMessageFailed timed out")
 		case err := <-errCh:
 			require.ErrorIs(t, err, sarama.ErrMessageTooLarge)
 		}
-	}()
+	})
 
 	wg.Wait()
 }
@@ -186,8 +184,7 @@ func TestProducerDoubleClose(t *testing.T) {
 	options := getOptions()
 
 	errCh := make(chan error, 1)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	ctx = context.WithValue(ctx, "testing.T", t)
 	changefeed := model.DefaultChangeFeedID("changefeed-test")
