@@ -244,37 +244,36 @@ type BinlogEvent struct {
 	caseSensitive bool
 }
 
-// strictness says whether a build refuses what it cannot apply, rather than
-// logging the problem and leaving the rule out of the filter.
-type strictness int
-
-const (
-	// tolerateAll never fails on rule content.
-	tolerateAll strictness = iota
-	// rejectNonComposable fails on a rule sharing a key with a rule it cannot
-	// compose with. A rule that cannot be applied at all, such as one naming
-	// an event that an older DM accepted, is still only logged: rejecting
-	// those once blocked an upgrade outright, see pingcap/tiflow#10282.
-	rejectNonComposable
-)
-
 // NewBinlogEvent returns a binlog event filter built from rules. Rules sharing
 // a (schema-pattern, table-pattern) key all apply when all of them are Ignore,
 // since each one only narrows what gets skipped. Any rule the filter cannot
 // apply is deliberately left out with a warning, so an existing task or source
 // whose configuration is already invalid can still start.
 func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, error) {
-	return newBinlogEvent(caseSensitive, rules, tolerateAll)
+	b, _, err := newBinlogEvent(caseSensitive, rules)
+	return b, err
 }
 
 // ValidateRules returns an error for the first non-composable same-key group.
 // Only a submission path may call it: a persisted config must stay loadable.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
-	_, err := newBinlogEvent(caseSensitive, rules, rejectNonComposable)
-	return err
+	_, notComposed, err := newBinlogEvent(caseSensitive, rules)
+	if err != nil || len(notComposed) == 0 {
+		return err
+	}
+	rule := notComposed[0]
+	return errors.Errorf(
+		"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
+			"are only supported when all of them are Ignore rules",
+		rule.SchemaPattern, rule.TablePattern)
 }
 
-func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, strict strictness) (*BinlogEvent, error) {
+// newBinlogEvent builds the filter and names the rules it left out because
+// they share a key with a rule they cannot compose with. A rule it cannot
+// apply at all is only logged, since rejecting one, such as an event name an
+// older DM accepted, once blocked an upgrade outright: pingcap/tiflow#10282.
+func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, []*BinlogEventRule, error) {
+	var notComposed []*BinlogEventRule
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
 		caseSensitive: caseSensitive,
@@ -303,23 +302,18 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, strict strictn
 		existing := rulesAtKey[key]
 		// Empty means AddRule collided with a key spelled differently.
 		if len(existing) == 0 || rule.Action != Ignore || !allIgnoreRules(existing) {
-			if strict == rejectNonComposable {
-				return nil, errors.Errorf(
-					"multiple rules at the same key (schema-pattern=%q, table-pattern=%q) "+
-						"are only supported when all of them are Ignore rules",
-					rule.SchemaPattern, rule.TablePattern)
-			}
 			log.Warn("leave out binlog event rule, it cannot compose with the rule already at its key",
 				zap.Any("rule", rule))
+			notComposed = append(notComposed, rule)
 			continue
 		}
 		if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
-			return nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+			return nil, nil, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 		}
 		rulesAtKey[key] = append(rulesAtKey[key], rule)
 	}
 
-	return b, nil
+	return b, notComposed, nil
 }
 
 // MergeLowerPriorityRules merges rules into b, where b's existing rules win
@@ -328,7 +322,7 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule, strict strictn
 // returned slices follow rules' order, and leave out whatever the filter
 // cannot apply.
 func (b *BinlogEvent) MergeLowerPriorityRules(rules []*BinlogEventRule) (added, overwritten []*BinlogEventRule, err error) {
-	lower, err := newBinlogEvent(b.caseSensitive, rules, tolerateAll)
+	lower, _, err := newBinlogEvent(b.caseSensitive, rules)
 	if err != nil {
 		return nil, nil, err
 	}
