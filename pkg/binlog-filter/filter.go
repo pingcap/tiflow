@@ -257,15 +257,15 @@ func NewBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 // ValidateRules returns the first conflict between rules at one key. Only a
 // submission path may call it: a persisted config must stay loadable.
 func ValidateRules(caseSensitive bool, rules []*BinlogEventRule) error {
-	_, res, err := newBinlogEvent(caseSensitive, rules)
-	if err != nil || len(res.conflicts) == 0 {
+	_, placed, err := newBinlogEvent(caseSensitive, rules)
+	if err != nil || len(placed.conflicts) == 0 {
 		return err
 	}
-	return res.conflicts[0]
+	return placed.conflicts[0]
 }
 
-// buildResult says what a build did with the rules it was given.
-type buildResult struct {
+// placement says where a build put the rules it was given.
+type placement struct {
 	// keyOf names the key each rule went in at. A rule missing from it was
 	// left out, either as unusable or by one of conflicts.
 	keyOf map[*BinlogEventRule][2]string
@@ -276,8 +276,8 @@ type buildResult struct {
 // newBinlogEvent builds the filter. A rule it cannot apply at all is only
 // logged, since rejecting one, such as an event name an older DM accepted,
 // once blocked an upgrade outright: pingcap/tiflow#10282.
-func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, buildResult, error) {
-	res := buildResult{keyOf: make(map[*BinlogEventRule][2]string, len(rules))}
+func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent, placement, error) {
+	placed := placement{keyOf: make(map[*BinlogEventRule][2]string, len(rules))}
 	b := &BinlogEvent{
 		Selector:      selector.NewTrieSelector(),
 		caseSensitive: caseSensitive,
@@ -295,7 +295,7 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 
 		if err == nil {
 			rulesAtKey[key] = append(rulesAtKey[key], rule)
-			res.keyOf[rule] = key
+			placed.keyOf[rule] = key
 			continue
 		}
 
@@ -306,17 +306,17 @@ func newBinlogEvent(caseSensitive bool, rules []*BinlogEventRule) (*BinlogEvent,
 
 		if conflict := keyConflict(rule, rulesAtKey[key]); conflict != nil {
 			log.Warn("leave out binlog event rule", zap.Any("rule", rule), zap.Error(conflict))
-			res.conflicts = append(res.conflicts, conflict)
+			placed.conflicts = append(placed.conflicts, conflict)
 			continue
 		}
 		if err = b.Insert(rule.SchemaPattern, rule.TablePattern, rule, selector.Append); err != nil {
-			return nil, buildResult{}, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
+			return nil, placement{}, errors.Annotatef(err, "add rule %+v into binlog event filter", rule)
 		}
 		rulesAtKey[key] = append(rulesAtKey[key], rule)
-		res.keyOf[rule] = key
+		placed.keyOf[rule] = key
 	}
 
-	return b, res, nil
+	return b, placed, nil
 }
 
 // keyConflict says why rule cannot join existing, the rules already at its
