@@ -87,7 +87,7 @@ type ClientConn interface {
 	// For the fisrt return param if no error happens:
 	// For StoreTypeEtcd, it returns *clientv3.Client
 	// For StoreTypeMySQL/StoreTypeSQLite, it returns *sql.DB
-	GetConn() (interface{}, error)
+	GetConn() (any, error)
 
 	// Close closes the underlying connection and releases some resources
 	Close() error

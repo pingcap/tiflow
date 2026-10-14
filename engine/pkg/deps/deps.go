@@ -36,7 +36,7 @@ func NewDeps() *Deps {
 }
 
 // Provide accepts a constructor and build a value into container
-func (d *Deps) Provide(constructor interface{}) error {
+func (d *Deps) Provide(constructor any) error {
 	return d.container.Provide(constructor)
 }
 
@@ -44,7 +44,7 @@ func (d *Deps) Provide(constructor interface{}) error {
 // `func(arg1 Type1, arg2 Type2,...) (ret, error)`.
 // The arguments to the function is automatically filled with
 // the dependency injection functionality.
-func (d *Deps) Construct(fn interface{}) (interface{}, error) {
+func (d *Deps) Construct(fn any) (any, error) {
 	fnTp := reflect.TypeOf(fn)
 	if fnTp.NumOut() != 2 {
 		log.Panic("Unexpected input type", zap.Any("type", reflect.TypeOf(fn)))
@@ -73,10 +73,10 @@ func (d *Deps) Construct(fn interface{}) (interface{}, error) {
 }
 
 // Fill injects dependencies from Deps to params
-func (d *Deps) Fill(params interface{}) error {
+func (d *Deps) Fill(params any) error {
 	invokeFnTp := reflect.FuncOf(
 		[]reflect.Type{reflect.TypeOf(params).Elem()},
-		[]reflect.Type{reflect.TypeOf(new(error))},
+		[]reflect.Type{reflect.TypeFor[*error]()},
 		false)
 	invokeFn := reflect.MakeFunc(invokeFnTp, func(args []reflect.Value) (results []reflect.Value) {
 		defer func() {

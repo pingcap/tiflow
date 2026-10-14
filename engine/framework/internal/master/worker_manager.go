@@ -121,13 +121,11 @@ func NewWorkerManager(
 		timeouts: timeoutConfig,
 	}
 
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		if err := ret.runBackgroundChecker(); err != nil {
 			ret.errCenter.OnError(err)
 		}
-	}()
+	})
 
 	return ret
 }
@@ -489,7 +487,6 @@ func (m *WorkerManager) checkWorkerEntriesOnce() error {
 	}
 
 	for workerID, entry := range m.workerEntries {
-		entry := entry
 		state := entry.State()
 		if state == workerEntryOffline || state == workerEntryTombstone {
 			// Prevent repeated delivery of the workerOffline event.

@@ -371,13 +371,13 @@ func TestIntegrationBrokerGCClosedWorker(t *testing.T) {
 	expectedGCWorkerCnt := int32(0)
 	wg := sync.WaitGroup{}
 
-	for worker := 0; worker < workerCount; worker++ {
+	for worker := range workerCount {
 		gc := rand.Intn(2) == 0
 		workerID := fmt.Sprintf("worker-%d", worker)
 
 		resCount := rand.Intn(maxResNumPerWorker) + 1
 		persistedResCount := 0
-		for res := 0; res < resCount; res++ {
+		for res := range resCount {
 			resID := fmt.Sprintf("/s3/test-%d", res)
 			isPersisted := rand.Intn(2) == 0
 			if isPersisted {

@@ -124,7 +124,7 @@ func (m *testJobMasterImpl) OnWorkerOffline(worker WorkerHandle, reason error) e
 	return args.Error(0)
 }
 
-func (m *testJobMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (m *testJobMasterImpl) OnWorkerMessage(worker WorkerHandle, topic p2p.Topic, message any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

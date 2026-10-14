@@ -98,7 +98,7 @@ func (e *exampleMaster) OnWorkerOffline(worker framework.WorkerHandle, reason er
 	return nil
 }
 
-func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (e *exampleMaster) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message any) error {
 	log.Info("OnWorkerMessage")
 	return nil
 }

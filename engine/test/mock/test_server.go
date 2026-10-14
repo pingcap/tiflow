@@ -97,11 +97,11 @@ func (s *testStream) SetTrailer(metadata.MD) {}
 
 func (s *testStream) Context() context.Context { return nil }
 
-func (s *testStream) SendMsg(interface{}) error {
+func (s *testStream) SendMsg(any) error {
 	return errors.New("unimplemented")
 }
 
-func (s *testStream) RecvMsg(interface{}) error {
+func (s *testStream) RecvMsg(any) error {
 	return errors.New("unimplemented")
 }
 
@@ -115,7 +115,7 @@ func (s *testStream) CloseSend() error {
 	return errors.New("unimplemented")
 }
 
-func (s *testServerConn) sendRequest(ctx context.Context, req interface{}) (interface{}, error) {
+func (s *testServerConn) sendRequest(ctx context.Context, req any) (any, error) {
 	switch x := req.(type) {
 	case *pb.TestBinlogRequest:
 		stream := &testStream{
