@@ -664,17 +664,21 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
 
 	if req.Op == pb.TaskOp_Delete {
-		// delete meta data for optimist
-		if len(req.Sources) == 0 {
-			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
-		} else {
-			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
-		}
-		if err2 != nil {
-			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
-		}
+		s.removeOptimisticMetaData(req.Name, req.Sources)
 	}
 	return resp, nil
+}
+
+func (s *Server) removeOptimisticMetaData(taskName string, sources []string) {
+	var err error
+	if len(sources) == 0 {
+		err = s.optimist.RemoveMetaDataWithTask(taskName)
+	} else {
+		err = s.optimist.RemoveMetaDataWithTaskAndSources(taskName, sources...)
+	}
+	if err != nil {
+		log.L().Error("failed to delete metadata for task", zap.String("task name", taskName), log.ShortError(err))
+	}
 }
 
 // GetSubTaskCfg implements MasterServer.GetSubTaskCfg.

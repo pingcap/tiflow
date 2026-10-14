@@ -549,6 +549,19 @@ paths:
           schema:
             type: boolean
             example: true
+        - name: "keep_meta"
+          in: query
+          required: false
+          description: |-
+            Whether to keep downstream checkpoints and resumable internal metadata when deleting the task.
+            Optimistic shard DDL metadata is always removed.
+            With force=true, only already-persisted checkpoint state is retained; deletion does not flush the latest checkpoint.
+            Stop the task and wait for the stop operation to complete before deleting it when the latest checkpoint must be retained.
+            Only use keep_meta=true after all DM masters are upgraded, because older versions ignore unknown query parameters.
+          schema:
+            type: boolean
+            default: false
+            example: true
       responses:
         "204":
           description: "success"
