@@ -480,7 +480,7 @@ func TestGenRowsEvent(t *testing.T) {
 		tableID    uint64 = 108
 		eventType         = replication.TABLE_MAP_EVENT
 		rowsFlag          = RowFlagsEndOfStatement
-		rows       [][]interface{}
+		rows       [][]any
 		columnType []byte // nil
 	)
 
@@ -496,7 +496,7 @@ func TestGenRowsEvent(t *testing.T) {
 	require.Nil(t, rowsEv)
 
 	// valid eventType and rows, invalid columnType
-	row := []interface{}{int32(1)}
+	row := []any{int32(1)}
 	rows = append(rows, row)
 	rowsEv, err = GenRowsEvent(header, latestPos, eventType, tableID, rowsFlag, rows, columnType, nil)
 	require.NotNil(t, err)
@@ -522,15 +522,15 @@ func TestGenRowsEvent(t *testing.T) {
 	require.Equal(t, rows, rowsEvBody.Rows)
 
 	// multi rows, with different length, invalid
-	rows = append(rows, []interface{}{int32(1), int32(2)})
+	rows = append(rows, []any{int32(1), int32(2)})
 	rowsEv, err = GenRowsEvent(header, latestPos, eventType, tableID, rowsFlag, rows, columnType, nil)
 	require.NotNil(t, err)
 	require.Nil(t, rowsEv)
 
 	// multi rows, multi columns, valid
-	rows = make([][]interface{}, 0, 2)
-	rows = append(rows, []interface{}{int32(1), int32(2)})
-	rows = append(rows, []interface{}{int32(3), int32(4)})
+	rows = make([][]any, 0, 2)
+	rows = append(rows, []any{int32(1), int32(2)})
+	rows = append(rows, []any{int32(3), int32(4)})
 	columnType = []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_LONG}
 	rowsEv, err = GenRowsEvent(header, latestPos, eventType, tableID, rowsFlag, rows, columnType, nil)
 	require.Nil(t, err)
@@ -556,8 +556,8 @@ func TestGenRowsEvent(t *testing.T) {
 	}
 
 	// more column types
-	rows = make([][]interface{}, 0, 1)
-	rows = append(rows, []interface{}{
+	rows = make([][]any, 0, 1)
+	rows = append(rows, []any{
 		int32(1), int8(2), int16(3), int32(4), int64(5),
 		float32(1.23), float64(4.56), "string with type STRING",
 	})
@@ -582,8 +582,8 @@ func TestGenRowsEvent(t *testing.T) {
 	require.Nil(t, rowsEv)
 
 	// NotSupported column type
-	rows = make([][]interface{}, 0, 1)
-	rows = append(rows, []interface{}{int32(1)})
+	rows = make([][]any, 0, 1)
+	rows = append(rows, []any{int32(1)})
 	unsupportedTypes := []byte{
 		gmysql.MYSQL_TYPE_VARCHAR, gmysql.MYSQL_TYPE_VAR_STRING,
 		gmysql.MYSQL_TYPE_NEWDECIMAL, gmysql.MYSQL_TYPE_BIT,

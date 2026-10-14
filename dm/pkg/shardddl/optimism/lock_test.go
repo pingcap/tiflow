@@ -488,7 +488,7 @@ func (t *testLock) TestLockTrySyncNullNotNull(c *check.C) {
 	t.checkLockSynced(c, l)
 	t.checkLockNoDone(c, l)
 
-	for i := 0; i < 2; i++ { // two round
+	for range 2 { // two round
 		// try sync for one table, from `NULL` to `NOT NULL`, no DDLs returned.
 		info := newInfoWithVersion(task, source, db, tbls[0], downSchema, downTable, DDLs1, ti0, []*model.TableInfo{ti1}, vers)
 		DDLs, cols, err := l.TrySync(info, tts)
