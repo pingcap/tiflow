@@ -89,13 +89,18 @@ func TestTaskConfigToSubTaskConfigsRejectsMixedActionAtOneKey(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestOpenAPITaskToSubTaskConfigsRejectsUnusableRule(t *testing.T) {
+func TestOpenAPITaskToSubTaskConfigsRejectsAliasedRangePattern(t *testing.T) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	require.NoError(t, err)
-	filterRule, ok := task.BinlogFilterRule.Get("filterA")
-	require.True(t, ok)
-	filterRule.IgnoreEvent = &[]string{"no such event"}
-	task.BinlogFilterRule.Set("filterA", filterRule)
+	// "[ab]" and "[ba]" are one key that reads back under one spelling, so the
+	// rules there cannot be listed and composed, even though both are Ignore.
+	filtered := task.TableMigrateRule[0]
+	require.NotNil(t, filtered.BinlogFilterRule)
+	filtered.Source.Schema = "[ab]"
+	aliased := filtered
+	aliased.Source.Schema = "[ba]"
+	task.TableMigrateRule[0] = filtered
+	task.TableMigrateRule = append(task.TableMigrateRule, aliased)
 
 	sourceCfgMap := make(map[string]*SourceConfig, len(task.SourceConfig.SourceConf))
 	for _, sourceConf := range task.SourceConfig.SourceConf {
@@ -111,7 +116,7 @@ func TestOpenAPITaskToSubTaskConfigsRejectsUnusableRule(t *testing.T) {
 	}
 
 	_, err = OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
-	require.ErrorContains(t, err, "no such event")
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
 }
 
 func TestValidateMetricLabels(t *testing.T) {

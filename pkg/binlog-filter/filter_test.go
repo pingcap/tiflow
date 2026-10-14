@@ -183,6 +183,13 @@ func TestValidateRulesRejectsMixedActionAtOneKey(t *testing.T) {
 	require.NoError(t, ValidateRules(false, []*BinlogEventRule{ignoreRule, ignoreAddColumn("*", "", "d_col")}))
 }
 
+func TestValidateRulesToleratesUnusableRule(t *testing.T) {
+	usable := ignoreAddColumn("*", "", "a_col")
+	unusable := &BinlogEventRule{SchemaPattern: "db9", Events: []EventType{"truncate"}, Action: Ignore}
+
+	require.NoError(t, ValidateRules(false, []*BinlogEventRule{usable, unusable}))
+}
+
 func TestValidateRulesRejectsAliasedRangePattern(t *testing.T) {
 	// "[ab]" and "[ba]" name one trie key but read back as only the first
 	// spelling, so the rules at that key cannot be listed. Composing blind
@@ -323,13 +330,16 @@ func TestMergeLowerPriorityRules(t *testing.T) {
 		require.Equal(t, Do, addColumnAction(t, filter, "b_col"))
 	})
 
-	t.Run("a rule it cannot use fails the merge", func(t *testing.T) {
+	t.Run("a rule it cannot use is left out", func(t *testing.T) {
 		filter, err := NewBinlogEvent(false, nil)
 		require.NoError(t, err)
 
+		usable := ignoreAddColumn("db9", "", "a_col")
 		unusable := &BinlogEventRule{SchemaPattern: "*", Events: []EventType{"wrong event"}, Action: Ignore}
-		_, _, err = filter.MergeLowerPriorityRules([]*BinlogEventRule{unusable})
-		require.Error(t, err)
+		added, overwritten, err := filter.MergeLowerPriorityRules([]*BinlogEventRule{usable, unusable})
+		require.NoError(t, err)
+		require.Equal(t, []*BinlogEventRule{usable}, added)
+		require.Empty(t, overwritten)
 	})
 }
 

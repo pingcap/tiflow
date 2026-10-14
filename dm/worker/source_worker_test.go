@@ -1022,14 +1022,14 @@ func TestCopyConfigFromSourceKeepsFirstRuleAtNonComposableKey(t *testing.T) {
 	require.Equal(t, bf.Do, addColumnActionFor(t, subTaskCfg, "db", "t", "b_col"))
 }
 
-func TestCopyConfigFromSourceRejectsUnusableSourceRule(t *testing.T) {
+func TestCopyConfigFromSourceLeavesOutUnusableSourceRule(t *testing.T) {
+	usable := ignoreAddColumnRule("db9", "", "a_col")
 	unusable := &bf.BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: "Nonsense"}
-	sourceCfg := &config.SourceConfig{
-		Filters: []*bf.BinlogEventRule{ignoreAddColumnRule("db9", "", "a_col"), unusable},
-	}
+	sourceCfg := &config.SourceConfig{Filters: []*bf.BinlogEventRule{usable, unusable}}
 	subTaskCfg := &config.SubTaskConfig{}
 
-	require.Error(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+	require.NoError(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+	require.Equal(t, []*bf.BinlogEventRule{usable}, subTaskCfg.FilterRules)
 }
 
 func TestCopyConfigFromSourceEmptyFilters(t *testing.T) {
