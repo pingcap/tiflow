@@ -170,6 +170,12 @@ func TestCallStatus(t *testing.T) {
 	require.Equal(t, s.Bps, int64(0))
 }
 
+func TestNormalizeDumpProgress(t *testing.T) {
+	require.Equal(t, "100.00 %", normalizeDumpProgress("100 %"))
+	require.Equal(t, "50.00 %", normalizeDumpProgress("50.00 %"))
+	require.Empty(t, normalizeDumpProgress(""))
+}
+
 func (t *testDumplingSuite) TestParseArgsWontOverwrite(c *check.C) {
 	cfg := &config.SubTaskConfig{
 		Timezone: "UTC",
