@@ -1009,7 +1009,7 @@ func (s *Server) GetWorkerCfg(ctx context.Context, req *pb.GetWorkerCfgRequest) 
 
 // CheckSubtasksCanUpdate check if input subtask cfg can be updated.
 func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtasksCanUpdateRequest) (*pb.CheckSubtasksCanUpdateResponse, error) {
-	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Object("payload", req))
 	resp := &pb.CheckSubtasksCanUpdateResponse{}
 	defer func() {
 		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))

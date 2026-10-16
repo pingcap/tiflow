@@ -228,6 +228,9 @@ func WithCtx(ctx context.Context) Logger {
 	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
 }
 
+// RedactedCredential is the placeholder for credentials in configuration output.
+const RedactedCredential = "******"
+
 var enabledRedactLog atomic.Bool
 
 func init() {
