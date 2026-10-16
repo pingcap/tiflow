@@ -808,6 +808,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		Result:       true,
 		SourceStatus: &sourceStatus,
 	}
+	if log.IsRedactLogEnabled() {
+		defer func() { *resp = *pb.RedactQueryStatus(resp) }()
+	}
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -831,7 +834,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 	}
 
 	if err != nil {
-		resp.Msg = fmt.Sprintf("error when get master status: %v", err)
+		resp.Msg = fmt.Sprintf("error when get master status: %s", log.RedactError(err))
 	} else if len(resp.SubTaskStatus) == 0 {
 		resp.Msg = "no sub task started"
 	}
@@ -922,7 +925,7 @@ func makeCommonWorkerResponse(reqErr error) *pb.CommonWorkerResponse {
 	}
 	if reqErr != nil {
 		resp.Result = false
-		resp.Msg = reqErr.Error()
+		resp.Msg = log.RedactError(reqErr)
 	}
 	return resp
 }

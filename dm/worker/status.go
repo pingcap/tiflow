@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/dm/common"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
@@ -35,6 +36,14 @@ func (st *SubTask) Status() interface{} {
 // StatusJSON returns the status of the current sub task as json string.
 func (st *SubTask) StatusJSON() string {
 	status := st.Status()
+	if log.IsRedactLogEnabled() {
+		switch value := status.(type) {
+		case *pb.SyncStatus:
+			status = pb.RedactSubTaskStatus(&pb.SubTaskStatus{Status: &pb.SubTaskStatus_Sync{Sync: value}}).GetSync()
+		case *pb.CheckStatus:
+			status = pb.RedactSubTaskStatus(&pb.SubTaskStatus{Status: &pb.SubTaskStatus_Check{Check: value}}).GetCheck()
+		}
+	}
 	sj, err := json.Marshal(status)
 	if err != nil {
 		st.l.Error("fail to marshal status", zap.Reflect("status", status), zap.Error(err))
@@ -117,6 +126,11 @@ func (w *SourceWorker) Status(stName string, sourceStatus *binlog.SourceStatus) 
 // This function will also cause every unit to print its status to log.
 func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *binlog.SourceStatus) string {
 	sl := &pb.SubTaskStatusList{Status: w.Status(stName, sourceStatus)}
+	if log.IsRedactLogEnabled() {
+		for i, status := range sl.Status {
+			sl.Status[i] = pb.RedactSubTaskStatus(status)
+		}
+	}
 	mar := jsonpb.Marshaler{EmitDefaults: true, Indent: "    "}
 	s, err := mar.MarshalToString(sl)
 	if err != nil {
