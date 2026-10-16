@@ -15,6 +15,7 @@ package memory
 
 import (
 	"context"
+	"sync"
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
@@ -33,6 +34,9 @@ type memoryLogWriter struct {
 
 	eg     *errgroup.Group
 	cancel context.CancelFunc
+
+	errMu    sync.RWMutex
+	firstErr error
 }
 
 // NewLogWriter creates a new memoryLogWriter.
@@ -64,13 +68,39 @@ func NewLogWriter(
 
 	lw.encodeWorkers = newEncodingWorkerGroup(cfg)
 	eg.Go(func() error {
-		return lw.encodeWorkers.Run(lwCtx)
+		err := lw.encodeWorkers.Run(lwCtx)
+		lw.recordError(err)
+		return err
 	})
 	lw.fileWorkers = newFileWorkerGroup(cfg, cfg.FlushWorkerNum, extStorage, opts...)
 	eg.Go(func() error {
-		return lw.fileWorkers.Run(lwCtx, lw.encodeWorkers.outputCh)
+		err := lw.fileWorkers.Run(lwCtx, lw.encodeWorkers.outputCh)
+		lw.recordError(err)
+		return err
 	})
 	return lw, nil
+}
+
+func (l *memoryLogWriter) recordError(err error) {
+	// Keep the worker's root cause before errgroup cancellation makes sibling
+	// workers return context.Canceled.
+	if err == nil || errors.Cause(err) == context.Canceled {
+		return
+	}
+	l.errMu.Lock()
+	defer l.errMu.Unlock()
+	if l.firstErr == nil {
+		l.firstErr = err
+	}
+}
+
+func (l *memoryLogWriter) preferFirstError(err error) error {
+	l.errMu.RLock()
+	defer l.errMu.RUnlock()
+	if l.firstErr != nil {
+		return l.firstErr
+	}
+	return err
 }
 
 // WriteEvents implements RedoLogWriter.WriteEvents
@@ -84,15 +114,15 @@ func (l *memoryLogWriter) WriteEvents(ctx context.Context, events ...writer.Redo
 			continue
 		}
 		if err := l.encodeWorkers.AddEvent(ctx, event); err != nil {
-			return err
+			return l.preferFirstError(err)
 		}
 	}
-	return nil
+	return l.preferFirstError(nil)
 }
 
 // FlushLog implement FlushLog api
 func (l *memoryLogWriter) FlushLog(ctx context.Context) error {
-	return l.encodeWorkers.FlushAll(ctx)
+	return l.preferFirstError(l.encodeWorkers.FlushAll(ctx))
 }
 
 // Close implements RedoLogWriter.Close
@@ -102,5 +132,5 @@ func (l *memoryLogWriter) Close() error {
 	} else {
 		log.Panic("redo writer close without init")
 	}
-	return l.eg.Wait()
+	return l.preferFirstError(l.eg.Wait())
 }

@@ -16,17 +16,69 @@ package memory
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
+	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
+
+func TestUploadErrorIsReturned(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	extStorage := mockstorage.NewMockExternalStorage(ctrl)
+	uploadErr := errors.New("upload failed")
+	extStorage.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(uploadErr)
+
+	originalInitExternalStorage := redo.InitExternalStorage
+	redo.InitExternalStorage = func(context.Context, url.URL) (storage.ExternalStorage, error) {
+		return extStorage, nil
+	}
+	t.Cleanup(func() {
+		redo.InitExternalStorage = originalInitExternalStorage
+	})
+
+	uri, err := url.Parse("s3://bucket/prefix")
+	require.NoError(t, err)
+	lw, err := NewLogWriter(context.Background(), &writer.LogWriterConfig{
+		ConsistentConfig: config.ConsistentConfig{
+			EncodingWorkerNum: 1,
+			FlushWorkerNum:    1,
+			FlushConcurrency:  1,
+		},
+		LogType:            redo.RedoRowLogFileType,
+		CaptureID:          "test-capture",
+		ChangeFeedID:       model.DefaultChangeFeedID("test-changefeed"),
+		URI:                uri,
+		UseExternalStorage: true,
+		MaxLogSizeInBytes:  redo.Megabyte,
+	}, writer.WithLogFileName(func() string { return "redo.log" }))
+	require.NoError(t, err)
+
+	err = lw.WriteEvents(context.Background(), &model.RowChangedEvent{
+		Table:    &model.TableName{TableID: 1},
+		CommitTs: 1,
+	})
+	require.NoError(t, err)
+	err = lw.FlushLog(context.Background())
+	require.True(t, errors.Is(err, uploadErr), "%+v", err)
+	err = lw.WriteEvents(context.Background(), &model.RowChangedEvent{
+		Table:    &model.TableName{TableID: 1},
+		CommitTs: 2,
+	})
+	require.True(t, errors.Is(err, uploadErr), "%+v", err)
+	require.True(t, errors.Is(lw.Close(), uploadErr))
+}
 
 func TestWriteDML(t *testing.T) {
 	t.Parallel()

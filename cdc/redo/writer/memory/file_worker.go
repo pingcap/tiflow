@@ -244,11 +244,13 @@ func (f *fileWorkerGroup) bgWriteLogs(
 				eventPool.Put(event)
 			} else if event.flushCallback != nil {
 				err = f.flushAll(egCtx)
-				event.flushCallback()
 			}
 
 			if err != nil {
 				return errors.Trace(err)
+			}
+			if event.flushCallback != nil {
+				event.flushCallback()
 			}
 		}
 	}

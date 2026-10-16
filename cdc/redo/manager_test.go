@@ -23,12 +23,55 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/redo/writer"
+	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+type closeErrorLogWriter struct {
+	closeErr error
+}
+
+func (w *closeErrorLogWriter) WriteEvents(context.Context, ...writer.RedoEvent) error {
+	return nil
+}
+
+func (w *closeErrorLogWriter) FlushLog(context.Context) error {
+	return nil
+}
+
+func (w *closeErrorLogWriter) Close() error {
+	return w.closeErr
+}
+
+func TestMergeRunAndCloseError(t *testing.T) {
+	runErr := errors.New("run failed")
+	closeErr := errors.New("close failed")
+
+	require.Same(t, runErr, mergeRunAndCloseError(runErr, closeErr))
+	require.Same(t, closeErr, mergeRunAndCloseError(nil, closeErr))
+	require.Same(t, closeErr, mergeRunAndCloseError(context.Canceled, closeErr))
+	require.Nil(t, mergeRunAndCloseError(nil, context.Canceled))
+	require.ErrorIs(t, mergeRunAndCloseError(context.Canceled, context.Canceled), context.Canceled)
+}
+
+func TestLogManagerCloseReturnsWriterError(t *testing.T) {
+	closeErr := errors.New("close failed")
+	m := &logManager{
+		cfg: &writer.LogWriterConfig{
+			ChangeFeedID: model.DefaultChangeFeedID("test-changefeed"),
+		},
+		writer:    &closeErrorLogWriter{closeErr: closeErr},
+		logBuffer: chann.NewDrainableChann[cacheEvents](),
+	}
+
+	require.Same(t, closeErr, m.close())
+}
 
 func BenchmarkBlackhole(b *testing.B) {
 	runBenchTest(b, "blackhole://", false)

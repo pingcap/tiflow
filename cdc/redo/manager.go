@@ -237,7 +237,7 @@ func newLogManager(
 }
 
 // Run implements pkg/util.Runnable.
-func (m *logManager) Run(ctx context.Context) error {
+func (m *logManager) Run(ctx context.Context) (retErr error) {
 	failpoint.Inject("ChangefeedNewRedoManagerError", func() {
 		failpoint.Return(errors.New("changefeed new redo manager injected error"))
 	})
@@ -245,7 +245,9 @@ func (m *logManager) Run(ctx context.Context) error {
 		return nil
 	}
 
-	defer m.close()
+	defer func() {
+		retErr = mergeRunAndCloseError(retErr, m.close())
+	}()
 	start := time.Now()
 	w, err := factory.NewRedoLogWriter(ctx, m.cfg)
 	if err != nil {
@@ -258,6 +260,18 @@ func (m *logManager) Run(ctx context.Context) error {
 	}
 	m.writer = w
 	return m.bgUpdateLog(ctx, m.getFlushDuration())
+}
+
+func mergeRunAndCloseError(runErr, closeErr error) error {
+	// Closing the writer can expose the worker's root cause after the run path
+	// has observed only a derived cancellation.
+	if runErr != nil && errors.Cause(runErr) != context.Canceled {
+		return runErr
+	}
+	if closeErr != nil && errors.Cause(closeErr) != context.Canceled {
+		return closeErr
+	}
+	return runErr
 }
 
 func (m *logManager) getFlushDuration() time.Duration {
@@ -549,21 +563,24 @@ func (m *logManager) withLock(action func(m *logManager) error) error {
 	return action(m)
 }
 
-func (m *logManager) close() {
+func (m *logManager) close() error {
 	m.rwlock.Lock()
 	defer m.rwlock.Unlock()
 	atomic.StoreInt32(&m.closed, 1)
 
 	m.logBuffer.CloseAndDrain()
+	var closeErr error
 	if m.writer != nil {
-		if err := m.writer.Close(); err != nil && errors.Cause(err) != context.Canceled {
+		closeErr = m.writer.Close()
+		if closeErr != nil && errors.Cause(closeErr) != context.Canceled {
 			log.Error("redo manager fails to close writer",
 				zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 				zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-				zap.Error(err))
+				zap.Error(closeErr))
 		}
 	}
 	log.Info("redo manager closed",
 		zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 		zap.String("changefeed", m.cfg.ChangeFeedID.ID))
+	return closeErr
 }

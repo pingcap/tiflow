@@ -798,7 +798,9 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		defer p.wg.Done()
 		// there are some other objects need errCh, such as sink and sink manager
 		// but we can't ensure that all the producer of errCh are non-blocking
-		// It's very tricky that create a goroutine to receive the local errCh
+		// Use a dedicated goroutine to receive the local errCh.
+		// Forward all component errors through sendError so lifecycle errors
+		// cannot occupy p.errCh and hide a fatal error.
 		// TODO(leoppro): we should using `pkg/cdcContext.Context` instead of standard cdcContext and handle error by `pkg/cdcContext.Context.Throw`
 		for {
 			select {
@@ -878,7 +880,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 			return errors.Trace(err)
 		}
 		p.sourceManager = sourcemanager.New(p.changefeedID, p.upstream, p.mg,
-			sortEngine, p.errCh, pullerSplitUpdateMode, p.changefeed.Info.Config.BDRMode)
+			sortEngine, errCh, pullerSplitUpdateMode, p.changefeed.Info.Config.BDRMode)
 		isMysqlBackend, err := isMysqlCompatibleBackend(p.changefeed.Info.SinkURI)
 		if err != nil {
 			return errors.Trace(err)
@@ -886,7 +888,7 @@ func (p *processor) lazyInitImpl(ctx cdcContext.Context) error {
 		p.sinkManager, err = sinkmanager.New(stdCtx, p.changefeedID,
 			p.changefeed.Info, p.upstream, p.schemaStorage,
 			p.redoDMLMgr, p.sourceManager,
-			p.errCh, p.warnCh, isMysqlBackend, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
+			errCh, p.warnCh, isMysqlBackend, p.metricsTableSinkTotalRows, p.metricsTableSinkFlushLagDuration)
 		if err != nil {
 			log.Info("Processor creates sink manager fail",
 				zap.String("namespace", p.changefeedID.Namespace),
@@ -1075,15 +1077,13 @@ func (p *processor) createAndDriveSchemaStorage(ctx cdcContext.Context) (entry.S
 }
 
 func (p *processor) sendError(err error) {
-	if err == nil {
+	if isProcessorIgnorableError(err) {
 		return
 	}
 	select {
 	case p.errCh <- err:
 	default:
-		if !isProcessorIgnorableError(err) {
-			log.Error("processor receives redundant error", zap.Error(err))
-		}
+		log.Error("processor receives redundant error", zap.Error(err))
 	}
 }
 
