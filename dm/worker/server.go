@@ -856,7 +856,7 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 
 // OperateSchema operates schema for an upstream table.
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "OperateSchema"), zap.Object("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -978,7 +978,7 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 
 // HandleError handle error.
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "HandleError"), zap.Object("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {

@@ -297,7 +297,7 @@ func (o *Optimist) UnlockLock(ctx context.Context, id, source, upstreamSchema, u
 		lock.UpdateTableAfterUnlock(infos[0])
 	}
 	o.logger.Info("put shard DDL lock operation", zap.String("lock", id),
-		zap.Stringer("operation", ops[0]), zap.Bool("already exist", !succ), zap.Int64("revision", rev))
+		log.RedactField(zap.Stringer("operation", ops[0])), zap.Bool("already exist", !succ), zap.Int64("revision", rev))
 	return nil
 }
 
@@ -502,7 +502,7 @@ func (o *Optimist) recoverLocks(
 				for _, op := range opSchema {
 					lock := o.lk.FindLock(op.ID)
 					if lock == nil {
-						o.logger.Warn("lock for the operation not found", zap.Stringer("operation", op))
+						o.logger.Warn("lock for the operation not found", log.RedactField(zap.Stringer("operation", op)))
 						continue
 					}
 					if op.Done {
@@ -637,7 +637,7 @@ func (o *Optimist) handleInfoPut(ctx context.Context, infoCh <-chan optimism.Inf
 			if !ok {
 				return
 			}
-			o.logger.Info("receive a shard DDL info", zap.Stringer("info", info), zap.Bool("is deleted", info.IsDeleted))
+			o.logger.Info("receive a shard DDL info", log.RedactField(zap.Stringer("info", info)), zap.Bool("is deleted", info.IsDeleted))
 
 			if info.IsDeleted {
 				// this often happen after the lock resolved.
@@ -673,7 +673,7 @@ func (o *Optimist) handleInfo(info optimism.Info, skipDone bool) error {
 	}
 	err := o.handleLock(info, tts, skipDone)
 	if err != nil {
-		o.logger.Error("fail to handle the shard DDL lock", zap.String("info", info.ShortString()), log.ShortError(err))
+		o.logger.Error("fail to handle the shard DDL lock", log.RedactField(zap.String("info", info.ShortString())), log.ShortError(err))
 		metrics.ReportDDLError(info.Task, metrics.InfoErrHandleLock)
 	}
 	return err
@@ -689,9 +689,9 @@ func (o *Optimist) handleOperationPut(ctx context.Context, opCh <-chan optimism.
 			if !ok {
 				return
 			}
-			o.logger.Info("receive a shard DDL lock operation", zap.Stringer("operation", op))
+			o.logger.Info("receive a shard DDL lock operation", log.RedactField(zap.Stringer("operation", op)))
 			if !op.Done {
-				o.logger.Info("the shard DDL lock operation has not done", zap.Stringer("operation", op))
+				o.logger.Info("the shard DDL lock operation has not done", log.RedactField(zap.Stringer("operation", op)))
 				continue
 			}
 
@@ -707,7 +707,7 @@ func (o *Optimist) handleOperationPut(ctx context.Context, opCh <-chan optimism.
 func (o *Optimist) handleOperation(op optimism.Operation) {
 	lock := o.lk.FindLock(op.ID)
 	if lock == nil {
-		o.logger.Warn("no lock for the shard DDL lock operation exist", zap.Stringer("operation", op))
+		o.logger.Warn("no lock for the shard DDL lock operation exist", log.RedactField(zap.Stringer("operation", op)))
 		return
 	}
 
@@ -719,9 +719,9 @@ func (o *Optimist) handleOperation(op optimism.Operation) {
 	// NOTE: even all tables have done their previous DDLs operations, the lock may still not resolved,
 	// because these tables may have different schemas.
 	done := lock.TryMarkDone(op.Source, op.UpSchema, op.UpTable)
-	o.logger.Info("mark operation for a table as done", zap.Bool("done", done), zap.Stringer("operation", op))
+	o.logger.Info("mark operation for a table as done", zap.Bool("done", done), log.RedactField(zap.Stringer("operation", op)))
 	if !lock.IsResolved() {
-		o.logger.Info("the lock is still not resolved", zap.Stringer("operation", op))
+		o.logger.Info("the lock is still not resolved", log.RedactField(zap.Stringer("operation", op)))
 		return
 	}
 	o.removeLockOptional(op, lock)
@@ -729,14 +729,14 @@ func (o *Optimist) handleOperation(op optimism.Operation) {
 
 func (o *Optimist) removeLockOptional(op optimism.Operation, lock *optimism.Lock) {
 	// the lock has done, remove the lock.
-	o.logger.Info("the lock for the shard DDL lock operation has been resolved", zap.Stringer("operation", op))
+	o.logger.Info("the lock for the shard DDL lock operation has been resolved", log.RedactField(zap.Stringer("operation", op)))
 	deleted, err := o.removeLock(lock)
 	if err != nil {
 		o.logger.Error("fail to delete the shard DDL infos and lock operations", zap.String("lock", lock.ID), log.ShortError(err))
 		metrics.ReportDDLError(op.Task, metrics.OpErrRemoveLock)
 	}
 	if deleted {
-		o.logger.Info("the shard DDL infos and lock operations have been cleared", zap.Stringer("operation", op))
+		o.logger.Info("the shard DDL infos and lock operations have been cleared", log.RedactField(zap.Stringer("operation", op)))
 	}
 }
 
@@ -751,7 +751,7 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 	switch {
 	case info.IgnoreConflict:
 		o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
-			zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
+			zap.String("lock", lockID), log.RedactField(zap.String("info", info.ShortString())), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 	case err != nil:
 		switch {
 		case terror.ErrShardDDLOptimismNeedSkipAndRedirect.Equal(err):
@@ -762,16 +762,16 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 			cfStage = optimism.ConflictDetected
 			cfMsg = err.Error()
 			o.logger.Warn("conflict occur when trying to sync for shard DDL info, this often means shard DDL conflict detected",
-				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
+				zap.String("lock", lockID), log.RedactField(zap.String("info", info.ShortString())), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 		default:
 			cfStage = optimism.ConflictError // we treat any errors returned from `TrySync` as conflict detected now.
 			cfMsg = err.Error()
 			o.logger.Warn("error occur when trying to sync for shard DDL info, this often means shard DDL error happened",
-				zap.String("lock", lockID), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
+				zap.String("lock", lockID), log.RedactField(zap.String("info", info.ShortString())), zap.Bool("is deleted", info.IsDeleted), log.ShortError(err))
 		}
 	default:
 		o.logger.Info("the shard DDL lock returned some DDLs",
-			zap.String("lock", lockID), zap.Strings("ddls", newDDLs), zap.Strings("cols", cols), zap.String("info", info.ShortString()), zap.Bool("is deleted", info.IsDeleted))
+			zap.String("lock", lockID), log.RedactField(zap.Strings("ddls", newDDLs)), zap.Strings("cols", cols), log.RedactField(zap.String("info", info.ShortString())), zap.Bool("is deleted", info.IsDeleted))
 	}
 
 	lock := o.lk.FindLock(lockID)
@@ -801,7 +801,7 @@ func (o *Optimist) handleLock(info optimism.Info, tts []optimism.TargetTable, sk
 		return err
 	}
 	o.logger.Info("put shard DDL lock operation", zap.String("lock", lockID),
-		zap.Stringer("operation", op), zap.Bool("already exist", !succ), zap.Int64("revision", rev))
+		log.RedactField(zap.Stringer("operation", op)), zap.Bool("already exist", !succ), zap.Int64("revision", rev))
 	return nil
 }
 

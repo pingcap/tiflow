@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -239,7 +240,7 @@ func (s *Storage) Save(tctx *tcontext.Context, ghostSchema, ghostTable, realSche
 	// maybe we meed more checks for it
 
 	if len(info.DDLs) != 0 && info.DDLs[len(info.DDLs)-1] == ddl {
-		tctx.L().Warn("online ddl may be saved before, just ignore it", zap.String("ddl", ddl))
+		tctx.L().Warn("online ddl may be saved before, just ignore it", dmlog.RedactField(zap.String("ddl", ddl)))
 		return nil
 	}
 	info.DDLs = append(info.DDLs, ddl)

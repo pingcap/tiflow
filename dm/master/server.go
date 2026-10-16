@@ -524,7 +524,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	resp.CheckResult = msg
 
-	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
+	log.L().Info("", zap.String("task name", cfg.Name), log.ConfigField("task", cfg), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
 	if len(req.Sources) > 0 {
