@@ -997,7 +997,7 @@ func (cp *RemoteCheckPoint) createSchema(tctx *tcontext.Context) error {
 	sql2 := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(cp.cfg.MetaSchema))
 	args := make([]interface{}, 0)
 	_, err := cp.dbConn.ExecuteSQL(tctx, cp.metricProxies, []string{sql2}, [][]interface{}{args}...)
-	cp.logCtx.L().Info("create checkpoint schema", zap.String("statement", sql2))
+	cp.logCtx.L().Info("create checkpoint schema", log.RedactField(zap.String("statement", sql2)))
 	return err
 }
 
@@ -1021,7 +1021,7 @@ func (cp *RemoteCheckPoint) createTable(tctx *tcontext.Context) error {
 		)`,
 	}
 	_, err := cp.dbConn.ExecuteSQL(tctx, cp.metricProxies, sqls)
-	cp.logCtx.L().Info("create checkpoint table", zap.Strings("statements", sqls))
+	cp.logCtx.L().Info("create checkpoint table", log.RedactField(zap.Strings("statements", sqls)))
 	return err
 }
 

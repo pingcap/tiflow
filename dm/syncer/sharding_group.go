@@ -84,6 +84,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	fr "github.com/pingcap/tiflow/dm/pkg/func-rollback"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -701,7 +702,7 @@ func (k *ShardingGroupKeeper) Close() {
 func (k *ShardingGroupKeeper) createSchema() error {
 	stmt := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS `%s`", k.shardMetaSchema)
 	_, err := k.dbConn.ExecuteSQL(k.tctx, k.metricProxies, []string{stmt})
-	k.tctx.L().Info("execute sql", zap.String("statement", stmt))
+	k.tctx.L().Info("execute sql", dmlog.RedactField(zap.String("statement", stmt)))
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 
@@ -718,7 +719,7 @@ func (k *ShardingGroupKeeper) createTable() error {
 		UNIQUE KEY uk_source_id_table_id_source (source_id, target_table_id, source_table_id)
 	)`, k.shardMetaTableName)
 	_, err := k.dbConn.ExecuteSQL(k.tctx, k.metricProxies, []string{stmt})
-	k.tctx.L().Info("execute sql", zap.String("statement", stmt))
+	k.tctx.L().Info("execute sql", dmlog.RedactField(zap.String("statement", stmt)))
 	return terror.WithScope(err, terror.ScopeDownstream)
 }
 

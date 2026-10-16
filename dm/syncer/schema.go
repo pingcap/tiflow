@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
@@ -145,7 +146,7 @@ func (s *Syncer) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaR
 			return "", terror.ErrSchemaTrackerRestoreStmtFail.Delegate(err2)
 		}
 
-		s.tctx.L().Info("flush table info", zap.String("table info", newSQL))
+		s.tctx.L().Info("flush table info", dmlog.RedactField(zap.String("table info", newSQL)))
 		err = s.checkpoint.FlushPointsWithTableInfos(s.tctx.WithContext(ctx), []*filter.Table{sourceTable}, []*model.TableInfo{ti})
 		if err != nil {
 			return "", err

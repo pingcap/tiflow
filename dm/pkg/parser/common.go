@@ -38,7 +38,7 @@ const (
 func Parse(p *parser.Parser, sql, charset, collation string) (stmt []ast.StmtNode, err error) {
 	stmts, warnings, err := p.Parse(sql, charset, collation)
 	if len(warnings) > 0 {
-		log.L().Warn("parse statement", zap.String("sql", sql), zap.Errors("warning messages", warnings))
+		log.L().Warn("parse statement", log.RedactField(zap.String("sql", sql)), zap.Errors("warning messages", warnings))
 	}
 
 	return stmts, terror.ErrParseSQL.Delegate(err)

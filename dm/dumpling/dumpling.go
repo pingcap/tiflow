@@ -108,7 +108,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 		m.dumpConfig.PromRegistry = prometheus.DefaultGatherer.(prometheus.Registerer)
 	}
 
-	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
+	m.logger.Info("create dumpling", zap.String("config", log.RedactConfigJSON(m.dumpConfig.String())))
 	return nil
 }
 

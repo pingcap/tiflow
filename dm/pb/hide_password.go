@@ -59,6 +59,35 @@ func (m *CheckSubtasksCanUpdateRequest) MarshalLogObject(enc zapcore.ObjectEncod
 	return nil
 }
 
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *HandleWorkerErrorRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Sqls = redactSQLs(m.Sqls)
+	enc.AddString("payload", clone.String())
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *OperateWorkerSchemaRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	if clone.Schema != "" {
+		clone.Schema = log.RedactString(clone.Schema)
+	}
+	enc.AddString("payload", clone.String())
+	return nil
+}
+
+func redactSQLs(sqls []string) []string {
+	if !log.IsRedactLogEnabled() {
+		return sqls
+	}
+	clone := make([]string, len(sqls))
+	for i := range clone {
+		clone[i] = "?"
+	}
+	return clone
+}
+
 const invalidConfigForLog = "(invalid config; redacted)"
 
 // Decode generic mappings instead of config structs so diagnostics retain unknown
@@ -105,6 +134,9 @@ func redactTOMLConfig(input string) string {
 }
 
 func isSensitiveConfigField(key string) bool {
+	if log.IsRedactLogEnabled() && log.IsSensitiveExpressionField(key) {
+		return true
+	}
 	switch strings.ToLower(key) {
 	case "password", "ssl-ca-bytes", "ssl-cert-bytes", "ssl-key-bytes",
 		"ssl-ca-base64", "ssl-cert-base64", "ssl-key-base64":
