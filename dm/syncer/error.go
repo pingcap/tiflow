@@ -89,7 +89,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 		}
 
 		handle := func() {
-			tctx.L().Warn("ignore special error for DDL", zap.String("DDL", ddl2), log.ShortError(err))
+			tctx.L().Warn("ignore special error for DDL", log.RedactField(zap.String("DDL", ddl2)), log.ShortError(err))
 			err2 := conn.ResetConn(tctx) // also reset the `invalid connection` for later use.
 			if err2 != nil {
 				tctx.L().Warn("reset connection failed", log.ShortError(err2))
@@ -149,7 +149,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 			table = n.Table.Name.O
 			col = n.Specs[0].OldColumnName.Name.O
 		}
-		tctx.L().Warn("try to fix drop column error", zap.String("DDL", ddl2), log.ShortError(originErr))
+		tctx.L().Warn("try to fix drop column error", log.RedactField(zap.String("DDL", ddl2)), log.ShortError(originErr))
 
 		// check if dependent index is single-column index on this column
 		sql2 := "SELECT INDEX_NAME FROM information_schema.statistics WHERE TABLE_SCHEMA = ? and TABLE_NAME = ? and COLUMN_NAME = ?"
@@ -210,7 +210,7 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 			return err2
 		}
 
-		tctx.L().Info("execute drop column SQL success", zap.String("DDL", ddl2))
+		tctx.L().Info("execute drop column SQL success", log.RedactField(zap.String("DDL", ddl2)))
 		return nil
 	}
 	// TODO: add support for downstream alter pk without schema

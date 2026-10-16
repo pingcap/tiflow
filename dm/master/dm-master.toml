@@ -3,6 +3,8 @@
 # log configuration
 log-file = "dm-master.log"
 log-level = "info"
+# Hide sensitive diagnostic values. Configure workers separately as well.
+redact-info-log = false
 
 # dm-master listen address
 master-addr = ":8261"

@@ -155,7 +155,7 @@ func (l *Lock) FetchTableInfos(task, source, schema, table string) (*model.Table
 	}
 	var ti *model.TableInfo
 	if bytes.Equal(tiBytes, []byte("null")) {
-		log.L().Warn("null table info", zap.String("query", query), zap.String("source", source), zap.String("schema", schema), zap.String("table", table))
+		log.L().Warn("null table info", log.RedactField(zap.String("query", query)), zap.String("source", source), zap.String("schema", schema), zap.String("table", table))
 		return nil, terror.ErrMasterOptimisticDownstreamMetaNotFound.Generate(task)
 	}
 	if err := json.Unmarshal(tiBytes, &ti); err != nil {
@@ -273,7 +273,7 @@ func (l *Lock) TrySync(info Info, tts []TargetTable) (newDDLs []string, cols []s
 		case ConflictSkipWaitRedirect:
 			return newDDLs, cols, terror.ErrShardDDLOptimismNeedSkipAndRedirect.Generate(l.ID, ddls[idx])
 		case ConflictResolved:
-			log.L().Info("all conflict DDL resolved", zap.String("DDL", ddls[idx]), zap.String("callerSource", callerSource),
+			log.L().Info("all conflict DDL resolved", log.RedactField(zap.String("DDL", ddls[idx])), zap.String("callerSource", callerSource),
 				zap.String("callerSchema", callerSchema), zap.String("callerTable", callerTable))
 		}
 
@@ -332,7 +332,7 @@ func (l *Lock) TryRemoveTable(source, schema, table string) []string {
 	delete(l.versions[source][schema], table)
 	log.L().Info("table removed from the lock", zap.String("lock", l.ID),
 		zap.String("source", source), zap.String("schema", schema), zap.String("table", table),
-		zap.Stringer("table info", ti))
+		log.RedactField(zap.Stringer("table info", ti)))
 	return dropColumns
 }
 
@@ -565,7 +565,7 @@ func (l *Lock) AddTable(source, schema, table string, needLock bool) {
 			l.finalTables[source][schema][table] = l.initTable
 		} else {
 			t := schemacmp.Encode(ti)
-			log.L().Debug("get source table info", zap.String("task", l.Task), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("info", t))
+			log.L().Debug("get source table info", zap.String("task", l.Task), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), log.RedactField(zap.Stringer("info", t)))
 			l.tables[source][schema][table] = t
 			l.finalTables[source][schema][table] = t
 		}
@@ -573,7 +573,7 @@ func (l *Lock) AddTable(source, schema, table string, needLock bool) {
 		l.versions[source][schema][table] = 0
 		log.L().Info("table added to the lock", zap.String("lock", l.ID),
 			zap.String("source", source), zap.String("schema", schema), zap.String("table", table),
-			zap.Stringer("table info", l.initTable))
+			log.RedactField(zap.Stringer("table info", l.initTable)))
 	}
 }
 
@@ -1198,7 +1198,7 @@ func (l *Lock) redirectForConflictTables(callerSource, callerSchema, callerTable
 					return err
 				}
 				log.L().Info("put redirect operation for conflict table", zap.String("lock", l.ID),
-					zap.Stringer("operation", op), zap.Bool("succeed", !succ), zap.Int64("revision", rev))
+					log.RedactField(zap.Stringer("operation", op)), zap.Bool("succeed", !succ), zap.Int64("revision", rev))
 			}
 		}
 	}

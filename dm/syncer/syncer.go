@@ -282,7 +282,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	var logger log.Logger
 	if cfg.FrameworkLogger != nil {
-		logger = log.Logger{Logger: cfg.FrameworkLogger.With(logFields...)}
+		logger = log.Logger{Logger: log.WithRedaction(cfg.FrameworkLogger).With(logFields...)}
 	} else {
 		logger = log.With(logFields...)
 	}
@@ -957,7 +957,7 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	tctx.L().Debug("reverse-synchronized table schema",
 		zap.Stringer("sourceTable", sourceTable),
 		zap.Stringer("targetTable", targetTable),
-		zap.String("sql", createSQL),
+		log.RedactField(zap.String("sql", createSQL)),
 	)
 	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, createStmt); err != nil {
 		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
@@ -1141,13 +1141,13 @@ func (s *Syncer) addJob(job *job) {
 		s.dmlJobCh <- job
 		failpoint.Label("skip_dml")
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
-			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
+			s.tctx.L().Info("receive dml job", log.RedactField(zap.Any("dml job", job)))
 			time.Sleep(500 * time.Millisecond)
 		})
 	case gc:
 		s.dmlJobCh <- job
 	default:
-		s.tctx.L().DPanic("unhandled job type", zap.Stringer("job", job))
+		s.tctx.L().DPanic("unhandled job type", log.RedactField(zap.Stringer("job", job)))
 	}
 }
 
@@ -1190,12 +1190,12 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		if waitXIDStatus(s.waitXIDJob.Load()) == waiting {
-			s.tctx.L().Info("not receive xid job yet", zap.Any("next job", job))
+			s.tctx.L().Info("not receive xid job yet", log.RedactField(zap.Any("next job", job)))
 		}
 	})
 
 	if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete && job.tp != flush {
-		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", zap.Any("job", job))
+		s.tctx.L().Info("All jobs is completed before syncer close, the coming job will be reject", log.RedactField(zap.Any("job", job)))
 		// nolint:nakedret
 		return
 	}
@@ -1415,7 +1415,7 @@ func (s *Syncer) createCheckpointSnapshot(isSyncFlush bool) (*SnapshotInfo, []*f
 		s.tctx.L().Info("flush checkpoints except for these tables", zap.Reflect("tables", exceptTables))
 
 		shardMetaSQLs, shardMetaArgs = s.sgk.PrepareFlushSQLs(exceptTableIDs)
-		s.tctx.L().Info("prepare flush sqls", zap.Strings("shard meta sqls", shardMetaSQLs), zap.Reflect("shard meta arguments", shardMetaArgs))
+		s.tctx.L().Info("prepare flush sqls", log.RedactField(zap.Strings("shard meta sqls", shardMetaSQLs)), log.RedactField(zap.Reflect("shard meta arguments", shardMetaArgs)))
 	}
 
 	return snapshotInfo, exceptTables, shardMetaSQLs, shardMetaArgs
@@ -1489,7 +1489,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		failpoint.Inject("BlockDDLJob", func(v failpoint.Value) {
 			t := v.(int) // sleep time
-			s.tctx.L().Info("BlockDDLJob", zap.Any("job", ddlJob), zap.Int("sleep time", t))
+			s.tctx.L().Info("BlockDDLJob", log.RedactField(zap.Any("job", ddlJob)), zap.Int("sleep time", t))
 			time.Sleep(time.Second * time.Duration(t))
 		})
 
@@ -1502,17 +1502,17 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			shardPessimistOp = s.pessimist.PendingOperation()
 			if shardPessimistOp != nil && !shardPessimistOp.Exec {
 				ignore = true
-				s.tctx.L().Info("ignore shard DDLs in pessimistic shard mode", zap.Strings("ddls", ddlJob.ddls))
+				s.tctx.L().Info("ignore shard DDLs in pessimistic shard mode", log.RedactField(zap.Strings("ddls", ddlJob.ddls)))
 			}
 		case config.ShardOptimistic:
 			if len(ddlJob.ddls) == 0 {
 				ignore = true
-				s.tctx.L().Info("ignore shard DDLs in optimistic mode", zap.Stringer("info", s.optimist.PendingInfo()))
+				s.tctx.L().Info("ignore shard DDLs in optimistic mode", log.RedactField(zap.Stringer("info", s.optimist.PendingInfo())))
 			}
 		}
 
 		failpoint.Inject("ExecDDLError", func() {
-			s.tctx.L().Warn("execute ddl error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "ExecDDLError"))
+			s.tctx.L().Warn("execute ddl error", log.RedactField(zap.Strings("DDL", ddlJob.ddls)), zap.String("failpoint", "ExecDDLError"))
 			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
 			failpoint.Goto("bypass")
 		})
@@ -1574,7 +1574,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		failpoint.Label("bypass")
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && (intVal == 2 || intVal == 3) {
-				s.tctx.L().Warn("mock safe mode error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "SafeModeExit"))
+				s.tctx.L().Warn("mock safe mode error", log.RedactField(zap.Strings("DDL", ddlJob.ddls)), zap.String("failpoint", "SafeModeExit"))
 				if intVal == 2 {
 					err = terror.ErrWorkerDDLLockInfoNotFound.Generatef("DDL info not found")
 				} else {
@@ -1601,7 +1601,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			switch {
 			case shardInfo == nil:
 				// no need to do the shard DDL handle for `CREATE DATABASE/TABLE` now.
-				s.tctx.L().Warn("skip shard DDL handle in pessimistic shard mode", zap.Strings("ddl", ddlJob.ddls))
+				s.tctx.L().Warn("skip shard DDL handle in pessimistic shard mode", log.RedactField(zap.Strings("ddl", ddlJob.ddls)))
 			case shardPessimistOp == nil:
 				err = terror.ErrWorkerDDLLockOpNotFound.Generate(shardInfo)
 			default:
@@ -1614,7 +1614,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 				// no need to do the shard DDL handle for `DROP DATABASE/TABLE` now.
 				// but for `CREATE DATABASE` and `ALTER DATABASE` we execute it to the downstream directly without `shardInfo`.
 				if ignore { // actually ignored.
-					s.tctx.L().Warn("skip shard DDL handle in optimistic shard mode", zap.Strings("ddl", ddlJob.ddls))
+					s.tctx.L().Warn("skip shard DDL handle in optimistic shard mode", log.RedactField(zap.Strings("ddl", ddlJob.ddls)))
 				}
 			case s.optimist.PendingOperation() == nil:
 				err = terror.ErrWorkerDDLLockOpNotFound.Generate(shardInfo)
@@ -2289,7 +2289,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		failpoint.Inject("IgnoreSomeTypeEvent", func(val failpoint.Value) {
 			if e.Header.EventType.String() == val.(string) {
-				s.tctx.L().Debug("IgnoreSomeTypeEvent", zap.Reflect("event", e))
+				s.tctx.L().Debug("IgnoreSomeTypeEvent", log.RedactField(zap.Reflect("event", e)))
 				failpoint.Continue()
 			}
 		})
@@ -2338,7 +2338,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			var sourceTbls map[string]map[string]struct{}
 			sourceTbls, err = s.trackOriginDDL(queryEvent, ec)
 			if err != nil {
-				s.tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), zap.ByteString("sql", queryEvent.Query))
+				s.tctx.L().Warn("failed to track query when handle-error skip", zap.Error(err), log.RedactField(zap.ByteString("sql", queryEvent.Query)))
 			}
 
 			s.saveGlobalPoint(endLocation)
@@ -2677,7 +2677,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		zap.Stringer("source table", sourceTable),
 		zap.Stringer("target table", targetTable),
 		log.WrapStringerField("location", ec.endLocation),
-		zap.Reflect("raw event data", ev.Rows))
+		log.RedactField(zap.Reflect("raw event data", ev.Rows)))
 
 	needSkip, err := s.skipRowsEvent(sourceTable, ec.header.EventType)
 	if err != nil {
@@ -2969,14 +2969,14 @@ func (s *Syncer) trackDDL(usedSchema string, trackInfo *ddlInfo, ec *eventContex
 			if ignoreTrackerDDLError(err) {
 				ec.tctx.L().Warn("will ignore a DDL error when tracking",
 					zap.String("schema", usedSchema),
-					zap.String("statement", trackInfo.originDDL),
+					log.RedactField(zap.String("statement", trackInfo.originDDL)),
 					log.WrapStringerField("location", ec.endLocation),
 					log.ShortError(err))
 				return nil
 			}
 			ec.tctx.L().Error("cannot track DDL",
 				zap.String("schema", usedSchema),
-				zap.String("statement", trackInfo.originDDL),
+				log.RedactField(zap.String("statement", trackInfo.originDDL)),
 				log.WrapStringerField("location", ec.endLocation),
 				log.ShortError(err))
 			return terror.ErrSchemaTrackerCannotExecDDL.Delegate(err, trackInfo.originDDL)
@@ -3175,7 +3175,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.String("db", db),
 					zap.String("path", s.cfg.LoaderConfig.Dir),
 					zap.String("file", file),
-					zap.ByteString("statement", stmt),
+					log.RedactField(zap.ByteString("statement", stmt)),
 					zap.Error(err))
 				setFirstErr(err)
 				continue
@@ -3184,14 +3184,14 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			case *ast.SetStmt:
 				logger.Warn("ignoring statement",
 					zap.String("type", fmt.Sprintf("%T", v)),
-					zap.ByteString("statement", stmt))
+					log.RedactField(zap.ByteString("statement", stmt)))
 			case *ast.CreateTableStmt:
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
 						zap.Any("path", s.cfg.LoaderConfig.Dir),
 						zap.Any("file", file),
-						zap.ByteString("statement", stmt),
+						log.RedactField(zap.ByteString("statement", stmt)),
 						zap.Error(err))
 					setFirstErr(err)
 					continue
@@ -3206,7 +3206,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					logger.Warn("fail to create table for dump files",
 						zap.Any("path", s.cfg.LoaderConfig.Dir),
 						zap.Any("file", file),
-						zap.ByteString("statement", stmt),
+						log.RedactField(zap.ByteString("statement", stmt)),
 						zap.Error(err))
 					setFirstErr(err)
 					continue
@@ -3502,7 +3502,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	newCfg.DumpIOTotalBytes = oldCfg.DumpIOTotalBytes
 
 	if oldCfg.String() != newCfg.String() {
-		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
+		s.tctx.L().Warn("can not update cfg", log.ConfigField("old cfg", oldCfg), log.ConfigField("new cfg", newCfg))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil

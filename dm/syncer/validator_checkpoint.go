@@ -123,7 +123,7 @@ func (c *validatorPersistHelper) createSchemaAndTables(tctx *tcontext.Context) e
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 	query := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
 	_, err := c.db.ExecContext(tctx, query)
-	tctx.L().Info("create checkpoint schema", zap.String("statement", query))
+	tctx.L().Info("create checkpoint schema", log.RedactField(zap.String("statement", query)))
 	return err
 }
 
@@ -188,7 +188,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			INDEX idx_stage(stage)
 		)`,
 	}
-	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", sqls))
+	tctx.L().Info("create checkpoint and data table", log.RedactField(zap.Strings("statements", sqls)))
 	for _, q := range sqls {
 		if _, err := c.db.ExecContext(tctx, q); err != nil {
 			return err
@@ -408,7 +408,7 @@ func (c *validatorPersistHelper) persist(tctx *tcontext.Context, loc binlog.Loca
 	query = `DELETE FROM ` + c.pendingChangeTableName + ` WHERE source = ? and revision != ?`
 	args = []interface{}{c.cfg.SourceID, nextRevision}
 	if err := c.execQueriesWithRetry(newCtx, []string{query}, [][]interface{}{args}); err != nil {
-		c.L.Warn("failed to delete previous pending row changes", zap.Error(err), zap.Reflect("args", args))
+		c.L.Warn("failed to delete previous pending row changes", zap.Error(err), log.RedactField(zap.Reflect("args", args)))
 		// nolint:nilerr
 	}
 

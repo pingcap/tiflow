@@ -129,7 +129,7 @@ func InitLogger(cfg *Config) error {
 
 	// Do not log stack traces at all, as we'll get the stack trace from the
 	// error itself.
-	logger = logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+	logger = WithRedaction(logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel)))
 	pclog.ReplaceGlobals(logger, props)
 
 	lightningLogger := logger.With(zap.String("component", "lightning"))
@@ -139,8 +139,8 @@ func InitLogger(cfg *Config) error {
 	appLevel = props.Level
 	appProps = props
 	// init and set tidb slow query logger to stdout if log level is debug
-	if inDev {
-		slowQueryLogger := zap.NewExample()
+	if inDev && !IsRedactLogEnabled() {
+		slowQueryLogger := WithRedaction(zap.NewExample())
 		slowQueryLogger = slowQueryLogger.With(zap.String("component", "slow query logger"))
 		logutil.SlowQueryLogger = slowQueryLogger
 	} else {

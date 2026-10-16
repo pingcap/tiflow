@@ -189,7 +189,7 @@ func (c *compactor) compactJob(j *job) {
 	}
 
 	prevJob := c.buffer[prevPos]
-	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
+	c.logger.Debug("start to compact", log.RedactField(zap.Stringer("previous dml", prevJob.dml)), log.RedactField(zap.Stringer("current dml", j.dml)))
 
 	// adjust safemode
 	adjustSafeMode(j, prevJob)
@@ -201,7 +201,7 @@ func (c *compactor) compactJob(j *job) {
 	c.buffer[prevPos] = nil
 	tableKeyMap[key] = len(c.buffer)
 	c.buffer = append(c.buffer, j)
-	c.logger.Debug("finish to compact", zap.Stringer("dml", j.dml))
+	c.logger.Debug("finish to compact", log.RedactField(zap.Stringer("dml", j.dml)))
 	c.updateJobMetricsFn(true, adminQueueName, newCompactJob(prevJob.targetTable))
 }
 

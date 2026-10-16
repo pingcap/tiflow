@@ -176,7 +176,7 @@ func (o *Optimist) GetRedirectOperation(ctx context.Context, info optimism.Info,
 	o.mu.Unlock()
 
 	go func() {
-		o.logger.Info("start to wait redirect operation", zap.Stringer("info", info), zap.Int64("revision", rev))
+		o.logger.Info("start to wait redirect operation", log.RedactField(zap.Stringer("info", info)), zap.Int64("revision", rev))
 		for {
 			op, rev2, err := optimism.GetOperation(o.cli, o.task, o.source, info.UpSchema, info.UpTable)
 			if err != nil {

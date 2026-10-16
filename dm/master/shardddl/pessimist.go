@@ -137,7 +137,7 @@ func (p *Pessimist) buildLocks(etcdCli *clientv3.Client) (int64, int64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	p.logger.Info("get history shard DDL info", zap.Reflect("info", ifm), zap.Int64("revision", rev1))
+	p.logger.Info("get history shard DDL info", log.RedactField(zap.Reflect("info", ifm)), zap.Int64("revision", rev1))
 
 	// get the history shard DDL lock operation.
 	// the newly operations after this GET will be received through the WATCH with `rev2`,
@@ -146,7 +146,7 @@ func (p *Pessimist) buildLocks(etcdCli *clientv3.Client) (int64, int64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	p.logger.Info("get history shard DDL lock operation", zap.Reflect("operation", opm), zap.Int64("revision", rev2))
+	p.logger.Info("get history shard DDL lock operation", log.RedactField(zap.Reflect("operation", opm)), zap.Int64("revision", rev2))
 
 	// recover the shard DDL lock based on history shard DDL info & lock operation.
 	err = p.recoverLocks(ifm, opm)
@@ -428,7 +428,7 @@ func (p *Pessimist) recoverLocks(ifm map[string]map[string]pessimism.Info, opm m
 		for source, op := range ops {
 			lock := p.lk.FindLock(op.ID)
 			if lock == nil {
-				p.logger.Warn("no shard DDL lock exists for the operation", zap.Stringer("operation", op))
+				p.logger.Warn("no shard DDL lock exists for the operation", log.RedactField(zap.Stringer("operation", op)))
 				continue
 			}
 
@@ -473,12 +473,12 @@ func (p *Pessimist) handleInfoPut(ctx context.Context, infoCh <-chan pessimism.I
 			if !ok {
 				return
 			}
-			p.logger.Info("receive a shard DDL info", zap.Stringer("info", info))
+			p.logger.Info("receive a shard DDL info", log.RedactField(zap.Stringer("info", info)))
 
 			p.infoOpMu.Lock()
 			lockID, synced, remain, err := p.lk.TrySync(info, p.taskSources(info.Task))
 			if err != nil {
-				p.logger.Error("fail to try sync shard DDL lock", zap.Stringer("info", info), log.ShortError(err))
+				p.logger.Error("fail to try sync shard DDL lock", log.RedactField(zap.Stringer("info", info)), log.ShortError(err))
 				// currently, only DDL mismatch will cause error
 				metrics.ReportDDLError(info.Task, metrics.InfoErrSyncLock)
 				p.infoOpMu.Unlock()
@@ -510,21 +510,21 @@ func (p *Pessimist) handleOperationPut(ctx context.Context, opCh <-chan pessimis
 			if !ok {
 				return
 			}
-			p.logger.Info("receive a shard DDL lock operation", zap.Stringer("operation", op))
+			p.logger.Info("receive a shard DDL lock operation", log.RedactField(zap.Stringer("operation", op)))
 			if !op.Done {
-				p.logger.Info("the shard DDL lock operation has not done", zap.Stringer("operation", op))
+				p.logger.Info("the shard DDL lock operation has not done", log.RedactField(zap.Stringer("operation", op)))
 				continue
 			}
 
 			p.infoOpMu.Lock()
 			lock := p.lk.FindLock(op.ID)
 			if lock == nil {
-				p.logger.Warn("no lock for the shard DDL lock operation exist", zap.Stringer("operation", op))
+				p.logger.Warn("no lock for the shard DDL lock operation exist", log.RedactField(zap.Stringer("operation", op)))
 				p.infoOpMu.Unlock()
 				continue
 			} else if synced, _ := lock.IsSynced(); !synced {
 				// this should not happen in normal case.
-				p.logger.Warn("the lock for the shard DDL lock operation has not synced", zap.Stringer("operation", op))
+				p.logger.Warn("the lock for the shard DDL lock operation has not synced", log.RedactField(zap.Stringer("operation", op)))
 				metrics.ReportDDLError(op.Task, metrics.OpErrLockUnSynced)
 				p.infoOpMu.Unlock()
 				continue
@@ -533,14 +533,14 @@ func (p *Pessimist) handleOperationPut(ctx context.Context, opCh <-chan pessimis
 			// update the `done` status of the lock and check whether is resolved.
 			lock.MarkDone(op.Source)
 			if lock.IsResolved() {
-				p.logger.Info("the lock for the shard DDL lock operation has been resolved", zap.Stringer("operation", op))
+				p.logger.Info("the lock for the shard DDL lock operation has been resolved", log.RedactField(zap.Stringer("operation", op)))
 				// remove all operations for this shard DDL lock.
 				err := p.removeLock(lock)
 				if err != nil {
 					p.logger.Error("fail to delete the shard DDL lock operations", zap.String("lock", lock.ID), log.ShortError(err))
 					metrics.ReportDDLError(op.Task, metrics.OpErrRemoveLock)
 				}
-				p.logger.Info("the lock info for the shard DDL lock operation has been cleared", zap.Stringer("operation", op))
+				p.logger.Info("the lock info for the shard DDL lock operation has been cleared", log.RedactField(zap.Stringer("operation", op)))
 				p.infoOpMu.Unlock()
 				continue
 			}
@@ -548,7 +548,7 @@ func (p *Pessimist) handleOperationPut(ctx context.Context, opCh <-chan pessimis
 			// one of the non-owner dm-worker instance has done the operation,
 			// still need to wait for more `done` from other non-owner dm-worker instances.
 			if op.Source != lock.Owner {
-				p.logger.Info("the shard DDL lock operation of a non-owner has done", zap.Stringer("operation", op), zap.String("owner", lock.Owner))
+				p.logger.Info("the shard DDL lock operation of a non-owner has done", log.RedactField(zap.Stringer("operation", op)), zap.String("owner", lock.Owner))
 				p.infoOpMu.Unlock()
 				continue
 			}

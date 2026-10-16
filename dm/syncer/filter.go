@@ -18,6 +18,7 @@ import (
 
 	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/pingcap/tidb/pkg/util/filter"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	onlineddl "github.com/pingcap/tiflow/dm/syncer/online-ddl-tools"
@@ -46,7 +47,7 @@ func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool,
 		})
 	}
 	for _, table := range realTables {
-		s.tctx.L().Debug("query event info", zap.String("event", "query"), zap.String("origin sql", qec.originSQL), zap.Stringer("table", table), zap.Stringer("ddl info", ddlInfo))
+		s.tctx.L().Debug("query event info", zap.String("event", "query"), dmlog.RedactField(zap.String("origin sql", qec.originSQL)), zap.Stringer("table", table), dmlog.RedactField(zap.Stringer("ddl info", ddlInfo)))
 		if s.skipByTable(table) {
 			s.tctx.L().Debug("skip event by balist")
 			return true, nil
@@ -61,10 +62,10 @@ func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool,
 			// In the case of online-ddl, if the generated table is skipped, track ddl will failed.
 			err := s.trackDDL(qec.ddlSchema, ddlInfo, qec.eventContext)
 			if err != nil {
-				s.tctx.L().Warn("track ddl failed", zap.Stringer("ddl info", ddlInfo))
+				s.tctx.L().Warn("track ddl failed", dmlog.RedactField(zap.Stringer("ddl info", ddlInfo)))
 			}
 			s.saveTablePoint(table, qec.lastLocation)
-			s.tctx.L().Warn("track skipped ddl and return empty string", zap.String("origin sql", qec.originSQL), zap.Stringer("ddl info", ddlInfo))
+			s.tctx.L().Warn("track skipped ddl and return empty string", dmlog.RedactField(zap.String("origin sql", qec.originSQL)), dmlog.RedactField(zap.Stringer("ddl info", ddlInfo)))
 			ddlInfo.originDDL = ""
 			return true, nil
 		}

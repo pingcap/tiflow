@@ -100,12 +100,12 @@ func (c *causality) run() {
 
 			// detectConflict before add
 			if c.detectConflict(keys) {
-				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
+				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", log.RedactField(zap.Strings("keys", keys)))
 				c.outCh <- newConflictJob(c.workerCount)
 				c.relation.clear()
 			}
 			j.dmlQueueKey = c.add(keys)
-			c.logger.Debug("key for keys", zap.String("key", j.dmlQueueKey), zap.Strings("keys", keys))
+			c.logger.Debug("key for keys", log.RedactField(zap.String("key", j.dmlQueueKey)), log.RedactField(zap.Strings("keys", keys)))
 		}
 		c.metricProxies.Metrics.ConflictDetectDurationHistogram.Observe(time.Since(startTime).Seconds())
 
