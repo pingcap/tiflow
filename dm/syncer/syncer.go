@@ -957,7 +957,7 @@ func (s *Syncer) trackTableInfoFromDownstream(tctx *tcontext.Context, sourceTabl
 	tctx.L().Debug("reverse-synchronized table schema",
 		zap.Stringer("sourceTable", sourceTable),
 		zap.Stringer("targetTable", targetTable),
-		zap.String("sql", createSQL),
+		log.RedactField(zap.String("sql", createSQL)),
 	)
 	if err = s.schemaTracker.Exec(tctx.Ctx, sourceTable.Schema, createStmt); err != nil {
 		return terror.ErrSchemaTrackerCannotCreateTable.Delegate(err, sourceTable)
@@ -1141,7 +1141,7 @@ func (s *Syncer) addJob(job *job) {
 		s.dmlJobCh <- job
 		failpoint.Label("skip_dml")
 		failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
-			s.tctx.L().Info("receive dml job", zap.Any("dml job", job))
+			s.tctx.L().Info("receive dml job", log.RedactField(zap.Any("dml job", job)))
 			time.Sleep(500 * time.Millisecond)
 		})
 	case gc:
@@ -1190,7 +1190,7 @@ func (s *Syncer) handleJob(job *job) (added2Queue bool, err error) {
 
 	failpoint.Inject("checkCheckpointInMiddleOfTransaction", func() {
 		if waitXIDStatus(s.waitXIDJob.Load()) == waiting {
-			s.tctx.L().Info("not receive xid job yet", zap.Any("next job", job))
+			s.tctx.L().Info("not receive xid job yet", log.RedactField(zap.Any("next job", job)))
 		}
 	})
 
@@ -1489,7 +1489,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 
 		failpoint.Inject("BlockDDLJob", func(v failpoint.Value) {
 			t := v.(int) // sleep time
-			s.tctx.L().Info("BlockDDLJob", zap.Any("job", ddlJob), zap.Int("sleep time", t))
+			s.tctx.L().Info("BlockDDLJob", log.RedactField(zap.Any("job", ddlJob)), zap.Int("sleep time", t))
 			time.Sleep(time.Second * time.Duration(t))
 		})
 
@@ -1512,7 +1512,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		}
 
 		failpoint.Inject("ExecDDLError", func() {
-			s.tctx.L().Warn("execute ddl error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "ExecDDLError"))
+			s.tctx.L().Warn("execute ddl error", log.RedactField(zap.Strings("DDL", ddlJob.ddls)), zap.String("failpoint", "ExecDDLError"))
 			err = terror.ErrDBUnExpect.Delegate(errors.Errorf("execute ddl %v error", ddlJob.ddls))
 			failpoint.Goto("bypass")
 		})
@@ -1574,7 +1574,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 		failpoint.Label("bypass")
 		failpoint.Inject("SafeModeExit", func(val failpoint.Value) {
 			if intVal, ok := val.(int); ok && (intVal == 2 || intVal == 3) {
-				s.tctx.L().Warn("mock safe mode error", zap.Strings("DDL", ddlJob.ddls), zap.String("failpoint", "SafeModeExit"))
+				s.tctx.L().Warn("mock safe mode error", log.RedactField(zap.Strings("DDL", ddlJob.ddls)), zap.String("failpoint", "SafeModeExit"))
 				if intVal == 2 {
 					err = terror.ErrWorkerDDLLockInfoNotFound.Generatef("DDL info not found")
 				} else {
@@ -2289,7 +2289,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		failpoint.Inject("IgnoreSomeTypeEvent", func(val failpoint.Value) {
 			if e.Header.EventType.String() == val.(string) {
-				s.tctx.L().Debug("IgnoreSomeTypeEvent", zap.Reflect("event", e))
+				s.tctx.L().Debug("IgnoreSomeTypeEvent", log.RedactField(zap.Reflect("event", e)))
 				failpoint.Continue()
 			}
 		})
@@ -2677,7 +2677,7 @@ func (s *Syncer) handleRowsEvent(ev *replication.RowsEvent, ec eventContext) (*f
 		zap.Stringer("source table", sourceTable),
 		zap.Stringer("target table", targetTable),
 		log.WrapStringerField("location", ec.endLocation),
-		zap.Reflect("raw event data", ev.Rows))
+		log.RedactField(zap.Reflect("raw event data", ev.Rows)))
 
 	needSkip, err := s.skipRowsEvent(sourceTable, ec.header.EventType)
 	if err != nil {

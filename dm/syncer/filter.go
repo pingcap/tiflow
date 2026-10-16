@@ -47,7 +47,7 @@ func (s *Syncer) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (bool,
 		})
 	}
 	for _, table := range realTables {
-		s.tctx.L().Debug("query event info", zap.String("event", "query"), zap.String("origin sql", qec.originSQL), zap.Stringer("table", table), zap.Stringer("ddl info", ddlInfo))
+		s.tctx.L().Debug("query event info", zap.String("event", "query"), dmlog.RedactField(zap.String("origin sql", qec.originSQL)), zap.Stringer("table", table), dmlog.RedactField(zap.Stringer("ddl info", ddlInfo)))
 		if s.skipByTable(table) {
 			s.tctx.L().Debug("skip event by balist")
 			return true, nil

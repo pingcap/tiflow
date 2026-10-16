@@ -116,7 +116,7 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 		return nil, terror.ErrDBUnExpect.Generate("database connection not valid")
 	}
 	tctx.L().Debug("query statement",
-		zap.String("query", utils.TruncateString(query, -1)),
+		log.RedactField(zap.String("query", utils.TruncateString(query, -1))),
 		log.ZapRedactString("argument", utils.TruncateInterface(args, -1)))
 
 	rows, err := conn.DBConn.QueryContext(tctx.Context(), query, args...)
@@ -182,7 +182,7 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 		// avoid use TruncateInterface for all log level which will slow the speed of DML
 		if tctx.L().Core().Enabled(zap.DebugLevel) {
 			tctx.L().Debug("execute statement",
-				zap.String("query", utils.TruncateString(query, -1)),
+				log.RedactField(zap.String("query", utils.TruncateString(query, -1))),
 				log.ZapRedactString("argument", utils.TruncateInterface(arg, -1)))
 		}
 

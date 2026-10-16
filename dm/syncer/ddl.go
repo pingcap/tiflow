@@ -301,7 +301,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 			ddl.logger.Info("re-replicate shard group was completed", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 			return qec.closeShardingResync()
 		} else if ddl.shardMode != config.ShardOptimistic {
-			ddl.logger.Debug("skip event in re-replicating sharding group", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+			ddl.logger.Debug("skip event in re-replicating sharding group", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 			return nil
 		}
 		// optimistic shard mode handle situation will be handled through table point after
@@ -1238,7 +1238,7 @@ func (ddl *DDLWorker) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (
 		})
 	}
 	for _, table := range realTables {
-		ddl.logger.Debug("query event info", zap.String("event", "query"), zap.String("origin sql", qec.originSQL), zap.Stringer("table", table), zap.Stringer("ddl info", ddlInfo))
+		ddl.logger.Debug("query event info", zap.String("event", "query"), log.RedactField(zap.String("origin sql", qec.originSQL)), zap.Stringer("table", table), log.RedactField(zap.Stringer("ddl info", ddlInfo)))
 		if skipByTable(ddl.baList, table) {
 			ddl.logger.Debug("skip event by balist")
 			return true, nil
@@ -1281,7 +1281,7 @@ func (ddl *DDLWorker) processOneDDL(qec *queryEventContext, sql string) ([]strin
 		}
 	}
 
-	qec.tctx.L().Debug("will check skip query event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("ddlInfo", ddlInfo))
+	qec.tctx.L().Debug("will check skip query event", zap.String("event", "query"), log.RedactField(zap.String("statement", sql)), log.RedactField(zap.Stringer("ddlInfo", ddlInfo)))
 	shouldSkip, err := ddl.skipQueryEvent(qec, ddlInfo)
 	if err != nil {
 		return nil, err

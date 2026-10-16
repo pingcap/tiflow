@@ -180,7 +180,7 @@ func (w *DMLWorker) run() {
 			queueBucket := int(utils.GenHashKey(j.dmlQueueKey)) % w.workerCount
 			w.updateJobMetricsFunc(false, queueBucketMapping[queueBucket], j)
 			startTime := time.Now()
-			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), zap.String("key", j.dmlQueueKey))
+			w.logger.Debug("queue for key", zap.Int("queue", queueBucket), log.RedactField(zap.String("key", j.dmlQueueKey)))
 			jobChs[queueBucket] <- j
 			w.metricProxies.AddJobDurationHistogram.WithLabelValues(j.tp.String(), w.task, queueBucketMapping[queueBucket], w.source).Observe(time.Since(startTime).Seconds())
 		}

@@ -657,7 +657,7 @@ func (o *Optimist) handleInfoPut(ctx context.Context, infoCh <-chan optimism.Inf
 
 func (o *Optimist) handleInfo(info optimism.Info, skipDone bool) error {
 	added := o.tk.AddTable(info.Task, info.Source, info.UpSchema, info.UpTable, info.DownSchema, info.DownTable)
-	o.logger.Debug("a table added for info", zap.Bool("added", added), zap.String("info", info.ShortString()))
+	o.logger.Debug("a table added for info", zap.Bool("added", added), log.RedactField(zap.String("info", info.ShortString())))
 
 	tts := o.tk.FindTables(info.Task, info.DownSchema, info.DownTable)
 	if tts == nil {

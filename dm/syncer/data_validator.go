@@ -789,7 +789,7 @@ func (v *DataValidator) dispatchRowChange(key string, row *rowValidationJob) {
 	v.workers[hashVal].rowChangeCh <- row
 
 	v.L.Debug("dispatch row change job", zap.Any("table", row.row.GetSourceTable()),
-		zap.Stringer("type", row.Tp), zap.String("key", key), zap.Int("worker id", hashVal))
+		zap.Stringer("type", row.Tp), log.RedactField(zap.String("key", key)), zap.Int("worker id", hashVal))
 }
 
 func (v *DataValidator) genValidateTableInfo(sourceTable *filter.Table, columnCount int) (*validateTableInfo, error) {

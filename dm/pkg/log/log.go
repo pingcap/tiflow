@@ -139,8 +139,8 @@ func InitLogger(cfg *Config) error {
 	appLevel = props.Level
 	appProps = props
 	// init and set tidb slow query logger to stdout if log level is debug
-	if inDev {
-		slowQueryLogger := zap.NewExample()
+	if inDev && !IsRedactLogEnabled() {
+		slowQueryLogger := WithRedaction(zap.NewExample())
 		slowQueryLogger = slowQueryLogger.With(zap.String("component", "slow query logger"))
 		logutil.SlowQueryLogger = slowQueryLogger
 	} else {

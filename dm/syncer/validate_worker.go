@@ -523,9 +523,9 @@ func (c *validateCompareContext) compareData(key string, sourceData, targetData 
 			c.logger.Debug("compare failed",
 				zap.Stringer("src table", c.sourceTable),
 				zap.Stringer("dst table", c.targetTable),
-				zap.String("col", fmt.Sprintf("%s %s", column.Name, column.GetTypeDesc())),
-				zap.String("key", key),
-				zap.Reflect("src data", data1), zap.Reflect("dst data", data2))
+				log.RedactField(zap.String("col", fmt.Sprintf("%s %s", column.Name, column.GetTypeDesc()))),
+				log.RedactField(zap.String("key", key)),
+				log.RedactField(zap.Reflect("src data", data1)), log.RedactField(zap.Reflect("dst data", data2)))
 		}
 		return false, nil
 	}

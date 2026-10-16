@@ -565,7 +565,7 @@ func (l *Lock) AddTable(source, schema, table string, needLock bool) {
 			l.finalTables[source][schema][table] = l.initTable
 		} else {
 			t := schemacmp.Encode(ti)
-			log.L().Debug("get source table info", zap.String("task", l.Task), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), zap.Stringer("info", t))
+			log.L().Debug("get source table info", zap.String("task", l.Task), zap.String("source", source), zap.String("schema", schema), zap.String("table", table), log.RedactField(zap.Stringer("info", t)))
 			l.tables[source][schema][table] = t
 			l.finalTables[source][schema][table] = t
 		}
