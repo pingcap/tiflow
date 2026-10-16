@@ -46,6 +46,7 @@ func main() {
 		os.Exit(2)
 	}
 
+	log.SetRedactLog(cfg.RedactInfoLog)
 	// 2. init logger
 	err = log.InitLogger(&log.Config{
 		File:   cfg.LogFile,

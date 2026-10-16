@@ -282,7 +282,7 @@ func NewSyncer(cfg *config.SubTaskConfig, etcdClient *clientv3.Client, relay rel
 	}
 	var logger log.Logger
 	if cfg.FrameworkLogger != nil {
-		logger = log.Logger{Logger: cfg.FrameworkLogger.With(logFields...)}
+		logger = log.Logger{Logger: log.WithRedaction(cfg.FrameworkLogger).With(logFields...)}
 	} else {
 		logger = log.With(logFields...)
 	}

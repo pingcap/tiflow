@@ -69,6 +69,7 @@ func NewConfig() *Config {
 	fs.StringVar(&cfg.LogLevel, "L", "info", "log level: debug, info, warn, error, fatal")
 	fs.StringVar(&cfg.LogFile, "log-file", "", "log file path")
 	fs.StringVar(&cfg.LogFormat, "log-format", "text", `the format of the log, "text" or "json"`)
+	fs.BoolVar(&cfg.RedactInfoLog, "redact-info-log", false, "whether to redact sensitive diagnostic values")
 	// fs.StringVar(&cfg.LogRotate, "log-rotate", "day", "log file rotate type, hour/day")
 
 	fs.StringVar(&cfg.Name, "name", "", "human-readable name for this DM-master member")
@@ -102,10 +103,11 @@ type ExperimentalFeatures struct {
 type Config struct {
 	flagSet *flag.FlagSet
 
-	LogLevel  string `toml:"log-level" json:"log-level"`
-	LogFile   string `toml:"log-file" json:"log-file"`
-	LogFormat string `toml:"log-format" json:"log-format"`
-	LogRotate string `toml:"log-rotate" json:"log-rotate"`
+	RedactInfoLog bool   `toml:"redact-info-log" json:"redact-info-log"`
+	LogLevel      string `toml:"log-level" json:"log-level"`
+	LogFile       string `toml:"log-file" json:"log-file"`
+	LogFormat     string `toml:"log-format" json:"log-format"`
+	LogRotate     string `toml:"log-rotate" json:"log-rotate"`
 
 	RPCTimeoutStr string        `toml:"rpc-timeout" json:"rpc-timeout"`
 	RPCTimeout    time.Duration `toml:"-" json:"-"`

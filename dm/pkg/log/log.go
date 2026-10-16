@@ -129,7 +129,7 @@ func InitLogger(cfg *Config) error {
 
 	// Do not log stack traces at all, as we'll get the stack trace from the
 	// error itself.
-	logger = logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+	logger = WithRedaction(logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel)))
 	pclog.ReplaceGlobals(logger, props)
 
 	lightningLogger := logger.With(zap.String("component", "lightning"))

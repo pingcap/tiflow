@@ -1,3 +1,4 @@
+redact-info-log = false
 log-level = "debug"
 log-file = "/tmp/dm_test/dmctl_basic/master/log/dm-master.log"
 log-format = "text"

@@ -90,7 +90,7 @@ func NewLightning(cfg *config.SubTaskConfig, cli *clientv3.Client, workerName st
 	lightningCfg := MakeGlobalConfig(cfg)
 	logger := log.L()
 	if cfg.FrameworkLogger != nil {
-		logger = log.Logger{Logger: cfg.FrameworkLogger}
+		logger = log.Logger{Logger: log.WithRedaction(cfg.FrameworkLogger)}
 	}
 	loader := &LightningLoader{
 		cfg:                   cfg,
@@ -306,7 +306,7 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 			lserver.WithDumpFileStorage(l.cfg.ExtStorage))
 	}
 	if l.cfg.FrameworkLogger != nil {
-		opts = append(opts, lserver.WithLogger(l.cfg.FrameworkLogger))
+		opts = append(opts, lserver.WithLogger(log.WithRedaction(l.cfg.FrameworkLogger)))
 	} else {
 		opts = append(opts, lserver.WithLogger(l.logger.Logger))
 	}

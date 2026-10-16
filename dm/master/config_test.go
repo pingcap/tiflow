@@ -37,6 +37,19 @@ var _ = check.Suite(&testConfigSuite{})
 
 type testConfigSuite struct{}
 
+func TestMasterRedactInfoLog(t *testing.T) {
+	cfg := NewConfig()
+	require.False(t, cfg.RedactInfoLog)
+	require.NoError(t, cfg.FromContent(SampleConfig+"\n"))
+	require.False(t, cfg.RedactInfoLog)
+	require.NoError(t, cfg.FromContent(strings.ReplaceAll(SampleConfig, "redact-info-log = false", "redact-info-log = true")))
+	require.True(t, cfg.RedactInfoLog)
+	require.NoError(t, cfg.flagSet.Parse([]string{"--redact-info-log=true"}))
+	require.True(t, cfg.RedactInfoLog)
+	require.NoError(t, cfg.flagSet.Parse([]string{"--redact-info-log=false"}))
+	require.False(t, cfg.RedactInfoLog)
+}
+
 func (t *testConfigSuite) SetUpSuite(c *check.C) {
 	// initialized the logger to make genEmbedEtcdConfig working.
 	c.Assert(log.InitLogger(&log.Config{}), check.IsNil)
