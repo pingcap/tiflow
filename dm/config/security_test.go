@@ -106,6 +106,14 @@ func (c *testTLSConfig) TestLoadAndClearContent() {
 	c.Require().Len(s.SSLCABytes, 0)
 	c.Require().Len(s.SSLCertBytes, 0)
 	c.Require().Len(s.SSLKeyBytes, 0)
+	s.SSLCABase64, s.SSLCertBase64, s.SSLKeyBase64 = "private-ca", "private-cert", "private-key"
+	clone := s.Clone()
+	clone.ClearSSLBytesData()
+	c.Require().Empty(clone.SSLCABase64)
+	c.Require().Empty(clone.SSLCertBase64)
+	c.Require().Empty(clone.SSLKeyBase64)
+	c.Require().Equal("private-key", s.SSLKeyBase64)
+	s.ClearSSLBytesData()
 
 	s.SSLCABase64 = "MTIz"
 	err = s.LoadTLSContent()

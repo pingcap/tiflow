@@ -27,6 +27,7 @@ import (
 	gmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/errno"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/dm/pkg/cancelcause"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -242,15 +243,24 @@ func proxyFields() []zap.Field {
 	proxyCfg := httpproxy.FromEnvironment()
 	fields := make([]zap.Field, 0, 3)
 	if proxyCfg.HTTPProxy != "" {
-		fields = append(fields, zap.String("http_proxy", proxyCfg.HTTPProxy))
+		fields = append(fields, zap.String("http_proxy", redactProxyURL(proxyCfg.HTTPProxy)))
 	}
 	if proxyCfg.HTTPSProxy != "" {
-		fields = append(fields, zap.String("https_proxy", proxyCfg.HTTPSProxy))
+		fields = append(fields, zap.String("https_proxy", redactProxyURL(proxyCfg.HTTPSProxy)))
 	}
 	if proxyCfg.NoProxy != "" {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))
 	}
 	return fields
+}
+
+func redactProxyURL(raw string) string {
+	// Proxy environment variables also accept user:password@host:port without
+	// a scheme. Storage URL redaction treats scheme-less inputs as local paths.
+	if !strings.Contains(raw, "://") {
+		return strings.TrimPrefix(objstore.RedactURL("http://"+raw), "http://")
+	}
+	return objstore.RedactURL(raw)
 }
 
 // SetToSlice converts a map of struct{} value to a slice to pretty print.
