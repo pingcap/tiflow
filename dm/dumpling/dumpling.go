@@ -60,7 +60,7 @@ type Dumpling struct {
 func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 	logger := log.L()
 	if cfg.FrameworkLogger != nil {
-		logger = log.Logger{Logger: cfg.FrameworkLogger}
+		logger = log.Logger{Logger: log.WithRedaction(cfg.FrameworkLogger)}
 	}
 	m := &Dumpling{
 		cfg:    cfg,
