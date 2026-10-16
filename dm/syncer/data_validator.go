@@ -1419,7 +1419,7 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 	errorRowCount, err := v.getErrorRowCount(validatorDmctlOpTimeout)
 	if err != nil {
 		// nolint:nilerr
-		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", err.Error())
+		extraMsg = fmt.Sprintf(" (failed to load error count from meta db: %s)", log.RedactError(err))
 	}
 	// if we print those state in a structured way, there would be at least 9 lines for each subtask,
 	// which is hard to read, so print them into one line.
@@ -1435,6 +1435,9 @@ func (v *DataValidator) GetValidatorStatus() *pb.ValidationStatus {
 
 	result := v.getResult()
 	returnedResult := &result
+	if log.IsRedactLogEnabled() {
+		returnedResult = pb.RedactProcessResult(returnedResult)
+	}
 	if !result.IsCanceled && len(result.Errors) == 0 {
 		// no need to show if validator is running normally
 		returnedResult = nil
