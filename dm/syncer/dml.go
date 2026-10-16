@@ -93,7 +93,11 @@ func adjustValueFromBinlogData(
 				d, err = latin1Decoder.Bytes(v)
 				// replicate wrong data and don't break task
 				if err != nil {
-					log.L().DPanic("can't convert latin1 to utf8", zap.ByteString("value", v), zap.Error(err))
+					log.L().DPanic("can't convert latin1 to utf8",
+						log.ZapRedact(zap.ByteString("value", v)),
+						zap.Int("value length", len(v)),
+						zap.String("value type", "bytes"),
+						zap.Error(err))
 				}
 			}
 		case string:
@@ -119,7 +123,11 @@ func adjustValueFromBinlogData(
 				d, err = latin1Decoder.String(v)
 				// replicate wrong data and don't break task
 				if err != nil {
-					log.L().DPanic("can't convert latin1 to utf8", zap.String("value", v), zap.Error(err))
+					log.L().DPanic("can't convert latin1 to utf8",
+						log.ZapRedact(zap.String("value", v)),
+						zap.Int("value length", len(v)),
+						zap.String("value type", "string"),
+						zap.Error(err))
 				}
 			}
 		}
