@@ -80,6 +80,22 @@ func TestUploadErrorIsReturned(t *testing.T) {
 	require.True(t, errors.Is(lw.Close(), uploadErr))
 }
 
+func TestRecordErrorKeepsFirstNonCancellationError(t *testing.T) {
+	lw := &memoryLogWriter{}
+	fallbackErr := errors.New("fallback error")
+	firstErr := errors.New("first worker error")
+	secondErr := errors.New("second worker error")
+
+	lw.recordError(nil)
+	lw.recordError(errors.Trace(context.Canceled))
+	require.Same(t, fallbackErr, lw.preferFirstError(fallbackErr))
+
+	lw.recordError(firstErr)
+	lw.recordError(secondErr)
+	require.Same(t, firstErr, lw.preferFirstError(nil))
+	require.Same(t, firstErr, lw.preferFirstError(fallbackErr))
+}
+
 func TestWriteDML(t *testing.T) {
 	t.Parallel()
 

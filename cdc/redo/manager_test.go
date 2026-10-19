@@ -17,11 +17,15 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
+	mockstorage "github.com/pingcap/tidb/br/pkg/mock/storage"
+	"github.com/pingcap/tidb/br/pkg/storage"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/redo/writer"
 	"github.com/pingcap/tiflow/pkg/chann"
@@ -71,6 +75,55 @@ func TestLogManagerCloseReturnsWriterError(t *testing.T) {
 	}
 
 	require.Same(t, closeErr, m.close())
+}
+
+func TestLogManagerRunReturnsUploadError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	extStorage := mockstorage.NewMockExternalStorage(ctrl)
+	uploadErr := errors.New("upload failed")
+	extStorage.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(uploadErr)
+
+	originalInitExternalStorage := redo.InitExternalStorage
+	redo.InitExternalStorage = func(context.Context, url.URL) (storage.ExternalStorage, error) {
+		return extStorage, nil
+	}
+	t.Cleanup(func() {
+		redo.InitExternalStorage = originalInitExternalStorage
+	})
+
+	cfg := &config.ConsistentConfig{
+		Level:                 string(redo.ConsistentLevelEventual),
+		MaxLogSize:            redo.DefaultMaxLogSize,
+		Storage:               "s3://bucket/prefix",
+		FlushIntervalInMs:     redo.MinFlushIntervalInMs,
+		MetaFlushIntervalInMs: redo.MinFlushIntervalInMs,
+		EncodingWorkerNum:     1,
+		FlushWorkerNum:        1,
+		FlushConcurrency:      1,
+	}
+	m := NewDMLManager(model.DefaultChangeFeedID("test-changefeed"), cfg)
+	m.AddTable(1, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	runErrCh := make(chan error, 1)
+	go func() {
+		runErrCh <- m.Run(ctx)
+	}()
+
+	require.NoError(t, m.EmitRowChangedEvents(ctx, 1, nil, &model.RowChangedEvent{
+		Table:    &model.TableName{TableID: 1},
+		CommitTs: 1,
+	}))
+	require.NoError(t, m.UpdateResolvedTs(ctx, 1, 1))
+
+	select {
+	case err := <-runErrCh:
+		require.ErrorIs(t, err, uploadErr)
+	case <-time.After(5 * time.Second):
+		t.Fatal("redo manager did not return the upload error")
+	}
 }
 
 func BenchmarkBlackhole(b *testing.B) {

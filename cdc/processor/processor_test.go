@@ -378,6 +378,29 @@ func TestProcessorError(t *testing.T) {
 	})
 }
 
+func TestProcessorSendErrorFiltersLifecycleErrors(t *testing.T) {
+	p := &processor{errCh: make(chan error, 1)}
+	ignorableErrors := []error{
+		nil,
+		errors.Trace(context.Canceled),
+		cerror.ErrAdminStopProcessor.GenWithStackByArgs(),
+		cerror.ErrReactorFinished.GenWithStackByArgs(),
+	}
+
+	for _, err := range ignorableErrors {
+		p.sendError(err)
+		require.Empty(t, p.errCh)
+	}
+
+	firstFatalErr := errors.New("first fatal error")
+	p.sendError(firstFatalErr)
+	require.Len(t, p.errCh, 1)
+
+	// The existing channel policy remains first-arrival-wins for fatal errors.
+	p.sendError(errors.New("second fatal error"))
+	require.Same(t, firstFatalErr, <-p.errCh)
+}
+
 func TestProcessorExit(t *testing.T) {
 	ctx := cdcContext.NewBackendContext4Test(true)
 	liveness := model.LivenessCaptureAlive
