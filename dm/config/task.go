@@ -173,6 +173,10 @@ type MySQLInstance struct {
 
 // VerifyAndAdjust does verification on configs, and adjust some configs.
 func (m *MySQLInstance) VerifyAndAdjust() error {
+	return m.verifyAndAdjust(true)
+}
+
+func (m *MySQLInstance) verifyAndAdjust(checkMeta bool) error {
 	if m == nil {
 		return terror.ErrConfigMySQLInstNotFound.Generate()
 	}
@@ -181,8 +185,10 @@ func (m *MySQLInstance) VerifyAndAdjust() error {
 		return terror.ErrConfigEmptySourceID.Generate()
 	}
 
-	if err := m.Meta.Verify(); err != nil {
-		return terror.Annotatef(err, "source %s", m.SourceID)
+	if checkMeta {
+		if err := m.Meta.Verify(); err != nil {
+			return terror.Annotatef(err, "source %s", m.SourceID)
+		}
 	}
 
 	if len(m.MydumperConfigName) > 0 && m.Mydumper != nil {
@@ -802,7 +808,8 @@ func (c *TaskConfig) adjust() error {
 	globalConfigReferCount := map[string]int{}
 	duplicateErrorStrings := make([]string, 0)
 	for i, inst := range c.MySQLInstances {
-		if err := inst.VerifyAndAdjust(); err != nil {
+		// All mode uses dump metadata, not the meta in the task configuration.
+		if err := inst.verifyAndAdjust(c.TaskMode != ModeAll); err != nil {
 			return terror.Annotatef(err, "mysql-instance: %s", humanize.Ordinal(i))
 		}
 		if iid, ok := instanceIDs[inst.SourceID]; ok {
