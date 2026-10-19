@@ -152,6 +152,74 @@ func TestS3RetryerRetriesReadConnectionReset(t *testing.T) {
 	require.False(t, req.WillRetry())
 }
 
+func TestS3RetryerReadConnectionResetMatcher(t *testing.T) {
+	testCases := []struct {
+		name  string
+		err   error
+		match bool
+	}{
+		{
+			name:  "reset by peer",
+			err:   errors.New("read tcp 10.0.0.1:1234->10.0.0.2:80: read: connection reset by peer"),
+			match: true,
+		},
+		{
+			name:  "reset without peer suffix",
+			err:   errors.New("read: connection reset"),
+			match: true,
+		},
+		{
+			name:  "write-side reset",
+			err:   errors.New("write: connection reset by peer"),
+			match: false,
+		},
+		{
+			name:  "generic reset",
+			err:   errors.New("connection reset by peer"),
+			match: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.match, isConnectionResetError(tc.err))
+		})
+	}
+}
+
+func TestS3RetryerDeadlineTakesPrecedenceOverConnectionReset(t *testing.T) {
+	retryer := NewS3Retryer(7, time.Second, 2*time.Second)
+	req := newRetryTestRequest(
+		retryer,
+		s3.ServiceName,
+		errors.New("context deadline exceeded while reading: read: connection reset by peer"),
+	)
+
+	require.False(t, retryer.ShouldRetry(req))
+}
+
+func TestS3RetryerDoesNotPromoteReadConnectionResetForNonS3Service(t *testing.T) {
+	retryer := NewS3Retryer(7, time.Second, 2*time.Second)
+	req := newRetryTestRequest(retryer, "dynamodb", newReadConnectionResetError())
+
+	require.False(t, client.DefaultRetryer{NumMaxRetries: 7}.ShouldRetry(req))
+	require.False(t, retryer.ShouldRetry(req))
+}
+
+func TestDefaultS3RetryerRetriesReadConnectionResetWithDefaultBudget(t *testing.T) {
+	retryer := DefaultS3Retryer()
+	req := newRetryTestRequest(retryer, s3.ServiceName, newReadConnectionResetError())
+
+	require.True(t, retryer.ShouldRetry(req))
+	require.Equal(t, 3, retryer.MaxRetries())
+
+	req.Retryable = aws.Bool(retryer.ShouldRetry(req))
+	req.RetryCount = 2
+	require.True(t, req.WillRetry())
+	req.RetryCount = 3
+	require.False(t, req.WillRetry())
+}
+
 func TestS3RetryerDoesNotRetryDeadline(t *testing.T) {
 	retryer := NewS3Retryer(7, time.Second, 2*time.Second)
 
