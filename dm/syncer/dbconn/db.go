@@ -296,7 +296,7 @@ func resetConnRetryableFn(tctx *tcontext.Context, queries, args any) func(int, e
 			tctx.L().Error("retrying reset connection", zap.Int("retry", retryTime),
 				zap.Int("resetRetries", retryTime),
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
-				zap.String("arguments", utils.TruncateInterface(args, -1)),
+				log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
 				log.ShortError(err))
 			return true
 		}
