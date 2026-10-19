@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/redo"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -86,7 +87,7 @@ func (a *redoLogAdvancer) advance(ctx context.Context) error {
 				log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 					zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 					zap.String("changefeed", a.task.tableSink.changefeed.ID),
-					zap.Stringer("span", &a.task.span),
+					logutil.ZapRedactStringer("span", &a.task.span),
 					zap.Uint64("memory", refundMem))
 			}
 		}
@@ -108,7 +109,7 @@ func (a *redoLogAdvancer) advance(ctx context.Context) error {
 		log.Debug("update resolved ts to redo",
 			zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 			zap.String("changefeed", a.task.tableSink.changefeed.ID),
-			zap.Stringer("span", &a.task.span),
+			logutil.ZapRedactStringer("span", &a.task.span),
 			zap.Uint64("resolvedTs", a.lastTxnCommitTs))
 		a.emittedCommitTs = a.lastTxnCommitTs
 	}
@@ -139,7 +140,7 @@ func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 		log.Debug("MemoryQuotaTracing: force acquire memory for redo log task",
 			zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 			zap.String("changefeed", a.task.tableSink.changefeed.ID),
-			zap.Stringer("span", &a.task.span),
+			logutil.ZapRedactStringer("span", &a.task.span),
 			zap.Uint64("memory", a.usedMem-a.availableMem))
 		a.availableMem = a.usedMem
 	}
@@ -167,7 +168,7 @@ func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 				log.Debug("MemoryQuotaTracing: try acquire memory for redo log task",
 					zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 					zap.String("changefeed", a.task.tableSink.changefeed.ID),
-					zap.Stringer("span", &a.task.span),
+					logutil.ZapRedactStringer("span", &a.task.span),
 					zap.Uint64("memory", requestMemSize))
 			}
 		} else {
@@ -180,7 +181,7 @@ func (a *redoLogAdvancer) tryAdvanceAndAcquireMem(
 			log.Debug("MemoryQuotaTracing: block acquire memory for redo log task",
 				zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 				zap.String("changefeed", a.task.tableSink.changefeed.ID),
-				zap.Stringer("span", &a.task.span),
+				logutil.ZapRedactStringer("span", &a.task.span),
 				zap.Uint64("memory", requestMemSize))
 		}
 	}
@@ -253,7 +254,7 @@ func (a *redoLogAdvancer) cleanup() {
 		log.Debug("MemoryQuotaTracing: refund memory for redo log task",
 			zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 			zap.String("changefeed", a.task.tableSink.changefeed.ID),
-			zap.Stringer("span", &a.task.span),
+			logutil.ZapRedactStringer("span", &a.task.span),
 			zap.Uint64("memory", a.availableMem-a.usedMem))
 	}
 }

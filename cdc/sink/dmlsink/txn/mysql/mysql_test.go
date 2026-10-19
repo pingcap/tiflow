@@ -14,12 +14,14 @@
 package mysql
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -40,12 +42,14 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"github.com/pingcap/tiflow/pkg/sink"
 	pmysql "github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"go.uber.org/zap/zaptest/observer"
 )
 
@@ -97,6 +101,113 @@ func newTestMockDB(t *testing.T) (db *sql.DB, mock sqlmock.Sqlmock) {
 	})
 	require.Nil(t, err)
 	return
+}
+
+func TestLogDMLTxnErrRedaction(t *testing.T) {
+	const secret = "secret-value"
+	const literal = "‹literal›"
+	tableInfo := model.BuildTableInfo("test", "accounts", []*model.Column{
+		{Name: "value", Type: mysql.TypeVarchar},
+		{Name: "marker", Type: mysql.TypeVarchar},
+	}, nil)
+	cols := model.Columns2ColumnDatas([]*model.Column{
+		{Name: "value", Value: secret},
+		{Name: "marker", Value: literal},
+	}, tableInfo)
+	query, args := prepareReplace(tableInfo.TableName.QuoteString(), cols, tableInfo, true, true)
+	require.Equal(t, "INSERT INTO `test`.`accounts` (`value`,`marker`) VALUES (?,?)", query)
+	require.Equal(t, []interface{}{secret, literal}, args)
+	modes := []struct {
+		mode         redact.RedactionMode
+		expectedArgs string
+	}{
+		{redact.RedactionModeOff, "[secret-value ‹literal›]"},
+		{redact.RedactionModeOn, "?"},
+		{redact.RedactionModeMarker, "‹[secret-value ‹‹literal››]›"},
+	}
+	errCases := []struct {
+		name      string
+		number    uint16
+		message   string
+		retryable bool
+	}{
+		{"retryable", mysql.ErrLockDeadlock, "deadlock", true},
+		{"nonretryable", mysql.ErrDupEntry, "duplicate key", false},
+	}
+
+	for _, mode := range modes {
+		for _, errCase := range errCases {
+			for _, multiStmt := range []bool{false, true} {
+				t.Run(fmt.Sprintf("%s/%s/multiStmt=%t", mode.mode, errCase.name, multiStmt), func(t *testing.T) {
+					originalMode := errors.RedactLogEnabled.Load()
+					redact.SetRedactionMode(mode.mode)
+					t.Cleanup(func() { errors.RedactLogEnabled.Store(originalMode) })
+					core, logs := observer.New(zap.DebugLevel)
+					var output bytes.Buffer
+					jsonCore := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()),
+						zapcore.AddSync(&output), zap.DebugLevel)
+					t.Cleanup(log.ReplaceGlobals(zap.New(zapcore.NewTee(core, jsonCore)), &log.ZapProperties{
+						Level: zap.NewAtomicLevelAt(zap.DebugLevel),
+					}))
+
+					cause := &dmysql.MySQLError{Number: errCase.number, Message: errCase.message}
+					db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+					require.NoError(t, err)
+					mock.ExpectBegin()
+					mock.ExpectExec(query).WithArgs(secret, literal).WillReturnError(cause)
+					mock.ExpectRollback()
+					mock.ExpectClose()
+					t.Cleanup(func() {
+						require.NoError(t, db.Close())
+						require.NoError(t, mock.ExpectationsWereMet())
+					})
+					tx, err := db.Begin()
+					require.NoError(t, err)
+					backend := &mysqlBackend{db: db, changefeed: "test-changefeed"}
+					dmls := &preparedDMLs{
+						sqls: []string{query}, values: [][]interface{}{args}, rowCount: 1, startTs: []model.Ts{42},
+					}
+					var wrappedErr error
+					if multiStmt {
+						wrappedErr = backend.multiStmtExecute(context.Background(), dmls, tx, time.Second)
+					} else {
+						wrappedErr = backend.sequenceExecute(context.Background(), dmls, tx, time.Second)
+					}
+
+					require.Same(t, cause, errors.Cause(wrappedErr))
+					require.Contains(t, wrappedErr.Error(), "Failed query info: "+query+"; ")
+					require.Contains(t, wrappedErr.Error(), cause.Error())
+					require.NotContains(t, wrappedErr.Error(), secret)
+					require.NotContains(t, wrappedErr.Error(), "literal")
+					entries := logs.All()
+					require.Len(t, entries, 2)
+					require.Equal(t, query, entries[0].ContextMap()["sql"])
+					require.Equal(t, mode.expectedArgs, fmt.Sprint(entries[0].ContextMap()["args"]))
+					require.Equal(t, query, entries[1].ContextMap()["query"])
+					if errCase.retryable {
+						require.Equal(t, zap.WarnLevel, entries[1].Level)
+						require.Equal(t, "execute DMLs with error, retry later", entries[1].Message)
+					} else {
+						require.Equal(t, zap.ErrorLevel, entries[1].Level)
+						require.Equal(t, "execute DMLs with error, can not retry", entries[1].Message)
+					}
+					switch mode.mode {
+					case redact.RedactionModeOff:
+						require.Contains(t, output.String(), secret)
+						require.Contains(t, output.String(), literal)
+					case redact.RedactionModeOn:
+						require.NotContains(t, output.String(), secret)
+						require.NotContains(t, output.String(), "literal")
+					case redact.RedactionModeMarker:
+						require.Contains(t, output.String(), mode.expectedArgs)
+						unmarked := strings.ReplaceAll(output.String(), mode.expectedArgs, "")
+						require.NotContains(t, unmarked, secret)
+						require.NotContains(t, unmarked, "literal")
+					}
+				})
+			}
+		}
+	}
 }
 
 func TestPrepareDML(t *testing.T) {

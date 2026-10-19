@@ -23,6 +23,7 @@ import (
 
 	ticonfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
@@ -104,6 +105,82 @@ func TestDefaultCfg(t *testing.T) {
 	require.Nil(t, defaultCfg.ValidateAndAdjust())
 	require.Equal(t, defaultCfg, o.ServerConfig)
 	require.Equal(t, "http://127.0.0.1:2379", o.ServerPdAddr)
+}
+
+func TestRedactInfoLogConfiguration(t *testing.T) {
+	modes := []struct {
+		name        string
+		flagValue   string
+		configValue string
+		expected    logutil.RedactInfoLogType
+	}{
+		{"off", "false", "false", logutil.RedactInfoLogOFF},
+		{"on", "true", "true", logutil.RedactInfoLogON},
+		{"marker", "MARKER", `"MARKER"`, logutil.RedactInfoLogMarker},
+	}
+
+	check := func(t *testing.T, configValue, flagValue string, expected logutil.RedactInfoLogType) {
+		t.Helper()
+		cmd := new(cobra.Command)
+		o := newOptions()
+		o.addFlags(cmd)
+
+		var args []string
+		if configValue != "" {
+			configPath := filepath.Join(t.TempDir(), "ticdc.toml")
+			content := "[security]\nredact-info-log = " + configValue + "\n"
+			require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
+			args = append(args, "--config", configPath)
+		}
+		if flagValue != "" {
+			args = append(args, "--redact-info-log", flagValue)
+		}
+
+		require.NoError(t, cmd.ParseFlags(args))
+		require.NoError(t, o.complete(cmd))
+		require.Equal(t, expected, o.ServerConfig.Security.RedactInfoLog)
+	}
+
+	for _, mode := range modes {
+		t.Run("flag/"+mode.name, func(t *testing.T) {
+			check(t, "", mode.flagValue, mode.expected)
+		})
+		t.Run("config/"+mode.name, func(t *testing.T) {
+			check(t, mode.configValue, "", mode.expected)
+		})
+		for _, configMode := range modes {
+			t.Run("override/"+configMode.name+"/"+mode.name, func(t *testing.T) {
+				check(t, configMode.configValue, mode.flagValue, mode.expected)
+			})
+		}
+	}
+}
+
+func TestRedactInfoLogInvalidConfiguration(t *testing.T) {
+	for _, value := range []string{"invalid", "2", ""} {
+		t.Run("flag/"+value, func(t *testing.T) {
+			cmd := new(cobra.Command)
+			o := newOptions()
+			o.addFlags(cmd)
+
+			err := cmd.ParseFlags([]string{"--redact-info-log=" + value})
+			require.ErrorContains(t, err, `the "redact-info-log" value is invalid`)
+		})
+	}
+
+	for _, value := range []string{`"invalid"`, `"true"`, "2"} {
+		t.Run("config/"+value, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "ticdc.toml")
+			content := "[security]\nredact-info-log = " + value + "\n"
+			require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
+			cmd := new(cobra.Command)
+			o := newOptions()
+			o.addFlags(cmd)
+
+			require.NoError(t, cmd.ParseFlags([]string{"--config", configPath}))
+			require.ErrorContains(t, o.complete(cmd), `the "redact-info-log" value is invalid`)
+		})
+	}
 }
 
 func TestParseCfg(t *testing.T) {
