@@ -16,16 +16,17 @@ package framework
 import (
 	"testing"
 
-	"github.com/integralist/go-findroot/find"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestDockerComposeOperator_SetupTearDown(t *testing.T) {
-	st, err := find.Repo()
+	// This integration-style test verifies the operator can boot and tear down
+	// the avro compose stack after resolving its compose file from the repo tree.
+	fileName, err := ResolveRepoPath(DockerComposeFilePathPrefix + "docker-compose-avro.yml")
 	assert.NoError(t, err)
 
 	d := &DockerComposeOperator{
-		FileName:   st.Path + "/docker-compose-avro.yml",
+		FileName:   fileName,
 		Controller: "controller0",
 	}
 	d.Setup()
