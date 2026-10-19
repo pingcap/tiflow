@@ -35,6 +35,32 @@ func TestGTDISetSorted(t *testing.T) {
 	require.Equal(t, sortedGTIDSet, gSet.String())
 }
 
+func TestParseMariaDBGTIDSetKeepLargestSeq(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		gtidStr  string
+		expected string
+	}{
+		{"0-1-100,0-2-150", "0-2-150"},
+		{"0-2-150,0-1-100", "0-2-150"},
+		// the GTID set saved by older versions of DM is sorted as strings
+		{"0-10-200,0-9-100", "0-10-200"},
+		{"0-1-100,1-2-5,1-3-6", "0-1-100,1-3-6"},
+	}
+	for _, flavor := range []string{mysql.MariaDBFlavor, ""} {
+		for _, cs := range cases {
+			gSet, err := ParserGTID(flavor, cs.gtidStr)
+			require.NoError(t, err)
+			require.IsType(t, &mysql.MariadbGTIDSet{}, gSet)
+			require.Equal(t, cs.expected, gSet.String(), cs.gtidStr)
+		}
+	}
+
+	_, err := ParserGTID(mysql.MariaDBFlavor, "0-1-100,xxx")
+	require.Error(t, err)
+}
+
 func TestMinGTIDSet(t *testing.T) {
 	t.Parallel()
 
