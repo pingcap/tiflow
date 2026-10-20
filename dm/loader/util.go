@@ -22,10 +22,12 @@ import (
 	"time"
 
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -78,7 +80,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 	if err2 != nil {
 		toPrint = []byte(err2.Error())
 	}
-	log.L().Error("fail to parse dump metadata", log.ShortError(err))
+	log.L().Error("fail to parse dump metadata", redact.ErrorField(err))
 	return "", "", terror.ErrParseMydumperMeta.Generate(err, toPrint)
 }
 
@@ -88,18 +90,18 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 	if cfg.Mode == config.ModeFull {
 		// in full-mode all files won't be need in the future
 		if err := storage.RemoveAll(ctx, cfg.Dir, nil); err != nil {
-			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", cfg.Dir), zap.Error(err))
+			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorField(err))
 		}
 	} else {
-		if storage.IsS3Path(cfg.Dir) {
-			// s3 no need immediately remove
-			log.L().Info("dump path is s3, and s3 storage does not need to immediately remove dump data files.", zap.String("S3 Path", cfg.Dir))
+		if !storage.IsLocalDiskPath(cfg.Dir) {
+			// Remote paths must not be passed to local filesystem operations.
+			log.L().Info("remote storage does not need to immediately remove dump data files", zap.String("path", objstore.RedactURL(cfg.Dir)))
 			return
 		}
 		// leave metadata file and table structure files, only delete data files
 		files, err := utils.CollectDirFiles(cfg.Dir)
 		if err != nil {
-			log.L().Warn("fail to collect files", zap.String("data folder", cfg.Dir), zap.Error(err))
+			log.L().Warn("fail to collect files", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorField(err))
 		}
 		var lastErr error
 		for f := range files {
@@ -111,7 +113,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 			}
 		}
 		if lastErr != nil {
-			log.L().Warn("show last error when remove loaded dump sql files", zap.String("data folder", cfg.Dir), zap.Error(lastErr))
+			log.L().Warn("show last error when remove loaded dump sql files", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorField(lastErr))
 		}
 	}
 }

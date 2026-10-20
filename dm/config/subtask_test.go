@@ -398,6 +398,25 @@ func TestSubTaskAdjustLoaderS3Dir(t *testing.T) {
 	require.Equal(t, "1invalid:", cfg.LoaderConfig.Dir)
 }
 
+func TestStorageCredentialsInConfigErrors(t *testing.T) {
+	for _, tc := range []struct {
+		dir  string
+		mode LoadMode
+	}{
+		{"s3://bucket/path?access-key=private-ak&secret-access-key=private-sk", LoadModeLoader},
+		{"s3://bucket:bad/path?secret-access-key=private-sk", LoadModeSQL},
+	} {
+		cfg := &SubTaskConfig{
+			Name: "task-one", SourceID: "source-one", Mode: ModeAll,
+			LoaderConfig: LoaderConfig{Dir: tc.dir, ImportMode: tc.mode, PoolSize: defaultPoolSize},
+		}
+		err := cfg.Adjust(false)
+		require.Error(t, err)
+		require.NotContains(t, err.Error(), "private-")
+		require.Equal(t, tc.dir, cfg.Dir)
+	}
+}
+
 func TestDBConfigClone(t *testing.T) {
 	a := &dbconfig.DBConfig{
 		Host:     "127.0.0.1",

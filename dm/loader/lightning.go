@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -523,12 +524,12 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	case terror.ErrLoadLightningHasDup.Equal(l.lastErr),
 		terror.ErrLoadLightningChecksum.Equal(l.lastErr):
 		l.logger.Info("manually resume from error, DM will skip the error and continue to next unit",
-			zap.Error(l.lastErr))
+			redact.ErrorField(l.lastErr))
 
 		l.finish.Store(true)
 		err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
 		if err != nil {
-			l.logger.Error("failed to update checkpoint status", zap.Error(err))
+			l.logger.Error("failed to update checkpoint status", redact.ErrorField(err))
 			return err
 		}
 		status = lightningStatusFinished
@@ -551,11 +552,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			l.finish.Store(true)
 			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
 			if err != nil {
-				l.logger.Error("failed to update checkpoint status", zap.Error(err))
+				l.logger.Error("failed to update checkpoint status", redact.ErrorField(err))
 				return err
 			}
 		} else {
-			l.logger.Error("failed to runlightning", zap.Error(err))
+			l.logger.Error("failed to runlightning", redact.ErrorField(err))
 		}
 	} else {
 		l.finish.Store(true)
@@ -615,7 +616,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 	})
 
 	if err := l.restore(ctx); err != nil && !utils.IsContextCanceledError(err) {
-		l.logger.Error("process error", zap.Error(err))
+		l.logger.Error("process error", redact.ErrorField(err))
 		processError := unit.NewProcessError(err)
 		l.handleExitErrMetric(processError)
 		errs = append(errs, processError)

@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/upgrade"
 	"github.com/pingcap/tiflow/dm/pkg/v1dbschema"
@@ -266,7 +267,7 @@ func (s *Server) getSubtaskCfgsStagesV1Import(tctx *tcontext.Context) (
 		for taskName, meta := range resp.Meta {
 			cfg, err := v1workermeta.SubTaskConfigFromV1TOML(meta.Task)
 			if err != nil {
-				tctx.Logger.Error("fail to get subtask config from v1 TOML", zap.ByteString("config", meta.Task))
+				tctx.Logger.Error("fail to get subtask config from v1 TOML", zap.String("config", redact.StorageConfigTOML(string(meta.Task))))
 				errorMsgs = append(errorMsgs, fmt.Sprintf("task %s, %s", meta.Name, err.Error()))
 				continue
 			}
@@ -277,7 +278,7 @@ func (s *Server) getSubtaskCfgsStagesV1Import(tctx *tcontext.Context) (
 			}
 			subtaskCfgs[taskName][cfg.SourceID] = cfg
 			subtaskStages[taskName][cfg.SourceID] = meta.Stage
-			tctx.Logger.Info("got subtask config and stage", zap.Stringer("config", &cfg), zap.Stringer("stage", meta.Stage))
+			tctx.Logger.Info("got subtask config and stage", redact.StorageConfigField("config", &cfg), zap.Stringer("stage", meta.Stage))
 		}
 	}
 

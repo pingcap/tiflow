@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/streamer"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/relay"
@@ -546,7 +547,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		return err
 	}
 
-	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), zap.Any("subTasks", subTaskCfgM))
+	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), redact.StorageConfigField("subTasks", subTaskCfgM))
 
 	for _, subTaskCfg := range subTaskCfgM {
 		expectStage := subTaskStages[subTaskCfg.Name]
@@ -660,7 +661,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, vali
 		return nil
 	}
 
-	w.l.Info("subtask created", zap.Stringer("config", cfg2))
+	w.l.Info("subtask created", redact.StorageConfigField("config", cfg2))
 	st.Run(expectStage, validatorStage, w.getRelayWithoutLock())
 	return nil
 }

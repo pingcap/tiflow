@@ -14,13 +14,41 @@
 package pb
 
 import (
+	"github.com/gogo/protobuf/proto"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap/zapcore"
 )
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
+	clone := *m
+	clone.Task = redact.StorageConfigYAML(m.Task)
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *CheckTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Task = redact.StorageConfigYAML(m.Task)
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *UpdateTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Task = redact.StorageConfigYAML(m.Task)
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
+	return nil
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler.
+func (m *CheckSubtasksCanUpdateRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.SubtaskCfgTomlString = redact.StorageConfigTOML(m.SubtaskCfgTomlString)
+	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
 
@@ -28,4 +56,56 @@ func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
+}
+
+// RedactStorageQueryStatus masks credentials in a response copy, including
+// errors received from older workers. It leaves internal status data untouched.
+func RedactStorageQueryStatus(response *QueryStatusResponse) *QueryStatusResponse {
+	if response == nil {
+		return nil
+	}
+	result := proto.Clone(response).(*QueryStatusResponse)
+	result.Msg = redact.URLText(result.Msg)
+	cleanResult := func(r *ProcessResult) {
+		if r == nil {
+			return
+		}
+		for _, err := range r.Errors {
+			if err != nil {
+				err.Message = redact.URLText(err.Message)
+				err.RawCause = redact.URLText(err.RawCause)
+				err.Workaround = redact.URLText(err.Workaround)
+			}
+		}
+	}
+	cleanDDLs := func(ddls []string) {
+		for i := range ddls {
+			ddls[i] = redact.URLText(ddls[i])
+		}
+	}
+	if source := result.SourceStatus; source != nil {
+		cleanResult(source.Result)
+		if source.RelayStatus != nil {
+			cleanResult(source.RelayStatus.Result)
+		}
+	}
+	for _, task := range result.SubTaskStatus {
+		if task == nil {
+			continue
+		}
+		cleanResult(task.Result)
+		if task.Validation != nil {
+			cleanResult(task.Validation.Result)
+		}
+		if sync := task.GetSync(); sync != nil {
+			sync.ConflictMsg = redact.URLText(sync.ConflictMsg)
+			cleanDDLs(sync.BlockingDDLs)
+			for _, group := range sync.UnresolvedGroups {
+				if group != nil {
+					cleanDDLs(group.DDLs)
+				}
+			}
+		}
+	}
+	return result
 }
