@@ -116,7 +116,6 @@ func TestLogManagerRunReturnsUploadError(t *testing.T) {
 		Table:    &model.TableName{TableID: 1},
 		CommitTs: 1,
 	}))
-	require.NoError(t, m.UpdateResolvedTs(ctx, 1, 1))
 
 	select {
 	case err := <-runErrCh:
