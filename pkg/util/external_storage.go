@@ -114,9 +114,18 @@ func isDeadlineExceedError(err error) bool {
 	return strings.Contains(err.Error(), "context deadline exceeded")
 }
 
+// isConnectionResetError matches the read-side TCP reset that aws-sdk-go v1
+// deliberately excludes from its default retryable connection errors.
+func isConnectionResetError(err error) bool {
+	return strings.Contains(err.Error(), "read: connection reset")
+}
+
 func (rl retryerWithLog) ShouldRetry(r *request.Request) bool {
 	if isDeadlineExceedError(r.Error) {
 		return false
+	}
+	if r.ClientInfo.ServiceName == s3.ServiceName && isConnectionResetError(r.Error) {
+		return true
 	}
 	return rl.DefaultRetryer.ShouldRetry(r)
 }

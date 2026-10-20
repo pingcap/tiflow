@@ -342,7 +342,12 @@ func TestProcessorError(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	// send a abnormal error
+	// An ignorable cancellation must not occupy the single-slot error channel
+	// and hide a fatal error arriving immediately afterwards.
+	p.sendError(context.Canceled)
+	require.Len(t, p.errCh, 0)
+
+	// send an abnormal error
 	p.sendError(cerror.ErrSinkURIInvalid)
 	err = p.Tick(ctx)
 	tester.MustApplyPatches()
@@ -362,14 +367,38 @@ func TestProcessorError(t *testing.T) {
 	require.Nil(t, err)
 	tester.MustApplyPatches()
 
-	// send a normal error
+	// send a normal error. sendError ignores lifecycle errors, while handleErr
+	// keeps the existing normal-exit classification used by pause and remove.
 	p.sendError(context.Canceled)
-	err = p.Tick(ctx)
-	tester.MustApplyPatches()
+	require.Len(t, p.errCh, 0)
+	err = p.handleErr(context.Canceled)
 	require.True(t, cerror.ErrReactorFinished.Equal(errors.Cause(err)))
 	require.Equal(t, p.changefeed.TaskPositions[p.captureInfo.ID], &model.TaskPosition{
 		Error: nil,
 	})
+}
+
+func TestProcessorSendErrorFiltersLifecycleErrors(t *testing.T) {
+	p := &processor{errCh: make(chan error, 1)}
+	ignorableErrors := []error{
+		nil,
+		errors.Trace(context.Canceled),
+		cerror.ErrAdminStopProcessor.GenWithStackByArgs(),
+		cerror.ErrReactorFinished.GenWithStackByArgs(),
+	}
+
+	for _, err := range ignorableErrors {
+		p.sendError(err)
+		require.Empty(t, p.errCh)
+	}
+
+	firstFatalErr := errors.New("first fatal error")
+	p.sendError(firstFatalErr)
+	require.Len(t, p.errCh, 1)
+
+	// The existing channel policy remains first-arrival-wins for fatal errors.
+	p.sendError(errors.New("second fatal error"))
+	require.Same(t, firstFatalErr, <-p.errCh)
 }
 
 func TestProcessorExit(t *testing.T) {
