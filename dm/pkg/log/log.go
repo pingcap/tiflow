@@ -130,6 +130,9 @@ func InitLogger(cfg *Config) error {
 	// Do not log stack traces at all, as we'll get the stack trace from the
 	// error itself.
 	logger = logger.WithOptions(zap.AddStacktrace(zap.DPanicLevel))
+	if IsRedactLogEnabled() {
+		logger = WithRedaction(logger)
+	}
 	pclog.ReplaceGlobals(logger, props)
 
 	lightningLogger := logger.With(zap.String("component", "lightning"))
@@ -227,6 +230,9 @@ func WrapStringerField(message string, object fmt.Stringer) zap.Field {
 func WithCtx(ctx context.Context) Logger {
 	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
 }
+
+// RedactedCredential is the placeholder for credentials in configuration output.
+const RedactedCredential = "******"
 
 var enabledRedactLog atomic.Bool
 

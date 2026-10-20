@@ -79,7 +79,7 @@ func (p *Pessimist) PutInfo(ctx context.Context, info pessimism.Info) (int64, er
 		return rev, nil
 	}
 
-	p.logger.Warn("the previous shard DDL operation still exists, waiting for it to be deleted", zap.Stringer("info", info))
+	p.logger.Warn("the previous shard DDL operation still exists, waiting for it to be deleted", log.RedactField(zap.Stringer("info", info)))
 
 	// wait for the operation to be deleted.
 	ctx2, cancel2 := context.WithCancel(ctx)

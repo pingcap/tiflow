@@ -56,7 +56,7 @@ var SampleSourceConfig string
 
 // ObfuscatedPasswordForFeedback is the source encryption password that returns to the foreground.
 // PM's requirement, we always return obfuscated password to users.
-var ObfuscatedPasswordForFeedback string = "******"
+var ObfuscatedPasswordForFeedback string = log.RedactedCredential
 
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {

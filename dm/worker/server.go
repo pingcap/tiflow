@@ -808,6 +808,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		Result:       true,
 		SourceStatus: &sourceStatus,
 	}
+	if log.IsRedactLogEnabled() {
+		defer func() { *resp = *pb.RedactQueryStatus(resp) }()
+	}
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -831,7 +834,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 	}
 
 	if err != nil {
-		resp.Msg = fmt.Sprintf("error when get master status: %v", err)
+		resp.Msg = fmt.Sprintf("error when get master status: %s", log.RedactError(err))
 	} else if len(resp.SubTaskStatus) == 0 {
 		resp.Msg = "no sub task started"
 	}
@@ -856,7 +859,7 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 
 // OperateSchema operates schema for an upstream table.
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "OperateSchema"), zap.Object("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -922,7 +925,7 @@ func makeCommonWorkerResponse(reqErr error) *pb.CommonWorkerResponse {
 	}
 	if reqErr != nil {
 		resp.Result = false
-		resp.Msg = reqErr.Error()
+		resp.Msg = log.RedactError(reqErr)
 	}
 	return resp
 }
@@ -978,7 +981,7 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 
 // HandleError handle error.
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "HandleError"), zap.Object("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -1009,7 +1012,7 @@ func (s *Server) GetWorkerCfg(ctx context.Context, req *pb.GetWorkerCfgRequest) 
 
 // CheckSubtasksCanUpdate check if input subtask cfg can be updated.
 func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtasksCanUpdateRequest) (*pb.CheckSubtasksCanUpdateResponse, error) {
-	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Object("payload", req))
 	resp := &pb.CheckSubtasksCanUpdateResponse{}
 	defer func() {
 		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))

@@ -408,8 +408,8 @@ func (vw *validateWorker) getTargetRows(cond *Cond) (map[string][]*sql.NullStrin
 			vw.L.Info("met retryable error", zap.Error(err))
 		} else {
 			vw.L.Error("failed to query",
-				zap.String("query", utils.TruncateString(rowsQuery, -1)),
-				zap.String("args", utils.TruncateInterface(cond.GetArgs(), -1)))
+				log.RedactField(zap.String("query", utils.TruncateString(rowsQuery, -1))),
+				log.RedactField(zap.String("args", utils.TruncateInterface(cond.GetArgs(), -1))))
 			err = errors.Trace(err)
 		}
 		return nil, err
