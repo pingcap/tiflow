@@ -1251,3 +1251,23 @@ func TestTaskYamlForDowngrade(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originCfg.TargetDB.Password, decryptedPass)
 }
+
+func TestAllModeIgnoresEmptyMeta(t *testing.T) {
+	t.Parallel()
+	for _, meta := range []string{"{}", "{binlog-pos: 123}", "{binlog-name: '', binlog-gtid: ''}"} {
+		for _, mode := range []string{ModeAll, ModeIncrement, ModeFull} {
+			t.Run(mode+meta, func(t *testing.T) {
+				content := strings.Replace(correctTaskConfig, "task-mode: all", "task-mode: "+mode, 1)
+				content = strings.Replace(content, "  - source-id: \"mysql-replica-01\"", "  - source-id: \"mysql-replica-01\"\n    meta: "+meta, 1)
+				cfg := NewTaskConfig()
+				err := cfg.FromYaml(content)
+				if mode == ModeAll {
+					require.NoError(t, err)
+					require.NotNil(t, cfg.MySQLInstances[0].Meta)
+				} else {
+					require.True(t, terror.ErrConfigMetaInvalid.Equal(err), "error: %v", err)
+				}
+			})
+		}
+	}
+}

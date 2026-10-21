@@ -91,6 +91,7 @@ type Checker struct {
 	checkList         []checker.RealChecker
 	checkingItems     map[string]string
 	dumpWholeInstance bool
+	removeMeta        bool
 	result            struct {
 		sync.RWMutex
 		detail *checker.Results
@@ -103,14 +104,26 @@ type Checker struct {
 	stCfgs []*config.SubTaskConfig
 }
 
+// Option configures the precheck for a task operation.
+type Option func(*Checker)
+
+// WithRemoveMeta makes the precheck ignore checkpoints that start-task will remove.
+func WithRemoveMeta(removeMeta bool) Option {
+	return func(c *Checker) { c.removeMeta = removeMeta }
+}
+
 // NewChecker returns a checker.
-func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, errCnt, warnCnt int64) *Checker {
+func NewChecker(cfgs []*config.SubTaskConfig, checkingItems map[string]string, errCnt, warnCnt int64, options ...Option) *Checker {
 	c := &Checker{
 		instances:     make([]*mysqlInstance, 0, len(cfgs)),
 		checkingItems: checkingItems,
 		errCnt:        errCnt,
 		warnCnt:       warnCnt,
 		stCfgs:        cfgs,
+	}
+
+	for _, option := range options {
+		option(c)
 	}
 
 	for _, cfg := range cfgs {
@@ -348,10 +361,14 @@ func (c *Checker) Init(ctx context.Context) (err error) {
 			checkMetaPos := len(instance.cfg.Meta.BinLogName) > 0 ||
 				(instance.cfg.EnableGTID && len(instance.cfg.Meta.BinLogGTID) > 0)
 			if _, ok := c.checkingItems[config.MetaPositionChecking]; checkMetaPos && ok {
+				meta, enableGTID, err := c.metaPositionForCheck(ctx, instance)
+				if err != nil {
+					return err
+				}
 				c.checkList = append(c.checkList, checker.NewMetaPositionChecker(instance.sourceDB,
 					instance.cfg.From,
-					instance.cfg.EnableGTID,
-					instance.cfg.Meta))
+					enableGTID,
+					meta))
 			}
 		}
 		if config.HasSync(instance.cfg.Mode) {

@@ -154,7 +154,7 @@ func (t *testDMOpenAPISuite) TestDMAPIUpdateJobCfg() {
 	verDB := conn.InitVersionDB()
 	verDB.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version'").WillReturnRows(sqlmock.NewRows([]string{"Variable_name", "Value"}).
 		AddRow("version", "5.7.25-TiDB-v6.1.0"))
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64, _ ...checker.Option) (string, error) {
 		return "check pass", nil
 	}
 	w = httptest.NewRecorder()

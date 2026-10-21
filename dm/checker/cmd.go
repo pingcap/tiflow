@@ -30,7 +30,7 @@ var (
 	CheckTaskSuccess = "pre-check is passed. "
 
 	// CheckSyncConfigFunc holds the CheckSyncConfig function.
-	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error)
+	CheckSyncConfigFunc func(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64, options ...Option) (string, error)
 )
 
 func init() {
@@ -38,7 +38,7 @@ func init() {
 }
 
 // CheckSyncConfig checks synchronization configuration.
-func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64) (string, error) {
+func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, warnCnt int64, options ...Option) (string, error) {
 	if len(cfgs) == 0 {
 		return "", nil
 	}
@@ -51,7 +51,7 @@ func CheckSyncConfig(ctx context.Context, cfgs []*config.SubTaskConfig, errCnt, 
 		return "", nil
 	}
 
-	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt)
+	c := NewChecker(cfgs, checkingItems, errCnt, warnCnt, options...)
 
 	if err := c.Init(ctx); err != nil {
 		return "", terror.Annotate(err, "fail to initialize checker")
