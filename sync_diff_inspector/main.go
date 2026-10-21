@@ -40,12 +40,13 @@ func init() {
 func main() {
 	cfg := config.NewConfig()
 	err := cfg.Parse(os.Args[1:])
+	dmlog.SetRedactLog(cfg.RedactInfoLog)
 	switch errors.Cause(err) {
 	case nil:
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
-		fmt.Printf("Error: %s\n", err.Error())
+		fmt.Printf("Error: %s\n", dmlog.RedactString(err.Error()))
 		cfg.FlagSet.PrintDefaults()
 		os.Exit(2)
 	}
@@ -62,8 +63,6 @@ func main() {
 		}
 		return
 	}
-
-	dmlog.SetRedactLog(cfg.RedactInfoLog)
 
 	conf := new(log.Config)
 	conf.Level = cfg.LogLevel

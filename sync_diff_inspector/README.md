@@ -21,6 +21,8 @@ For more details you can read the [config.toml](./config/config.toml), [config_s
 
 Enable log redaction with `--redact-info-log` or the top-level TOML setting `redact-info-log = true`. It is disabled by default, and an explicit command-line value overrides the configuration file. When enabled, sensitive diagnostic fields are replaced with `?`, including SQL and arguments, row values, chunk and histogram bounds, configuration dumps, column metadata, and comparison errors. Database queries, checkpoints, and generated fix SQL use the original values.
 
+Use `--redact-info-log` on the command line to also hide configuration parsing errors. Settings in a TOML file cannot be loaded if the file has a syntax error.
+
 ## Documents
 - `zh`: [Overview in Chinese](https://docs.pingcap.com/zh/tidb/stable/sync-diff-inspector-overview)
 - `en`: [Overview in English](https://docs.pingcap.com/tidb/stable/sync-diff-inspector-overview)

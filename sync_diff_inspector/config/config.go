@@ -496,7 +496,12 @@ func (c *Config) Parse(arguments []string) error {
 	if c.ConfigFile == "" {
 		return errors.Errorf("argument --config is required")
 	}
+	redactInfoLog := c.RedactInfoLog
 	err = c.configFromFile(c.ConfigFile)
+	// Honor an explicit CLI setting even if TOML decoding changes it and fails.
+	if c.FlagSet.Changed("redact-info-log") {
+		c.RedactInfoLog = redactInfoLog
+	}
 	if err != nil {
 		return errors.Trace(err)
 	}
