@@ -204,6 +204,9 @@ function run() {
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT
 
 	sleep 3
+	# Resume from the retained checkpoints without configured meta. Cover both
+	# GTID (source1) and file/position (source2), rather than leaving an empty meta.
+	sed -i '/^    meta:$/d; /^      binlog-\(gtid\|name\|pos\):/d' $WORK_DIR/dm-task.yaml
 	# start DM task. don't check error because it will meet injected error soon
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task.yaml"
@@ -280,6 +283,19 @@ function run() {
 		"stop-relay -s $worker2bound worker2" \
 		"\"result\": true" 2
 
+	# Also restart without meta or relay. Writes made while the task is stopped
+	# must be recovered from the checkpoints, not skipped by starting at the tail.
+	run_sql_source1 "insert into incremental_mode.t1 (id, name) values (100, 'without meta');"
+	run_sql_source2 "insert into incremental_mode.t2 (id, name) values (100, 'without meta');"
+	dmctl_start_task "$WORK_DIR/dm-task.yaml"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status test" \
+		"\"stage\": \"Running\"" 2
+	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
+	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"stop-task test" \
+		"\"result\": true" 3
+
 	# test rotate binlog, after rotate purge some binlogs. check whether dm can do precheck correctly
 	uuid=($(get_uuid $MYSQL_HOST1 $MYSQL_PORT1)) # get uuid before truncate
 	binlog_name=($(get_latest_name $MYSQL_HOST2 $MYSQL_PORT2))
@@ -315,15 +331,20 @@ function run() {
 	sed -i "s/binlog-name-placeholder-2/$new_binlog_name2/g" $WORK_DIR/dm-task.yaml
 	sed -i "s/binlog-pos-placeholder-2/4/g" $WORK_DIR/dm-task.yaml
 
-	# precheck DM task.
+	# Source1's checkpoint covers the purged GTIDs, but source2's checkpoint
+	# needs a purged file even though its configured meta points to the latest
+	# file. The failure must come from source2, not source1's configured GTID.
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"check-task $WORK_DIR/dm-task.yaml" \
-		"\"name\": \"meta position check\"" 1
+		"\"name\": \"meta position check\"" 1 \
+		"address of db instance - $MYSQL_HOST2:$MYSQL_PORT2" 1
 
-	# start DM task.
+	# Removing metadata checks the configured positions instead: source1's
+	# configured GTID needs purged transactions, while source2's file is valid.
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"start-task $WORK_DIR/dm-task.yaml --remove-meta" \
-		"\"name\": \"meta position check\"" 1
+		"\"name\": \"meta position check\"" 1 \
+		"address of db instance - $MYSQL_HOST1:$MYSQL_PORT1" 1
 }
 
 cleanup_data $TEST_NAME
