@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.26.9
+go 1.27.2
 
 // Keep the Go 1.25 default behaviors that Go 1.26 changed:
 //   - urlstrictcolons=0: the sink URI may carry several Kafka broker endpoints
@@ -462,6 +462,3 @@ replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-// tls10server=1
-godebug tlsrsakex=1

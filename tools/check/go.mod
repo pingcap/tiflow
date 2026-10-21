@@ -1,6 +1,6 @@
 module github.com/pingcap/tidb-cdc/_tools
 
-go 1.26.9
+go 1.27.2
 
 require (
 	github.com/AlekSi/gocov-xml v1.1.0
