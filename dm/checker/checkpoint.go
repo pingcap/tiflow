@@ -16,9 +16,7 @@ package checker
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
-	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/config"
@@ -39,47 +37,34 @@ func (c *Checker) metaPositionForCheck(ctx context.Context, instance *mysqlInsta
 		return cfg.Meta, cfg.EnableGTID, nil
 	}
 
-	query := fmt.Sprintf("SELECT binlog_name, binlog_pos, binlog_gtid, is_global FROM %s WHERE id = ?",
-		dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name)))
-	rows, err := instance.targetDB.DB.QueryContext(ctx, query, cfg.SourceID)
-	if err != nil {
-		if conn.IsMySQLError(err, mysql.ErrNoSuchTable) || conn.IsMySQLError(err, mysql.ErrBadDB) {
-			return cfg.Meta, cfg.EnableGTID, nil
-		}
-		return nil, false, terror.DBErrorAdapt(err, terror.ScopeDownstream, terror.ErrDBDriverError)
-	}
-	defer rows.Close()
-
 	location := binlog.MustZeroLocation(cfg.Flavor)
 	hasTablePoint := false
-	for rows.Next() {
-		var (
-			name     string
-			pos      uint32
-			gtidStr  sql.NullString
-			isGlobal bool
-		)
-		if err := rows.Scan(&name, &pos, &gtidStr, &isGlobal); err != nil {
-			return nil, false, terror.DBErrorAdapt(err, terror.ScopeDownstream, terror.ErrDBDriverError)
-		}
-		if !isGlobal {
-			hasTablePoint = true
-			continue
-		}
-		gset, err := gtid.ParserGTID(cfg.Flavor, gtidStr.String)
-		if err != nil {
-			return nil, false, err
-		}
-		point := binlog.NewLocation(gmysql.Position{Name: name, Pos: pos}, gset)
-		// RemoteCheckPoint.Load also ignores fresh global points.
-		if !binlog.IsFreshPosition(point, cfg.Flavor, cfg.EnableGTID) {
-			location = point
-		}
+	missingCheckpoint := false
+	query := func(query string, args ...interface{}) (*sql.Rows, error) {
+		rows, err := instance.targetDB.DB.QueryContext(ctx, query, args...)
+		missingCheckpoint = conn.IsMySQLError(err, mysql.ErrNoSuchTable) || conn.IsMySQLError(err, mysql.ErrBadDB)
+		return rows, terror.DBErrorAdapt(err, terror.ScopeDownstream, terror.ErrDBDriverError)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, false, terror.DBErrorAdapt(err, terror.ScopeDownstream, terror.ErrDBDriverError)
+	err := cputil.LoadSyncerCheckpoint(query,
+		dbutil.TableName(cfg.MetaSchema, cputil.SyncerCheckpoint(cfg.Name)), cfg.SourceID, cfg.Flavor, false,
+		func(row cputil.SyncerCheckpointRow) error {
+			if !row.IsGlobal {
+				hasTablePoint = true
+			} else if !binlog.IsFreshPosition(row.Location, cfg.Flavor, cfg.EnableGTID) {
+				// RemoteCheckPoint.Load also ignores fresh global points.
+				location = row.Location
+			}
+			return nil
+		})
+	if err != nil {
+		// Only a failed query for absent metadata may fall back, not an error
+		// encountered while decoding or consuming an existing result.
+		if missingCheckpoint {
+			return cfg.Meta, cfg.EnableGTID, nil
+		}
+		return nil, false, err
 	}
-	if binlog.IsFreshPosition(location, cfg.Flavor, cfg.EnableGTID) && !hasTablePoint {
+	if cputil.IsFreshSyncerCheckpoint(location, hasTablePoint, cfg.Flavor, cfg.EnableGTID) {
 		return cfg.Meta, cfg.EnableGTID, nil
 	}
 	pos := binlog.RemoveRelaySubDirSuffix(location.Position)

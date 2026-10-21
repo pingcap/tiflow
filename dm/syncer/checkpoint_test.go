@@ -24,6 +24,7 @@ import (
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	dmysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/check"
 	"github.com/pingcap/log"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
@@ -567,4 +568,91 @@ func TestLastFlushOutdated(t *testing.T) {
 	require.Nil(t, checkpoint.Snapshot(true))
 	// though snapshot is nil, checkpoint is not outdated
 	require.False(t, checkpoint.LastFlushOutdated())
+}
+
+// Exercise the shared reader through the runtime loader, including the fields
+// that position-only prechecks deliberately do not fetch or restore.
+func TestRemoteCheckPointSharedLoader(t *testing.T) {
+	const gtidStr = "938bc44f-4acc-11ed-a147-0242ac110003:1-100"
+	columns := []string{"schema", "table", "name", "pos", "gtid", "exitName", "exitPos", "exitGTID", "tableInfo", "global"}
+	for _, enableGTID := range []bool{false, true} {
+		for _, name := range []string{"global and table", "table only", "fresh global", "fresh global retains loaded point", "missing table", "invalid table info", "invalid exit GTID"} {
+			t.Run(fmt.Sprintf("%s/gtid=%t", name, enableGTID), func(t *testing.T) {
+				tctx := tcontext.Background()
+				cfg := &config.SubTaskConfig{
+					Name: "test", SourceID: "source-1", MetaSchema: "dm_meta", Flavor: mysql.MySQLFlavor,
+					SyncerConfig: config.SyncerConfig{EnableGTID: enableGTID},
+				}
+				db, mock, err := sqlmock.New()
+				require.NoError(t, err)
+				defer db.Close()
+				sqlConn, err := db.Conn(tctx.Context())
+				require.NoError(t, err)
+				defer sqlConn.Close()
+				cp := NewRemoteCheckPoint(tctx, cfg, nil, cfg.SourceID).(*RemoteCheckPoint)
+				cp.dbConn = dbconn.NewDBConn(cfg, conn.NewBaseConnForTest(sqlConn, &retry.FiniteRetryStrategy{}))
+				// No Init/DDL is needed to exercise the read-only load operation.
+				rows := sqlmock.NewRows(columns)
+				var checkpointGTID interface{}
+				if enableGTID {
+					checkpointGTID = gtidStr
+				}
+				expected := binlog.MustZeroLocation(cfg.Flavor)
+				wantFresh := false
+				switch name {
+				case "global and table":
+					rows.AddRow("", "", "bin.000001", 100, checkpointGTID, "bin.000002", 200, checkpointGTID, "null", true).
+						AddRow("db", "tbl", "bin.000001", 100, checkpointGTID, "", 0, nil, `{"id":42}`, false)
+					set, err := gtid.ParserGTID(cfg.Flavor, "")
+					require.NoError(t, err)
+					if enableGTID {
+						set, err = gtid.ParserGTID(cfg.Flavor, gtidStr)
+						require.NoError(t, err)
+					}
+					expected = binlog.NewLocation(mysql.Position{Name: "bin.000001", Pos: 100}, set)
+				case "table only":
+					rows.AddRow("db", "tbl", "bin.000001", 100, checkpointGTID, "", 0, nil, "null", false)
+				case "fresh global", "fresh global retains loaded point":
+					rows.AddRow("", "", "", 4, nil, "", 0, nil, "null", true)
+					wantFresh = name == "fresh global"
+					if !wantFresh {
+						expected.Position = mysql.Position{Name: "bin.000001", Pos: 100}
+						cp.SaveGlobalPoint(expected)
+					}
+				case "invalid table info":
+					rows.AddRow("db", "tbl", "bin.000001", 100, checkpointGTID, "", 0, nil, "invalid json", false)
+				case "invalid exit GTID":
+					rows.AddRow("", "", "", 4, nil, "", 0, "invalid", "null", true)
+					wantFresh = true // ignored when GTID mode is disabled
+				}
+				query := mock.ExpectQuery("SELECT .* FROM `dm_meta`.`test_syncer_checkpoint` WHERE id = \\?").WithArgs(cfg.SourceID)
+				if name == "missing table" {
+					query.WillReturnError(&dmysql.MySQLError{Number: 1146, Message: "missing checkpoint table"})
+				} else {
+					query.WillReturnRows(rows).RowsWillBeClosed()
+				}
+				err = cp.Load(tctx)
+				if name == "missing table" || name == "invalid table info" || (name == "invalid exit GTID" && enableGTID) {
+					require.Error(t, err, "runtime load must not hide metadata errors")
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, expected, cp.GlobalPoint())
+					s := &Syncer{cfg: cfg, checkpoint: cp}
+					fresh, err := s.IsFreshTask(tctx.Context())
+					require.NoError(t, err)
+					require.Equal(t, wantFresh, fresh)
+					if name == "global and table" {
+						require.Equal(t, expected, cp.points["db"]["tbl"].MySQLLocation())
+						require.Equal(t, int64(42), cp.points["db"]["tbl"].TableInfo().ID)
+						require.NotNil(t, cp.safeModeExitPoint)
+						require.Equal(t, mysql.Position{Name: "bin.000002", Pos: 200}, cp.safeModeExitPoint.Position)
+						if enableGTID {
+							require.Equal(t, gtidStr, cp.safeModeExitPoint.GTIDSetStr())
+						}
+					}
+				}
+				require.NoError(t, mock.ExpectationsWereMet())
+			})
+		}
+	}
 }

@@ -103,7 +103,9 @@ func TestMetaPositionForCheckErrors(t *testing.T) {
 		{name: "permission denied", queryErr: &gmysql.MySQLError{Number: mysql.ErrTableaccessDenied}},
 		{name: "connection error", queryErr: errors.New("connection failed")},
 		{name: "invalid checkpoint GTID", rows: sqlmock.NewRows([]string{"name", "pos", "gtid", "global"}).AddRow("bin.000001", 100, "invalid", true)},
+		{name: "invalid table checkpoint GTID", rows: sqlmock.NewRows([]string{"name", "pos", "gtid", "global"}).AddRow("bin.000001", 100, "invalid", false)},
 		{name: "scan error", rows: sqlmock.NewRows([]string{"name", "pos", "gtid", "global"}).AddRow("bin.000001", "invalid", "", true)},
+		{name: "table removed during read", rows: sqlmock.NewRows([]string{"name", "pos", "gtid", "global"}).AddRow("bin.000001", 100, "", true).RowError(0, &gmysql.MySQLError{Number: mysql.ErrNoSuchTable})},
 		{name: "row error", rows: sqlmock.NewRows([]string{"name", "pos", "gtid", "global"}).AddRow("bin.000001", 100, "", true).RowError(0, errors.New("read failed"))},
 	}
 	for _, tc := range cases {
