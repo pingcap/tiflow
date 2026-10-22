@@ -130,6 +130,7 @@ func (t *testDumplingSuite) TestDefaultConfig(c *check.C) {
 	c.Assert(dumpling.Init(ctx), check.IsNil)
 	c.Assert(dumpling.dumpConfig.StatementSize, check.Not(check.Equals), export.UnspecifiedSize)
 	c.Assert(dumpling.dumpConfig.Rows, check.Not(check.Equals), export.UnspecifiedSize)
+	c.Assert(dumpling.dumpConfig.TLSCipherSuites, check.DeepEquals, conn.MySQLTLSCipherSuites())
 }
 
 func TestCallStatus(t *testing.T) {

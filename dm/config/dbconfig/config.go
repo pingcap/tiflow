@@ -144,7 +144,7 @@ func (db *DBConfig) Clone() *DBConfig {
 	clone := *db
 
 	if db.MaxAllowedPacket != nil {
-		packet := *(db.MaxAllowedPacket)
+		packet := *db.MaxAllowedPacket
 		clone.MaxAllowedPacket = &packet
 	}
 
@@ -158,7 +158,7 @@ func (db *DBConfig) Clone() *DBConfig {
 	clone.Security = db.Security.Clone()
 
 	if db.RawDBCfg != nil {
-		dbCfg := *(db.RawDBCfg)
+		dbCfg := *db.RawDBCfg
 		clone.RawDBCfg = &dbCfg
 	}
 
