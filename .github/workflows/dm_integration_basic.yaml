@@ -55,9 +55,18 @@ jobs:
           }
 
           run_mysql "SET GLOBAL ENFORCE_GTID_CONSISTENCY=ON"
-          run_mysql "SET GLOBAL gtid_mode=OFF_PERMISSIVE"
-          run_mysql "SET GLOBAL gtid_mode=ON_PERMISSIVE"
-          run_mysql "SET GLOBAL gtid_mode=ON"
+          gtid_mode="$(run_mysql 'SELECT @@GLOBAL.gtid_mode')"
+          if [[ "$gtid_mode" == OFF ]]; then
+            run_mysql "SET GLOBAL gtid_mode=OFF_PERMISSIVE"
+            gtid_mode=OFF_PERMISSIVE
+          fi
+          if [[ "$gtid_mode" == OFF_PERMISSIVE ]]; then
+            run_mysql "SET GLOBAL gtid_mode=ON_PERMISSIVE"
+            gtid_mode=ON_PERMISSIVE
+          fi
+          if [[ "$gtid_mode" == ON_PERMISSIVE ]]; then
+            run_mysql "SET GLOBAL gtid_mode=ON"
+          fi
           test "$(run_mysql 'SELECT @@GLOBAL.gtid_mode')" = ON
       - name: Check out code
         uses: actions/checkout@v6
