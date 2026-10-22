@@ -96,5 +96,23 @@ if [ "$USE_TLS" = "0" ]; then
 	if [ "${NEXT_GEN:-}" != "1" ]; then
 		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
 		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
+	else
+		# Next-gen rejects local sort. Reuse the cluster's MinIO bucket with a
+		# separate prefix for global sort, including after TiDB restarts. The
+		# global variable persists in TiKV across the TLS restart above.
+		# Encode credentials and the endpoint as URI query parameters.
+		cloud_storage_uri=$(
+			python3 - "${MINIO_BUCKET:-next-gen-test}" "${MINIO_ADDR:-127.0.0.1:9000}" "${MINIO_ACCESS_KEY:-minioadmin}" "${MINIO_SECRET_KEY:-minioadmin}" <<'PY'
+import sys
+from urllib.parse import urlencode
+
+bucket, address, access_key, secret_key = sys.argv[1:]
+query = urlencode({"endpoint": "http://" + address, "access-key": access_key,
+                   "secret-access-key": secret_key, "provider": "minio"})
+print("s3://" + bucket + "/dm-global-sort?" + query)
+PY
+		)
+		# Fail immediately if global sort cannot be configured.
+		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_cloud_storage_uri = '$cloud_storage_uri'"
 	fi
 fi
