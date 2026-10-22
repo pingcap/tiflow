@@ -96,5 +96,8 @@ if [ "$USE_TLS" = "0" ]; then
 	if [ "${NEXT_GEN:-}" != "1" ]; then
 		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
 		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
+	else
+		# Next-gen rejects local sort for index backfill; use MinIO for global sort.
+		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_cloud_storage_uri = 's3://${MINIO_BUCKET}/dm-global-sort?endpoint=http://${MINIO_ADDR}&access-key=${MINIO_ACCESS_KEY}&secret-access-key=${MINIO_SECRET_KEY}&provider=minio'"
 	fi
 fi
