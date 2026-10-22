@@ -41,15 +41,24 @@ jobs:
       DM_MASTER_ADDR: "127.0.0.1:8261"
       DM_WORKER_ADDR: "127.0.0.1:8262"
     steps:
-      # Some steps may fail on some versions, but the end result should be the same.
-      # That's why we set continue-on-error and run this in multiple commands.
-      - name: Try to enable GTID
-        continue-on-error: true
+      - name: Enable GTID
         run: |
-          mysql -h 127.0.0.1 -u root -e "SET GLOBAL ENFORCE_GTID_CONSISTENCY=ON"
-          mysql -h 127.0.0.1 -u root -e "SET GLOBAL gtid_mode=OFF_PERMISSIVE"
-          mysql -h 127.0.0.1 -u root -e "SET GLOBAL gtid_mode=ON_PERMISSIVE"
-          mysql -h 127.0.0.1 -u root -e "SET GLOBAL gtid_mode=ON"
+          run_mysql() {
+            for attempt in {1..30}; do
+              if mysql --connect-timeout=5 -h 127.0.0.1 -u root -Nse "$1"; then
+                return 0
+              fi
+              echo "MySQL command failed (attempt ${attempt}/30); retrying" >&2
+              sleep 2
+            done
+            return 1
+          }
+
+          run_mysql "SET GLOBAL ENFORCE_GTID_CONSISTENCY=ON"
+          run_mysql "SET GLOBAL gtid_mode=OFF_PERMISSIVE"
+          run_mysql "SET GLOBAL gtid_mode=ON_PERMISSIVE"
+          run_mysql "SET GLOBAL gtid_mode=ON"
+          test "$(run_mysql 'SELECT @@GLOBAL.gtid_mode')" = ON
       - name: Check out code
         uses: actions/checkout@v6
       - name: Set up Go
