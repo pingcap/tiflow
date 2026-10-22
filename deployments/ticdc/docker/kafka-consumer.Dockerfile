@@ -1,4 +1,4 @@
-FROM golang:1.27.2-alpine AS builder
+FROM golang:1.27.3-alpine AS builder
 RUN apk add --no-cache make bash git build-base
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .

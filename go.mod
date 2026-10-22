@@ -1,6 +1,6 @@
 module github.com/pingcap/tiflow
 
-go 1.27.2
+go 1.27.3
 
 // Keep the Go 1.25 default behaviors that Go 1.26 changed:
 //   - urlstrictcolons=0: the sink URI may carry several Kafka broker endpoints
