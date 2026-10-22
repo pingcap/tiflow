@@ -461,7 +461,8 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
 // Temporary Go 1.27 map ABI support from https://github.com/pingcap/tidb/pull/72081.
-// Replace both modules with official TiDB versions after the draft PR is validated and merged.
-replace github.com/pingcap/tidb => github.com/dillon-zheng/tidb v0.0.0-20261017065457-8b21f5b35742
+// The TiDB fork also lets DM set Dumpling TLS cipher suites for MySQL 5.7.
+// Replace both modules with official TiDB versions after upstream support lands.
+replace github.com/pingcap/tidb => github.com/lidezhu/tidb v1.1.0-beta.0.20261022085814-a0b7b9c028c4
 
 replace github.com/pingcap/tidb/pkg/parser => github.com/dillon-zheng/tidb/pkg/parser v0.0.0-20261017065457-8b21f5b35742

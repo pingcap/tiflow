@@ -440,6 +440,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 	m.detectSQLMode(ctx, dumpConfig)
 	dumpConfig.ExtStorage = cfg.ExtStorage
 	dumpConfig.MinTLSVersion = tls.VersionTLS10
+	dumpConfig.TLSCipherSuites = conn.MySQLTLSCipherSuites()
 
 	return dumpConfig, nil
 }
