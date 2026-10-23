@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -39,19 +40,20 @@ func ZapLogger(log *zap.Logger) gin.HandlerFunc {
 			zap.String("remote_ip", c.Request.RemoteAddr),
 			zap.String("user_agent", req.UserAgent()),
 			zap.String("duration", time.Since(start).String()),
-			zap.String("request", fmt.Sprintf("%s %s", req.Method, req.RequestURI)),
+			// Query strings can carry credentials; access logs only need the path.
+			zap.String("request", fmt.Sprintf("%s %s", req.Method, req.URL.EscapedPath())),
 		}
 
 		switch {
 		case statusCode >= 500:
 			if err := c.Errors.Last(); err != nil {
-				log.With(zap.Error(err)).Error("Server error", fields...)
+				log.With(redact.ErrorFieldWithRedactedURL(err)).Error("Server error", fields...)
 			} else {
 				log.Error("Server error", fields...)
 			}
 		case statusCode >= 400:
 			if err := c.Errors.Last(); err != nil {
-				log.With(zap.Error(c.Errors.Last().Err)).Warn("Client error", fields...)
+				log.With(redact.ErrorFieldWithRedactedURL(c.Errors.Last().Err)).Warn("Client error", fields...)
 			} else {
 				log.Warn("Client error", fields...)
 			}

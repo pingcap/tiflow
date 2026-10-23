@@ -16,6 +16,7 @@ package openapi
 import (
 	"encoding/json"
 
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -42,4 +43,34 @@ func (t *Task) FromJSON(data []byte) error {
 // ToJSON marshal json to task.
 func (t *Task) ToJSON() ([]byte, error) {
 	return json.Marshal(t)
+}
+
+// TaskWithRedactedURL returns a response copy with storage credentials hidden.
+// It must not change task templates or configurations used for execution.
+func TaskWithRedactedURL(task *Task) *Task {
+	if task == nil {
+		return nil
+	}
+	result := *task
+	if full := task.SourceConfig.FullMigrateConf; full != nil {
+		copyFull := *full
+		if full.DataDir != nil {
+			dir := objstore.RedactURL(*full.DataDir)
+			copyFull.DataDir = &dir
+		}
+		result.SourceConfig.FullMigrateConf = &copyFull
+	}
+	return &result
+}
+
+// TaskListWithRedactedURL returns diagnostic copies of a task list.
+func TaskListWithRedactedURL(tasks []Task) []Task {
+	if tasks == nil {
+		return nil
+	}
+	result := make([]Task, len(tasks))
+	for i := range tasks {
+		result[i] = *TaskWithRedactedURL(&tasks[i])
+	}
+	return result
 }

@@ -153,7 +153,8 @@ func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 				// error
 				_, err = AdjustPath("1invalid:", testSeparator+testUniqueID.test)
 				require.Error(t, err)
-				require.Regexp(t, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*", err.Error())
+				require.ErrorContains(t, err, "parse storage URL failed: invalid format")
+				require.NotContains(t, err.Error(), "1invalid:")
 				// normal
 				var expectPath string
 				if testPath.isURLFormat {

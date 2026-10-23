@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -72,7 +73,12 @@ type Unit interface {
 
 // NewProcessError creates a new ProcessError
 // we can refine to add error scope field if needed.
-func NewProcessError(err error) *pb.ProcessError {
+func NewProcessError(err error) (result *pb.ProcessError) {
+	defer func() {
+		result.Message = redact.TextWithRedactedURL(result.Message)
+		result.RawCause = redact.TextWithRedactedURL(result.RawCause)
+		result.Workaround = redact.TextWithRedactedURL(result.Workaround)
+	}()
 	if e, ok := err.(*terror.Error); ok {
 		return &pb.ProcessError{
 			ErrCode:    int32(e.Code()),

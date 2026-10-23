@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
 )
@@ -79,7 +80,7 @@ func (s *Server) reverseRequestToLeaderMW(tlsCfg *tls.Config) gin.HandlerFunc {
 				transport.TLSClientConfig = tlsCfg
 				simpleProxy.Transport = transport
 			}
-			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.String()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
+			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.EscapedPath()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
 			simpleProxy.ServeHTTP(c.Writer, c.Request)
 			c.Abort()
 		}
@@ -461,6 +462,8 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	res.Task = *openapi.TaskWithRedactedURL(&res.Task)
+	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
 	c.IndentedJSON(http.StatusCreated, res)
 }
 
@@ -476,6 +479,8 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
+	res.Task = *openapi.TaskWithRedactedURL(&res.Task)
+	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
 	c.IndentedJSON(http.StatusOK, res)
 }
 
@@ -506,7 +511,7 @@ func (s *Server) DMAPIGetTask(c *gin.Context, taskName string, params openapi.DM
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, openapi.TaskWithRedactedURL(task))
 }
 
 // DMAPIGetTaskStatus url is:(GET /api/v1/tasks/{task-name}/status).
@@ -530,7 +535,7 @@ func (s *Server) DMAPIGetTaskList(c *gin.Context, params openapi.DMAPIGetTaskLis
 		_ = c.Error(err)
 		return
 	}
-	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: taskList}
+	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: openapi.TaskListWithRedactedURL(taskList)}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
@@ -835,7 +840,9 @@ func (s *Server) DMAPIConvertTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, openapi.ConverterTaskResponse{Task: *task, TaskConfigFile: taskCfg.String()})
+	c.IndentedJSON(http.StatusOK, openapi.ConverterTaskResponse{
+		Task: *openapi.TaskWithRedactedURL(task), TaskConfigFile: taskConfigWithRedactedURL(taskCfg).String(),
+	})
 }
 
 // DMAPIImportTaskTemplate create task_config_template url is: (POST /api/v1/tasks/templates/import).
@@ -858,7 +865,7 @@ func (s *Server) DMAPIImportTaskTemplate(c *gin.Context) {
 				ErrorMsg string `json:"error_msg"`
 				TaskName string `json:"task_name"`
 			}{
-				ErrorMsg: err.Error(),
+				ErrorMsg: redact.TextWithRedactedURL(err.Error()),
 				TaskName: task.Name,
 			})
 		} else {
@@ -890,7 +897,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusCreated, task)
+	c.IndentedJSON(http.StatusCreated, openapi.TaskWithRedactedURL(task))
 }
 
 // DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/tasks/templates).
@@ -904,7 +911,7 @@ func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 	for i, TaskConfig := range TaskConfigList {
 		taskList[i] = *TaskConfig
 	}
-	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: taskList}
+	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: openapi.TaskListWithRedactedURL(taskList)}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
@@ -928,7 +935,7 @@ func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(terror.ErrOpenAPITaskConfigNotExist.Generate(taskName))
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, openapi.TaskWithRedactedURL(task))
 }
 
 // DMAPUpdateTaskTemplate update task_config_template url is: (PUT /api/v1/tasks/templates/{task-name}).
@@ -952,7 +959,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, openapi.TaskWithRedactedURL(task))
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {
@@ -970,6 +977,6 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 		} else {
 			msg = gErr.Error()
 		}
-		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: msg, ErrorCode: code})
+		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: redact.TextWithRedactedURL(msg), ErrorCode: code})
 	}
 }

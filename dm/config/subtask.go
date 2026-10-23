@@ -29,6 +29,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 	"github.com/google/uuid"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -327,10 +328,10 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 
 	// import-into mode requires shared storage (s3, gcs, azure, etc.)
 	if isImportInto && strings.TrimSpace(c.LoaderConfig.Dir) == "" {
-		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(objstore.RedactURL(c.LoaderConfig.Dir))
 	}
 	if isImportInto && storage.IsLocalDiskPath(c.LoaderConfig.Dir) {
-		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(c.LoaderConfig.Dir)
+		return terror.ErrConfigImportIntoRequiresSharedStorage.Generate(objstore.RedactURL(c.LoaderConfig.Dir))
 	}
 
 	if len(c.ColumnMappingRules) > 0 {
@@ -373,7 +374,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		// check
 		isS3 := storage.IsS3Path(c.LoaderConfig.Dir)
 		if isS3 && c.ImportMode == LoadModeLoader {
-			return terror.ErrConfigLoaderS3NotSupport.Generate(c.LoaderConfig.Dir)
+			return terror.ErrConfigLoaderS3NotSupport.Generate(objstore.RedactURL(c.LoaderConfig.Dir))
 		}
 		// add suffix
 		var dirSuffix string
@@ -386,7 +387,7 @@ func (c *SubTaskConfig) Adjust(verifyDecryptPassword bool) error {
 		}
 		newDir, err := storage.AdjustPath(c.LoaderConfig.Dir, dirSuffix)
 		if err != nil {
-			return terror.ErrConfigLoaderDirInvalid.Delegate(err, c.LoaderConfig.Dir)
+			return terror.ErrConfigLoaderDirInvalid.Delegate(err, objstore.RedactURL(c.LoaderConfig.Dir))
 		}
 		c.LoaderConfig.Dir = newDir
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/cputil"
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -176,7 +177,7 @@ func upgradeToVer2(cli *clientv3.Client, uctx Context) error {
 			subCfg2, err := subCfg.DecryptedClone()
 			if err != nil {
 				log.L().Error("subconfig error when upgrading", zap.String("task", task),
-					zap.String("source id", sourceID), zap.String("subtask config", subCfg.String()), zap.Error(err))
+					zap.String("source id", sourceID), redact.ConfigFieldWithRedactedURL("subtask config", subCfg), zap.Error(err))
 				return err
 			}
 			dbConfigs[tableName] = subCfg2.To
