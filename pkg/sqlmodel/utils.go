@@ -14,7 +14,9 @@
 package sqlmodel
 
 import (
+	"bytes"
 	"fmt"
+	"reflect"
 	"strings"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -44,6 +46,20 @@ func ColValAsStr(v interface{}) string {
 		return dv
 	}
 	return fmt.Sprintf("%v", v)
+}
+
+// colValEqual compares two column values. Applying == or != to an interface
+// that holds a slice panics with "comparing uncomparable type []uint8", and
+// BINARY, binary CHAR, BLOB and TEXT columns reach here as []byte, so those are
+// compared with bytes.Equal. reflect.DeepEqual keeps any other uncomparable
+// type safe too.
+func colValEqual(a, b any) bool {
+	aBytes, aOK := a.([]byte)
+	bBytes, bOK := b.([]byte)
+	if aOK || bOK {
+		return aOK && bOK && bytes.Equal(aBytes, bBytes)
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // writableSourceColumns returns source columns that are present in the row
