@@ -14,12 +14,15 @@
 package loader
 
 import (
+	"context"
 	"testing"
 
+	drivermysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/lightning/common"
 	lcfg "github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/objstore"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
@@ -97,6 +100,56 @@ func TestConvertLightningError(t *testing.T) {
 	converted := convertLightningError(errors.Trace(err))
 	require.True(t, terror.ErrLoadLightningChecksum.Equal(converted))
 	require.Contains(t, converted.Error(), "checksum mismatched, KV number in source files: 4, KV number in TiDB cluster: 3")
+}
+
+func TestRetryLightningMetaInit(t *testing.T) {
+	t.Parallel()
+
+	metaInitRace := common.ErrInitMetaManager.Wrap(&drivermysql.MySQLError{
+		Number: mysql.ErrBadDB, Message: "Unknown database ''",
+	}).GenWithStackByArgs()
+	otherMetaError := common.ErrInitMetaManager.Wrap(&drivermysql.MySQLError{
+		Number: mysql.ErrNoSuchTable, Message: "table missing",
+	}).GenWithStackByArgs()
+	otherStageError := common.ErrInvalidTLSConfig.Wrap(&drivermysql.MySQLError{
+		Number: mysql.ErrBadDB, Message: "Unknown database ''",
+	}).GenWithStackByArgs()
+
+	for _, test := range []struct {
+		name     string
+		errors   []error
+		wantRuns int
+		wantErr  error
+	}{
+		{"transient metadata schema race", []error{metaInitRace, nil}, 2, nil},
+		{"persistent metadata schema race", []error{metaInitRace}, lightningMetaInitRetryLimit, metaInitRace},
+		{"different metadata error", []error{otherMetaError}, 1, otherMetaError},
+		{"different Lightning stage", []error{otherStageError}, 1, otherStageError},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			runs := 0
+			err := retryLightningMetaInit(context.Background(), 0, func(attempt int) error {
+				require.Equal(t, runs, attempt)
+				runs++
+				if attempt < len(test.errors) {
+					return test.errors[attempt]
+				}
+				return test.errors[len(test.errors)-1]
+			})
+			require.ErrorIs(t, err, test.wantErr)
+			require.Equal(t, test.wantRuns, runs)
+		})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	runs := 0
+	err := retryLightningMetaInit(ctx, 0, func(int) error {
+		runs++
+		cancel()
+		return metaInitRace
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, runs)
 }
 
 func TestGetLightiningConfig(t *testing.T) {

@@ -15,6 +15,7 @@ package loader
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"path/filepath"
 	"regexp"
@@ -22,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	drivermysql "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
@@ -54,6 +56,8 @@ const (
 	// checkpoint file name for lightning loader
 	// this file is used to store the real checkpoint data for lightning.
 	lightningCheckpointFileName = "tidb_lightning_checkpoint.pb"
+	lightningMetaInitRetryLimit = 3
+	lightningMetaInitRetryDelay = time.Second
 )
 
 // LightningLoader can load your mydumper data into TiDB database.
@@ -315,7 +319,21 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 	if l.cfg.LoaderConfig.ImportMode == config.LoadModePhysical {
 		opts = append(opts, lserver.WithDupIndicator(&hasDup))
 	}
-	err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
+	if cfg.TikvImporter.Backend == lcfg.BackendLocal {
+		err = retryLightningMetaInit(taskCtx, lightningMetaInitRetryDelay, func(attempt int) error {
+			if attempt > 0 {
+				l.logger.Warn("retry Lightning metadata initialization after concurrent schema cleanup", zap.Int("attempt", attempt+1))
+				var configErr error
+				cfg, configErr = l.getLightningConfig()
+				if configErr != nil {
+					return configErr
+				}
+			}
+			return l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
+		})
+	} else {
+		err = l.core.RunOnceWithOptions(taskCtx, cfg, opts...)
+	}
 	failpoint.Inject("LoadDataSlowDown", nil)
 	failpoint.Inject("LoadDataSlowDownByTask", func(val failpoint.Value) {
 		tasks := val.(string)
@@ -334,6 +352,39 @@ func (l *LightningLoader) runLightning(ctx context.Context, cfg *lcfg.Config) (e
 		return terror.ErrLoadLightningHasDup.Generate(cfg.App.TaskInfoSchemaName, errormanager.ConflictErrorTableName)
 	}
 	return nil
+}
+
+// retryLightningMetaInit handles the race where another Lightning task drops the
+// shared metadata schema between CREATE DATABASE and CREATE TABLE. This error
+// happens before Lightning starts importing data, so retrying the run is safe.
+func retryLightningMetaInit(ctx context.Context, delay time.Duration, run func(int) error) error {
+	for attempt := 0; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		err := run(attempt)
+		if !isLightningMetaInitSchemaRace(err) || attempt == lightningMetaInitRetryLimit-1 {
+			return err
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return ctx.Err()
+		case <-timer.C:
+		}
+	}
+}
+
+func isLightningMetaInitSchemaRace(err error) bool {
+	if !stderrors.Is(err, common.ErrInitMetaManager) {
+		return false
+	}
+	var mysqlErr *drivermysql.MySQLError
+	return stderrors.As(err, &mysqlErr) && mysqlErr.Number == mysql.ErrBadDB
 }
 
 var checksumErrorPattern = regexp.MustCompile(`total_kvs: (\d*) vs (\d*)`)
