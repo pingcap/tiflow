@@ -29,39 +29,30 @@ import (
 
 const invalidConfig = "(invalid config; redacted)"
 
-// StorageConfigField formats a diagnostic copy without exposing storage URL
+// ConfigFieldWithRedactedURL formats a diagnostic copy without exposing storage URL
 // credentials. It must not be used to serialize execution or persisted configs.
-func StorageConfigField(key string, cfg any) zap.Field {
+func ConfigFieldWithRedactedURL(key string, cfg any) zap.Field {
 	data, err := json.Marshal(cfg)
 	if err != nil {
 		return zap.String(key, invalidConfig)
 	}
-	return zap.String(key, storageConfigJSON(string(data)))
-}
-
-// storageConfigJSON hides storage URL credentials in diagnostic JSON.
-func storageConfigJSON(input string) string {
-	var cfg any
-	d := json.NewDecoder(strings.NewReader(input))
+	var value any
+	d := json.NewDecoder(bytes.NewReader(data))
 	d.UseNumber()
-	if err := d.Decode(&cfg); err != nil {
-		return invalidConfig
+	if err := d.Decode(&value); err != nil {
+		return zap.String(key, invalidConfig)
 	}
-	var extra any
-	if err := d.Decode(&extra); err != io.EOF {
-		return invalidConfig
-	}
-	redactStorageConfig(cfg)
-	data, err := json.Marshal(cfg)
+	redactConfigURL("", value)
+	data, err = json.Marshal(value)
 	if err != nil {
-		return invalidConfig
+		return zap.String(key, invalidConfig)
 	}
-	return string(data)
+	return zap.String(key, string(data))
 }
 
-// StorageConfigYAML hides storage URL credentials in a single configuration
+// YAMLConfigWithRedactedURL hides storage URL credentials in a single configuration
 // document, retaining unknown fields and leaving the original request untouched.
-func StorageConfigYAML(input string) string {
+func YAMLConfigWithRedactedURL(input string) string {
 	if input == "" {
 		return ""
 	}
@@ -75,7 +66,7 @@ func StorageConfigYAML(input string) string {
 	if err := d.Decode(&extra); err != io.EOF {
 		return invalidConfig
 	}
-	redactStorageConfig(cfg)
+	redactConfigURL("", cfg)
 	data, err := yaml.Marshal(cfg)
 	if err != nil {
 		return invalidConfig
@@ -83,8 +74,8 @@ func StorageConfigYAML(input string) string {
 	return string(data)
 }
 
-// StorageConfigTOML hides storage URL credentials in diagnostic TOML.
-func StorageConfigTOML(input string) string {
+// TOMLConfigWithRedactedURL hides storage URL credentials in diagnostic TOML.
+func TOMLConfigWithRedactedURL(input string) string {
 	if input == "" {
 		return ""
 	}
@@ -92,7 +83,7 @@ func StorageConfigTOML(input string) string {
 	if _, err := toml.Decode(input, &cfg); err != nil {
 		return invalidConfig
 	}
-	redactStorageConfig(cfg)
+	redactConfigURL("", cfg)
 	var out bytes.Buffer
 	if err := toml.NewEncoder(&out).Encode(cfg); err != nil {
 		return invalidConfig
@@ -100,38 +91,35 @@ func StorageConfigTOML(input string) string {
 	return out.String()
 }
 
-func redactStorageValue(key string, value any) any {
-	if s, ok := value.(string); ok {
+// redactConfigURL only mutates decoded diagnostic copies. URL credential rules
+// belong to objstore.RedactURL; other configuration fields are left unchanged.
+func redactConfigURL(key string, value any) any {
+	switch v := value.(type) {
+	case string:
 		switch strings.ToLower(key) {
 		case "dir", "data-dir", "data_dir", "output-dir", "outputdir":
-			return objstore.RedactURL(s)
+			return objstore.RedactURL(v)
 		}
-	}
-	redactStorageConfig(value)
-	return value
-}
-
-func redactStorageConfig(value any) {
-	switch v := value.(type) {
 	case map[string]any:
 		for key, child := range v {
-			v[key] = redactStorageValue(key, child)
+			v[key] = redactConfigURL(key, child)
 		}
 	case map[any]any:
 		for key, child := range v {
 			if name, ok := key.(string); ok {
-				v[key] = redactStorageValue(name, child)
+				v[key] = redactConfigURL(name, child)
 			}
 		}
 	case []any:
 		for _, child := range v {
-			redactStorageConfig(child)
+			redactConfigURL("", child)
 		}
 	case []map[string]any:
 		for _, child := range v {
-			redactStorageConfig(child)
+			redactConfigURL("", child)
 		}
 	}
+	return value
 }
 
 // diagnosticURL only locates URLs in free-form text. Credential selection and
@@ -139,24 +127,24 @@ func redactStorageConfig(value any) {
 // A single slash also matches paths normalized by filepath, such as s3:/bucket.
 var diagnosticURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*:/{1,2}[^\s"'<>]+`)
 
-// URLText applies the same TiDB URL policy to URLs embedded in diagnostic text.
-func URLText(text string) string {
+// TextWithRedactedURL applies the same TiDB URL policy to URLs embedded in diagnostic text.
+func TextWithRedactedURL(text string) string {
 	return diagnosticURL.ReplaceAllStringFunc(text, objstore.RedactURL)
 }
 
-// ErrorField formats a diagnostic error without exposing an unredacted verbose
+// ErrorFieldWithRedactedURL formats a diagnostic error without exposing an unredacted verbose
 // representation. It never changes the error used for execution or retries.
-func ErrorField(err error) zap.Field {
+func ErrorFieldWithRedactedURL(err error) zap.Field {
 	if err == nil {
 		return zap.Skip()
 	}
-	return zap.String("error", URLText(err.Error()))
+	return zap.String("error", TextWithRedactedURL(err.Error()))
 }
 
-// ProxyURL adapts scheme-less proxy syntax before using TiDB's URL redactor.
+// RedactedProxyURL adapts scheme-less proxy syntax before using TiDB's URL redactor.
 // Without the temporary scheme, user:password@host:port is treated as a local
 // path by objstore.RedactURL and is returned unchanged.
-func ProxyURL(raw string) string {
+func RedactedProxyURL(raw string) string {
 	if !strings.Contains(raw, "://") {
 		return strings.TrimPrefix(objstore.RedactURL("http://"+raw), "http://")
 	}

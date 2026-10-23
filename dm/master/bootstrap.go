@@ -267,7 +267,7 @@ func (s *Server) getSubtaskCfgsStagesV1Import(tctx *tcontext.Context) (
 		for taskName, meta := range resp.Meta {
 			cfg, err := v1workermeta.SubTaskConfigFromV1TOML(meta.Task)
 			if err != nil {
-				tctx.Logger.Error("fail to get subtask config from v1 TOML", zap.String("config", redact.StorageConfigTOML(string(meta.Task))))
+				tctx.Logger.Error("fail to get subtask config from v1 TOML", zap.String("config", redact.TOMLConfigWithRedactedURL(string(meta.Task))))
 				errorMsgs = append(errorMsgs, fmt.Sprintf("task %s, %s", meta.Name, err.Error()))
 				continue
 			}
@@ -278,7 +278,7 @@ func (s *Server) getSubtaskCfgsStagesV1Import(tctx *tcontext.Context) (
 			}
 			subtaskCfgs[taskName][cfg.SourceID] = cfg
 			subtaskStages[taskName][cfg.SourceID] = meta.Stage
-			tctx.Logger.Info("got subtask config and stage", redact.StorageConfigField("config", &cfg), zap.Stringer("stage", meta.Stage))
+			tctx.Logger.Info("got subtask config and stage", redact.ConfigFieldWithRedactedURL("config", &cfg), zap.Stringer("stage", meta.Stage))
 		}
 	}
 

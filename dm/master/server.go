@@ -526,7 +526,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	resp.CheckResult = msg
 
-	log.L().Info("", zap.String("task name", cfg.Name), redact.StorageConfigField("task", cfg), zap.String("request", "StartTask"))
+	log.L().Info("", zap.String("task name", cfg.Name), redact.ConfigFieldWithRedactedURL("task", cfg), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
 	if len(req.Sources) > 0 {
@@ -754,7 +754,7 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp, nil
 	}
 	resp.CheckResult = msg
-	log.L().Info("update task", zap.String("task name", cfg.Name), redact.StorageConfigField("task", cfg))
+	log.L().Info("update task", zap.String("task name", cfg.Name), redact.ConfigFieldWithRedactedURL("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
 	if len(req.Sources) > 0 {
@@ -1142,7 +1142,7 @@ func (s *Server) getStatusFromWorkers(
 	)
 	setWorkerResp := func(resp *pb.QueryStatusResponse) {
 		workerRespMu.Lock()
-		workerResps = append(workerResps, pb.RedactStorageQueryStatus(resp))
+		workerResps = append(workerResps, pb.QueryStatusWithRedactedURL(resp))
 		workerRespMu.Unlock()
 	}
 
@@ -2019,7 +2019,7 @@ func (s *Server) waitOperationOk(
 				zap.Stringer("expect", expect),
 				log.ShortError(err))
 		} else {
-			queryResp := pb.RedactStorageQueryStatus(resp.QueryStatus)
+			queryResp := pb.QueryStatusWithRedactedURL(resp.QueryStatus)
 			if queryResp == nil {
 				// should not happen
 				return false, "", nil, errors.Errorf("expect a query-status response, got type %v", resp.Type)
@@ -2530,7 +2530,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
 		}
-		return taskConfigWithRedactedStorage(taskCfg).String()
+		return taskConfigWithRedactedURL(taskCfg).String()
 	}
 	switch req.Type {
 	case pb.CfgType_TaskTemplateType:
@@ -3070,7 +3070,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation status", redact.StorageConfigField("subtask", subTaskCfgs))
+	log.L().Info("query validation status", redact.ConfigFieldWithRedactedURL("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
 		workerRespMu sync.Mutex
@@ -3132,7 +3132,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation error", redact.StorageConfigField("subtask", subTaskCfgs))
+	log.L().Info("query validation error", redact.ConfigFieldWithRedactedURL("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3187,7 +3187,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("operate validation error", redact.StorageConfigField("subtask", subTaskCfgs))
+	log.L().Info("operate validation error", redact.ConfigFieldWithRedactedURL("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.OperateValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3474,9 +3474,9 @@ func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb
 	}, nil
 }
 
-// taskConfigWithRedactedStorage keeps the existing struct-based YAML formatting
+// taskConfigWithRedactedURL keeps the existing struct-based YAML formatting
 // of get-config, and copies every loader before masking its storage URL.
-func taskConfigWithRedactedStorage(cfg *config.TaskConfig) *config.TaskConfig {
+func taskConfigWithRedactedURL(cfg *config.TaskConfig) *config.TaskConfig {
 	result := *cfg
 	cloneLoader := func(loader *config.LoaderConfig) *config.LoaderConfig {
 		if loader == nil {

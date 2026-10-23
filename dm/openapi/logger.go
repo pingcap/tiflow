@@ -47,13 +47,13 @@ func ZapLogger(log *zap.Logger) gin.HandlerFunc {
 		switch {
 		case statusCode >= 500:
 			if err := c.Errors.Last(); err != nil {
-				log.With(redact.ErrorField(err)).Error("Server error", fields...)
+				log.With(redact.ErrorFieldWithRedactedURL(err)).Error("Server error", fields...)
 			} else {
 				log.Error("Server error", fields...)
 			}
 		case statusCode >= 400:
 			if err := c.Errors.Last(); err != nil {
-				log.With(redact.ErrorField(c.Errors.Last().Err)).Warn("Client error", fields...)
+				log.With(redact.ErrorFieldWithRedactedURL(c.Errors.Last().Err)).Warn("Client error", fields...)
 			} else {
 				log.Warn("Client error", fields...)
 			}

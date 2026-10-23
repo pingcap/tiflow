@@ -45,9 +45,9 @@ func (t *Task) ToJSON() ([]byte, error) {
 	return json.Marshal(t)
 }
 
-// RedactTaskStorage returns a response copy with storage credentials hidden.
+// TaskWithRedactedURL returns a response copy with storage credentials hidden.
 // It must not change task templates or configurations used for execution.
-func RedactTaskStorage(task *Task) *Task {
+func TaskWithRedactedURL(task *Task) *Task {
 	if task == nil {
 		return nil
 	}
@@ -63,14 +63,14 @@ func RedactTaskStorage(task *Task) *Task {
 	return &result
 }
 
-// RedactTaskStorageList returns diagnostic copies of a task list.
-func RedactTaskStorageList(tasks []Task) []Task {
+// TaskListWithRedactedURL returns diagnostic copies of a task list.
+func TaskListWithRedactedURL(tasks []Task) []Task {
 	if tasks == nil {
 		return nil
 	}
 	result := make([]Task, len(tasks))
 	for i := range tasks {
-		result[i] = *RedactTaskStorage(&tasks[i])
+		result[i] = *TaskWithRedactedURL(&tasks[i])
 	}
 	return result
 }

@@ -60,11 +60,11 @@ func TestStorageStatusRedaction(t *testing.T) {
 		}},
 	}
 	before := status.String()
-	copyStatus := RedactStorageQueryStatus(status)
+	copyStatus := QueryStatusWithRedactedURL(status)
 	require.NotContains(t, copyStatus.String(), "private-sk")
 	require.Contains(t, copyStatus.String(), "request id: test-id")
 	require.Equal(t, before, status.String())
 	require.Equal(t, int32(32001), copyStatus.SubTaskStatus[0].Result.Errors[0].ErrCode)
 	require.Equal(t, int64(42), copyStatus.SubTaskStatus[0].GetSync().TotalRows)
-	require.Nil(t, RedactStorageQueryStatus(nil))
+	require.Nil(t, QueryStatusWithRedactedURL(nil))
 }

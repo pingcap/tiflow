@@ -177,7 +177,7 @@ func upgradeToVer2(cli *clientv3.Client, uctx Context) error {
 			subCfg2, err := subCfg.DecryptedClone()
 			if err != nil {
 				log.L().Error("subconfig error when upgrading", zap.String("task", task),
-					zap.String("source id", sourceID), redact.StorageConfigField("subtask config", subCfg), zap.Error(err))
+					zap.String("source id", sourceID), redact.ConfigFieldWithRedactedURL("subtask config", subCfg), zap.Error(err))
 				return err
 			}
 			dbConfigs[tableName] = subCfg2.To

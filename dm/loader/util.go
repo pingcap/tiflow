@@ -80,7 +80,7 @@ func getMydumpMetadata(ctx context.Context, cli *clientv3.Client, cfg *config.Su
 	if err2 != nil {
 		toPrint = []byte(err2.Error())
 	}
-	log.L().Error("fail to parse dump metadata", redact.ErrorField(err))
+	log.L().Error("fail to parse dump metadata", redact.ErrorFieldWithRedactedURL(err))
 	return "", "", terror.ErrParseMydumperMeta.Generate(err, toPrint)
 }
 
@@ -90,7 +90,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 	if cfg.Mode == config.ModeFull {
 		// in full-mode all files won't be need in the future
 		if err := storage.RemoveAll(ctx, cfg.Dir, nil); err != nil {
-			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorField(err))
+			log.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorFieldWithRedactedURL(err))
 		}
 	} else {
 		if !storage.IsLocalDiskPath(cfg.Dir) {
@@ -101,7 +101,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 		// leave metadata file and table structure files, only delete data files
 		files, err := utils.CollectDirFiles(cfg.Dir)
 		if err != nil {
-			log.L().Warn("fail to collect files", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorField(err))
+			log.L().Warn("fail to collect files", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorFieldWithRedactedURL(err))
 		}
 		var lastErr error
 		for f := range files {
@@ -113,7 +113,7 @@ func cleanDumpFiles(ctx context.Context, cfg *config.SubTaskConfig) {
 			}
 		}
 		if lastErr != nil {
-			log.L().Warn("show last error when remove loaded dump sql files", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorField(lastErr))
+			log.L().Warn("show last error when remove loaded dump sql files", zap.String("data folder", objstore.RedactURL(cfg.Dir)), redact.ErrorFieldWithRedactedURL(lastErr))
 		}
 	}
 }

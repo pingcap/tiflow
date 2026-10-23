@@ -800,7 +800,7 @@ func (s *Server) disableRelay(source string) error {
 
 // QueryStatus implements WorkerServer.QueryStatus.
 func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (result *pb.QueryStatusResponse, resultErr error) {
-	defer func() { result = pb.RedactStorageQueryStatus(result) }()
+	defer func() { result = pb.QueryStatusWithRedactedURL(result) }()
 	log.L().Info("", zap.String("request", "QueryStatus"), zap.Stringer("payload", req))
 
 	sourceStatus := s.getSourceStatus(true)

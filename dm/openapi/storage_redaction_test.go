@@ -34,17 +34,17 @@ func TestTaskStorageResponseRedaction(t *testing.T) {
 	}}
 	before, err := json.Marshal(task)
 	require.NoError(t, err)
-	copyTask := RedactTaskStorage(task)
+	copyTask := TaskWithRedactedURL(task)
 	require.NotContains(t, *copyTask.SourceConfig.FullMigrateConf.DataDir, "private-")
 	require.Contains(t, *copyTask.SourceConfig.FullMigrateConf.DataDir, "bucket/path")
 	after, err := json.Marshal(task)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
-	copies := RedactTaskStorageList([]Task{*task})
+	copies := TaskListWithRedactedURL([]Task{*task})
 	require.NotContains(t, *copies[0].SourceConfig.FullMigrateConf.DataDir, "private-")
 	require.Equal(t, "task-one", copies[0].Name)
-	require.Nil(t, RedactTaskStorage(nil))
-	require.Nil(t, RedactTaskStorageList(nil))
+	require.Nil(t, TaskWithRedactedURL(nil))
+	require.Nil(t, TaskListWithRedactedURL(nil))
 }
 
 func TestAccessLogURLCredentials(t *testing.T) {

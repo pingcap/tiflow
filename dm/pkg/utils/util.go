@@ -243,10 +243,10 @@ func proxyFields() []zap.Field {
 	proxyCfg := httpproxy.FromEnvironment()
 	fields := make([]zap.Field, 0, 3)
 	if proxyCfg.HTTPProxy != "" {
-		fields = append(fields, zap.String("http_proxy", redact.ProxyURL(proxyCfg.HTTPProxy)))
+		fields = append(fields, zap.String("http_proxy", redact.RedactedProxyURL(proxyCfg.HTTPProxy)))
 	}
 	if proxyCfg.HTTPSProxy != "" {
-		fields = append(fields, zap.String("https_proxy", redact.ProxyURL(proxyCfg.HTTPSProxy)))
+		fields = append(fields, zap.String("https_proxy", redact.RedactedProxyURL(proxyCfg.HTTPSProxy)))
 	}
 	if proxyCfg.NoProxy != "" {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))

@@ -25,13 +25,13 @@ func TestTaskConfigStorageResponse(t *testing.T) {
 	cfg := config.NewTaskConfig()
 	cfg.Name = "task-one"
 	cfg.Loaders["local"] = &config.LoaderConfig{Dir: "./dump"}
-	require.Equal(t, cfg.String(), taskConfigWithRedactedStorage(cfg).String(),
+	require.Equal(t, cfg.String(), taskConfigWithRedactedURL(cfg).String(),
 		"get-config formatting must not change for ordinary configurations")
 	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
 	cfg.Loaders["remote"] = &config.LoaderConfig{Dir: raw}
 	cfg.MySQLInstances = []*config.MySQLInstance{{Loader: cfg.Loaders["remote"]}}
 	before := cfg.String()
-	output := taskConfigWithRedactedStorage(cfg).String()
+	output := taskConfigWithRedactedURL(cfg).String()
 	require.NotContains(t, output, "private-")
 	require.Contains(t, output, "bucket/path")
 	require.Equal(t, before, cfg.String())

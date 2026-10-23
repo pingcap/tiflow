@@ -23,7 +23,7 @@ import (
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.Task = redact.StorageConfigYAML(m.Task)
+	clone.Task = redact.YAMLConfigWithRedactedURL(m.Task)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -31,7 +31,7 @@ func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *CheckTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.Task = redact.StorageConfigYAML(m.Task)
+	clone.Task = redact.YAMLConfigWithRedactedURL(m.Task)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -39,7 +39,7 @@ func (m *CheckTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *UpdateTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.Task = redact.StorageConfigYAML(m.Task)
+	clone.Task = redact.YAMLConfigWithRedactedURL(m.Task)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -47,7 +47,7 @@ func (m *UpdateTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *CheckSubtasksCanUpdateRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.SubtaskCfgTomlString = redact.StorageConfigTOML(m.SubtaskCfgTomlString)
+	clone.SubtaskCfgTomlString = redact.TOMLConfigWithRedactedURL(m.SubtaskCfgTomlString)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -58,29 +58,29 @@ func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error
 	return nil
 }
 
-// RedactStorageQueryStatus masks credentials in a response copy, including
+// QueryStatusWithRedactedURL masks credentials in a response copy, including
 // errors received from older workers. It leaves internal status data untouched.
-func RedactStorageQueryStatus(response *QueryStatusResponse) *QueryStatusResponse {
+func QueryStatusWithRedactedURL(response *QueryStatusResponse) *QueryStatusResponse {
 	if response == nil {
 		return nil
 	}
 	result := proto.Clone(response).(*QueryStatusResponse)
-	result.Msg = redact.URLText(result.Msg)
+	result.Msg = redact.TextWithRedactedURL(result.Msg)
 	cleanResult := func(r *ProcessResult) {
 		if r == nil {
 			return
 		}
 		for _, err := range r.Errors {
 			if err != nil {
-				err.Message = redact.URLText(err.Message)
-				err.RawCause = redact.URLText(err.RawCause)
-				err.Workaround = redact.URLText(err.Workaround)
+				err.Message = redact.TextWithRedactedURL(err.Message)
+				err.RawCause = redact.TextWithRedactedURL(err.RawCause)
+				err.Workaround = redact.TextWithRedactedURL(err.Workaround)
 			}
 		}
 	}
 	cleanDDLs := func(ddls []string) {
 		for i := range ddls {
-			ddls[i] = redact.URLText(ddls[i])
+			ddls[i] = redact.TextWithRedactedURL(ddls[i])
 		}
 	}
 	if source := result.SourceStatus; source != nil {
@@ -98,7 +98,7 @@ func RedactStorageQueryStatus(response *QueryStatusResponse) *QueryStatusRespons
 			cleanResult(task.Validation.Result)
 		}
 		if sync := task.GetSync(); sync != nil {
-			sync.ConflictMsg = redact.URLText(sync.ConflictMsg)
+			sync.ConflictMsg = redact.TextWithRedactedURL(sync.ConflictMsg)
 			cleanDDLs(sync.BlockingDDLs)
 			for _, group := range sync.UnresolvedGroups {
 				if group != nil {
