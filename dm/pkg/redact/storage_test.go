@@ -37,6 +37,7 @@ func TestStorageConfigRedaction(t *testing.T) {
 	}{
 		{"yaml", "name: task-one\nloaders:\n  global:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
 		{"yaml-list", "name: task-one\nmysql-instances:\n- loader:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
+		{"yaml-numeric-key", "name: task-one\nloaders:\n  123:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
 		{"json", `{"name":"task-one","dir":"` + url + `"}`, redactJSON},
 		{"toml", "name = 'task-one'\n[[loaders]]\ndir = '" + url + "'\n", TOMLConfigWithRedactedURL},
 	} {
@@ -112,6 +113,26 @@ func TestStorageConfigURLFields(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, before, after)
 	}
+}
+
+func TestStorageConfigInvalidURLFields(t *testing.T) {
+	raw := "s3://bucket/path?secret-access-key=private-sk"
+	for _, input := range []string{
+		"name: task-one\ndir: ['" + raw + "']",
+		"name: task-one\ndir: {unexpected: '" + raw + "'}",
+	} {
+		output := YAMLConfigWithRedactedURL(input)
+		require.NotContains(t, output, "private-sk")
+		require.Contains(t, output, "task-one")
+	}
+	for _, invalidDir := range []any{[]string{raw}, map[string]string{"unexpected": raw}} {
+		field := ConfigFieldWithRedactedURL("config", map[string]any{"name": "task-one", "dir": invalidDir})
+		require.NotContains(t, field.String, "private-sk")
+		require.Contains(t, field.String, "task-one")
+	}
+	output := TOMLConfigWithRedactedURL("name = 'task-one'\ndir = ['" + raw + "']")
+	require.NotContains(t, output, "private-sk")
+	require.Contains(t, output, "task-one")
 }
 
 func TestURLTextCredentials(t *testing.T) {

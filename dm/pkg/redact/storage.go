@@ -94,21 +94,26 @@ func TOMLConfigWithRedactedURL(input string) string {
 // redactConfigURL only mutates decoded diagnostic copies. URL credential rules
 // belong to objstore.RedactURL; other configuration fields are left unchanged.
 func redactConfigURL(key string, value any) any {
-	switch v := value.(type) {
-	case string:
-		switch strings.ToLower(key) {
-		case "dir", "data-dir", "data_dir", "output-dir", "outputdir":
-			return objstore.RedactURL(v)
+	switch strings.ToLower(key) {
+	case "dir", "data-dir", "data_dir", "output-dir", "outputdir":
+		if raw, ok := value.(string); ok {
+			return objstore.RedactURL(raw)
 		}
+		// Requests are logged before schema validation. Do not echo malformed
+		// URL fields, which can contain credentials inside arrays or objects.
+		if value != nil {
+			return objstore.InvalidURLPlaceholder
+		}
+	}
+	switch v := value.(type) {
 	case map[string]any:
 		for key, child := range v {
 			v[key] = redactConfigURL(key, child)
 		}
 	case map[any]any:
 		for key, child := range v {
-			if name, ok := key.(string); ok {
-				v[key] = redactConfigURL(name, child)
-			}
+			name, _ := key.(string)
+			v[key] = redactConfigURL(name, child)
 		}
 	case []any:
 		for _, child := range v {
