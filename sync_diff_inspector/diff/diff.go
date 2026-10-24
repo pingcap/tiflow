@@ -32,9 +32,11 @@ import (
 	tidbconfig "github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/report"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source"
@@ -138,7 +140,7 @@ func (df *Diff) PrintSummary(ctx context.Context) bool {
 	df.report.CalculateTotalSize(ctx, df.downstream.GetDB())
 	err := df.report.CommitSummary()
 	if err != nil {
-		log.Fatal("failed to commit report", zap.Error(err))
+		log.Fatal("failed to commit report", logutil.ZapRedactError(err))
 	}
 	df.report.Print(os.Stdout)
 	return df.report.Result == report.Pass
@@ -159,7 +161,7 @@ func (df *Diff) Close() {
 	})
 
 	if err := os.Remove(filepath.Join(df.CheckpointDir, checkpointFile)); err != nil && !os.IsNotExist(err) {
-		log.Fatal("fail to remove the checkpoint file", zap.String("error", err.Error()))
+		log.Fatal("fail to remove the checkpoint file", logutil.ZapRedactError(err))
 	}
 }
 
@@ -207,7 +209,7 @@ func (df *Diff) initCheckpoint() error {
 			// this need not be synchronized, because at the moment, the is only one thread access the section
 			log.Info("load checkpoint",
 				zap.Any("chunk index", node.GetID()),
-				zap.Reflect("chunk", node),
+				logutil.ZapRedactReflect("chunk", node),
 				zap.String("state", node.GetState()))
 			df.cp.InitCurrentSavedID(node)
 			// remove the sql file that ID bigger than node.
@@ -321,7 +323,7 @@ func (df *Diff) equalByChunkChecksum(ctx context.Context) error {
 			// finish read the tables
 			break
 		}
-		log.Info("global consume chunk info", zap.Any("chunk index", c.ChunkRange.Index), zap.Any("chunk bound", c.ChunkRange.Bounds))
+		log.Info("global consume chunk info", zap.Any("chunk index", c.ChunkRange.Index), logutil.ZapRedactReflect("chunk bound", c.ChunkRange.Bounds))
 		pool.Apply(func() {
 			isEqual := df.consume(ctx, c)
 			if !isEqual {
@@ -482,12 +484,12 @@ func (df *Diff) consume(ctx context.Context, rangeInfo *splitter.RangeInfo) bool
 			log.Debug("count greater than threshold, start do bingenerate", zap.Any("chunk id", rangeInfo.ChunkRange.Index), zap.Int64("upstream chunk size", upCount))
 			info, err = df.BinGenerate(ctx, df.workSource, rangeInfo, upCount)
 			if err != nil {
-				log.Error("fail to do binary search.", zap.Error(err))
+				log.Error("fail to do binary search.", logutil.ZapRedactError(err))
 				df.report.SetTableMeetError(schema, table, err)
 				// reuse rangeInfo to compare data
 				info = rangeInfo
 			} else {
-				log.Debug("bin generate finished", zap.Reflect("chunk", info.ChunkRange), zap.Any("chunk id", info.ChunkRange.Index))
+				log.Debug("bin generate finished", logutil.ZapRedactReflect("chunk", info.ChunkRange), zap.Any("chunk id", info.ChunkRange.Index))
 			}
 		}
 		isDataEqual, err := df.compareRows(ctx, info, dml)
@@ -566,14 +568,14 @@ func (df *Diff) binSearch(ctx context.Context, targetSource source.Source, table
 		// the midValues may be empty when downstream has much less rows in this chunk.
 		return tableRange, nil
 	}
-	log.Debug("mid values", zap.Reflect("mid values", midValues), zap.Reflect("indices", indexColumns), zap.Reflect("bounds", tableRange.ChunkRange.Bounds))
-	log.Debug("table ranges", zap.Reflect("original range", tableRange))
+	log.Debug("mid values", logutil.ZapRedactReflect("mid values", midValues), logutil.ZapRedactReflect("indices", indexColumns), logutil.ZapRedactReflect("bounds", tableRange.ChunkRange.Bounds))
+	log.Debug("table ranges", logutil.ZapRedactReflect("original range", tableRange))
 	for i := range indexColumns {
-		log.Debug("update tableRange", zap.String("field", indexColumns[i].Name.O), zap.String("value", midValues[indexColumns[i].Name.O]))
+		log.Debug("update tableRange", zap.String("field", indexColumns[i].Name.O), dmlog.ZapRedactString("value", midValues[indexColumns[i].Name.O]))
 		tableRange1.Update(indexColumns[i].Name.O, "", midValues[indexColumns[i].Name.O], false, true, tableDiff.Collation, tableDiff.Range)
 		tableRange2.Update(indexColumns[i].Name.O, midValues[indexColumns[i].Name.O], "", true, false, tableDiff.Collation, tableDiff.Range)
 	}
-	log.Debug("table ranges", zap.Reflect("tableRange 1", tableRange1), zap.Reflect("tableRange 2", tableRange2))
+	log.Debug("table ranges", logutil.ZapRedactReflect("tableRange 1", tableRange1), logutil.ZapRedactReflect("tableRange 2", tableRange2))
 	isEqual1, count1, _, err = df.compareChecksumAndGetCount(ctx, tableRange1)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -693,7 +695,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 					sql := df.downstream.GenerateFixSQL(
 						source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 					)
-					log.Debug("[delete]", zap.String("sql", sql))
+					log.Debug("[delete]", dmlog.ZapRedactString("sql", sql))
 
 					dml.sqls = append(dml.sqls, sql)
 				}
@@ -713,7 +715,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 				rowsAdd++
 				if df.exportFixSQL {
 					sql := df.downstream.GenerateFixSQL(source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex())
-					log.Debug("[insert]", zap.String("sql", sql))
+					log.Debug("[insert]", dmlog.ZapRedactString("sql", sql))
 
 					dml.sqls = append(dml.sqls, sql)
 				}
@@ -748,7 +750,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 				sql = df.downstream.GenerateFixSQL(
 					source.Delete, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 				)
-				log.Debug("[delete]", zap.String("sql", sql))
+				log.Debug("[delete]", dmlog.ZapRedactString("sql", sql))
 			}
 			lastDownstreamData = nil
 		case -1:
@@ -758,7 +760,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 				sql = df.downstream.GenerateFixSQL(
 					source.Insert, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 				)
-				log.Debug("[insert]", zap.String("sql", sql))
+				log.Debug("[insert]", dmlog.ZapRedactString("sql", sql))
 			}
 			lastUpstreamData = nil
 		case 0:
@@ -769,7 +771,7 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 				sql = df.downstream.GenerateFixSQL(
 					source.Replace, lastUpstreamData, lastDownstreamData, rangeInfo.GetTableIndex(),
 				)
-				log.Debug("[update]", zap.String("sql", sql))
+				log.Debug("[update]", dmlog.ZapRedactString("sql", sql))
 			}
 			lastUpstreamData = nil
 			lastDownstreamData = nil
@@ -811,11 +813,11 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				fixSQLPath := filepath.Join(df.FixSQLDir, fileName)
 				if fileExists(fixSQLPath) {
 					// unreachable
-					log.Fatal("write sql failed: repeat sql happen", zap.Strings("sql", dml.sqls))
+					log.Fatal("write sql failed: repeat sql happen", logutil.ZapRedactStrings("sql", dml.sqls))
 				}
 				fixSQLFile, err := os.Create(fixSQLPath)
 				if err != nil {
-					log.Fatal("write sql failed: cannot create file", zap.Strings("sql", dml.sqls), zap.Error(err))
+					log.Fatal("write sql failed: cannot create file", logutil.ZapRedactStrings("sql", dml.sqls), logutil.ZapRedactError(err))
 				}
 				// write chunk meta
 				chunkRange := dml.node.ChunkRange
@@ -826,7 +828,7 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				for _, sql := range dml.sqls {
 					_, err = fixSQLFile.WriteString(fmt.Sprintf("%s\n", sql))
 					if err != nil {
-						log.Fatal("write sql failed", zap.String("sql", sql), zap.Error(err))
+						log.Fatal("write sql failed", dmlog.ZapRedactString("sql", sql), logutil.ZapRedactError(err))
 					}
 				}
 				fixSQLFile.Close()

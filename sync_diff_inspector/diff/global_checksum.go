@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -98,7 +99,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			checkpointState.Upstream.Done = true
 			checkpointState.Downstream.Done = true
 			if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
-				log.Warn("failed to save checksum checkpoint", zap.Error(err))
+				log.Warn("failed to save checksum checkpoint", logutil.ZapRedactError(err))
 			}
 			df.checksumCheckpoint = checkpointState
 			continue
@@ -118,7 +119,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 
 		flushCkpt := func(ctx context.Context) {
 			if err := df.flushChecksumCheckpoint(ctx, checkpointState); err != nil {
-				log.Warn("fail to flush checksum checkpoint", zap.Error(err))
+				log.Warn("fail to flush checksum checkpoint", logutil.ZapRedactError(err))
 			}
 		}
 
@@ -181,7 +182,7 @@ func (df *Diff) equalByGlobalChecksum(ctx context.Context) error {
 			log.Warn("global checksum stopped due to table error, remaining tables skipped",
 				zap.String("table", dbutil.TableName(schema, table)),
 				zap.Int("remaining", len(tables)-tableIndex-1),
-				zap.Error(err))
+				logutil.ZapRedactError(err))
 			break
 		}
 

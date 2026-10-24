@@ -14,11 +14,104 @@
 package diff
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tidb/pkg/parser"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
+	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+type metadataLogSource struct {
+	source.Source
+	db       *sql.DB
+	table    *common.TableDiff
+	checksum uint64
+}
+
+func (s *metadataLogSource) GetDB() *sql.DB {
+	return s.db
+}
+
+func (s *metadataLogSource) GetTables() []*common.TableDiff {
+	return []*common.TableDiff{s.table}
+}
+
+func (s *metadataLogSource) GetCountAndMD5(context.Context, *splitter.RangeInfo) *source.ChecksumInfo {
+	return &source.ChecksumInfo{Count: splitter.SplitThreshold, Checksum: s.checksum}
+}
+
+func TestBinGenerateColumnMetadataRedaction(t *testing.T) {
+	original := dmlog.IsRedactLogEnabled()
+	t.Cleanup(func() { dmlog.SetRedactLog(original) })
+
+	tableInfo, err := utils.GetTableInfoBySQL("CREATE TABLE `test`.`test` ("+
+		"`a` varchar(100) DEFAULT 'private-default', "+
+		"`b` varchar(200) AS (concat(`a`, 'private-generated')) STORED, "+
+		"`c` enum('private-enum', 'public'), UNIQUE KEY (`a`, `b`, `c`))", parser.New())
+	require.NoError(t, err)
+	columns, err := json.Marshal(tableInfo.Columns)
+	require.NoError(t, err)
+	for _, literal := range []string{"private-default", "private-generated", "private-enum"} {
+		require.Contains(t, string(columns), literal)
+	}
+	table := &common.TableDiff{Schema: "test_schema", Table: "test_table", Info: tableInfo, Range: "TRUE"}
+
+	for _, redact := range []bool{false, true} {
+		t.Run(fmt.Sprintf("redact=%t", redact), func(t *testing.T) {
+			dmlog.SetRedactLog(redact)
+			core, observed := observer.New(zap.DebugLevel)
+			restore := log.ReplaceGlobals(zap.New(core), nil)
+			t.Cleanup(restore)
+
+			conn, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+			require.NoError(t, err)
+			defer conn.Close()
+			mock.ExpectQuery("SELECT `a`, `b`, `c` FROM `test_schema`.`test_table` WHERE (TRUE) AND (TRUE) ORDER BY `a`, `b`, `c` LIMIT 1 OFFSET 1000").
+				WillReturnRows(sqlmock.NewRows([]string{"a", "b", "c"}).AddRow("mid-value", "mid-generated", "private-enum"))
+
+			upstream := &metadataLogSource{db: conn, table: table, checksum: 1}
+			downstream := &metadataLogSource{table: table, checksum: 2}
+			df := &Diff{upstream: upstream, downstream: downstream, workSource: upstream}
+			tableRange := &splitter.RangeInfo{ChunkRange: chunk.NewChunkRange(tableInfo), IndexID: tableInfo.Indices[0].ID}
+			result, err := df.BinGenerate(context.Background(), upstream, tableRange, 2*splitter.SplitThreshold)
+			require.NoError(t, err)
+			require.Same(t, tableRange, result)
+			require.NoError(t, mock.ExpectationsWereMet())
+			unchangedColumns, err := json.Marshal(tableInfo.Columns)
+			require.NoError(t, err)
+			require.Equal(t, columns, unchangedColumns)
+
+			entries := observed.FilterMessage("mid values").All()
+			require.Len(t, entries, 1)
+			if redact {
+				require.Equal(t, "?", entries[0].ContextMap()["indices"])
+				encodedLogs, err := json.Marshal(observed.All())
+				require.NoError(t, err)
+				for _, literal := range []string{"private-default", "private-generated", "private-enum"} {
+					require.NotContains(t, string(encodedLogs), literal)
+				}
+			} else {
+				require.Equal(t, zap.Reflect("indices", tableInfo.Columns), entries[0].Context[1])
+				encodedColumns, err := json.Marshal(entries[0].ContextMap()["indices"])
+				require.NoError(t, err)
+				require.Equal(t, columns, encodedColumns)
+			}
+		})
+	}
+}
 
 func TestGetSnapshot(t *testing.T) {
 	cases := []struct {

@@ -21,6 +21,8 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"go.uber.org/zap"
 )
@@ -49,11 +51,11 @@ func (r RowDatas) Less(i, j int) bool {
 	for idx, col := range r.OrderKeyCols {
 		col1, ok := r.Rows[i].Data[col.Name.O]
 		if !ok {
-			log.Fatal("data don't have column", zap.String("column", col.Name.O), zap.Reflect("data", r.Rows[i].Data))
+			log.Fatal("data don't have column", zap.String("column", col.Name.O), logutil.ZapRedactReflect("data", r.Rows[i].Data))
 		}
 		col2, ok := r.Rows[j].Data[col.Name.O]
 		if !ok {
-			log.Fatal("data don't have column", zap.String("column", col.Name.O), zap.Reflect("data", r.Rows[j].Data))
+			log.Fatal("data don't have column", zap.String("column", col.Name.O), logutil.ZapRedactReflect("data", r.Rows[j].Data))
 		}
 
 		switch {
@@ -81,11 +83,11 @@ func (r RowDatas) Less(i, j int) bool {
 
 		num1, err1 := strconv.ParseFloat(strData1, 64)
 		if err1 != nil {
-			log.Fatal("convert string to float failed", zap.String("column", col.Name.O), zap.String("data", strData1), zap.Error(err1))
+			log.Fatal("convert string to float failed", zap.String("column", col.Name.O), dmlog.ZapRedactString("data", strData1), logutil.ZapRedactError(err1))
 		}
 		num2, err2 := strconv.ParseFloat(strData2, 64)
 		if err2 != nil {
-			log.Fatal("convert string to float failed", zap.String("column", col.Name.O), zap.String("data", strData2), zap.Error(err2))
+			log.Fatal("convert string to float failed", zap.String("column", col.Name.O), dmlog.ZapRedactString("data", strData2), logutil.ZapRedactError(err2))
 		}
 
 		if num1 == num2 {

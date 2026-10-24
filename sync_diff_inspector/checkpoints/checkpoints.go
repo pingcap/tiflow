@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/report"
 	"go.uber.org/zap"
 )
@@ -288,7 +289,7 @@ func (cp *Checkpoint) SaveChunk(ctx context.Context, fileName string, cur *Node,
 		return nil, err
 	}
 	log.Info("save checkpoint",
-		zap.Any("chunk", cur),
+		logutil.ZapRedactReflect("chunk", cur),
 		zap.String("state", cur.GetState()))
 	return cur.GetID(), nil
 }
