@@ -38,6 +38,7 @@ import (
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/security"
+	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -289,7 +290,7 @@ func (t *TaskConfig) Init(
 
 	t.TargetCheckTables, err = filter.Parse(t.CheckTables)
 	if err != nil {
-		log.Error("parse check tables failed", zap.Error(err))
+		log.Error("parse check tables failed", logutil.ZapRedactError(err))
 		return errors.Annotate(err, "parse check tables failed")
 	}
 
@@ -520,7 +521,12 @@ func (c *Config) Parse(arguments []string) error {
 	if c.Task.OutputDir == "" {
 		c.Task.OutputDir = timestampOutputDir()
 		if err := os.RemoveAll(c.Task.OutputDir); err != nil && !os.IsNotExist(err) {
-			log.Fatal("fail to remove the temp directory", zap.String("path", c.Task.OutputDir), zap.String("error", err.Error()))
+			// Parse runs before the global redaction setting is initialized.
+			path, errText := c.Task.OutputDir, err.Error()
+			if c.RedactInfoLog {
+				path, errText = "?", "?"
+			}
+			log.Fatal("fail to remove the temp directory", zap.String("path", path), zap.String("error", errText))
 		}
 	}
 

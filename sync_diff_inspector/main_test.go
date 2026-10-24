@@ -16,13 +16,80 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/stretchr/testify/require"
 )
+
+func TestStartupErrorRedaction(t *testing.T) {
+	const helperEnv = "TIFLOW_TEST_STARTUP_ERROR"
+	if os.Getenv(helperEnv) == "1" {
+		os.Args = append([]string{"sync_diff_inspector"}, flag.Args()...)
+		main()
+		return
+	}
+
+	const secret = "PrivateStartupReviewMarker"
+	for _, tc := range []struct {
+		name    string
+		flags   []string
+		filter  string
+		message string
+	}{
+		{name: "template", flags: []string{"--template", secret}, message: "unexpect template name"},
+		{name: "log-level", flags: []string{"--log-level", secret}, message: "Log init failed!"},
+		{name: "log-file", message: "Log init failed!"},
+		{name: "config-init", filter: "/[" + secret + "/.*", message: "Fail to initialize config."},
+		{name: "config-check", flags: []string{"--check-thread-count=0"}, message: "There is something wrong with your config"},
+	} {
+		for _, enabled := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/redact=%t", tc.name, enabled), func(t *testing.T) {
+				dir := t.TempDir()
+				outputDir := filepath.Join(dir, secret)
+				if tc.name == "log-file" {
+					require.NoError(t, os.WriteFile(outputDir, nil, 0o600))
+				}
+				filter := tc.filter
+				if filter == "" {
+					filter = "*.*"
+				}
+				configPath := filepath.Join(dir, "config.toml")
+				content := fmt.Sprintf("[data-sources.target]\n[task]\noutput-dir = %q\ntarget-instance = 'target'\ntarget-check-tables = [%q]\n", outputDir, filter)
+				require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
+				args := []string{"-test.run=^TestStartupErrorRedaction$", "--", "--config", configPath, fmt.Sprintf("--redact-info-log=%t", enabled)}
+				cmd := exec.Command(os.Args[0], append(args, tc.flags...)...)
+				cmd.Env = append(os.Environ(), helperEnv+"=1")
+				output, err := cmd.CombinedOutput()
+				var exitErr *exec.ExitError
+				require.ErrorAs(t, err, &exitErr, "%s", output)
+				require.Equal(t, 2, exitErr.ExitCode(), "%s", output)
+				text := string(output)
+				if tc.name == "template" && enabled {
+					require.Equal(t, "?\n", text)
+				} else {
+					require.Contains(t, text, tc.message)
+				}
+				if tc.name == "config-init" || tc.name == "config-check" {
+					// Inspect the file as well as stdout/stderr so an earlier
+					// diagnostic cannot expose the same value before startup exits.
+					logOutput, err := os.ReadFile(filepath.Join(outputDir, config.LogFileName))
+					require.NoError(t, err)
+					text += string(logOutput)
+				}
+				if enabled {
+					require.NotContains(t, text, secret)
+				} else {
+					require.Contains(t, text, secret)
+				}
+			})
+		}
+	}
+}
 
 func TestConfigParseErrorRedaction(t *testing.T) {
 	// Run the real entry point in a subprocess because parse failures call os.Exit.

@@ -58,7 +58,7 @@ func main() {
 
 	if cfg.Template != "" {
 		if err := config.ExportTemplateConfig(cfg.Template); err != nil {
-			fmt.Printf("%s\n", err.Error())
+			fmt.Printf("%s\n", dmlog.RedactString(err.Error()))
 			os.Exit(2)
 		}
 		return
@@ -70,7 +70,7 @@ func main() {
 	conf.File.Filename = filepath.Join(cfg.Task.OutputDir, config.LogFileName)
 	lg, p, e := log.InitLogger(conf)
 	if e != nil {
-		log.Error("Log init failed!", zap.String("error", e.Error()))
+		log.Error("Log init failed!", logutil.ZapRedactError(e))
 		os.Exit(2)
 	}
 	log.ReplaceGlobals(lg, p)
@@ -80,13 +80,13 @@ func main() {
 	// Initial config
 	err = cfg.Init()
 	if err != nil {
-		fmt.Printf("Fail to initialize config.\n%s\n", err.Error())
+		fmt.Printf("Fail to initialize config.\n%s\n", dmlog.RedactString(err.Error()))
 		os.Exit(2)
 	}
 
 	ok := cfg.CheckConfig()
 	if !ok {
-		fmt.Printf("There is something wrong with your config, please check log info in %s\n", conf.File.Filename)
+		fmt.Printf("There is something wrong with your config, please check log info in %s\n", dmlog.RedactString(conf.File.Filename))
 		os.Exit(2)
 	}
 
@@ -109,7 +109,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 	d, err := diff.NewDiff(ctx, cfg)
 	if err != nil {
 		fmt.Printf("An error occurred while initializing diff: %s, please check log info in %s for full details\n",
-			dmlog.RedactString(err.Error()), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+			dmlog.RedactString(err.Error()), dmlog.RedactString(filepath.Join(cfg.Task.OutputDir, config.LogFileName)))
 		log.Fatal("failed to initialize diff process", logutil.ZapRedactError(err))
 		return false
 	}
@@ -119,7 +119,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		err = d.StructEqual(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table structure: %s, please check log info in %s for full details\n",
-				dmlog.RedactString(err.Error()), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+				dmlog.RedactString(err.Error()), dmlog.RedactString(filepath.Join(cfg.Task.OutputDir, config.LogFileName)))
 			log.Fatal("failed to check structure difference", logutil.ZapRedactError(err))
 			return false
 		}
@@ -133,7 +133,7 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		err = d.Equal(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table data: %s, please check log info in %s for full details\n",
-				dmlog.RedactString(err.Error()), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+				dmlog.RedactString(err.Error()), dmlog.RedactString(filepath.Join(cfg.Task.OutputDir, config.LogFileName)))
 			log.Fatal("failed to check data difference", logutil.ZapRedactError(err))
 			return false
 		}
