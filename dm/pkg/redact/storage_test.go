@@ -34,7 +34,6 @@ func TestStorageConfigRedaction(t *testing.T) {
 		{"yaml", "name: task-one\nloaders:\n  global:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
 		{"yaml-list", "name: task-one\nmysql-instances:\n- loader:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
 		{"yaml-numeric-key", "name: task-one\nloaders:\n  123:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
-		{"toml", "name = 'task-one'\n[[loaders]]\ndir = '" + url + "'\n", TOMLConfigWithRedactedURL},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			output := tc.redact(tc.input)
@@ -61,7 +60,6 @@ func TestInvalidStorageConfig(t *testing.T) {
 	}{
 		{"dir: [private-sk", YAMLConfigWithRedactedURL},
 		{"dir: local\n---\ndir: private-sk", YAMLConfigWithRedactedURL},
-		{`dir = "private-sk`, TOMLConfigWithRedactedURL},
 	} {
 		require.Equal(t, invalidConfig, tc.redact(tc.input))
 	}
@@ -87,9 +85,6 @@ func TestStorageConfigInvalidURLFields(t *testing.T) {
 		require.NotContains(t, output, "private-sk")
 		require.Contains(t, output, "task-one")
 	}
-	output := TOMLConfigWithRedactedURL("name = 'task-one'\ndir = ['" + raw + "']")
-	require.NotContains(t, output, "private-sk")
-	require.Contains(t, output, "task-one")
 }
 
 func TestURLTextCredentials(t *testing.T) {

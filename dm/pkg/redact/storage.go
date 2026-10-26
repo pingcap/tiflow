@@ -15,12 +15,10 @@
 package redact
 
 import (
-	"bytes"
 	"io"
 	"regexp"
 	"strings"
 
-	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tidb/pkg/objstore"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
@@ -52,23 +50,6 @@ func YAMLConfigWithRedactedURL(input string) string {
 	return string(data)
 }
 
-// TOMLConfigWithRedactedURL hides storage URL credentials in diagnostic TOML.
-func TOMLConfigWithRedactedURL(input string) string {
-	if input == "" {
-		return ""
-	}
-	var cfg map[string]any
-	if _, err := toml.Decode(input, &cfg); err != nil {
-		return invalidConfig
-	}
-	redactConfigURL("", cfg)
-	var out bytes.Buffer
-	if err := toml.NewEncoder(&out).Encode(cfg); err != nil {
-		return invalidConfig
-	}
-	return out.String()
-}
-
 // redactConfigURL only mutates decoded diagnostic copies. URL credential rules
 // belong to objstore.RedactURL; other configuration fields are left unchanged.
 func redactConfigURL(key string, value any) any {
@@ -94,10 +75,6 @@ func redactConfigURL(key string, value any) any {
 			v[key] = redactConfigURL(name, child)
 		}
 	case []any:
-		for _, child := range v {
-			redactConfigURL("", child)
-		}
-	case []map[string]any:
 		for _, child := range v {
 			redactConfigURL("", child)
 		}

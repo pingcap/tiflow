@@ -45,14 +45,6 @@ func (m *UpdateTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
-func (m *CheckSubtasksCanUpdateRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
-	clone := *m
-	clone.SubtaskCfgTomlString = redact.TOMLConfigWithRedactedURL(m.SubtaskCfgTomlString)
-	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
-	return nil
-}
-
-// MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil

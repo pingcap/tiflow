@@ -30,7 +30,6 @@ func TestStorageRequestRedaction(t *testing.T) {
 		&StartTaskRequest{Task: cfg},
 		&CheckTaskRequest{Task: cfg},
 		&UpdateTaskRequest{Task: cfg},
-		&CheckSubtasksCanUpdateRequest{SubtaskCfgTomlString: "name = 'task-one'\ndir = '" + rawURL + "'"},
 	} {
 		before := req.String()
 		core, logs := observer.New(zap.InfoLevel)
