@@ -85,12 +85,12 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20260508054701-306e305bcf41
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
-	github.com/pingcap/kvproto v0.0.0-20260820070758-623e58e60fa9
+	github.com/pingcap/kvproto v0.0.0-20261014124429-4141ecadac8f
 	github.com/pingcap/log v1.1.1-0.20261007233122-0034994d1a22
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
-	github.com/pingcap/tidb v1.1.0-beta.0.20260923092734-13103a00793a
+	github.com/pingcap/tidb v1.1.0-beta.0.20261022132800-69d1aac23d4c
 	github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20260923082834-1869807c5fdb
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20261022132800-69d1aac23d4c
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.65.0
@@ -459,10 +459,3 @@ replace github.com/tildeleb/hashland => leb.io/hashland v0.1.5
 replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0.0.0-20190731080439-ebfcffb1b5c0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
-
-// Temporary Go 1.27 map ABI support from https://github.com/pingcap/tidb/pull/72081.
-// The TiDB fork also lets DM set Dumpling TLS cipher suites for MySQL 5.7.
-// Replace both modules with official TiDB versions after upstream support lands.
-replace github.com/pingcap/tidb => github.com/lidezhu/tidb v1.1.0-beta.0.20261022085814-a0b7b9c028c4
-
-replace github.com/pingcap/tidb/pkg/parser => github.com/dillon-zheng/tidb/pkg/parser v0.0.0-20261017065457-8b21f5b35742

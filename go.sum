@@ -333,8 +333,6 @@ github.com/dgryski/go-farm v0.0.0-20190104051053-3adb47b1fb0f/go.mod h1:SqUrOPUn
 github.com/dgryski/go-farm v0.0.0-20190423205320-6a90982ecee2/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
 github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da h1:aIftn67I1fkbMa512G+w+Pxci9hJPB8oMnkcP3iZF38=
 github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da/go.mod h1:SqUrOPUnsFjfmXRMNPybcSiG0BgUW2AuFH8PAnS2iTw=
-github.com/dillon-zheng/tidb/pkg/parser v0.0.0-20261017065457-8b21f5b35742 h1:IEOas1I4FyoLSoXiieBTHqDRH0eSavmr0ZYtZfZ+8VE=
-github.com/dillon-zheng/tidb/pkg/parser v0.0.0-20261017065457-8b21f5b35742/go.mod h1:EAX+oCkoKe+Cl0pPWUkFrQp5XgIfzjGw61TWH+rRYW0=
 github.com/dimfeld/httptreemux v5.0.1+incompatible h1:Qj3gVcDNoOthBAqftuD596rm4wg/adLLz5xh5CmpiCA=
 github.com/dimfeld/httptreemux v5.0.1+incompatible/go.mod h1:rbUlSV+CCpv/SuqUTP/8Bk2O3LyUV436/yaRGkhP6Z0=
 github.com/dlclark/regexp2 v1.11.0 h1:G/nrcoOa7ZXlpoa/91N3X7mM3r8eIlMBBJZvsz/mxKI=
@@ -745,8 +743,6 @@ github.com/lestrrat-go/option v1.0.1 h1:oAzP2fvZGQKWkvHa1/SAcFolBEca1oN+mQ7eooNB
 github.com/lestrrat-go/option v1.0.1/go.mod h1:5ZHFbivi4xwXxhxY9XHDe2FHo6/Z7WWmtT7T5nBBp3I=
 github.com/lib/pq v1.2.0 h1:LXpIM/LZ5xGFhOpXAQUIMM1HdyqzVYM13zNdjCEEcA0=
 github.com/lib/pq v1.2.0/go.mod h1:5WUZQaWbwv1U+lTReE5YruASi9Al49XbQIvNi/34Woo=
-github.com/lidezhu/tidb v1.1.0-beta.0.20261022085814-a0b7b9c028c4 h1:iPOTpTzZAyeoWgX/Dc9PnHK8rfibkb2ZiA/OTlVQk8A=
-github.com/lidezhu/tidb v1.1.0-beta.0.20261022085814-a0b7b9c028c4/go.mod h1:ur8aQkY8GWZ+Sioy4Cd3F4cmUbMMe36k26aUF7RdnSo=
 github.com/linkedin/goavro/v2 v2.14.0 h1:aNO/js65U+Mwq4yB5f1h01c3wiM458qtRad1DN0CMUI=
 github.com/linkedin/goavro/v2 v2.14.0/go.mod h1:KXx+erlq+RPlGSPmLF7xGo6SAbh8sCQ53x064+ioxhk=
 github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0/go.mod h1:zJYVVT2jmtg6P3p1VtQj7WsuWi/y4VnjVBn7F8KPB3I=
@@ -894,8 +890,8 @@ github.com/pingcap/fn v1.0.0/go.mod h1:u9WZ1ZiOD1RpNhcI42RucFh/lBuzTu6rw88a+oF2Z
 github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 h1:surzm05a8C9dN8dIUmo4Be2+pMRb6f55i+UIYrluu2E=
 github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989/go.mod h1:O17XtbryoCJhkKGbT62+L2OlrniwqiGLSqrmdHCMzZw=
 github.com/pingcap/kvproto v0.0.0-20191211054548-3c6b38ea5107/go.mod h1:WWLmULLO7l8IOcQG+t+ItJ3fEcrL5FxF0Wu+HrMy26w=
-github.com/pingcap/kvproto v0.0.0-20260820070758-623e58e60fa9 h1:Z1gFEBIzhT7Cuc0IBAsKgUxMapL2kwqe3QQq7g9XiJw=
-github.com/pingcap/kvproto v0.0.0-20260820070758-623e58e60fa9/go.mod h1:z6+aAHB7dBkA+LyinEX+48/ImRJ3jag0Hg0c7wkhEvE=
+github.com/pingcap/kvproto v0.0.0-20261014124429-4141ecadac8f h1:4d+GdI0GRxACpzJHdeGzYs98EvSVO1JK+iiIRSvkvEg=
+github.com/pingcap/kvproto v0.0.0-20261014124429-4141ecadac8f/go.mod h1:Ncxdh+nyHtsZ3ujcyuVPRqIigvnNj05St7swJZ5n6cs=
 github.com/pingcap/log v0.0.0-20191012051959-b742a5d432e9/go.mod h1:4rbK1p9ILyIfb6hU7OG2CiWSqMXnp3JMbiaVJ6mvoY8=
 github.com/pingcap/log v0.0.0-20210625125904-98ed8e2eb1c7/go.mod h1:8AanEdAHATuRurdGxZXBz0At+9avep+ub7U1AGYLIMM=
 github.com/pingcap/log v1.1.0/go.mod h1:DWQW5jICDR7UJh4HtxXSM20Churx4CQL0fwL/SoOSA4=
@@ -905,8 +901,12 @@ github.com/pingcap/metering_sdk v0.0.0-20260814062708-9e3b68cd9adf h1:8gzQg9J2EN
 github.com/pingcap/metering_sdk v0.0.0-20260814062708-9e3b68cd9adf/go.mod h1:IP3HAzDbY5sdoLTQSkF5HjZukuO2koKzbX2FglVSaIA=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
+github.com/pingcap/tidb v1.1.0-beta.0.20261022132800-69d1aac23d4c h1:3oXxa204oML/cdGdQZryrqHfMNhvXIcySL+FyEV4lLg=
+github.com/pingcap/tidb v1.1.0-beta.0.20261022132800-69d1aac23d4c/go.mod h1:3+NahOAsyzjbIkW/W5J/Pl+IZob6sAig4oM54LSdtlU=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7 h1:eFu98FbfJB7PKWOtkaV6YNXXJWqDhczQX56j/iucgU4=
 github.com/pingcap/tidb-dashboard v0.0.0-20240326110213-9768844ff5d7/go.mod h1:ucZBRz52icb23T/5Z4CsuUHmarYiin7p2MeiVBe+o8c=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20261022132800-69d1aac23d4c h1:XZRpKDC2PEWELCi23abWfHFGDngzJBv4/AJBSetHxjg=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20261022132800-69d1aac23d4c/go.mod h1:EAX+oCkoKe+Cl0pPWUkFrQp5XgIfzjGw61TWH+rRYW0=
 github.com/pingcap/tipb v0.0.0-20261006155659-59b678398b17 h1:GalvMypJTiQvfc6p8fs7OS0z+X9O5ZAN+hTZ67QpTYM=
 github.com/pingcap/tipb v0.0.0-20261006155659-59b678398b17/go.mod h1:RM8iRcMalzOthG2XJxnNBniM4xFGb/lDwHUwqkaVzt4=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
