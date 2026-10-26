@@ -238,6 +238,15 @@ func (c *SubTaskConfig) String() string {
 	return string(cfg)
 }
 
+// Redacted returns a diagnostic copy with storage credentials hidden. The
+// shallow copy shares the IO counters, so it must not be used for execution
+// or persistence.
+func (c *SubTaskConfig) Redacted() *SubTaskConfig {
+	result := *c
+	result.LoaderConfig.Dir = objstore.RedactURL(c.LoaderConfig.Dir)
+	return &result
+}
+
 // Toml returns TOML format representation of config.
 // Note: The atomic.Uint64 fields (IOTotalBytes and DumpIOTotalBytes) are not
 // encoded in the TOML output because they do not implement the necessary

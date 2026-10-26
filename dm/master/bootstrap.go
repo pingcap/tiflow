@@ -278,7 +278,7 @@ func (s *Server) getSubtaskCfgsStagesV1Import(tctx *tcontext.Context) (
 			}
 			subtaskCfgs[taskName][cfg.SourceID] = cfg
 			subtaskStages[taskName][cfg.SourceID] = meta.Stage
-			tctx.Logger.Info("got subtask config and stage", redact.ConfigFieldWithRedactedURL("config", &cfg), zap.Stringer("stage", meta.Stage))
+			tctx.Logger.Info("got subtask config and stage", zap.Stringer("config", cfg.Redacted()), zap.Stringer("stage", meta.Stage))
 		}
 	}
 

@@ -16,7 +16,6 @@ package redact
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"regexp"
 	"strings"
@@ -28,27 +27,6 @@ import (
 )
 
 const invalidConfig = "(invalid config; redacted)"
-
-// ConfigFieldWithRedactedURL formats a diagnostic copy without exposing storage URL
-// credentials. It must not be used to serialize execution or persisted configs.
-func ConfigFieldWithRedactedURL(key string, cfg any) zap.Field {
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return zap.String(key, invalidConfig)
-	}
-	var value any
-	d := json.NewDecoder(bytes.NewReader(data))
-	d.UseNumber()
-	if err := d.Decode(&value); err != nil {
-		return zap.String(key, invalidConfig)
-	}
-	redactConfigURL("", value)
-	data, err = json.Marshal(value)
-	if err != nil {
-		return zap.String(key, invalidConfig)
-	}
-	return zap.String(key, string(data))
-}
 
 // YAMLConfigWithRedactedURL hides storage URL credentials in a single configuration
 // document, retaining unknown fields and leaving the original request untouched.

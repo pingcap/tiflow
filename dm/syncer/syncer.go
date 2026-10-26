@@ -3504,7 +3504,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	newCfg.DumpIOTotalBytes = oldCfg.DumpIOTotalBytes
 
 	if oldCfg.String() != newCfg.String() {
-		s.tctx.L().Warn("can not update cfg", redact.ConfigFieldWithRedactedURL("old cfg", oldCfg), redact.ConfigFieldWithRedactedURL("new cfg", newCfg))
+		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg.Redacted()), zap.Stringer("new cfg", newCfg.Redacted()))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil

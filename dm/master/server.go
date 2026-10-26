@@ -52,7 +52,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/etcdutil"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/ui"
@@ -525,7 +524,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	resp.CheckResult = msg
 
-	log.L().Info("", zap.String("task name", cfg.Name), redact.ConfigFieldWithRedactedURL("task", cfg), zap.String("request", "StartTask"))
+	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.Redacted().JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
 	if len(req.Sources) > 0 {
@@ -753,7 +752,7 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp, nil
 	}
 	resp.CheckResult = msg
-	log.L().Info("update task", zap.String("task name", cfg.Name), redact.ConfigFieldWithRedactedURL("task", cfg))
+	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg.Redacted()))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
 	if len(req.Sources) > 0 {
@@ -3069,7 +3068,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation status", redact.ConfigFieldWithRedactedURL("subtask", subTaskCfgs))
+	log.L().Info("query validation status", zap.Reflect("subtask", redactedSubTaskCfgs(subTaskCfgs)))
 	var (
 		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
 		workerRespMu sync.Mutex
@@ -3131,7 +3130,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation error", redact.ConfigFieldWithRedactedURL("subtask", subTaskCfgs))
+	log.L().Info("query validation error", zap.Reflect("subtask", redactedSubTaskCfgs(subTaskCfgs)))
 	var (
 		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3186,7 +3185,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("operate validation error", redact.ConfigFieldWithRedactedURL("subtask", subTaskCfgs))
+	log.L().Info("operate validation error", zap.Reflect("subtask", redactedSubTaskCfgs(subTaskCfgs)))
 	var (
 		workerResps  = make([]*pb.OperateValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3471,4 +3470,17 @@ func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb
 		Result:        true,
 		SourceConfigs: contents,
 	}, nil
+}
+
+// redactedSubTaskCfgs returns copies of subtask configs for logging, with
+// storage credentials hidden.
+func redactedSubTaskCfgs(cfgs map[string]map[string]config.SubTaskConfig) map[string]map[string]config.SubTaskConfig {
+	result := make(map[string]map[string]config.SubTaskConfig, len(cfgs))
+	for task, sourceCfgs := range cfgs {
+		result[task] = make(map[string]config.SubTaskConfig, len(sourceCfgs))
+		for source, cfg := range sourceCfgs {
+			result[task][source] = *cfg.Redacted()
+		}
+	}
+	return result
 }
