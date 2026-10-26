@@ -30,7 +30,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
-	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tiflow/dm/checker"
@@ -1142,7 +1141,7 @@ func (s *Server) getStatusFromWorkers(
 	)
 	setWorkerResp := func(resp *pb.QueryStatusResponse) {
 		workerRespMu.Lock()
-		workerResps = append(workerResps, pb.QueryStatusWithRedactedURL(resp))
+		workerResps = append(workerResps, resp.Redacted())
 		workerRespMu.Unlock()
 	}
 
@@ -2019,7 +2018,7 @@ func (s *Server) waitOperationOk(
 				zap.Stringer("expect", expect),
 				log.ShortError(err))
 		} else {
-			queryResp := pb.QueryStatusWithRedactedURL(resp.QueryStatus)
+			queryResp := resp.QueryStatus.Redacted()
 			if queryResp == nil {
 				// should not happen
 				return false, "", nil, errors.Errorf("expect a query-status response, got type %v", resp.Type)
@@ -2530,7 +2529,7 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
 		}
-		return taskConfigWithRedactedURL(taskCfg).String()
+		return taskCfg.Redacted().String()
 	}
 	switch req.Type {
 	case pb.CfgType_TaskTemplateType:
@@ -3472,36 +3471,4 @@ func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb
 		Result:        true,
 		SourceConfigs: contents,
 	}, nil
-}
-
-// taskConfigWithRedactedURL keeps the existing struct-based YAML formatting
-// of get-config, and copies every loader before masking its storage URL.
-func taskConfigWithRedactedURL(cfg *config.TaskConfig) *config.TaskConfig {
-	result := *cfg
-	cloneLoader := func(loader *config.LoaderConfig) *config.LoaderConfig {
-		if loader == nil {
-			return nil
-		}
-		copyLoader := *loader
-		copyLoader.Dir = objstore.RedactURL(loader.Dir)
-		return &copyLoader
-	}
-	if cfg.Loaders != nil {
-		result.Loaders = make(map[string]*config.LoaderConfig, len(cfg.Loaders))
-		for name, loader := range cfg.Loaders {
-			result.Loaders[name] = cloneLoader(loader)
-		}
-	}
-	if cfg.MySQLInstances != nil {
-		result.MySQLInstances = make([]*config.MySQLInstance, len(cfg.MySQLInstances))
-		for i, instance := range cfg.MySQLInstances {
-			if instance == nil {
-				continue
-			}
-			copyInstance := *instance
-			copyInstance.Loader = cloneLoader(instance.Loader)
-			result.MySQLInstances[i] = &copyInstance
-		}
-	}
-	return &result
 }

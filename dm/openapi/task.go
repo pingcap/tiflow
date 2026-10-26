@@ -45,14 +45,14 @@ func (t *Task) ToJSON() ([]byte, error) {
 	return json.Marshal(t)
 }
 
-// TaskWithRedactedURL returns a response copy with storage credentials hidden.
-// It must not change task templates or configurations used for execution.
-func TaskWithRedactedURL(task *Task) *Task {
-	if task == nil {
+// Redacted returns a response copy with storage credentials hidden.
+// It must not be used for task templates or configurations used for execution.
+func (t *Task) Redacted() *Task {
+	if t == nil {
 		return nil
 	}
-	result := *task
-	if full := task.SourceConfig.FullMigrateConf; full != nil {
+	result := *t
+	if full := t.SourceConfig.FullMigrateConf; full != nil {
 		copyFull := *full
 		if full.DataDir != nil {
 			dir := objstore.RedactURL(*full.DataDir)
@@ -61,16 +61,4 @@ func TaskWithRedactedURL(task *Task) *Task {
 		result.SourceConfig.FullMigrateConf = &copyFull
 	}
 	return &result
-}
-
-// TaskListWithRedactedURL returns diagnostic copies of a task list.
-func TaskListWithRedactedURL(tasks []Task) []Task {
-	if tasks == nil {
-		return nil
-	}
-	result := make([]Task, len(tasks))
-	for i := range tasks {
-		result[i] = *TaskWithRedactedURL(&tasks[i])
-	}
-	return result
 }

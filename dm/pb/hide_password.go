@@ -58,13 +58,13 @@ func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error
 	return nil
 }
 
-// QueryStatusWithRedactedURL masks credentials in a response copy, including
+// Redacted masks storage credentials in a response copy, including
 // errors received from older workers. It leaves internal status data untouched.
-func QueryStatusWithRedactedURL(response *QueryStatusResponse) *QueryStatusResponse {
-	if response == nil {
+func (m *QueryStatusResponse) Redacted() *QueryStatusResponse {
+	if m == nil {
 		return nil
 	}
-	result := proto.Clone(response).(*QueryStatusResponse)
+	result := proto.Clone(m).(*QueryStatusResponse)
 	result.Msg = redact.TextWithRedactedURL(result.Msg)
 	cleanResult := func(r *ProcessResult) {
 		if r == nil {

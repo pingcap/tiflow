@@ -27,24 +27,21 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestTaskStorageResponseRedaction(t *testing.T) {
+func TestTaskRedacted(t *testing.T) {
 	dir := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
 	task := &Task{Name: "task-one", SourceConfig: TaskSourceConfig{
 		FullMigrateConf: &TaskFullMigrateConf{DataDir: &dir},
 	}}
 	before, err := json.Marshal(task)
 	require.NoError(t, err)
-	copyTask := TaskWithRedactedURL(task)
+	copyTask := task.Redacted()
 	require.NotContains(t, *copyTask.SourceConfig.FullMigrateConf.DataDir, "private-")
 	require.Contains(t, *copyTask.SourceConfig.FullMigrateConf.DataDir, "bucket/path")
 	after, err := json.Marshal(task)
 	require.NoError(t, err)
 	require.Equal(t, before, after)
-	copies := TaskListWithRedactedURL([]Task{*task})
-	require.NotContains(t, *copies[0].SourceConfig.FullMigrateConf.DataDir, "private-")
-	require.Equal(t, "task-one", copies[0].Name)
-	require.Nil(t, TaskWithRedactedURL(nil))
-	require.Nil(t, TaskListWithRedactedURL(nil))
+	require.Equal(t, "task-one", copyTask.Name)
+	require.Nil(t, (*Task)(nil).Redacted())
 }
 
 func TestAccessLogURLCredentials(t *testing.T) {

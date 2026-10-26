@@ -30,6 +30,7 @@ import (
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	"github.com/pingcap/tidb/pkg/lightning/config"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -638,6 +639,39 @@ func (c *TaskConfig) String() string {
 		log.L().Error("marshal task config to yaml", zap.String("task", c.Name), log.ShortError(err))
 	}
 	return string(cfg)
+}
+
+// Redacted returns a response copy with storage credentials hidden, keeping
+// the struct-based formatting of String. It copies every loader before masking
+// its storage URL, and must not be used for execution or persistence.
+func (c *TaskConfig) Redacted() *TaskConfig {
+	result := *c
+	cloneLoader := func(loader *LoaderConfig) *LoaderConfig {
+		if loader == nil {
+			return nil
+		}
+		copyLoader := *loader
+		copyLoader.Dir = objstore.RedactURL(loader.Dir)
+		return &copyLoader
+	}
+	if c.Loaders != nil {
+		result.Loaders = make(map[string]*LoaderConfig, len(c.Loaders))
+		for name, loader := range c.Loaders {
+			result.Loaders[name] = cloneLoader(loader)
+		}
+	}
+	if c.MySQLInstances != nil {
+		result.MySQLInstances = make([]*MySQLInstance, len(c.MySQLInstances))
+		for i, instance := range c.MySQLInstances {
+			if instance == nil {
+				continue
+			}
+			copyInstance := *instance
+			copyInstance.Loader = cloneLoader(instance.Loader)
+			result.MySQLInstances[i] = &copyInstance
+		}
+	}
+	return &result
 }
 
 // JSON returns the config's json string.

@@ -462,7 +462,7 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	res.Task = *openapi.TaskWithRedactedURL(&res.Task)
+	res.Task = *res.Task.Redacted()
 	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
 	c.IndentedJSON(http.StatusCreated, res)
 }
@@ -479,7 +479,7 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	res.Task = *openapi.TaskWithRedactedURL(&res.Task)
+	res.Task = *res.Task.Redacted()
 	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
 	c.IndentedJSON(http.StatusOK, res)
 }
@@ -511,7 +511,7 @@ func (s *Server) DMAPIGetTask(c *gin.Context, taskName string, params openapi.DM
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, openapi.TaskWithRedactedURL(task))
+	c.IndentedJSON(http.StatusOK, task.Redacted())
 }
 
 // DMAPIGetTaskStatus url is:(GET /api/v1/tasks/{task-name}/status).
@@ -535,7 +535,10 @@ func (s *Server) DMAPIGetTaskList(c *gin.Context, params openapi.DMAPIGetTaskLis
 		_ = c.Error(err)
 		return
 	}
-	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: openapi.TaskListWithRedactedURL(taskList)}
+	for i := range taskList {
+		taskList[i] = *taskList[i].Redacted()
+	}
+	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
@@ -841,7 +844,7 @@ func (s *Server) DMAPIConvertTask(c *gin.Context) {
 		return
 	}
 	c.IndentedJSON(http.StatusOK, openapi.ConverterTaskResponse{
-		Task: *openapi.TaskWithRedactedURL(task), TaskConfigFile: taskConfigWithRedactedURL(taskCfg).String(),
+		Task: *task.Redacted(), TaskConfigFile: taskCfg.Redacted().String(),
 	})
 }
 
@@ -897,7 +900,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusCreated, openapi.TaskWithRedactedURL(task))
+	c.IndentedJSON(http.StatusCreated, task.Redacted())
 }
 
 // DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/tasks/templates).
@@ -909,9 +912,9 @@ func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 	}
 	taskList := make([]openapi.Task, len(TaskConfigList))
 	for i, TaskConfig := range TaskConfigList {
-		taskList[i] = *TaskConfig
+		taskList[i] = *TaskConfig.Redacted()
 	}
-	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: openapi.TaskListWithRedactedURL(taskList)}
+	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
 }
 
@@ -935,7 +938,7 @@ func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(terror.ErrOpenAPITaskConfigNotExist.Generate(taskName))
 		return
 	}
-	c.IndentedJSON(http.StatusOK, openapi.TaskWithRedactedURL(task))
+	c.IndentedJSON(http.StatusOK, task.Redacted())
 }
 
 // DMAPUpdateTaskTemplate update task_config_template url is: (PUT /api/v1/tasks/templates/{task-name}).
@@ -959,7 +962,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, openapi.TaskWithRedactedURL(task))
+	c.IndentedJSON(http.StatusOK, task.Redacted())
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {
