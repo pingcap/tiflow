@@ -209,10 +209,6 @@ func TestCollectMetric(t *testing.T) {
 		defer wg.Done()
 		_ = s.serve(ctx)
 	}()
-	defer func() {
-		cancel()
-		wg.Wait()
-	}()
 
 	jobManager := &mockJobManager{
 		jobs: map[pb.Job_State][]*pb.Job{
@@ -241,6 +237,9 @@ func TestCollectMetric(t *testing.T) {
 	s.collectLeaderMetric()
 	apiURL := fmt.Sprintf("http://%s", cfg.Addr)
 	testCustomedPrometheusMetrics(t, apiURL)
+
+	cancel()
+	wg.Wait()
 }
 
 func testCustomedPrometheusMetrics(t *testing.T, addr string) {
@@ -249,21 +248,15 @@ func testCustomedPrometheusMetrics(t *testing.T, addr string) {
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
 		resp, err := cli.Get(ctx, addr+"/metrics")
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			return false
-		}
+		require.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return false
-		}
+		require.NoError(t, err)
 		metric := string(body)
 		return strings.Contains(metric, "tiflow_server_master_job_num") &&
 			strings.Contains(metric, "tiflow_server_master_executor_num")
-	}, 5*time.Second, 20*time.Millisecond, "wait for server master metrics")
+	}, time.Second, time.Millisecond*20)
 }
 
 func TestHTTPErrorHandler(t *testing.T) {
