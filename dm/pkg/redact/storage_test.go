@@ -174,6 +174,30 @@ func TestURLTextUsesTiDBPolicy(t *testing.T) {
 		"region=us-east-1")
 }
 
+func TestURLTextJSONEscaped(t *testing.T) {
+	// encoding/json escapes '&' as \u0026, for example in checker results.
+	// The sensitive parameters are not first, so they must be split correctly.
+	raw := "s3://bucket/path?region=us-east-1&secret-access-key=private-sk&access-key=private-ak"
+	once, err := json.Marshal(map[string]string{"dir": raw})
+	require.NoError(t, err)
+	require.Contains(t, string(once), `\u0026`)
+	twice, err := json.Marshal(map[string]string{"result": string(once)})
+	require.NoError(t, err)
+
+	output := TextWithRedactedURL(string(once))
+	require.NotContains(t, output, "private-")
+	var decoded map[string]string
+	require.NoError(t, json.Unmarshal([]byte(output), &decoded))
+	require.Equal(t, objstore.RedactURL(raw), decoded["dir"])
+
+	output = TextWithRedactedURL(string(twice))
+	require.NotContains(t, output, "private-")
+	var outer map[string]string
+	require.NoError(t, json.Unmarshal([]byte(output), &outer))
+	require.NoError(t, json.Unmarshal([]byte(outer["result"]), &decoded))
+	require.Equal(t, objstore.RedactURL(raw), decoded["dir"])
+}
+
 func TestProxyURL(t *testing.T) {
 	for _, raw := range []string{
 		"http://private-user:private-password@proxy.invalid:8080",
