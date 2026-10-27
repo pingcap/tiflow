@@ -227,8 +227,7 @@ func (s *DMLSink) run(ctx context.Context) error {
 
 	log.Info("dml worker started", zap.String("namespace", s.changefeedID.Namespace),
 		zap.String("changefeed", s.changefeedID.ID),
-		zap.Int("workerCount", len(s.workers)),
-		zap.Any("config", s.workers[0].config))
+		zap.Int("workerCount", len(s.workers)))
 
 	return eg.Wait()
 }

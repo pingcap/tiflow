@@ -208,7 +208,6 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		gtidStr, err := event.GetGTIDStr(e)
 		if err != nil {
 			log.L().DPanic("failed to get GTID from event",
-				zap.Any("event", e),
 				zap.Error(err))
 			break
 		}
@@ -220,7 +219,6 @@ func (l *locationRecorder) update(e *replication.BinlogEvent) {
 		gtidStr, err := event.GetGTIDStr(e)
 		if err != nil {
 			log.L().DPanic("failed to get GTID from event",
-				zap.Any("event", e),
 				zap.Error(err))
 			break
 		}

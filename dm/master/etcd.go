@@ -119,7 +119,7 @@ func prepareJoinEtcd(cfg *Config) error {
 	} else {
 		cfg.InitialCluster = strings.TrimSpace(string(s))
 		cfg.InitialClusterState = embed.ClusterStateFlagExisting
-		log.L().Info("using persistent join data", zap.String("file", joinFP), zap.String("data", cfg.InitialCluster))
+		log.L().Info("using persistent join data", zap.String("file", joinFP))
 		return nil
 	}
 

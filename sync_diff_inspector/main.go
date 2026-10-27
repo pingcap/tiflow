@@ -87,7 +87,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	log.Info("", zap.Stringer("config", cfg))
+	log.Info("sync-diff-inspector config loaded")
 
 	ctx := context.Background()
 	if !checkSyncState(ctx, cfg) {

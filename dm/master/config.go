@@ -152,7 +152,7 @@ type Config struct {
 func (c *Config) String() string {
 	cfg, err := json.Marshal(c)
 	if err != nil {
-		log.L().Error("marshal to json", zap.Reflect("master config", c), log.ShortError(err))
+		log.L().Error("marshal to json", log.ShortError(err))
 	}
 	return string(cfg)
 }

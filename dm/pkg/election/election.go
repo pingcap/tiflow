@@ -304,13 +304,13 @@ func (e *Election) campaignLoop(ctx context.Context, session *concurrency.Sessio
 					break observeElection
 				}
 
-				e.l.Info("get response from election observe", zap.String("key", string(resp.Kvs[0].Key)), zap.String("value", string(resp.Kvs[0].Value)))
+				e.l.Info("get response from election observe", zap.String("key", string(resp.Kvs[0].Key)))
 				leaderKey = string(resp.Kvs[0].Key)
 				leaderInfo, err = getCampaignerInfo(resp.Kvs[0].Value)
 				revision = resp.Header.Revision
 				if err != nil {
 					// this should never happened
-					e.l.Error("fail to get leader information", zap.String("value", string(resp.Kvs[0].Value)), zap.Error(err))
+					e.l.Error("fail to get leader information", zap.Error(err))
 					continue
 				}
 

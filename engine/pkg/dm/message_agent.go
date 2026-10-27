@@ -336,7 +336,7 @@ func (agent *MessageAgentImpl) SendRequest(ctx context.Context, clientID string,
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultRequestTimeOut)
 	defer cancel()
-	agent.logger.Debug("send request", zap.String("client-id", clientID), zap.String("command", command), zap.Any("req", req))
+	agent.logger.Debug("send request", zap.String("client-id", clientID), zap.String("command", command))
 	return agent.messageMatcher.sendRequest(ctx2, clientCtx, generateTopic(agent.id, clientID), command, req, client)
 }
 
@@ -348,7 +348,7 @@ func (agent *MessageAgentImpl) sendResponse(ctx context.Context, clientID string
 	}
 	ctx2, cancel := context.WithTimeout(ctx, defaultResponseTimeOut)
 	defer cancel()
-	agent.logger.Debug("send response", zap.String("client-id", clientID), zap.String("command", command), zap.Any("resp", resp))
+	agent.logger.Debug("send response", zap.String("client-id", clientID), zap.String("command", command))
 	return agent.messageMatcher.sendResponse(ctx2, generateTopic(agent.id, clientID), msgID, command, resp, client)
 }
 

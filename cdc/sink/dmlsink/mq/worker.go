@@ -137,8 +137,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				event.rowEvent.Callback()
 				log.Debug("Skip event of stopped table",
 					zap.String("namespace", w.changeFeedID.Namespace),
-					zap.String("changefeed", w.changeFeedID.ID),
-					zap.Any("event", event))
+					zap.String("changefeed", w.changeFeedID.ID))
 				continue
 			}
 			if err := w.encoderGroup.AddEvents(
@@ -252,7 +251,7 @@ func (w *worker) group(
 		// Skip this event when the table is stopping.
 		if msg.rowEvent.GetTableSinkState() != state.TableSinkSinking {
 			msg.rowEvent.Callback()
-			log.Debug("Skip event of stopped table", zap.Any("event", msg.rowEvent))
+			log.Debug("Skip event of stopped table")
 			continue
 		}
 		if _, ok := groupedMsgs[msg.key]; !ok {

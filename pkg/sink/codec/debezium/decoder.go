@@ -167,7 +167,7 @@ func (d *Decoder) getCommitTs() uint64 {
 	source := d.valuePayload["source"].(map[string]interface{})
 	commitTs, err := source["commit_ts"].(json.Number).Int64()
 	if err != nil {
-		log.Error("decode value failed", zap.Error(err), zap.Any("value", source))
+		log.Error("decode value failed", zap.Error(err))
 	}
 	return uint64(commitTs)
 }
@@ -265,7 +265,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 			s := value.(string)
 			v, err := base64.StdEncoding.DecodeString(s)
 			if err != nil {
-				log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+				log.Error("decode value failed", zap.Error(err))
 				return nil
 			}
 			value = v
@@ -273,7 +273,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	case mysql.TypeDate, mysql.TypeNewDate:
 		v, err := value.(json.Number).Int64()
 		if err != nil {
-			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			log.Error("decode value failed", zap.Error(err))
 			return nil
 		}
 		t := time.Unix(v*60*60*24, 0)
@@ -281,7 +281,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	case mysql.TypeDatetime:
 		v, err := value.(json.Number).Int64()
 		if err != nil {
-			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			log.Error("decode value failed", zap.Error(err))
 			return nil
 		}
 		var t time.Time
@@ -294,7 +294,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	case mysql.TypeDuration:
 		v, err := value.(json.Number).Int64()
 		if err != nil {
-			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			log.Error("decode value failed", zap.Error(err))
 			return nil
 		}
 		d := types.NewDuration(0, 0, 0, int(v), types.MaxFsp)
@@ -302,7 +302,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 	case mysql.TypeLonglong, mysql.TypeLong, mysql.TypeInt24, mysql.TypeShort, mysql.TypeTiny:
 		v, err := value.(json.Number).Int64()
 		if err != nil {
-			log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+			log.Error("decode value failed", zap.Error(err))
 			return nil
 		}
 		if mysql.HasUnsignedFlag(ft.GetFlag()) {
@@ -321,7 +321,7 @@ func decodeColumn(value interface{}, colInfo *timodel.ColumnInfo) *model.ColumnD
 		case string:
 			b, err := base64.StdEncoding.DecodeString(v)
 			if err != nil {
-				log.Error("decode value failed", zap.Error(err), zap.Any("value", value))
+				log.Error("decode value failed", zap.Error(err))
 				return nil
 			}
 			var buf [8]byte

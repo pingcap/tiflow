@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -96,7 +97,7 @@ func NewConfluentSchemaManager(
 	}
 
 	if string(text[:]) != "{}" {
-		log.Error("Unexpected response from Schema Registry", zap.ByteString("response", text))
+		log.Error("Unexpected response from Schema Registry")
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Unexpected response from Schema Registry",
 		)
@@ -122,7 +123,7 @@ func (m *confluentSchemaManager) Register(
 ) (schemaID, error) {
 	// The Schema Registry expects the JSON to be without newline characters
 	id := schemaID{}
-	log.Info("confluentSchemaManager", zap.String("schemaDefinition", schemaDefinition), zap.String("schemaName", schemaName))
+	log.Info("confluentSchemaManager", zap.String("schemaName", schemaName))
 
 	buffer := new(bytes.Buffer)
 	err := json.Compact(buffer, []byte(schemaDefinition))
@@ -139,7 +140,7 @@ func (m *confluentSchemaManager) Register(
 		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaName) + "/versions"
-	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
+	log.Info("Registering schema", zap.String("uri", util.MaskSensitiveDataInURIForError(uri)))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
@@ -171,9 +172,7 @@ func (m *confluentSchemaManager) Register(
 		log.Error(
 			"Failed to register schema to the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode),
-			zap.String("uri", uri),
-			zap.ByteString("requestBody", payload),
-			zap.ByteString("responseBody", body),
+			zap.String("uri", util.MaskSensitiveDataInURIForError(uri)),
 		)
 		return id, cerror.ErrAvroSchemaAPIError.GenWithStackByArgs()
 	}
@@ -194,8 +193,7 @@ func (m *confluentSchemaManager) Register(
 
 	log.Info("Registered schema successfully",
 		zap.Int("schemaID", jsonResp.SchemaID),
-		zap.String("uri", uri),
-		zap.ByteString("body", body))
+		zap.String("uri", util.MaskSensitiveDataInURIForError(uri)))
 
 	id.confluentSchemaID = jsonResp.SchemaID
 	return id, nil
@@ -243,8 +241,7 @@ func (m *confluentSchemaManager) Lookup(
 	if resp.StatusCode != 200 && resp.StatusCode != 404 {
 		log.Error("Failed to query schema from the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode),
-			zap.String("uri", uri),
-			zap.ByteString("responseBody", body))
+			zap.String("uri", util.MaskSensitiveDataInURIForError(uri)))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Failed to query schema from the Registry, HTTP error",
 		)

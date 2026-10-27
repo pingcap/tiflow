@@ -98,7 +98,7 @@ type Server struct {
 
 // NewServer creates a new executor server instance
 func NewServer(cfg *Config) *Server {
-	log.Info("creating executor", zap.Stringer("config", cfg))
+	log.Info("creating executor")
 
 	registerWorkerOnce.Do(registerWorkers)
 	s := Server{

@@ -108,7 +108,7 @@ func WriteError(w http.ResponseWriter, statusCode int, err error) {
 func WriteData(w http.ResponseWriter, data interface{}) {
 	js, err := json.MarshalIndent(data, "", " ")
 	if err != nil {
-		log.Error("invalid json data", zap.Any("data", data), zap.Error(err))
+		log.Error("invalid json data", zap.Error(err))
 		WriteError(w, http.StatusInternalServerError, err)
 		return
 	}
@@ -243,7 +243,6 @@ func ForwardToCapture(c *gin.Context, fromID, toAddr string) {
 		}
 	}
 	log.Info("forwarding request to capture",
-		zap.String("url", c.Request.RequestURI),
 		zap.String("method", c.Request.Method),
 		zap.String("fromID", fromID),
 		zap.String("toAddr", toAddr),

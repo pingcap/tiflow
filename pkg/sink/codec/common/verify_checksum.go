@@ -43,13 +43,12 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 		}
 		if checksum != event.Checksum.Current {
 			log.Error("current checksum mismatch",
-				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum), zap.Any("event", event))
+				zap.Uint32("expected", event.Checksum.Current), zap.Uint32("actual", checksum))
 			for _, col := range event.Columns {
 				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				log.Info("data corrupted, print each column for debugging",
 					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
-					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
-					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()))
 			}
 			return fmt.Errorf("current checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Current)
 		}
@@ -62,13 +61,12 @@ func VerifyChecksum(event *model.RowChangedEvent, db *sql.DB) error {
 		if checksum != event.Checksum.Previous {
 			log.Error("previous checksum mismatch",
 				zap.Uint32("expected", event.Checksum.Previous),
-				zap.Uint32("actual", checksum), zap.Any("event", event))
+				zap.Uint32("actual", checksum))
 			for _, col := range event.PreColumns {
 				colInfo := event.TableInfo.ForceGetColumnInfo(col.ColumnID)
 				log.Info("data corrupted, print each column for debugging",
 					zap.String("name", colInfo.Name.O), zap.Any("type", colInfo.GetType()),
-					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()),
-					zap.Any("value", col.Value), zap.Any("default", colInfo.GetDefaultValue()))
+					zap.Any("charset", colInfo.GetCharset()), zap.Any("flag", colInfo.GetFlag()))
 			}
 			return fmt.Errorf("previous checksum mismatch, current: %d, expected: %d", checksum, event.Checksum.Previous)
 		}
@@ -138,7 +136,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 			v = uint64(a["value"].(int64))
 		default:
 			log.Panic("unknown golang type for the integral value",
-				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
+				zap.Any("mysqlType", mysqlType))
 		}
 		buf = binary.LittleEndian.AppendUint64(buf, v)
 	// TypeFloat encoded as float32, TypeDouble encoded as float64
@@ -185,7 +183,7 @@ func buildChecksumBytes(buf []byte, value interface{}, mysqlType byte) ([]byte, 
 			buf = appendLengthValue(buf, a)
 		default:
 			log.Panic("unknown golang type for the string value",
-				zap.Any("value", value), zap.Any("mysqlType", mysqlType))
+				zap.Any("mysqlType", mysqlType))
 		}
 	case mysql.TypeTimestamp:
 		location := "Local"

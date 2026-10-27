@@ -83,13 +83,11 @@ func (t *TxnEventAppender) Append(
 		lastCommitTs := lastTxn.GetCommitTs()
 		if lastCommitTs > row.CommitTs {
 			log.Panic("The commitTs of the emit row is less than the received row",
-				zap.Uint64("lastReceivedCommitTs", lastCommitTs),
-				zap.Any("row", row))
+				zap.Uint64("lastReceivedCommitTs", lastCommitTs))
 		} else if lastCommitTs == row.CommitTs && lastTxn.StartTs > row.StartTs {
 			log.Panic("The startTs of the emit row is less than the received row with same CommitTs",
 				zap.Uint64("lastReceivedCommitTs", lastCommitTs),
-				zap.Uint64("lastReceivedStartTs", lastTxn.StartTs),
-				zap.Any("row", row))
+				zap.Uint64("lastReceivedStartTs", lastTxn.StartTs))
 		}
 
 		// Split on big transactions or a new one. For 2 transactions,

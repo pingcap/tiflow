@@ -18,7 +18,6 @@ import (
 
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
-	"go.uber.org/zap"
 )
 
 const (
@@ -84,7 +83,7 @@ func EncodeTsKey(uniqueID uint32, tableID uint64, CRTs uint64, startTs ...uint64
 // Format: uniqueID, tableID, CRTs, startTs, delete/update/insert, Key.
 func EncodeKey(uniqueID uint32, tableID uint64, event *model.PolymorphicEvent) []byte {
 	if event.RawKV == nil {
-		log.Panic("rawkv must not be nil", zap.Any("event", event))
+		log.Panic("rawkv must not be nil")
 	}
 	// uniqueID, tableID, CRTs, startTs, Put/Delete, Key
 	length := 4 + 8 + 8 + 8 + 2 + len(event.RawKV.Key)

@@ -187,7 +187,7 @@ func NormalizeError() grpc.UnaryServerInterceptor {
 		if err != nil {
 			errOut := ToGRPCError(err)
 			s, _ := status.FromError(errOut)
-			logger := log.L().With(zap.String("method", method), zap.Error(err), zap.Any("request", req))
+			logger := log.L().With(zap.String("method", method), zap.Error(err))
 			switch s.Code() {
 			case codes.Unknown:
 				logger.Warn("request handled with an unknown error")
@@ -199,7 +199,7 @@ func NormalizeError() grpc.UnaryServerInterceptor {
 			return nil, errOut
 		}
 
-		log.Debug("request handled successfully", zap.String("method", method), zap.Any("request", req), zap.Any("response", resp))
+		log.Debug("request handled successfully", zap.String("method", method))
 		return resp, nil
 	}
 }
@@ -218,7 +218,7 @@ func Logger(allowList []string, limiter *rate.Limiter) grpc.UnaryServerIntercept
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
 		method := extractMethod(info.FullMethod)
 		if allow(method) {
-			log.Info("", zap.Any("request", req), zap.String("method", method))
+			log.Info("request received", zap.String("method", method))
 		}
 		return handler(ctx, req)
 	}

@@ -18,7 +18,6 @@ import (
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/dm/pkg/log"
-	"go.uber.org/zap"
 )
 
 // HasNotNullUniqueIdx returns true when the target table structure has PK or UK
@@ -193,9 +192,7 @@ func (r *RowChange) IdentityKey() string {
 // in-place.
 func (r *RowChange) Reduce(preRowChange *RowChange) {
 	if r.IdentityKey() != preRowChange.IdentityKey() {
-		log.L().DPanic("reduce row change failed, identity key not match",
-			zap.String("preID", preRowChange.IdentityKey()),
-			zap.String("curID", r.IdentityKey()))
+		log.L().DPanic("reduce row change failed, identity key not match")
 		return
 	}
 
@@ -212,8 +209,7 @@ func (r *RowChange) Reduce(preRowChange *RowChange) {
 // RowChangeInsert one. The behaviour is undefined for other types of RowChange.
 func (r *RowChange) SplitUpdate() (*RowChange, *RowChange) {
 	if r.tp != RowChangeUpdate {
-		log.L().DPanic("SplitUpdate should only be called on RowChangeUpdate",
-			zap.Stringer("rowChange", r))
+		log.L().DPanic("SplitUpdate should only be called on RowChangeUpdate")
 		return nil, nil
 	}
 

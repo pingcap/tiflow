@@ -14,7 +14,6 @@
 package openapi
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,7 +38,6 @@ func ZapLogger(log *zap.Logger) gin.HandlerFunc {
 			zap.String("remote_ip", c.Request.RemoteAddr),
 			zap.String("user_agent", req.UserAgent()),
 			zap.String("duration", time.Since(start).String()),
-			zap.String("request", fmt.Sprintf("%s %s", req.Method, req.RequestURI)),
 		}
 
 		switch {

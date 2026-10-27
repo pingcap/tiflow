@@ -20,12 +20,11 @@ import (
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/v1workermeta"
-	"go.uber.org/zap"
 )
 
 // OperateV1Meta implements WorkerServer.OperateV1Meta.
 func (s *Server) OperateV1Meta(ctx context.Context, req *pb.OperateV1MetaRequest) (*pb.OperateV1MetaResponse, error) {
-	log.L().Info("", zap.String("request", "OperateV1Meta"), zap.Stringer("payload", req))
+	log.L().Info("operate v1 metadata")
 
 	switch req.Op {
 	case pb.V1MetaOp_GetV1Meta:

@@ -183,13 +183,12 @@ func run(_ *cobra.Command, _ []string) {
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Panic("invalid upstream-uri", zap.Error(err))
+		log.Panic("invalid upstream-uri")
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if !sink.IsPulsarScheme(scheme) {
 		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be pulsar schema",
-			zap.String("schema", scheme),
-			zap.String("upstreamURI", upstreamURIStr))
+			zap.String("schema", scheme))
 	}
 
 	consumerOption.Adjust(upstreamURI, configFile)
@@ -284,7 +283,7 @@ func NewPulsarConsumer(option *ConsumerOption) (pulsar.Consumer, pulsar.Client) 
 			auth.ConfigParamScope:     option.oauth2Scope,
 			auth.ConfigParamType:      auth.ConfigParamTypeClientCredentials,
 		})
-		log.Info("oauth2 authentication is enabled", zap.String("issuer url", option.oauth2IssuerURL))
+		log.Info("oauth2 authentication is enabled", zap.String("issuer url", util.MaskSensitiveDataInURIForError(option.oauth2IssuerURL)))
 		clientOption.Authentication = authentication
 	}
 	if len(option.mtlsAuthTLSCertificatePath) != 0 {
@@ -467,7 +466,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 			ddl, err := decoder.NextDDLEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
-					zap.ByteString("value", msg.Payload()),
 					zap.Error(err))
 			}
 			c.appendDDL(ddl)
@@ -475,7 +473,6 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 			row, err := decoder.NextRowChangedEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
-					zap.ByteString("value", msg.Payload()),
 					zap.Error(err))
 			}
 			globalResolvedTs := atomic.LoadUint64(&c.globalResolvedTs)
@@ -485,8 +482,7 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Uint64("globalResolvedTs", globalResolvedTs),
 					zap.Uint64("partitionResolvedTs", partitionResolvedTs),
-					zap.Int32("partition", msg.ID().PartitionIdx()),
-					zap.Any("row", row))
+					zap.Int32("partition", msg.ID().PartitionIdx()))
 				// todo: mark the offset after the DDL is fully synced to the downstream mysql.
 				continue
 			}
@@ -501,13 +497,11 @@ func (c *Consumer) HandleMsg(msg pulsar.Message) error {
 				zap.Int64("tableID", row.GetTableID()),
 				zap.String("schema", row.TableInfo.GetSchemaName()),
 				zap.String("table", row.TableInfo.GetTableName()),
-				zap.Uint64("commitTs", row.CommitTs),
-				zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
+				zap.Uint64("commitTs", row.CommitTs))
 		case model.MessageTypeResolved:
 			ts, err := decoder.NextResolvedEvent()
 			if err != nil {
 				log.Panic("decode message value failed",
-					zap.ByteString("value", msg.Payload()),
 					zap.Error(err))
 			}
 

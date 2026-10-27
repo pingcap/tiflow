@@ -66,12 +66,12 @@ func main() {
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Panic("invalid upstream-uri", zap.Error(err))
+		log.Panic("invalid upstream-uri")
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {
 		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be `kafka`",
-			zap.String("upstreamURI", upstreamURIStr))
+			zap.String("scheme", scheme))
 	}
 
 	err = consumerOption.Adjust(upstreamURI, configFile)

@@ -101,9 +101,7 @@ func NewBrokerWithConfig(
 	executorID resModel.ExecutorID,
 	client client.ResourceManagerClient,
 ) (*DefaultBroker, error) {
-	log.Info("Create new resource broker",
-		zap.String("executor-id", string(executorID)),
-		zap.Any("config", config))
+	log.Info("Create new resource broker", zap.String("executor-id", string(executorID)))
 
 	broker := &DefaultBroker{
 		executorID:     executorID,
@@ -196,8 +194,7 @@ func (b *DefaultBroker) OpenStorage(
 		return nil, err
 	}
 
-	log.Info(fmt.Sprintf("Using %s storage with path", string(tp)),
-		zap.String("path", desc.URI()))
+	log.Info(fmt.Sprintf("Using %s storage", string(tp)))
 	return newResourceHandle(jobID, b.executorID, fm, desc, exists, b.client)
 }
 

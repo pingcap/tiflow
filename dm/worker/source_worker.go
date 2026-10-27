@@ -146,7 +146,7 @@ func NewSourceWorker(
 
 	InitConditionHub(w)
 
-	w.l.Info("initialized", zap.Stringer("cfg", cfg))
+	w.l.Info("initialized", zap.String("source", cfg.SourceID))
 
 	return w, nil
 }
@@ -546,7 +546,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		return err
 	}
 
-	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), zap.Any("subTasks", subTaskCfgM))
+	w.l.Info("starting to handle mysql source", zap.String("source", w.cfg.SourceID), zap.Int("subtask-count", len(subTaskCfgM)))
 
 	for _, subTaskCfg := range subTaskCfgM {
 		expectStage := subTaskStages[subTaskCfg.Name]
@@ -660,7 +660,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, vali
 		return nil
 	}
 
-	w.l.Info("subtask created", zap.Stringer("config", cfg2))
+	w.l.Info("subtask created", zap.String("task", cfg2.Name), zap.String("source", cfg2.SourceID))
 	st.Run(expectStage, validatorStage, w.getRelayWithoutLock())
 	return nil
 }

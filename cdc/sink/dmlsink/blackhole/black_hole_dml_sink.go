@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/pkg/sink"
-	"go.uber.org/zap"
 )
 
 // Assert EventSink[E event.TableEvent] implementation
@@ -39,8 +38,8 @@ func (s *DMLSink) WriteEvents(rows ...*dmlsink.CallbackableEvent[*model.RowChang
 	failpoint.Inject("WriteEventsFail", func() { err = errors.New("InjectedErrorForWriteEventsFail") })
 	if err == nil {
 		for _, row := range rows {
-			// NOTE: don't change the log, some tests depend on it.
-			log.Debug("BlackHoleSink: WriteEvents", zap.Any("row", row.Event))
+			// The integration test counts these log entries.
+			log.Debug("BlackHoleSink: WriteEvents")
 			row.Callback()
 		}
 	}
