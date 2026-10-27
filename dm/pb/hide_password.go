@@ -23,7 +23,7 @@ import (
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.Task = redact.YAMLConfigWithRedactedURL(m.Task)
+	clone.Task = redact.YAMLConfig(m.Task)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -31,7 +31,7 @@ func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *CheckTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.Task = redact.YAMLConfigWithRedactedURL(m.Task)
+	clone.Task = redact.YAMLConfig(m.Task)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -39,7 +39,7 @@ func (m *CheckTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *UpdateTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
-	clone.Task = redact.YAMLConfigWithRedactedURL(m.Task)
+	clone.Task = redact.YAMLConfig(m.Task)
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
 	return nil
 }
@@ -57,22 +57,22 @@ func (m *QueryStatusResponse) Redacted() *QueryStatusResponse {
 		return nil
 	}
 	result := proto.Clone(m).(*QueryStatusResponse)
-	result.Msg = redact.TextWithRedactedURL(result.Msg)
+	result.Msg = redact.Text(result.Msg)
 	cleanResult := func(r *ProcessResult) {
 		if r == nil {
 			return
 		}
 		for _, err := range r.Errors {
 			if err != nil {
-				err.Message = redact.TextWithRedactedURL(err.Message)
-				err.RawCause = redact.TextWithRedactedURL(err.RawCause)
-				err.Workaround = redact.TextWithRedactedURL(err.Workaround)
+				err.Message = redact.Text(err.Message)
+				err.RawCause = redact.Text(err.RawCause)
+				err.Workaround = redact.Text(err.Workaround)
 			}
 		}
 	}
 	cleanDDLs := func(ddls []string) {
 		for i := range ddls {
-			ddls[i] = redact.TextWithRedactedURL(ddls[i])
+			ddls[i] = redact.Text(ddls[i])
 		}
 	}
 	if source := result.SourceStatus; source != nil {
@@ -90,7 +90,7 @@ func (m *QueryStatusResponse) Redacted() *QueryStatusResponse {
 			cleanResult(task.Validation.Result)
 		}
 		if sync := task.GetSync(); sync != nil {
-			sync.ConflictMsg = redact.TextWithRedactedURL(sync.ConflictMsg)
+			sync.ConflictMsg = redact.Text(sync.ConflictMsg)
 			cleanDDLs(sync.BlockingDDLs)
 			for _, group := range sync.UnresolvedGroups {
 				if group != nil {

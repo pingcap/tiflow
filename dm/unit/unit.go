@@ -75,9 +75,9 @@ type Unit interface {
 // we can refine to add error scope field if needed.
 func NewProcessError(err error) (result *pb.ProcessError) {
 	defer func() {
-		result.Message = redact.TextWithRedactedURL(result.Message)
-		result.RawCause = redact.TextWithRedactedURL(result.RawCause)
-		result.Workaround = redact.TextWithRedactedURL(result.Workaround)
+		result.Message = redact.Text(result.Message)
+		result.RawCause = redact.Text(result.RawCause)
+		result.Workaround = redact.Text(result.Workaround)
 	}()
 	if e, ok := err.(*terror.Error); ok {
 		return &pb.ProcessError{

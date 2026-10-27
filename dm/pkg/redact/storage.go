@@ -26,9 +26,9 @@ import (
 
 const invalidConfig = "(invalid config; redacted)"
 
-// YAMLConfigWithRedactedURL hides storage URL credentials in a single configuration
+// YAMLConfig hides storage URL credentials in a single configuration
 // document, retaining unknown fields and leaving the original request untouched.
-func YAMLConfigWithRedactedURL(input string) string {
+func YAMLConfig(input string) string {
 	if input == "" {
 		return ""
 	}
@@ -96,8 +96,9 @@ var apostropheURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*:/{1,2}[^\s"<>]+`
 // more backslashes when that JSON is itself embedded in a JSON string.
 var escapedAmpersand = regexp.MustCompile(`\\+u0026`)
 
-// TextWithRedactedURL applies the same TiDB URL policy to URLs embedded in diagnostic text.
-func TextWithRedactedURL(text string) string {
+// Text hides the credentials of the storage URLs embedded in diagnostic text,
+// using the same TiDB URL policy as objstore.RedactURL.
+func Text(text string) string {
 	if !strings.Contains(text, "'") {
 		return diagnosticURL.ReplaceAllStringFunc(text, redactTextURL)
 	}
@@ -149,19 +150,22 @@ func redactTextURL(match string) string {
 	return strings.ReplaceAll(redacted, "&", escaped) + suffix
 }
 
-// ErrorFieldWithRedactedURL formats a diagnostic error without exposing an unredacted verbose
-// representation. It never changes the error used for execution or retries.
-func ErrorFieldWithRedactedURL(err error) zap.Field {
+// Error replaces zap.Error for errors that may contain storage URLs, such as
+// storage SDK errors, and hides the credentials of these URLs. It formats the
+// error without exposing an unredacted verbose representation, and never
+// changes the error used for execution or retries.
+func Error(err error) zap.Field {
 	if err == nil {
 		return zap.Skip()
 	}
-	return zap.String("error", TextWithRedactedURL(err.Error()))
+	return zap.String("error", Text(err.Error()))
 }
 
-// RedactedProxyURL adapts scheme-less proxy syntax before using TiDB's URL redactor.
+// ProxyURL hides the credentials of a proxy URL. It adapts scheme-less proxy
+// syntax before using TiDB's URL redactor.
 // Without the temporary scheme, user:password@host:port is treated as a local
 // path by objstore.RedactURL and is returned unchanged.
-func RedactedProxyURL(raw string) string {
+func ProxyURL(raw string) string {
 	if !strings.Contains(raw, "://") {
 		return strings.TrimPrefix(objstore.RedactURL("http://"+raw), "http://")
 	}

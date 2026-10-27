@@ -524,12 +524,12 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 	case terror.ErrLoadLightningHasDup.Equal(l.lastErr),
 		terror.ErrLoadLightningChecksum.Equal(l.lastErr):
 		l.logger.Info("manually resume from error, DM will skip the error and continue to next unit",
-			redact.ErrorFieldWithRedactedURL(l.lastErr))
+			redact.Error(l.lastErr))
 
 		l.finish.Store(true)
 		err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
 		if err != nil {
-			l.logger.Error("failed to update checkpoint status", redact.ErrorFieldWithRedactedURL(err))
+			l.logger.Error("failed to update checkpoint status", redact.Error(err))
 			return err
 		}
 		status = lightningStatusFinished
@@ -552,11 +552,11 @@ func (l *LightningLoader) restore(ctx context.Context) error {
 			l.finish.Store(true)
 			err = l.checkPointList.UpdateStatus(ctx, lightningStatusFinished)
 			if err != nil {
-				l.logger.Error("failed to update checkpoint status", redact.ErrorFieldWithRedactedURL(err))
+				l.logger.Error("failed to update checkpoint status", redact.Error(err))
 				return err
 			}
 		} else {
-			l.logger.Error("failed to runlightning", redact.ErrorFieldWithRedactedURL(err))
+			l.logger.Error("failed to runlightning", redact.Error(err))
 		}
 	} else {
 		l.finish.Store(true)
@@ -616,7 +616,7 @@ func (l *LightningLoader) Process(ctx context.Context, pr chan pb.ProcessResult)
 	})
 
 	if err := l.restore(ctx); err != nil && !utils.IsContextCanceledError(err) {
-		l.logger.Error("process error", redact.ErrorFieldWithRedactedURL(err))
+		l.logger.Error("process error", redact.Error(err))
 		processError := unit.NewProcessError(err)
 		l.handleExitErrMetric(processError)
 		errs = append(errs, processError)

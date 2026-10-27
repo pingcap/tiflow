@@ -31,9 +31,9 @@ func TestStorageConfigRedaction(t *testing.T) {
 		name, input string
 		redact      func(string) string
 	}{
-		{"yaml", "name: task-one\nloaders:\n  global:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
-		{"yaml-list", "name: task-one\nmysql-instances:\n- loader:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
-		{"yaml-numeric-key", "name: task-one\nloaders:\n  123:\n    dir: '" + url + "'\n", YAMLConfigWithRedactedURL},
+		{"yaml", "name: task-one\nloaders:\n  global:\n    dir: '" + url + "'\n", YAMLConfig},
+		{"yaml-list", "name: task-one\nmysql-instances:\n- loader:\n    dir: '" + url + "'\n", YAMLConfig},
+		{"yaml-numeric-key", "name: task-one\nloaders:\n  123:\n    dir: '" + url + "'\n", YAMLConfig},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			output := tc.redact(tc.input)
@@ -49,7 +49,7 @@ func TestStorageConfigRedaction(t *testing.T) {
 		"s3://private-ak:private-sk@bucket/path",
 		"azure://container/path?account-key=private-sk",
 	} {
-		require.NotContains(t, YAMLConfigWithRedactedURL("dir: '"+url+"'"), "private-")
+		require.NotContains(t, YAMLConfig("dir: '"+url+"'"), "private-")
 	}
 }
 
@@ -58,8 +58,8 @@ func TestInvalidStorageConfig(t *testing.T) {
 		input  string
 		redact func(string) string
 	}{
-		{"dir: [private-sk", YAMLConfigWithRedactedURL},
-		{"dir: local\n---\ndir: private-sk", YAMLConfigWithRedactedURL},
+		{"dir: [private-sk", YAMLConfig},
+		{"dir: local\n---\ndir: private-sk", YAMLConfig},
 	} {
 		require.Equal(t, invalidConfig, tc.redact(tc.input))
 	}
@@ -68,7 +68,7 @@ func TestInvalidStorageConfig(t *testing.T) {
 func TestStorageConfigURLFields(t *testing.T) {
 	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk&region=us-east-1"
 	for _, key := range []string{"dir", "DIR", "data-dir", "data_dir", "output-dir", "outputdir"} {
-		output := YAMLConfigWithRedactedURL("nested:\n- " + key + ": '" + raw + "'\n  unknown: 42\n")
+		output := YAMLConfig("nested:\n- " + key + ": '" + raw + "'\n  unknown: 42\n")
 		require.NotContains(t, output, "private-")
 		require.Contains(t, output, "region=us-east-1")
 		require.Contains(t, output, "unknown: 42")
@@ -81,7 +81,7 @@ func TestStorageConfigInvalidURLFields(t *testing.T) {
 		"name: task-one\ndir: ['" + raw + "']",
 		"name: task-one\ndir: {unexpected: '" + raw + "'}",
 	} {
-		output := YAMLConfigWithRedactedURL(input)
+		output := YAMLConfig(input)
 		require.NotContains(t, output, "private-sk")
 		require.Contains(t, output, "task-one")
 	}
@@ -95,15 +95,15 @@ func TestURLTextCredentials(t *testing.T) {
 		"read https://private-user:private-pass@host/path request id: test-id",
 		"s3://bad:port/path?secret-access-key=private-sk request id: test-id",
 	} {
-		output := TextWithRedactedURL(text)
+		output := Text(text)
 		require.NotContains(t, output, "private-")
 		require.Contains(t, output, "request id: test-id")
 	}
-	require.Equal(t, "ordinary error 403", TextWithRedactedURL("ordinary error 403"))
-	require.Equal(t, "read s3://bucket/path", TextWithRedactedURL("read s3://bucket/path"))
+	require.Equal(t, "ordinary error 403", Text("ordinary error 403"))
+	require.Equal(t, "read s3://bucket/path", Text("read s3://bucket/path"))
 	err := errors.New("403 https://bucket/path?sig=private-signature")
 	core, logs := observer.New(zap.ErrorLevel)
-	zap.New(core).Error("storage failed", ErrorFieldWithRedactedURL(err))
+	zap.New(core).Error("storage failed", Error(err))
 	fields := logs.All()[0].ContextMap()
 	require.NotContains(t, fields["error"], "private-")
 	require.NotContains(t, fields, "errorVerbose")
@@ -122,9 +122,9 @@ func TestURLTextUsesTiDBPolicy(t *testing.T) {
 		"https://private'user:private-password@host/path",
 	} {
 		require.Equal(t, "storage failed: "+objstore.RedactURL(raw)+" request id: 123",
-			TextWithRedactedURL("storage failed: "+raw+" request id: 123"))
+			Text("storage failed: "+raw+" request id: 123"))
 	}
-	require.Contains(t, TextWithRedactedURL("s3://bucket/path?region=us-east-1&secret-access-key=private-sk"),
+	require.Contains(t, Text("s3://bucket/path?region=us-east-1&secret-access-key=private-sk"),
 		"region=us-east-1")
 }
 
@@ -138,13 +138,13 @@ func TestURLTextJSONEscaped(t *testing.T) {
 	twice, err := json.Marshal(map[string]string{"result": string(once)})
 	require.NoError(t, err)
 
-	output := TextWithRedactedURL(string(once))
+	output := Text(string(once))
 	require.NotContains(t, output, "private-")
 	var decoded map[string]string
 	require.NoError(t, json.Unmarshal([]byte(output), &decoded))
 	require.Equal(t, objstore.RedactURL(raw), decoded["dir"])
 
-	output = TextWithRedactedURL(string(twice))
+	output = Text(string(twice))
 	require.NotContains(t, output, "private-")
 	var outer map[string]string
 	require.NoError(t, json.Unmarshal([]byte(output), &outer))
@@ -154,12 +154,12 @@ func TestURLTextJSONEscaped(t *testing.T) {
 
 func TestURLTextApostrophe(t *testing.T) {
 	raw := "s3://bucket/customer's-dump?access-key=private-ak&secret-access-key=private-sk"
-	output := TextWithRedactedURL("storage failed: " + raw)
+	output := Text("storage failed: " + raw)
 	require.NotContains(t, output, "private-")
 	require.Contains(t, output, "customer's-dump")
 
 	// net/url.Error quotes the URL and keeps apostrophes in userinfo.
-	output = TextWithRedactedURL(`Get "https://private'user:private-password@host/path": EOF`)
+	output = Text(`Get "https://private'user:private-password@host/path": EOF`)
 	require.NotContains(t, output, "private")
 	require.Contains(t, output, `"https://host/path"`)
 
@@ -169,20 +169,20 @@ func TestURLTextApostrophe(t *testing.T) {
 		"storage failed: 'http://user:private'password@host/path'",
 		`Get "http://user:private'password@host/path": EOF`,
 	} {
-		output = TextWithRedactedURL(text)
+		output = Text(text)
 		require.NotContains(t, output, "private", text)
 		require.NotContains(t, output, "password", text)
 	}
 
 	// Quoted URLs keep their quotes, and adjacent ones are still redacted.
 	require.Equal(t, "dir: '"+objstore.RedactURL("s3://bucket/path?secret-access-key=private-sk")+"'\nnext",
-		TextWithRedactedURL("dir: 's3://bucket/path?secret-access-key=private-sk'\nnext"))
-	output = TextWithRedactedURL("['s3://a/path?region=us-east-1','s3://b/path?secret-access-key=private-sk']")
+		Text("dir: 's3://bucket/path?secret-access-key=private-sk'\nnext"))
+	output = Text("['s3://a/path?region=us-east-1','s3://b/path?secret-access-key=private-sk']")
 	require.NotContains(t, output, "private-")
 
 	once, err := json.Marshal(map[string]string{"dir": raw})
 	require.NoError(t, err)
-	require.NotContains(t, TextWithRedactedURL(string(once)), "private-")
+	require.NotContains(t, Text(string(once)), "private-")
 }
 
 func TestProxyURL(t *testing.T) {
@@ -192,8 +192,8 @@ func TestProxyURL(t *testing.T) {
 		"https://proxy.invalid/?token=private-token",
 		"http://private-user:private-password@proxy.invalid:bad-port",
 	} {
-		require.NotContains(t, RedactedProxyURL(raw), "private-")
+		require.NotContains(t, ProxyURL(raw), "private-")
 	}
-	require.Equal(t, "proxy.invalid:8080", RedactedProxyURL("proxy.invalid:8080"))
-	require.Equal(t, "http://proxy.invalid:8080", RedactedProxyURL("http://proxy.invalid:8080"))
+	require.Equal(t, "proxy.invalid:8080", ProxyURL("proxy.invalid:8080"))
+	require.Equal(t, "http://proxy.invalid:8080", ProxyURL("http://proxy.invalid:8080"))
 }

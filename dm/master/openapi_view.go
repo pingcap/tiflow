@@ -462,7 +462,7 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
+	res.CheckResult = redact.Text(res.CheckResult)
 	c.IndentedJSON(http.StatusCreated, res)
 }
 
@@ -478,7 +478,7 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
+	res.CheckResult = redact.Text(res.CheckResult)
 	c.IndentedJSON(http.StatusOK, res)
 }
 
@@ -861,7 +861,7 @@ func (s *Server) DMAPIImportTaskTemplate(c *gin.Context) {
 				ErrorMsg string `json:"error_msg"`
 				TaskName string `json:"task_name"`
 			}{
-				ErrorMsg: redact.TextWithRedactedURL(err.Error()),
+				ErrorMsg: redact.Text(err.Error()),
 				TaskName: task.Name,
 			})
 		} else {
@@ -973,6 +973,6 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 		} else {
 			msg = gErr.Error()
 		}
-		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: redact.TextWithRedactedURL(msg), ErrorCode: code})
+		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: redact.Text(msg), ErrorCode: code})
 	}
 }

@@ -46,8 +46,8 @@ func TestProxyFieldsHideCredentials(t *testing.T) {
 			require.NotContains(t, field.String, "private-password")
 		}
 	}
-	require.Equal(t, "proxy.invalid:8080", redact.RedactedProxyURL("proxy.invalid:8080"))
-	require.Equal(t, "http://proxy.invalid:8080", redact.RedactedProxyURL("http://proxy.invalid:8080"))
+	require.Equal(t, "proxy.invalid:8080", redact.ProxyURL("proxy.invalid:8080"))
+	require.Equal(t, "http://proxy.invalid:8080", redact.ProxyURL("http://proxy.invalid:8080"))
 }
 
 func TestDecodeBinlogPosition(t *testing.T) {

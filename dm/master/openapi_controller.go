@@ -553,7 +553,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 			errorMsg = fmt.Sprintf("%s, Workaround: %s", errorMsg, err.Workaround)
 		}
 		errorMsg = fmt.Sprintf("%s.", errorMsg)
-		return redact.TextWithRedactedURL(errorMsg)
+		return redact.Text(errorMsg)
 	}
 
 	formatProcessErrors := func(errors []*pb.ProcessError) string {

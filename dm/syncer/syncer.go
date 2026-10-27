@@ -1937,7 +1937,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
 		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
-			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(s.cfg.Dir)), redact.ErrorFieldWithRedactedURL(err))
+			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(s.cfg.Dir)), redact.Error(err))
 		}
 	}
 
@@ -3072,7 +3072,7 @@ func (s *Syncer) genRouter() error {
 func (s *Syncer) loadAndFlushTableStructureFromDump(ctx context.Context) bool {
 	if err := s.loadTableStructureFromDump(ctx); err != nil {
 		// Storage SDK errors may contain the complete request URL.
-		s.tctx.L().Warn("error happened when load table structure from dump files", redact.ErrorFieldWithRedactedURL(err))
+		s.tctx.L().Warn("error happened when load table structure from dump files", redact.Error(err))
 		return false
 	}
 	if err := s.flushCheckPoints(); err != nil {
@@ -3089,14 +3089,14 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		var err error
 		dumpStorage, err = storage.CreateStorage(ctx, s.cfg.LoaderConfig.Dir)
 		if err != nil {
-			logger.Warn("fail to create dump storage", redact.ErrorFieldWithRedactedURL(err))
+			logger.Warn("fail to create dump storage", redact.Error(err))
 			return err
 		}
 		defer dumpStorage.Close()
 	}
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
-		logger.Warn("fail to get dump files", redact.ErrorFieldWithRedactedURL(err))
+		logger.Warn("fail to get dump files", redact.Error(err))
 		return err
 	}
 	var dbs, tables []string
@@ -3136,7 +3136,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	if err != nil {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
-			redact.ErrorFieldWithRedactedURL(err))
+			redact.Error(err))
 		return err
 	}
 
@@ -3168,7 +3168,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				zap.String("db", db),
 				zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 				zap.String("file", file),
-				redact.ErrorFieldWithRedactedURL(err2))
+				redact.Error(err2))
 			setFirstErr(err2)
 			continue
 		}
@@ -3185,7 +3185,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 					zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 					zap.String("file", file),
 					zap.ByteString("statement", stmt),
-					redact.ErrorFieldWithRedactedURL(err))
+					redact.Error(err))
 				setFirstErr(err)
 				continue
 			}
@@ -3201,7 +3201,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 						zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
 						zap.ByteString("statement", stmt),
-						redact.ErrorFieldWithRedactedURL(err))
+						redact.Error(err))
 					setFirstErr(err)
 					continue
 				}
@@ -3216,7 +3216,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 						zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
 						zap.ByteString("statement", stmt),
-						redact.ErrorFieldWithRedactedURL(err))
+						redact.Error(err))
 					setFirstErr(err)
 					continue
 				}

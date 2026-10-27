@@ -156,7 +156,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	if m.cfg.ExtStorage == nil {
 		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 		if err != nil {
-			m.logger.Error("fail to remove output directory", zap.String("directory", objstore.RedactURL(m.cfg.Dir)), redact.ErrorFieldWithRedactedURL(err))
+			m.logger.Error("fail to remove output directory", zap.String("directory", objstore.RedactURL(m.cfg.Dir)), redact.Error(err))
 			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+objstore.RedactURL(m.cfg.Dir)))
 			m.handleExitErrMetric(processError)
 			errs = append(errs, processError)
@@ -190,7 +190,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		})
 		dumpling.Close()
 	} else {
-		m.logger.Warn("error occurred during NewDumper", redact.ErrorFieldWithRedactedURL(err))
+		m.logger.Warn("error occurred during NewDumper", redact.Error(err))
 	}
 	cancel()
 
