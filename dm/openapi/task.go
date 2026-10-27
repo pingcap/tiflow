@@ -62,3 +62,20 @@ func (t *Task) Redacted() *Task {
 	}
 	return &result
 }
+
+// RestoreRedacted restores storage credentials hidden by Redacted when a client
+// submits back a task it read, so that editing other fields does not replace
+// the stored credentials with masked values.
+func (t *Task) RestoreRedacted(stored *Task) {
+	if t == nil || stored == nil {
+		return
+	}
+	full, storedFull := t.SourceConfig.FullMigrateConf, stored.SourceConfig.FullMigrateConf
+	if full == nil || full.DataDir == nil || storedFull == nil || storedFull.DataDir == nil {
+		return
+	}
+	dir, storedDir := *full.DataDir, *storedFull.DataDir
+	if dir != storedDir && dir == objstore.RedactURL(storedDir) {
+		full.DataDir = &storedDir
+	}
+}

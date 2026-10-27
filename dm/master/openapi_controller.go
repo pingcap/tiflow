@@ -424,6 +424,11 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	if err := task.Adjust(); err != nil {
 		return nil, err
 	}
+	// clients edit the task returned by getTask, whose storage credentials are
+	// redacted. A missing task is reported by the scheduler below.
+	if stored, err := s.getTask(ctx, task.Name, openapi.DMAPIGetTaskParams{}); err == nil {
+		task.RestoreRedacted(stored)
+	}
 	subTaskConfigList, msg, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
 	if err != nil {
 		return nil, err

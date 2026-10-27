@@ -843,9 +843,9 @@ func (s *Server) DMAPIConvertTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, openapi.ConverterTaskResponse{
-		Task: *task.Redacted(), TaskConfigFile: taskCfg.Redacted().String(),
-	})
+	// The response only converts the request, and the UI creates tasks from it,
+	// so storage credentials must not be redacted here.
+	c.IndentedJSON(http.StatusOK, openapi.ConverterTaskResponse{Task: *task, TaskConfigFile: taskCfg.String()})
 }
 
 // DMAPIImportTaskTemplate create task_config_template url is: (POST /api/v1/tasks/templates/import).
@@ -952,6 +952,14 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
+	// clients edit the template returned by DMAPIGetTaskTemplate, whose storage
+	// credentials are redacted.
+	stored, err := ha.GetOpenAPITaskTemplate(s.etcdClient, task.Name)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	task.RestoreRedacted(stored)
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if adjustDBErr := AdjustTargetDBSessionCfg(newCtx, toDBCfg); adjustDBErr != nil {

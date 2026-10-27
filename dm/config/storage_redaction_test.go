@@ -19,6 +19,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pingcap/tiflow/dm/openapi"
+	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/stretchr/testify/require"
 )
 
@@ -82,4 +84,48 @@ func dirFieldsForTest(typ reflect.Type, prefix string) []string {
 		}
 	}
 	return fields
+}
+
+func TestOpenAPITaskRedactedEditKeepsCredentials(t *testing.T) {
+	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
+	require.NoError(t, err)
+	raw := "s3://bucket/dump?access-key=private-ak&secret-access-key=private-sk"
+	task.SourceConfig.FullMigrateConf.DataDir = &raw
+	sourceCfgMap := make(map[string]*SourceConfig)
+	for _, conf := range task.SourceConfig.SourceConf {
+		sourceCfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+		require.NoError(t, err)
+		sourceCfg.SourceID = conf.SourceName
+		sourceCfgMap[conf.SourceName] = sourceCfg
+	}
+	toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
+	stored, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Len(t, stored, 2)
+	// Each source dumps to its own subdirectory, which getTask trims.
+	require.NotEqual(t, stored[0].LoaderConfig.Dir, stored[1].LoaderConfig.Dir)
+	storedTask := func() *openapi.Task {
+		// SubTaskConfigsToOpenAPITask modifies its input, like getTask does with copies.
+		cfgs := make([]*SubTaskConfig, 0, len(stored))
+		for _, cfg := range stored {
+			clone := *cfg
+			cfgs = append(cfgs, &clone)
+		}
+		return SubTaskConfigsToOpenAPITask(cfgs)
+	}
+
+	// A client reads the redacted task, edits another field, and submits it back.
+	edited := storedTask().Redacted()
+	require.NotContains(t, *edited.SourceConfig.FullMigrateConf.DataDir, "private-")
+	edited.RestoreRedacted(storedTask())
+	updated, err := OpenAPITaskToSubTaskConfigs(edited, toDBCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Len(t, updated, len(stored))
+	storedDirs := make(map[string]string, len(stored))
+	for _, cfg := range stored {
+		storedDirs[cfg.SourceID] = cfg.LoaderConfig.Dir
+	}
+	for _, cfg := range updated {
+		require.Equal(t, storedDirs[cfg.SourceID], cfg.LoaderConfig.Dir)
+	}
 }

@@ -44,6 +44,31 @@ func TestTaskRedacted(t *testing.T) {
 	require.Nil(t, (*Task)(nil).Redacted())
 }
 
+func TestTaskRestoreRedacted(t *testing.T) {
+	newTask := func(dir string) *Task {
+		return &Task{SourceConfig: TaskSourceConfig{FullMigrateConf: &TaskFullMigrateConf{DataDir: &dir}}}
+	}
+	dir := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
+	stored := newTask(dir)
+	edited := stored.Redacted()
+	edited.RestoreRedacted(stored)
+	require.Equal(t, dir, *edited.SourceConfig.FullMigrateConf.DataDir)
+
+	// A data_dir changed by the client is kept.
+	for _, submitted := range []string{"s3://bucket/path", "s3://bucket/other?secret-access-key=private-new", "./dump"} {
+		edited = newTask(submitted)
+		edited.RestoreRedacted(stored)
+		require.Equal(t, submitted, *edited.SourceConfig.FullMigrateConf.DataDir)
+	}
+	edited = &Task{}
+	edited.RestoreRedacted(stored)
+	require.Nil(t, edited.SourceConfig.FullMigrateConf)
+	edited = newTask("./dump")
+	edited.RestoreRedacted(&Task{})
+	require.Equal(t, "./dump", *edited.SourceConfig.FullMigrateConf.DataDir)
+	(*Task)(nil).RestoreRedacted(stored)
+}
+
 func TestAccessLogURLCredentials(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	router := gin.New()
