@@ -98,16 +98,38 @@ var escapedAmpersand = regexp.MustCompile(`\\+u0026`)
 
 // TextWithRedactedURL applies the same TiDB URL policy to URLs embedded in diagnostic text.
 func TextWithRedactedURL(text string) string {
-	text = diagnosticURL.ReplaceAllStringFunc(text, redactTextURL)
 	if !strings.Contains(text, "'") {
-		return text
+		return diagnosticURL.ReplaceAllStringFunc(text, redactTextURL)
 	}
+	text = redactBeforeApostrophes(text)
 	return apostropheURL.ReplaceAllStringFunc(text, func(match string) string {
 		if !strings.Contains(strings.TrimRight(match, `\'`), "'") {
 			return match
 		}
 		return redactTextURL(match)
 	})
+}
+
+// redactBeforeApostrophes redacts the URLs that end at a delimiter. A URL cut
+// off by an apostrophe that cannot be parsed, such as one with an apostrophe
+// in its password, is kept, so that it is redacted as a whole together with
+// its remainder instead of leaving the remainder unredacted.
+func redactBeforeApostrophes(text string) string {
+	var b strings.Builder
+	last := 0
+	for _, loc := range diagnosticURL.FindAllStringIndex(text, -1) {
+		match := text[loc[0]:loc[1]]
+		redacted := redactTextURL(match)
+		if strings.HasPrefix(text[loc[1]:], "'") &&
+			strings.HasPrefix(redacted, objstore.InvalidURLPlaceholder) {
+			continue
+		}
+		b.WriteString(text[last:loc[0]])
+		b.WriteString(redacted)
+		last = loc[1]
+	}
+	b.WriteString(text[last:])
+	return b.String()
 }
 
 // redactTextURL restores JSON-escaped query separators before redaction.

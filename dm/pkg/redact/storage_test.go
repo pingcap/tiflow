@@ -163,6 +163,17 @@ func TestURLTextApostrophe(t *testing.T) {
 	require.NotContains(t, output, "private")
 	require.Contains(t, output, `"https://host/path"`)
 
+	// An apostrophe in the password cuts the URL off before an invalid port.
+	for _, text := range []string{
+		"storage failed: http://user:private'password@host/path",
+		"storage failed: 'http://user:private'password@host/path'",
+		`Get "http://user:private'password@host/path": EOF`,
+	} {
+		output = TextWithRedactedURL(text)
+		require.NotContains(t, output, "private", text)
+		require.NotContains(t, output, "password", text)
+	}
+
 	// Quoted URLs keep their quotes, and adjacent ones are still redacted.
 	require.Equal(t, "dir: '"+objstore.RedactURL("s3://bucket/path?secret-access-key=private-sk")+"'\nnext",
 		TextWithRedactedURL("dir: 's3://bucket/path?secret-access-key=private-sk'\nnext"))
