@@ -118,6 +118,8 @@ func TestURLTextUsesTiDBPolicy(t *testing.T) {
 		"https://bucket/path?X-Amz-Signature=private-signature",
 		"https://private-user:private-password@host/path",
 		"s3://bucket:bad/path?secret-access-key=private-sk",
+		"s3://bucket/customer's-dump?access-key=private-ak&secret-access-key=private-sk",
+		"https://private'user:private-password@host/path",
 	} {
 		require.Equal(t, "storage failed: "+objstore.RedactURL(raw)+" request id: 123",
 			TextWithRedactedURL("storage failed: "+raw+" request id: 123"))
@@ -148,6 +150,28 @@ func TestURLTextJSONEscaped(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(output), &outer))
 	require.NoError(t, json.Unmarshal([]byte(outer["result"]), &decoded))
 	require.Equal(t, objstore.RedactURL(raw), decoded["dir"])
+}
+
+func TestURLTextApostrophe(t *testing.T) {
+	raw := "s3://bucket/customer's-dump?access-key=private-ak&secret-access-key=private-sk"
+	output := TextWithRedactedURL("storage failed: " + raw)
+	require.NotContains(t, output, "private-")
+	require.Contains(t, output, "customer's-dump")
+
+	// net/url.Error quotes the URL and keeps apostrophes in userinfo.
+	output = TextWithRedactedURL(`Get "https://private'user:private-password@host/path": EOF`)
+	require.NotContains(t, output, "private")
+	require.Contains(t, output, `"https://host/path"`)
+
+	// Quoted URLs keep their quotes, and adjacent ones are still redacted.
+	require.Equal(t, "dir: '"+objstore.RedactURL("s3://bucket/path?secret-access-key=private-sk")+"'\nnext",
+		TextWithRedactedURL("dir: 's3://bucket/path?secret-access-key=private-sk'\nnext"))
+	output = TextWithRedactedURL("['s3://a/path?region=us-east-1','s3://b/path?secret-access-key=private-sk']")
+	require.NotContains(t, output, "private-")
+
+	once, err := json.Marshal(map[string]string{"dir": raw})
+	require.NoError(t, err)
+	require.NotContains(t, TextWithRedactedURL(string(once)), "private-")
 }
 
 func TestProxyURL(t *testing.T) {

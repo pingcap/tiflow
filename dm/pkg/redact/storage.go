@@ -85,7 +85,12 @@ func redactConfigURL(key string, value any) any {
 // diagnosticURL only locates URLs in free-form text. Credential selection and
 // malformed-URL handling belong to TiDB's objstore.RedactURL, not this package.
 // A single slash also matches paths normalized by filepath, such as s3:/bucket.
+// It stops at apostrophes, so adjacent quoted URLs are redacted separately.
 var diagnosticURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*:/{1,2}[^\s"'<>]+`)
+
+// apostropheURL also spans apostrophes, which are valid in URL paths and
+// userinfo, so credentials after them are not cut off from their URL.
+var apostropheURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*:/{1,2}[^\s"<>]+`)
 
 // escapedAmpersand matches '&' as escaped by encoding/json (\u0026), with
 // more backslashes when that JSON is itself embedded in a JSON string.
@@ -93,7 +98,16 @@ var escapedAmpersand = regexp.MustCompile(`\\+u0026`)
 
 // TextWithRedactedURL applies the same TiDB URL policy to URLs embedded in diagnostic text.
 func TextWithRedactedURL(text string) string {
-	return diagnosticURL.ReplaceAllStringFunc(text, redactTextURL)
+	text = diagnosticURL.ReplaceAllStringFunc(text, redactTextURL)
+	if !strings.Contains(text, "'") {
+		return text
+	}
+	return apostropheURL.ReplaceAllStringFunc(text, func(match string) string {
+		if !strings.Contains(strings.TrimRight(match, `\'`), "'") {
+			return match
+		}
+		return redactTextURL(match)
+	})
 }
 
 // redactTextURL restores JSON-escaped query separators before redaction.
@@ -101,8 +115,9 @@ func TextWithRedactedURL(text string) string {
 // first value, and is kept whenever the first parameter is not sensitive.
 func redactTextURL(match string) string {
 	// Trailing backslashes escape the delimiter that ended the match, such as
-	// a quote in nested JSON, so they are not part of the URL.
-	raw := strings.TrimRight(match, `\`)
+	// a quote in nested JSON, and a trailing apostrophe closes a quoted URL,
+	// so they are not part of the URL.
+	raw := strings.TrimRight(match, `\'`)
 	suffix := match[len(raw):]
 	escaped := escapedAmpersand.FindString(raw)
 	if escaped == "" {
