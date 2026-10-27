@@ -1924,16 +1924,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	}
 
 	if freshAndAllMode {
-		err = s.loadTableStructureFromDump(ctx)
-		if err != nil {
-			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+		if !s.loadAndFlushTableStructureFromDump(ctx) {
 			cleanDumpFile = false
-		} else {
-			err = s.flushCheckPoints()
-			if err != nil {
-				s.tctx.L().Warn("error happened when flush table structure from dump files", zap.Error(err))
-				cleanDumpFile = false
-			}
 		}
 	} else {
 		err = s.checkpoint.LoadIntoSchemaTracker(ctx, s.schemaTracker)
@@ -3073,6 +3065,21 @@ func (s *Syncer) genRouter() error {
 		}
 	}
 	return nil
+}
+
+// loadAndFlushTableStructureFromDump returns false when the dump files are
+// still needed because the table structures are not loaded or not flushed.
+func (s *Syncer) loadAndFlushTableStructureFromDump(ctx context.Context) bool {
+	if err := s.loadTableStructureFromDump(ctx); err != nil {
+		// Storage SDK errors may contain the complete request URL.
+		s.tctx.L().Warn("error happened when load table structure from dump files", redact.ErrorFieldWithRedactedURL(err))
+		return false
+	}
+	if err := s.flushCheckPoints(); err != nil {
+		s.tctx.L().Warn("error happened when flush table structure from dump files", zap.Error(err))
+		return false
+	}
+	return true
 }
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
