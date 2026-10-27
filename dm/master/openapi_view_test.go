@@ -995,7 +995,7 @@ func (s *OpenAPIViewSuite) testSourceOperationWithTask(source *openapi.Source, t
 	s.Equal(int(terror.ErrSchedulerWorkerNotExist.Code()), resp.ErrorCode)
 }
 
-func (s *OpenAPIViewSuite) TestTaskEditKeepsRedactedStorageCredentials() {
+func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s1 := setupTestServer(ctx, s.T())
 	ctrl := gomock.NewController(s.T())
@@ -1040,22 +1040,28 @@ func (s *OpenAPIViewSuite) TestTaskEditKeepsRedactedStorageCredentials() {
 	task.SourceConfig.FullMigrateConf.DataDir = &dataDir
 
 	taskURL := "/api/v1/tasks"
+	task1URL := taskURL + "/" + task.Name
 	result = testutil.NewRequest().Post(taskURL).WithJsonBody(openapi.CreateTaskRequest{Task: task}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Require().Equal(http.StatusCreated, result.Code(), result.Recorder.Body.String())
 	oldSubTaskCfg := s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name]
 	s.Contains(oldSubTaskCfg.LoaderConfig.Dir, "private-sk")
 
-	// The UI edits a task from the list, and submits back its redacted data_dir.
+	// Clients read the full task and submit it back with PUT, or delete the task
+	// with keep_meta and create it again, so the stored data_dir must be returned.
 	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
 	var taskList openapi.GetTaskListResponse
 	s.NoError(result.UnmarshalBodyToObject(&taskList))
 	s.Require().Len(taskList.Data, 1)
-	editedTask := taskList.Data[0]
-	s.NotContains(*editedTask.SourceConfig.FullMigrateConf.DataDir, "private-")
-	batch := 1000
-	editedTask.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	s.Equal(dataDir, *taskList.Data[0].SourceConfig.FullMigrateConf.DataDir)
+	result = testutil.NewRequest().Get(task1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var readTask openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&readTask))
+	s.Equal(dataDir, *readTask.SourceConfig.FullMigrateConf.DataDir)
 
+	batch := 1000
+	readTask.SourceConfig.IncrMigrateConf.ReplBatch = &batch
 	syncUnit := syncer.NewSyncer(oldSubTaskCfg, nil, nil)
 	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
 	mockWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -1071,24 +1077,38 @@ func (s *OpenAPIViewSuite) TestTaskEditKeepsRedactedStorageCredentials() {
 		},
 	)
 	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
-	result = testutil.NewRequest().Put(taskURL+"/"+task.Name).
-		WithJsonBody(openapi.UpdateTaskRequest{Task: editedTask}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
-	s.Equal(http.StatusOK, result.Code(), result.Recorder.Body.String())
+	result = testutil.NewRequest().Put(task1URL).
+		WithJsonBody(openapi.UpdateTaskRequest{Task: readTask}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Require().Equal(http.StatusOK, result.Code(), result.Recorder.Body.String())
 	storedSubTaskCfg := s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name]
 	s.Equal(oldSubTaskCfg.LoaderConfig.Dir, storedSubTaskCfg.LoaderConfig.Dir)
 	s.Equal(batch, storedSubTaskCfg.SyncerConfig.Batch)
 
-	// Templates are edited in the same way.
+	// Replace the task as dmctl stop-task and start-task <config> do.
+	deleteCtx, cancelDelete := context.WithCancel(ctx)
+	defer cancelDelete()
+	mockWorkerClient.EXPECT().QueryStatus(gomock.Any(), &pb.QueryStatusRequest{Name: task.Name}).DoAndReturn(
+		func(context.Context, *pb.QueryStatusRequest, ...grpc.CallOption) (*pb.QueryStatusResponse, error) {
+			cancelDelete()
+			return nil, context.Canceled
+		},
+	)
+	s.NoError(s1.deleteTask(deleteCtx, task.Name, true, true))
+	s.Nil(s1.scheduler.GetSubTaskCfgsByTask(task.Name))
+	result = testutil.NewRequest().Post(taskURL).WithJsonBody(openapi.CreateTaskRequest{Task: readTask}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Require().Equal(http.StatusCreated, result.Code(), result.Recorder.Body.String())
+	s.Equal(oldSubTaskCfg.LoaderConfig.Dir, s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name].LoaderConfig.Dir)
+
 	templateURL := "/api/v1/tasks/templates"
 	result = testutil.NewRequest().Post(templateURL).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusCreated, result.Code())
 	result = testutil.NewRequest().Get(templateURL+"/"+task.Name).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code())
-	var editedTemplate openapi.Task
-	s.NoError(result.UnmarshalBodyToObject(&editedTemplate))
-	s.NotContains(*editedTemplate.SourceConfig.FullMigrateConf.DataDir, "private-")
-	editedTemplate.SourceConfig.IncrMigrateConf.ReplBatch = &batch
-	result = testutil.NewRequest().Put(templateURL+"/"+task.Name).WithJsonBody(editedTemplate).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	var readTemplate openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&readTemplate))
+	s.Equal(dataDir, *readTemplate.SourceConfig.FullMigrateConf.DataDir)
+	readTemplate.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	result = testutil.NewRequest().Put(templateURL+"/"+task.Name).WithJsonBody(readTemplate).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code(), result.Recorder.Body.String())
 	storedTemplate, err := ha.GetOpenAPITaskTemplate(s1.etcdClient, task.Name)
 	s.NoError(err)

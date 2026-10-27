@@ -462,7 +462,6 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	res.Task = *res.Task.Redacted()
 	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
 	c.IndentedJSON(http.StatusCreated, res)
 }
@@ -479,7 +478,6 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	res.Task = *res.Task.Redacted()
 	res.CheckResult = redact.TextWithRedactedURL(res.CheckResult)
 	c.IndentedJSON(http.StatusOK, res)
 }
@@ -511,7 +509,7 @@ func (s *Server) DMAPIGetTask(c *gin.Context, taskName string, params openapi.DM
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task.Redacted())
+	c.IndentedJSON(http.StatusOK, task)
 }
 
 // DMAPIGetTaskStatus url is:(GET /api/v1/tasks/{task-name}/status).
@@ -534,9 +532,6 @@ func (s *Server) DMAPIGetTaskList(c *gin.Context, params openapi.DMAPIGetTaskLis
 	if err != nil {
 		_ = c.Error(err)
 		return
-	}
-	for i := range taskList {
-		taskList[i] = *taskList[i].Redacted()
 	}
 	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -843,8 +838,6 @@ func (s *Server) DMAPIConvertTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	// The response only converts the request, and the UI creates tasks from it,
-	// so storage credentials must not be redacted here.
 	c.IndentedJSON(http.StatusOK, openapi.ConverterTaskResponse{Task: *task, TaskConfigFile: taskCfg.String()})
 }
 
@@ -900,7 +893,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusCreated, task.Redacted())
+	c.IndentedJSON(http.StatusCreated, task)
 }
 
 // DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/tasks/templates).
@@ -912,7 +905,7 @@ func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 	}
 	taskList := make([]openapi.Task, len(TaskConfigList))
 	for i, TaskConfig := range TaskConfigList {
-		taskList[i] = *TaskConfig.Redacted()
+		taskList[i] = *TaskConfig
 	}
 	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -938,7 +931,7 @@ func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(terror.ErrOpenAPITaskConfigNotExist.Generate(taskName))
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task.Redacted())
+	c.IndentedJSON(http.StatusOK, task)
 }
 
 // DMAPUpdateTaskTemplate update task_config_template url is: (PUT /api/v1/tasks/templates/{task-name}).
@@ -952,14 +945,6 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	// clients edit the template returned by DMAPIGetTaskTemplate, whose storage
-	// credentials are redacted.
-	stored, err := ha.GetOpenAPITaskTemplate(s.etcdClient, task.Name)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-	task.RestoreRedacted(stored)
 	newCtx := c.Request.Context()
 	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
 	if adjustDBErr := AdjustTargetDBSessionCfg(newCtx, toDBCfg); adjustDBErr != nil {
@@ -970,7 +955,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task.Redacted())
+	c.IndentedJSON(http.StatusOK, task)
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {

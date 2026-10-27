@@ -16,7 +16,6 @@ package openapi
 import (
 	"encoding/json"
 
-	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
@@ -43,39 +42,4 @@ func (t *Task) FromJSON(data []byte) error {
 // ToJSON marshal json to task.
 func (t *Task) ToJSON() ([]byte, error) {
 	return json.Marshal(t)
-}
-
-// Redacted returns a response copy with storage credentials hidden.
-// It must not be used for task templates or configurations used for execution.
-func (t *Task) Redacted() *Task {
-	if t == nil {
-		return nil
-	}
-	result := *t
-	if full := t.SourceConfig.FullMigrateConf; full != nil {
-		copyFull := *full
-		if full.DataDir != nil {
-			dir := objstore.RedactURL(*full.DataDir)
-			copyFull.DataDir = &dir
-		}
-		result.SourceConfig.FullMigrateConf = &copyFull
-	}
-	return &result
-}
-
-// RestoreRedacted restores storage credentials hidden by Redacted when a client
-// submits back a task it read, so that editing other fields does not replace
-// the stored credentials with masked values.
-func (t *Task) RestoreRedacted(stored *Task) {
-	if t == nil || stored == nil {
-		return
-	}
-	full, storedFull := t.SourceConfig.FullMigrateConf, stored.SourceConfig.FullMigrateConf
-	if full == nil || full.DataDir == nil || storedFull == nil || storedFull.DataDir == nil {
-		return
-	}
-	dir, storedDir := *full.DataDir, *storedFull.DataDir
-	if dir != storedDir && dir == objstore.RedactURL(storedDir) {
-		full.DataDir = &storedDir
-	}
 }
