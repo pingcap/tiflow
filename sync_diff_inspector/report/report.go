@@ -162,7 +162,7 @@ func (r *Report) CalculateTotalSize(ctx context.Context, db *sql.DB) {
 	for schema, tableMap := range r.TableResults {
 		for table := range tableMap {
 			size, err := utils.GetTableSize(ctx, db, schema, table)
-			if size == 0 || err != nil {
+			if err != nil {
 				log.Warn("fail to get the correct size of table, if you want to get the correct size, please analyze the corresponding tables", zap.String("table", dbutil.TableName(schema, table)), zap.Error(err))
 			} else {
 				r.TotalSize += size
