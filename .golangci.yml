@@ -20,7 +20,7 @@ linters:
     - stylecheck
     - gosec
     - asciicheck
-    - exportloopref
+    - copyloopvar
     - makezero
     - tparallel
     - rowserrcheck

@@ -51,7 +51,6 @@ func TestNewKey(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.str, func(t *testing.T) {
 			t.Parallel()
 			res, err := NewKey(tc.str)
@@ -69,7 +68,6 @@ func TestNewValue(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.str, func(t *testing.T) {
 			t.Parallel()
 			res, err := NewValue(tc.str)
