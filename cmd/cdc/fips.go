@@ -12,7 +12,6 @@
 // limitations under the License.
 
 //go:build boringcrypto
-// +build boringcrypto
 
 package main
 

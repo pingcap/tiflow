@@ -166,7 +166,7 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 
 	// 3. Split the table into spans, each span has approximately
 	// `writeWeightPerSpan` weight or `spanRegionLimit` regions.
-	for i := 0; i < len(regions); i++ {
+	for i := range regions {
 		restRegions := len(regions) - i
 		regionCount++
 		spanWriteWeight += regions[i].WrittenKeys

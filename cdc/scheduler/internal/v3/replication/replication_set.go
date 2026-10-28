@@ -1090,12 +1090,12 @@ func (h SetHeap) Less(i, j int) bool {
 func (h SetHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
 // Push pushes an element to the heap.
-func (h *SetHeap) Push(x interface{}) {
+func (h *SetHeap) Push(x any) {
 	*h = append(*h, x.(*ReplicationSet))
 }
 
 // Pop pops an element from the heap.
-func (h *SetHeap) Pop() interface{} {
+func (h *SetHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]

@@ -105,9 +105,7 @@ func newDMLSink(
 	s.alive.worker = worker
 
 	// Spawn a goroutine to send messages by the worker.
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		err := s.alive.worker.run(ctx)
 
 		s.alive.Lock()
@@ -133,7 +131,7 @@ func newDMLSink(
 					zap.Error(err))
 			}
 		}
-	}()
+	})
 
 	return s
 }

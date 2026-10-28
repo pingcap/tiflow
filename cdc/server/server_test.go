@@ -202,12 +202,10 @@ func TestServerTLSWithoutCommonName(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.tcpServer.Run(ctx)
 		require.ErrorContains(t, err, "ErrTCPServerClosed")
-	}()
+	})
 
 	// test cli sends request without a cert will success
 	err = retry.Do(ctx, func() error {
@@ -289,12 +287,10 @@ func TestServerTLSWithCommonNameAndRotate(t *testing.T) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := server.tcpServer.Run(ctx)
 		require.ErrorContains(t, err, "ErrTCPServerClosed")
-	}()
+	})
 
 	// test cli sends request without a cert will fail
 	err = retry.Do(ctx, func() error {

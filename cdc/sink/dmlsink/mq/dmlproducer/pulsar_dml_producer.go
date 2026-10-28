@@ -96,7 +96,7 @@ func NewPulsarDMLProducer(
 		producerCacheSize = int(*pulsarConfig.PulsarProducerCacheSize)
 	}
 
-	producers, err := lru.NewWithEvict(producerCacheSize, func(key interface{}, value interface{}) {
+	producers, err := lru.NewWithEvict(producerCacheSize, func(key any, value any) {
 		// this is call when lru Remove producer or auto remove producer
 		pulsarProducer, ok := value.(pulsar.Producer)
 		if ok && pulsarProducer != nil {

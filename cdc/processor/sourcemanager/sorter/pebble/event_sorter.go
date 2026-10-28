@@ -71,7 +71,7 @@ type EventIter struct {
 // New creates an EventSorter instance.
 func New(ID model.ChangeFeedID, dbs []*pebble.DB) *EventSorter {
 	channs := make([]*chann.DrainableChann[eventWithTableID], 0, len(dbs))
-	for i := 0; i < len(dbs); i++ {
+	for range dbs {
 		channs = append(channs, chann.NewAutoDrainChann[eventWithTableID](chann.Cap(128)))
 	}
 

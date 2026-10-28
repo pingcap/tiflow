@@ -123,7 +123,7 @@ func UnmarshalRedoLog(bts []byte) (r *model.RedoLog, o []byte, err error) {
 	}
 
 	shouldBeV1 := false
-	for i := 0; i < versionPrefixLength; i++ {
+	for i := range versionPrefixLength {
 		if bts[i] != versionPrefix[i] {
 			shouldBeV1 = true
 			break

@@ -37,11 +37,9 @@ func TestConnAndClientPool(t *testing.T) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Nil(t, runGrpcService(&srv{}, &addr, service))
-	}()
+	})
 
 	svc := <-service
 	require.NotNil(t, svc)
@@ -85,11 +83,9 @@ func TestConnAndClientPoolForV2(t *testing.T) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Nil(t, runGrpcService(&srv{v2: true}, &addr, service))
-	}()
+	})
 
 	svc := <-service
 	require.NotNil(t, svc)
@@ -127,11 +123,9 @@ func TestConnectToUnavailable(t *testing.T) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Nil(t, runGrpcService(&srv{}, &addr, service))
-	}()
+	})
 
 	svc := <-service
 	require.NotNil(t, svc)
@@ -157,18 +151,15 @@ func TestCancelStream(t *testing.T) {
 	var addr string
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.Nil(t, runGrpcService(&srv{}, &addr, service))
-	}()
+	})
 
 	svc := <-service
 	require.NotNil(t, svc)
 	defer svc.GracefulStop()
 
-	connCtx, connCancel := context.WithCancel(context.Background())
-	defer connCancel()
+	connCtx := t.Context()
 
 	pool := newConnAndClientPool(&security.Credential{}, nil, 1)
 	conn, err := pool.connect(connCtx, addr)

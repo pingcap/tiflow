@@ -160,7 +160,7 @@ func NewDMLSink(ctx context.Context,
 	workerChannels := make([]*chann.DrainableChann[eventFragment], cfg.WorkerCount)
 
 	// create a group of encoding workers.
-	for i := 0; i < defaultEncodingConcurrency; i++ {
+	for i := range defaultEncodingConcurrency {
 		encoder := encoderBuilder.Build()
 		s.encodingWorkers[i] = newEncodingWorker(i, s.changefeedID, encoder, s.alive.msgCh.Out(), encodedOutCh)
 	}
@@ -179,9 +179,7 @@ func NewDMLSink(ctx context.Context,
 	// the same dmlWorker.
 	s.defragmenter = newDefragmenter(encodedOutCh, workerChannels)
 
-	s.wg.Add(1)
-	go func() {
-		defer s.wg.Done()
+	s.wg.Go(func() {
 		err := s.run(wgCtx)
 
 		s.alive.Lock()
@@ -196,7 +194,7 @@ func NewDMLSink(ctx context.Context,
 			case errCh <- err:
 			}
 		}
-	}()
+	})
 
 	return s, nil
 }
@@ -205,7 +203,7 @@ func (s *DMLSink) run(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 
 	// run the encoding workers.
-	for i := 0; i < defaultEncodingConcurrency; i++ {
+	for i := range defaultEncodingConcurrency {
 		encodingWorker := s.encodingWorkers[i]
 		eg.Go(func() error {
 			return encodingWorker.run(ctx)

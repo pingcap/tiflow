@@ -210,7 +210,7 @@ func (m *MemQuota) Release(span tablepb.Span, resolved model.ResolvedTs) {
 		return records[i].ResolvedTs.Greater(resolved)
 	})
 	var toRelease uint64 = 0
-	for j := 0; j < i; j++ {
+	for j := range i {
 		toRelease += records[j].Size
 	}
 	m.tableMemory.ReplaceOrInsert(span, records[i:])

@@ -355,7 +355,7 @@ func datum2Column(
 		colDatum, exist := datums[colID]
 
 		var (
-			colValue interface{}
+			colValue any
 			size     int
 			warn     string
 			err      error
@@ -459,7 +459,7 @@ func (m *mounter) verifyColumnChecksum(
 	return checksum, true, nil
 }
 
-func newDatum(value interface{}, ft types.FieldType) (types.Datum, error) {
+func newDatum(value any, ft types.FieldType) (types.Datum, error) {
 	if value == nil {
 		return types.NewDatum(nil), nil
 	}
@@ -770,7 +770,7 @@ func sizeOfBytes(b []byte) int {
 
 // formatColVal return interface{} need to meet the same requirement as getDefaultOrZeroValue
 func formatColVal(datum types.Datum, col *timodel.ColumnInfo) (
-	value interface{}, size int, warn string, err error,
+	value any, size int, warn string, err error,
 ) {
 	if datum.IsNull() {
 		return nil, 0, "", nil

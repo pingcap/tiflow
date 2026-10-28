@@ -154,7 +154,7 @@ func TestEncodingWorkerRun(t *testing.T) {
 		},
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		frag := eventFragment{
 			versionedTable: cloudstorage.VersionedTableName{
 				TableNameWithPhysicTableID: table,
@@ -168,11 +168,9 @@ func TestEncodingWorkerRun(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_ = encodingWorker.run(ctx)
-	}()
+	})
 
 	cancel()
 	encodingWorker.close()
