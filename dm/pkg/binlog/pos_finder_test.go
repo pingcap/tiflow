@@ -38,7 +38,7 @@ func genBinlogFile(generator *event.Generator, start time.Time, nextFile string)
 			Schema:     fmt.Sprintf("db_%d", 1),
 			Table:      strconv.Itoa(1),
 			ColumnType: []byte{mysql.MYSQL_TYPE_INT24},
-			Rows:       [][]interface{}{{int32(1)}, {int32(2)}},
+			Rows:       [][]any{{int32(1)}, {int32(2)}},
 		},
 	}
 	allEvents := make([]*replication.BinlogEvent, 0)
@@ -79,7 +79,7 @@ func TestTransBoundary(t *testing.T) {
 			Schema:     fmt.Sprintf("db_%d", 1),
 			Table:      strconv.Itoa(1),
 			ColumnType: []byte{mysql.MYSQL_TYPE_INT24},
-			Rows:       [][]interface{}{{int32(1)}, {int32(2)}},
+			Rows:       [][]any{{int32(1)}, {int32(2)}},
 		},
 	}
 	var buf bytes.Buffer
@@ -102,7 +102,7 @@ func TestTransBoundary(t *testing.T) {
 	header.Timestamp = uint32(ts)
 	mapEvent, _ := event.GenTableMapEvent(header, beginEvent.Header.LogPos, 1, []byte("test"), []byte("t"), []byte{mysql.MYSQL_TYPE_INT24})
 	buf.Write(mapEvent.RawData)
-	rowsEvent, _ := event.GenRowsEvent(header, mapEvent.Header.LogPos, replication.WRITE_ROWS_EVENTv2, 1, 1, [][]interface{}{{int32(1)}, {int32(2)}}, []byte{mysql.MYSQL_TYPE_INT24}, mapEvent)
+	rowsEvent, _ := event.GenRowsEvent(header, mapEvent.Header.LogPos, replication.WRITE_ROWS_EVENTv2, 1, 1, [][]any{{int32(1)}, {int32(2)}}, []byte{mysql.MYSQL_TYPE_INT24}, mapEvent)
 	buf.Write(rowsEvent.RawData)
 	xidEvent, _ := event.GenXIDEvent(header, rowsEvent.Header.LogPos, 1)
 	buf.Write(xidEvent.RawData)

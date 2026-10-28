@@ -37,7 +37,7 @@ func TruncateString(s string, n int) string {
 // and returns a string with only the leading (at most) n runes of the input string.
 // If the converted string is truncated, a `...` tail will be appended.
 // It is not effective for large structure now.
-func TruncateInterface(v interface{}, n int) string {
+func TruncateInterface(v any, n int) string {
 	return TruncateString(fmt.Sprintf("%+v", v), n)
 }
 

@@ -14,6 +14,7 @@
 package optimism
 
 import (
+	"maps"
 	"sort"
 	"sync"
 
@@ -165,9 +166,7 @@ func (lk *LockKeeper) Locks() map[string]*Lock {
 	defer lk.mu.RUnlock()
 
 	locks := make(map[string]*Lock, len(lk.locks))
-	for k, v := range lk.locks {
-		locks[k] = v
-	}
+	maps.Copy(locks, lk.locks)
 	return locks
 }
 
@@ -208,9 +207,7 @@ func (tk *TableKeeper) Init(stm map[string]map[string]SourceTables) {
 		if _, ok := tk.tables[task]; !ok {
 			tk.tables[task] = make(map[string]SourceTables)
 		}
-		for source, st := range sts {
-			tk.tables[task][source] = st
-		}
+		maps.Copy(tk.tables[task], sts)
 	}
 }
 
