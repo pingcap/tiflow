@@ -378,7 +378,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if err != nil {
 				log.Panic("decode message value failed",
 					zap.Int32("partition", partition), zap.Any("offset", offset),
-					zap.Error(err))
+					zap.ByteString("value", value), zap.Error(err))
 			}
 
 			if dec, ok := progress.decoder.(*simple.Decoder); ok {
@@ -406,6 +406,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if err != nil {
 				log.Panic("decode message value failed",
 					zap.Int32("partition", partition), zap.Any("offset", offset),
+					zap.ByteString("value", value),
 					zap.Error(err))
 			}
 			// when using simple protocol, the row may be nil, since it's table info not received yet,
@@ -420,7 +421,7 @@ func (w *writer) WriteMessage(ctx context.Context, message *kafka.Message) bool 
 			if err != nil {
 				log.Panic("decode message value failed",
 					zap.Int32("partition", partition), zap.Any("offset", offset),
-					zap.Error(err))
+					zap.ByteString("value", value), zap.Error(err))
 			}
 
 			progress.updateWatermark(newWatermark, offset)
@@ -470,13 +471,13 @@ func (w *writer) checkPartition(row *model.RowChangedEvent, partition int32, off
 		log.Panic("cannot calculate partition for the row changed event",
 			zap.Int32("partition", partition), zap.Any("offset", offset),
 			zap.Int32("partitionNum", w.option.partitionNum), zap.Int64("tableID", row.GetTableID()),
-			zap.Error(err))
+			zap.Error(err), zap.Any("event", row))
 	}
 	if partition != target {
 		log.Panic("RowChangedEvent dispatched to wrong partition",
 			zap.Int32("partition", partition), zap.Int32("expected", target),
 			zap.Int32("partitionNum", w.option.partitionNum), zap.Any("offset", offset),
-			zap.Int64("tableID", row.GetTableID()),
+			zap.Int64("tableID", row.GetTableID()), zap.Any("row", row),
 		)
 	}
 }
@@ -499,6 +500,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 			zap.Uint64("commitTs", row.CommitTs), zap.Any("offset", offset),
 			zap.Uint64("watermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+			zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns),
 			zap.String("protocol", w.option.protocol.String()), zap.Bool("IsPartition", row.TableInfo.TableName.IsPartition))
 		return
 	}
@@ -519,6 +521,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 			zap.Uint64("highWatermark", group.highWatermark),
 			zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 			zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+			zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns),
 			zap.String("protocol", w.option.protocol.String()), zap.Bool("IsPartition", row.TableInfo.TableName.IsPartition))
 		return
 	default:
@@ -529,6 +532,7 @@ func (w *writer) appendRow2Group(row *model.RowChangedEvent, progress *partition
 		zap.Uint64("highWatermark", group.highWatermark),
 		zap.Any("partitionWatermark", watermark), zap.Any("watermarkOffset", progress.watermarkOffset),
 		zap.String("schema", row.TableInfo.GetSchemaName()), zap.String("table", row.TableInfo.GetTableName()),
+		zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns),
 		zap.String("protocol", w.option.protocol.String()))
 	group.Append(row, offset)
 }
@@ -560,7 +564,7 @@ func syncFlushRowChangedEvents(ctx context.Context, progress *partitionProgress,
 func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	db, err := sql.Open("mysql", dsn)
 	if err != nil {
-		log.Error("open db failed")
+		log.Error("open db failed", zap.Error(err))
 		return nil, cerror.Trace(err)
 	}
 

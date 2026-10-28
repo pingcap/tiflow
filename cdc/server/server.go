@@ -121,7 +121,8 @@ func New(pdEndpoints []string) (*server, error) {
 		tcpServer:          tcpServer,
 	}
 
-	log.Info("CDC server created", zap.Strings("pd", pdEndpoints))
+	log.Info("CDC server created",
+		zap.Strings("pd", pdEndpoints), zap.Stringer("config", conf))
 
 	return s, nil
 }

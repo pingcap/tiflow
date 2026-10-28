@@ -100,7 +100,8 @@ func (a *saramaAdminClient) GetTopicConfig(
 			log.Info("Kafka config item found",
 				zap.String("namespace", a.changefeed.Namespace),
 				zap.String("changefeed", a.changefeed.ID),
-				zap.String("configName", configName))
+				zap.String("configName", configName),
+				zap.String("configValue", entry.Value))
 			return entry.Value, nil
 		}
 	}

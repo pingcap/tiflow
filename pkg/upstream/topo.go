@@ -77,6 +77,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 			if err != nil {
 				log.Warn("Ignored invalid tidb topology info entry",
 					zap.String("key", key),
+					zap.String("value", string(kv.Value)),
 					zap.Error(err))
 				continue
 			}
@@ -89,6 +90,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 			if !alive || err != nil {
 				log.Warn("Ignored invalid tidb topology TTL entry",
 					zap.String("key", key),
+					zap.String("value", string(kv.Value)),
 					zap.Error(err))
 				continue
 			}

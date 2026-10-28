@@ -472,7 +472,7 @@ func (t *tempTxnInsertEventStorage) initializeAddEvent(ts model.Ts) {
 func (t *tempTxnInsertEventStorage) addEvent(event *model.RowChangedEvent) error {
 	// do some pre check
 	if !event.IsInsert() {
-		log.Panic("event is not insert event")
+		log.Panic("event is not insert event", zap.Any("event", event))
 	}
 	if t.reading && t.hasEvent() {
 		log.Panic("should read all events before write new event")
@@ -672,7 +672,9 @@ func (u *updateEventSplitter) readNextRow(ctx context.Context) (*model.RowChange
 				return nil, err
 			}
 			if event == nil || u.pendingEvent != nil {
-				log.Panic("processEvent return wrong result for pending event")
+				log.Panic("processEvent return wrong result for pending event",
+					zap.Any("event", event),
+					zap.Any("pendingEvent", u.pendingEvent))
 			}
 			return event, nil
 		}

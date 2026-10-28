@@ -253,7 +253,7 @@ func (m *metaManager) initMeta(ctx context.Context) error {
 			log.Error("redo: unmarshal meta data failed",
 				zap.String("namespace", m.changeFeedID.Namespace),
 				zap.String("changefeed", m.changeFeedID.ID),
-				zap.Error(err))
+				zap.Error(err), zap.ByteString("data", data))
 			return err
 		}
 		metas = append(metas, &meta)

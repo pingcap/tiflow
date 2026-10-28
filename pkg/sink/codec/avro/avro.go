@@ -217,13 +217,13 @@ func (a *BatchEncoder) AppendRowChangedEvent(
 
 	key, err := a.encodeKey(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding key failed", zap.Error(err))
+		log.Error("avro encoding key failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
 	value, err := a.encodeValue(ctx, topic, e)
 	if err != nil {
-		log.Error("avro encoding value failed", zap.Error(err))
+		log.Error("avro encoding value failed", zap.Error(err), zap.Any("event", e))
 		return errors.Trace(err)
 	}
 
@@ -638,6 +638,7 @@ func (a *BatchEncoder) columns2AvroData(input avroEncodeInput) (map[string]inter
 		}
 	}
 
+	log.Debug("rowToAvroData", zap.Any("data", ret))
 	return ret, nil
 }
 
@@ -922,7 +923,7 @@ func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (interface{}, str
 		if v, ok := col.Value.(string); ok {
 			n, err := strconv.ParseInt(v, 10, 32)
 			if err != nil {
-				log.Info("avro encoder parse year value failed", zap.Error(err))
+				log.Info("avro encoder parse year value failed", zap.String("value", v), zap.Error(err))
 				return nil, "", cerror.WrapError(cerror.ErrAvroEncodeFailed, err)
 			}
 			return int32(n), "int", nil
@@ -934,7 +935,7 @@ func (a *BatchEncoder) columnToAvroData(col model.ColumnDataX) (interface{}, str
 		}
 		return nil, "", cerror.ErrAvroEncodeFailed
 	default:
-		log.Error("unknown mysql type", zap.Any("mysqlType", col.GetType()))
+		log.Error("unknown mysql type", zap.Any("value", col.Value), zap.Any("mysqlType", col.GetType()))
 		return nil, "", cerror.ErrAvroEncodeFailed.GenWithStack("unknown mysql type")
 	}
 }

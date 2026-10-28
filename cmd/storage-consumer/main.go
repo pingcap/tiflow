@@ -97,7 +97,7 @@ func init() {
 
 	uri, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Error("invalid upstream-uri")
+		log.Error("invalid upstream-uri", zap.Error(putil.MaskSensitiveDataInURLError(err)))
 		os.Exit(1)
 	}
 	upstreamURI = uri
@@ -361,6 +361,7 @@ func (c *consumer) emitDMLEvents(
 				log.Warn("row changed event commit ts fallback, ignore",
 					zap.Uint64("commitTs", row.CommitTs),
 					zap.Any("tableMaxCommitTs", c.tableTsMap[tableID]),
+					zap.Any("row", row),
 				)
 				continue
 			}

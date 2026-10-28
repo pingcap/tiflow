@@ -464,7 +464,8 @@ func handleRowChangedEvents(
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Stringer("span", &span))
+				zap.Stringer("span", &span),
+				zap.Any("event", e))
 			continue
 		}
 
@@ -476,7 +477,8 @@ func handleRowChangedEvents(
 			log.Warn("skip emit empty row event",
 				zap.Stringer("span", &span),
 				zap.String("namespace", changefeed.Namespace),
-				zap.String("changefeed", changefeed.ID))
+				zap.String("changefeed", changefeed.ID),
+				zap.Any("event", e))
 			continue
 		}
 

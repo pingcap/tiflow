@@ -160,7 +160,7 @@ func (d *Decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 	event, err := buildRowChangedEvent(d.msg, tableInfo, d.config.EnableRowChecksum, d.upstreamTiDB)
 	d.msg = nil
 
-	log.Debug("row changed event assembled")
+	log.Debug("row changed event assembled", zap.Any("event", event))
 	return event, err
 }
 

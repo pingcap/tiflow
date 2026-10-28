@@ -934,11 +934,12 @@ func compareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols []*model
 		}
 
 		if cmp == 0 {
-			log.Warn("find different row", zap.String("column", key))
+			log.Warn("find different row", zap.String("column", key),
+				zap.String("row1", rowToString(map1)), zap.String("row2", rowToString(map2)))
 		} else if cmp > 0 {
-			log.Warn("target had superfluous data")
+			log.Warn("target had superfluous data", zap.String("row", rowToString(map2)))
 		} else {
-			log.Warn("target lack data")
+			log.Warn("target lack data", zap.String("row", rowToString(map1)))
 		}
 	}()
 

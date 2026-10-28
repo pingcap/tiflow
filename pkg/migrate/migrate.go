@@ -291,9 +291,14 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 		if shouldDelete(key) {
 			// 0 is the backup version. For now, we only support version 0
 			newKey := etcd.MigrateBackupKey(0, key)
-			log.Info("renaming old etcd data",
+			fields := []zap.Field{
 				zap.String("key", key),
-				zap.String("newKey", newKey))
+				zap.String("newKey", newKey),
+			}
+			if !strings.HasPrefix(key, oldChangefeedPrefix) {
+				fields = append(fields, zap.String("value", string(kvPair.Value)))
+			}
+			log.Info("renaming old etcd data", fields...)
 			if _, err := client.Put(ctx, newKey,
 				string(kvPair.Value)); err != nil {
 				log.Info("put new key failed", zap.String("key", key),

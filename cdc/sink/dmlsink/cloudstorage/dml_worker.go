@@ -94,7 +94,7 @@ func (t *batchedTask) handleSingleTableEvent(event eventFragment) {
 func (t *batchedTask) generateTaskByTable(table cloudstorage.VersionedTableName) batchedTask {
 	v := t.batch[table]
 	if v == nil {
-		log.Panic("table not found in dml task", zap.Any("table", table))
+		log.Panic("table not found in dml task", zap.Any("table", table), zap.Any("task", t))
 	}
 	delete(t.batch, table)
 

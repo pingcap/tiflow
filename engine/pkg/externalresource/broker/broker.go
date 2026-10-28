@@ -194,7 +194,8 @@ func (b *DefaultBroker) OpenStorage(
 		return nil, err
 	}
 
-	log.Info(fmt.Sprintf("Using %s storage", string(tp)))
+	log.Info(fmt.Sprintf("Using %s storage with path", string(tp)),
+		zap.String("path", desc.URI()))
 	return newResourceHandle(jobID, b.executorID, fm, desc, exists, b.client)
 }
 

@@ -29,6 +29,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.uber.org/zap"
 )
@@ -66,7 +67,7 @@ func main() {
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Panic("invalid upstream-uri")
+		log.Panic("invalid upstream-uri", zap.Error(util.MaskSensitiveDataInURLError(err)))
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if scheme != "kafka" {

@@ -74,6 +74,7 @@ import (
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/sqlmodel"
+	uriutil "github.com/pingcap/tiflow/pkg/util"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -1943,7 +1944,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
 		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
-			s.tctx.L().Warn("error when remove loaded dump folder", zap.Error(err))
+			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", uriutil.MaskSensitiveDataInURIForError(s.cfg.Dir)), zap.Error(err))
 		}
 	}
 
@@ -3157,6 +3158,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
+				zap.String("path", uriutil.MaskSensitiveDataInURIForError(s.cfg.LoaderConfig.Dir)),
 				zap.String("file", file),
 				zap.Error(err2))
 			setFirstErr(err2)
@@ -3172,7 +3174,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if err != nil {
 				logger.Warn("fail to parse statement for creating table in schema tracker",
 					zap.String("db", db),
+					zap.String("path", uriutil.MaskSensitiveDataInURIForError(s.cfg.LoaderConfig.Dir)),
 					zap.String("file", file),
+					zap.ByteString("statement", stmt),
 					zap.Error(err))
 				setFirstErr(err)
 				continue
@@ -3180,12 +3184,15 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			switch v := stmtNode.(type) {
 			case *ast.SetStmt:
 				logger.Warn("ignoring statement",
-					zap.String("type", fmt.Sprintf("%T", v)))
+					zap.String("type", fmt.Sprintf("%T", v)),
+					zap.ByteString("statement", stmt))
 			case *ast.CreateTableStmt:
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
+						zap.Any("path", uriutil.MaskSensitiveDataInURIForError(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
+						zap.ByteString("statement", stmt),
 						zap.Error(err))
 					setFirstErr(err)
 					continue
@@ -3198,7 +3205,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
+						zap.Any("path", uriutil.MaskSensitiveDataInURIForError(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
+						zap.ByteString("statement", stmt),
 						zap.Error(err))
 					setFirstErr(err)
 					continue

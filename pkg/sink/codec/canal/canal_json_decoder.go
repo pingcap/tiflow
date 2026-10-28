@@ -166,7 +166,7 @@ func (b *batchDecoder) HasNext() (model.MessageType, bool, error) {
 
 	if err := b.decoder.Decode(msg); err != nil {
 		log.Error("canal-json decoder decode failed",
-			zap.Error(err))
+			zap.Error(err), zap.ByteString("data", b.decoder.Bytes()))
 		return model.MessageTypeUnknown, false, err
 	}
 	b.msg = msg

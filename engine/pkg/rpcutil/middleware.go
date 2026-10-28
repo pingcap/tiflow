@@ -218,7 +218,12 @@ func Logger(allowList []string, limiter *rate.Limiter) grpc.UnaryServerIntercept
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, _ error) {
 		method := extractMethod(info.FullMethod)
 		if allow(method) {
-			log.Info("request received", zap.String("method", method))
+			if method == "CreateJob" {
+				// The job config in this request can contain database passwords.
+				log.Info("request received", zap.String("method", method))
+			} else {
+				log.Info("", zap.Any("request", req), zap.String("method", method))
+			}
 		}
 		return handler(ctx, req)
 	}

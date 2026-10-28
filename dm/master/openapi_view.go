@@ -79,7 +79,7 @@ func (s *Server) reverseRequestToLeaderMW(tlsCfg *tls.Config) gin.HandlerFunc {
 				transport.TLSClientConfig = tlsCfg
 				simpleProxy.Transport = transport
 			}
-			log.L().Info("reverse request to leader", zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
+			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.String()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
 			simpleProxy.ServeHTTP(c.Writer, c.Request)
 			c.Abort()
 		}

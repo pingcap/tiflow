@@ -454,7 +454,7 @@ func decodeColumns(
 		col := decodeColumn(value, columnID, &info.FieldType)
 		if col == nil {
 			log.Panic("cannot decode column",
-				zap.String("name", info.Name.O))
+				zap.String("name", info.Name.O), zap.Any("data", value))
 		}
 
 		result = append(result, col)
@@ -642,7 +642,7 @@ func (a *avroMarshaller) encodeValue4Avro(
 	case tiTypes.VectorFloat32:
 		return v.String(), "string"
 	default:
-		log.Panic("unexpected type for avro value")
+		log.Panic("unexpected type for avro value", zap.Any("value", value))
 	}
 	return value, ""
 }

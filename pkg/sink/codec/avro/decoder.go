@@ -155,7 +155,9 @@ func (d *decoder) NextRowChangedEvent() (*model.RowChangedEvent, error) {
 				zap.String("name", colInfo.Name.O),
 				zap.Any("type", colInfo.GetType()),
 				zap.Any("charset", colInfo.GetCharset()),
-				zap.Any("flag", colInfo.GetFlag()))
+				zap.Any("flag", colInfo.GetFlag()),
+				zap.Any("value", col.Value),
+				zap.Any("default", colInfo.GetDefaultValue()))
 		}
 	}
 

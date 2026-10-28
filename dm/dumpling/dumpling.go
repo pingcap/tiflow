@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
+	uriutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -154,8 +155,8 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	if m.cfg.ExtStorage == nil {
 		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 		if err != nil {
-			m.logger.Error("fail to remove output directory", log.ShortError(err))
-			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory"))
+			m.logger.Error("fail to remove output directory", zap.String("directory", uriutil.MaskSensitiveDataInURIForError(m.cfg.Dir)), log.ShortError(err))
+			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+uriutil.MaskSensitiveDataInURIForError(m.cfg.Dir)))
 			m.handleExitErrMetric(processError)
 			errs = append(errs, processError)
 			pr <- pb.ProcessResult{

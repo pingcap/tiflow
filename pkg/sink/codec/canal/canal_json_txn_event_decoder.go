@@ -88,7 +88,7 @@ func (d *canalJSONTxnEventDecoder) HasNext() (model.MessageType, bool, error) {
 
 	if err := json.Unmarshal(encodedData, msg); err != nil {
 		log.Error("canal-json decoder unmarshal data failed",
-			zap.Error(err))
+			zap.Error(err), zap.ByteString("data", encodedData))
 		return model.MessageTypeUnknown, false, err
 	}
 	d.msg = msg
@@ -155,7 +155,7 @@ func (d *canalJSONTxnEventDecoder) canalJSONMessage2RowChange() (*model.RowChang
 		}
 		result.PreColumns = preCols
 		if len(preCols) != len(result.Columns) {
-			log.Panic("column count mismatch", zap.Int("previousCount", len(preCols)), zap.Int("currentCount", len(result.Columns)))
+			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", result.Columns))
 		}
 	}
 	return result, nil

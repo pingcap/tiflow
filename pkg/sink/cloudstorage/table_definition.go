@@ -206,7 +206,7 @@ type tableDefWithoutQuery struct {
 func (t *TableDefinition) FromDDLEvent(event *model.DDLEvent, outputColumnID bool) {
 	if event.CommitTs != event.TableInfo.Version {
 		log.Panic("commit ts and table info version should be equal",
-			zap.Uint64("commitTs", event.CommitTs), zap.Uint64("tableVersion", event.TableInfo.Version),
+			zap.Any("event", event), zap.Any("tableInfo", event.TableInfo),
 		)
 	}
 	t.FromTableInfo(event.TableInfo, event.TableInfo.Version, outputColumnID)

@@ -59,7 +59,8 @@ func (f *selectorFilter) GetEligibleExecutors(
 		}
 		if len(executors) == 0 {
 			log.Info("no executor matches selector",
-				zap.Any("selector", selector))
+				zap.Any("selector", selector),
+				zap.Any("request", request))
 			return nil, errors.ErrSelectorUnsatisfied.GenWithStackByArgs(selector)
 		}
 	}

@@ -53,7 +53,8 @@ func (g *eventsGroup) Append(row *model.RowChangedEvent, offset kafka.Offset) {
 		zap.Uint64("highWatermark", g.highWatermark),
 		zap.Int64("tableID", row.GetTableID()),
 		zap.String("schema", row.TableInfo.GetSchemaName()),
-		zap.String("table", row.TableInfo.GetTableName()))
+		zap.String("table", row.TableInfo.GetTableName()),
+		zap.Any("columns", row.Columns), zap.Any("preColumns", row.PreColumns))
 }
 
 // Resolve will get events where CommitTs is less than resolveTs.

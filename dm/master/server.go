@@ -1628,7 +1628,7 @@ func (s *Server) OperateSource(ctx context.Context, req *pb.OperateSourceRequest
 // OperateLeader implements MasterServer.OperateLeader
 // Note: this request doesn't need to forward to leader.
 func (s *Server) OperateLeader(ctx context.Context, req *pb.OperateLeaderRequest) (*pb.OperateLeaderResponse, error) {
-	log.L().Info("operate leader")
+	log.L().Info("", zap.Stringer("payload", req), zap.String("request", "OperateLeader"))
 
 	switch req.Op {
 	case pb.LeaderOp_EvictLeaderOp:
@@ -2497,7 +2497,7 @@ func (s *Server) createMasterClientByName(ctx context.Context, name string) (pb.
 
 // GetMasterCfg implements MasterServer.GetMasterCfg.
 func (s *Server) GetMasterCfg(ctx context.Context, req *pb.GetMasterCfgRequest) (*pb.GetMasterCfgResponse, error) {
-	log.L().Info("get master config")
+	log.L().Info("", zap.Any("payload", req), zap.String("request", "GetMasterCfg"))
 
 	var err error
 	resp := &pb.GetMasterCfgResponse{}
@@ -2805,7 +2805,7 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
-	log.L().Info("master request", zap.String("method", methodName))
+	log.L().Info("master request", masterRequestLogFields(methodName, req)...)
 
 	// origin code:
 	//  isLeader, needForward := s.isLeaderAndNeedForward()
@@ -2839,6 +2839,19 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	reflect.ValueOf(respPointer).Elem().Set(reflect.Zero(respType))
 	*errPointer = terror.ErrMasterRequestIsNotForwardToLeader
 	return true
+}
+
+func masterRequestLogFields(method string, req interface{}) []zap.Field {
+	fields := []zap.Field{zap.String("method", method)}
+	// These requests carry task/source configs or plaintext supplied for encryption.
+	// Other requests contain operational parameters useful when debugging RPCs.
+	switch req.(type) {
+	case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.CheckTaskRequest,
+		*pb.OperateSourceRequest, *pb.EncryptRequest:
+		return fields
+	default:
+		return append(fields, zap.Any("payload", req))
+	}
 }
 
 func (s *Server) checkStartValidationParams(

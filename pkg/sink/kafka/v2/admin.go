@@ -141,7 +141,8 @@ func (a *admin) GetTopicConfig(ctx context.Context, topicName string, configName
 			log.Info("Kafka config item found",
 				zap.String("namespace", a.changefeedID.Namespace),
 				zap.String("changefeed", a.changefeedID.ID),
-				zap.String("configName", configName))
+				zap.String("configName", configName),
+				zap.String("configValue", entry.ConfigValue))
 			return entry.ConfigValue, nil
 		}
 	}

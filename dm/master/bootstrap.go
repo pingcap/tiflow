@@ -185,7 +185,7 @@ func (s *Server) collectSourceConfigFilesV1Import(tctx *tcontext.Context) (map[s
 		}
 
 		cfgs[cfgs2[0].SourceID] = cfgs2[0]
-		tctx.Logger.Info("collected source config", zap.String("source", cfgs2[0].SourceID))
+		tctx.Logger.Info("collected source config", zap.Stringer("config", cfgs2[0]))
 	}
 
 	return cfgs, nil

@@ -201,7 +201,7 @@ func (s *Server) Start() error {
 			if err2 := s.enableHandleSubtasks(sourceCfg, true); err2 != nil {
 				return err2
 			}
-			log.L().Info("started to handle mysql source", zap.String("source", sourceCfg.SourceID))
+			log.L().Info("started to handle mysql source", zap.String("sourceCfg", sourceCfg.String()))
 		}
 
 		s.runWg.Add(1)
@@ -800,7 +800,7 @@ func (s *Server) disableRelay(source string) error {
 
 // QueryStatus implements WorkerServer.QueryStatus.
 func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*pb.QueryStatusResponse, error) {
-	log.L().Info("query status", zap.String("task", req.Name))
+	log.L().Info("", zap.String("request", "QueryStatus"), zap.Stringer("payload", req))
 
 	sourceStatus := s.getSourceStatus(true)
 	sourceStatus.Worker = s.cfg.Name
@@ -840,7 +840,7 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 
 // PurgeRelay implements WorkerServer.PurgeRelay.
 func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("purge relay")
+	log.L().Info("", zap.String("request", "PurgeRelay"), zap.Stringer("payload", req))
 	w := s.getSourceWorker(true)
 	if w == nil {
 		log.L().Warn("fail to call StartSubTask, because no mysql source is being handled in the worker")
@@ -849,14 +849,14 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 
 	err := w.PurgeRelay(ctx, req)
 	if err != nil {
-		log.L().Error("fail to purge relay", zap.Error(err))
+		log.L().Error("fail to purge relay", zap.String("request", "PurgeRelay"), zap.Stringer("payload", req), zap.Error(err))
 	}
 	return makeCommonWorkerResponse(err), nil
 }
 
 // OperateSchema operates schema for an upstream table.
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("operate schema")
+	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -978,7 +978,7 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 
 // HandleError handle error.
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("handle worker error")
+	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -999,7 +999,7 @@ func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorReque
 
 // GetWorkerCfg get worker config.
 func (s *Server) GetWorkerCfg(ctx context.Context, req *pb.GetWorkerCfgRequest) (*pb.GetWorkerCfgResponse, error) {
-	log.L().Info("get worker config")
+	log.L().Info("", zap.String("request", "GetWorkerCfg"), zap.Stringer("payload", req))
 	var err error
 	resp := &pb.GetWorkerCfgResponse{}
 
@@ -1012,7 +1012,7 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 	log.L().Info("check whether subtasks can update")
 	resp := &pb.CheckSubtasksCanUpdateResponse{}
 	defer func() {
-		log.L().Info("checked whether subtasks can update", zap.Bool("success", resp.Success))
+		log.L().Info("", zap.String("request", "CheckSubtasksCanUpdate"), zap.Stringer("resp", resp))
 	}()
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -1037,7 +1037,7 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 }
 
 func (s *Server) GetWorkerValidatorStatus(ctx context.Context, req *pb.GetValidationStatusRequest) (*pb.GetValidationStatusResponse, error) {
-	log.L().Info("get worker validation status")
+	log.L().Info("", zap.String("request", "GetWorkerValidateStatus"), zap.Stringer("payload", req))
 
 	resp := &pb.GetValidationStatusResponse{
 		Result: true,
@@ -1085,7 +1085,7 @@ func (s *Server) GetValidatorError(ctx context.Context, req *pb.GetValidationErr
 }
 
 func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValidationErrorRequest) (*pb.OperateValidationErrorResponse, error) {
-	log.L().Info("operate validation error", zap.String("task", req.TaskName))
+	log.L().Info("operate validation error", zap.Stringer("payload", req))
 	w := s.getSourceWorker(true)
 	resp := &pb.OperateValidationErrorResponse{
 		Result: true,
@@ -1108,7 +1108,7 @@ func (s *Server) OperateValidatorError(ctx context.Context, req *pb.OperateValid
 }
 
 func (s *Server) UpdateValidator(ctx context.Context, req *pb.UpdateValidationWorkerRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("update validation")
+	log.L().Info("update validation", zap.Stringer("payload", req))
 	w := s.getSourceWorker(true)
 	resp := &pb.CommonWorkerResponse{
 		Result: true,

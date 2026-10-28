@@ -284,7 +284,7 @@ func MustBinaryLiteralToInt(bytes []byte) uint64 {
 	length := len(bytes)
 
 	if length > 8 {
-		log.Panic("invalid bit value found", zap.Int("length", length))
+		log.Panic("invalid bit value found", zap.ByteString("value", bytes))
 		return math.MaxUint64
 	}
 

@@ -317,7 +317,7 @@ func (b *batchDecoder) canalJSONMessage2RowChange() (*model.RowChangedEvent, err
 		}
 		result.PreColumns = preCols
 		if len(preCols) != len(result.Columns) {
-			log.Panic("column count mismatch", zap.Int("previousCount", len(preCols)), zap.Int("currentCount", len(result.Columns)))
+			log.Panic("column count mismatch", zap.Any("preCols", preCols), zap.Any("cols", result.Columns))
 		}
 	}
 	err = b.setPhysicalTableID(result, msg.getPhysicalTableID())
