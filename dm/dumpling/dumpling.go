@@ -38,7 +38,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/unit"
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
-	uriutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
@@ -109,7 +108,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 		m.dumpConfig.PromRegistry = prometheus.DefaultGatherer.(prometheus.Registerer)
 	}
 
-	m.logger.Info("create dumpling", zap.String("source", m.cfg.SourceID))
+	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
 	return nil
 }
 
@@ -155,8 +154,8 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	if m.cfg.ExtStorage == nil {
 		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 		if err != nil {
-			m.logger.Error("fail to remove output directory", zap.String("directory", uriutil.MaskSensitiveDataInURIForError(m.cfg.Dir)), log.ShortError(err))
-			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+uriutil.MaskSensitiveDataInURIForError(m.cfg.Dir)))
+			m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
+			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir))
 			m.handleExitErrMetric(processError)
 			errs = append(errs, processError)
 			pr <- pb.ProcessResult{
@@ -450,7 +449,7 @@ func (m *Dumpling) constructArgs(ctx context.Context) (*export.Config, error) {
 func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
 	baseDB, err := conn.GetUpstreamDB(&m.cfg.From)
 	if err != nil {
-		log.L().Warn("set up db connect failed", zap.String("source", m.cfg.SourceID),
+		log.L().Warn("set up db connect failed", zap.Any("db", m.cfg.From),
 			zap.Error(err))
 		return
 	}
@@ -458,7 +457,7 @@ func (m *Dumpling) detectSQLMode(ctx context.Context, dumpCfg *export.Config) {
 
 	sqlMode, err := conn.GetGlobalVariable(tcontext.NewContext(ctx, log.L()), baseDB, "sql_mode")
 	if err != nil {
-		log.L().Warn("get global sql_mode from upstream failed", zap.String("source", m.cfg.SourceID), zap.Error(err))
+		log.L().Warn("get global sql_mode from upstream failed", zap.Any("db", m.cfg.From), zap.Error(err))
 		return
 	}
 	m.logger.Info("found upstream SQL mode", zap.String("SQL mode", sqlMode))

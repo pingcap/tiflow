@@ -524,7 +524,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	resp.CheckResult = msg
 
-	log.L().Info("start task", zap.String("task name", cfg.Name))
+	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
 	if len(req.Sources) > 0 {
@@ -752,7 +752,7 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp, nil
 	}
 	resp.CheckResult = msg
-	log.L().Info("update task", zap.String("task name", cfg.Name))
+	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
 	if len(req.Sources) > 0 {
@@ -2805,7 +2805,7 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
-	log.L().Info("master request", masterRequestLogFields(methodName, req)...)
+	log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
 
 	// origin code:
 	//  isLeader, needForward := s.isLeaderAndNeedForward()
@@ -2839,19 +2839,6 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	reflect.ValueOf(respPointer).Elem().Set(reflect.Zero(respType))
 	*errPointer = terror.ErrMasterRequestIsNotForwardToLeader
 	return true
-}
-
-func masterRequestLogFields(method string, req interface{}) []zap.Field {
-	fields := []zap.Field{zap.String("method", method)}
-	// These requests carry task/source configs or plaintext supplied for encryption.
-	// Other requests contain operational parameters useful when debugging RPCs.
-	switch req.(type) {
-	case *pb.StartTaskRequest, *pb.UpdateTaskRequest, *pb.CheckTaskRequest,
-		*pb.OperateSourceRequest, *pb.EncryptRequest:
-		return fields
-	default:
-		return append(fields, zap.Any("payload", req))
-	}
 }
 
 func (s *Server) checkStartValidationParams(
@@ -3081,7 +3068,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation status", zap.String("task", req.TaskName))
+	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
 		workerRespMu sync.Mutex
@@ -3143,7 +3130,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation error", zap.String("task", req.TaskName))
+	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3198,7 +3185,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("operate validation error", zap.String("task", req.TaskName))
+	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
 	var (
 		workerResps  = make([]*pb.OperateValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
