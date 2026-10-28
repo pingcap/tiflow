@@ -471,5 +471,10 @@ replace sourcegraph.com/sourcegraph/appdash => github.com/sourcegraph/appdash v0
 
 replace sourcegraph.com/sourcegraph/appdash-data => github.com/sourcegraph/appdash-data v0.0.0-20151005221446-73f23eafcf67
 
+// etcd 3.5 requires UnaryServerInterceptor, removed in otelgrpc v0.61.0.
+// Remove this replace after upgrading etcd to use NewServerHandler and
+// verifying compatibility with the selected otelgrpc version.
+replace go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.60.0
+
 // tls10server=1
 godebug tlsrsakex=1
