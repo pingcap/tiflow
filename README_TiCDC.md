@@ -27,11 +27,7 @@ $ make cdc
 $ make test
 ```
 
-<<<<<<< HEAD
-Note that TiCDC supports building with the Go version `Go >= 1.25.12`.
-=======
 Note that TiCDC supports building with the Go version `Go >= 1.27.3`.
->>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
 
 When TiCDC is built successfully, you can find binary in the `bin` directory. Instructions for unit test and integration test can be found in [Running tests](./tests/integration_tests/README.md).
 

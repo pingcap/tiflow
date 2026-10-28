@@ -44,35 +44,9 @@ while ! mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e 'sele
 	sleep 2
 done
 
-<<<<<<< HEAD
 # if user test is already exist, add || true to avoid exit with 2
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '$PASSWORD';" || true
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "GRANT ALL PRIVILEGES ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_clustered_index = 'INT_ONLY'"
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
 mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
-=======
-# Skip user/grant setup when TLS is enabled — TiDB enforces TLS on client
-# connections so plain mysql can't connect. The user was already created
-# during the initial non-TLS startup before test_tls switched to TLS.
-if [ "$USE_TLS" = "0" ]; then
-	# if user test already exists, add || true to avoid exit with 2
-	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "CREATE USER 'test'@'%' IDENTIFIED BY '$PASSWORD';" || true
-	# Avoid GRANT ALL PRIVILEGES which fails on next-gen TiDB due to missing
-	# SHUTDOWN/CONFIG privileges. Use an explicit privilege list instead.
-	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "GRANT SELECT, INSERT, UPDATE, DELETE, CREATE, DROP, ALTER, INDEX, CREATE VIEW, SHOW VIEW, TRIGGER, REFERENCES, EXECUTE, SHOW DATABASES, SUPER, LOCK TABLES, CREATE TEMPORARY TABLES, RELOAD, REPLICATION CLIENT, REPLICATION SLAVE, PROCESS, CREATE USER, CREATE ROUTINE, ALTER ROUTINE, EVENT, CONFIG ON *.* TO 'test'@'%' WITH GRANT OPTION;" || true
-	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_clustered_index = 'INT_ONLY'" || true
-	# Next-gen DDL relies on the distributed execution framework (DXF) and fast
-	# reorg via tikv-worker; disabling them breaks ADD INDEX / ADD COLUMN.
-	if [ "${NEXT_GEN:-}" = "1" ]; then
-		# Next-gen rejects local-sort ADD INDEX / MODIFY COLUMN. Reuse the
-		# cluster's MinIO backend for global sort, including after TiDB restarts.
-		cloud_storage_uri="s3://${MINIO_BUCKET:-next-gen-test}/dm-global-sort?endpoint=http://${MINIO_ADDR:-127.0.0.1:9000}"
-		cloud_storage_uri="${cloud_storage_uri}&access-key=${MINIO_ACCESS_KEY:-minioadmin}&secret-access-key=${MINIO_SECRET_KEY:-minioadmin}&provider=minio"
-		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_cloud_storage_uri = '$cloud_storage_uri'"
-	else
-		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
-		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
-	fi
-fi
->>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))

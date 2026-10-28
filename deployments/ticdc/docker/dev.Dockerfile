@@ -1,8 +1,4 @@
-<<<<<<< HEAD
-FROM golang:1.25-alpine as builder
-=======
 FROM golang:1.27.3-alpine as builder
->>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
 RUN apk add --no-cache git make bash findutils
 WORKDIR /go/src/github.com/pingcap/tiflow
 COPY . .

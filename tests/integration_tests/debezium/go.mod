@@ -1,10 +1,6 @@
 module github.com/breezewish/checker
 
-<<<<<<< HEAD
-go 1.25.14
-=======
 go 1.27.3
->>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
 
 require (
 	github.com/alecthomas/chroma v0.10.0
