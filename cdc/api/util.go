@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -243,6 +244,7 @@ func ForwardToCapture(c *gin.Context, fromID, toAddr string) {
 		}
 	}
 	log.Info("forwarding request to capture",
+		zap.String("url", util.MaskSensitiveDataInURIForError(c.Request.RequestURI)),
 		zap.String("method", c.Request.Method),
 		zap.String("fromID", fromID),
 		zap.String("toAddr", toAddr),
