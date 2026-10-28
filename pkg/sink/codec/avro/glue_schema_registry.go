@@ -184,13 +184,15 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 	ctx context.Context,
 	schemaName string,
 	tableVersion uint64,
+	operation string,
 	schemaGen SchemaGenerator,
 ) (*goavro.Codec, []byte, error) {
 	m.cacheRWLock.RLock()
-	if entry, exists := m.cache[schemaName]; exists && entry.tableVersion == tableVersion {
+	if entry, exists := m.cache[schemaName]; exists && entry.tableVersion == tableVersion && entry.operation == operation {
 		log.Debug("Avro schema GetCachedOrRegister cache hit",
 			zap.String("schemaName", schemaName),
 			zap.Uint64("tableVersion", tableVersion),
+			zap.String("operation", operation),
 			zap.String("schemaID", entry.schemaID.glueSchemaID))
 		m.cacheRWLock.RUnlock()
 		return entry.codec, entry.header, nil
@@ -228,6 +230,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 
 	cacheEntry := &schemaCacheEntry{
 		tableVersion: tableVersion,
+		operation:    operation,
 		schemaID:     id,
 		codec:        codec,
 		header:       header,
@@ -240,6 +243,7 @@ func (m *glueSchemaManager) GetCachedOrRegister(
 	log.Info("Avro schema GetCachedOrRegister successful with cache miss",
 		zap.String("schemaName", schemaName),
 		zap.Uint64("tableVersion", tableVersion),
+		zap.String("operation", operation),
 		zap.String("schemaID", id.glueSchemaID))
 
 	return codec, header, nil

@@ -103,6 +103,7 @@ func TestReplicaConfigMarshal(t *testing.T) {
 			AvroEnableWatermark:            aws.Bool(true),
 			AvroDecimalHandlingMode:        aws.String("string"),
 			AvroBigintUnsignedHandlingMode: aws.String("string"),
+			AvroIncludeBeforeValue:         aws.Bool(true),
 			EncodingFormat:                 aws.String("json"),
 		},
 		LargeMessageHandle: &LargeMessageHandleConfig{
