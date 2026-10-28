@@ -168,9 +168,11 @@ type Syncer struct {
 	isTransactionEnd    bool
 	waitTransactionLock sync.Mutex
 
-	tableRouter     *regexprrouter.RouteTable
-	binlogFilter    *bf.BinlogEvent
-	baList          *filter.Filter
+	tableRouter  *regexprrouter.RouteTable
+	binlogFilter *bf.BinlogEvent
+	// baList is kept in an atomic pointer because streamer goroutines read it
+	// while Update replaces it.
+	baList          atomic.Pointer[filter.Filter]
 	exprFilterGroup *ExprFilterGroup
 	sessCtx         sessionctx.Context
 	causalityCtx    sessionctx.Context
@@ -410,12 +412,13 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		return err
 	}
 
-	s.baList, err = filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
+	baList, err := filter.New(s.cfg.CaseSensitive, s.cfg.BAList)
 	if err != nil {
 		return terror.ErrSyncerUnitGenBAList.Delegate(err)
 	}
+	s.setBAList(baList)
 
-	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone, s.baList)
+	s.syncCfg, err = subtaskCfg2BinlogSyncerCfg(s.cfg, s.timezone, s.getBAList)
 	if err != nil {
 		return err
 	}
@@ -485,7 +488,7 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 	var tableMap map[string]map[string]string
 	if s.SourceTableNamesFlavor == conn.LCTableNamesSensitive {
 		// TODO: we should avoid call this function multi times
-		allTables, err1 := conn.FetchAllDoTables(ctx, s.fromDB.BaseDB, s.baList)
+		allTables, err1 := conn.FetchAllDoTables(ctx, s.fromDB.BaseDB, s.getBAList())
 		if err1 != nil {
 			return err1
 		}
@@ -622,7 +625,7 @@ func buildLowerCaseTableNamesMap(logger log.Logger, tables map[string][]string) 
 // NOTE: now we don't support modify router rules after task has started.
 func (s *Syncer) initShardingGroups(ctx context.Context, needCheck bool) error {
 	// fetch tables from source and filter them
-	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.baList)
+	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.getBAList())
 	if err != nil {
 		return err
 	}
@@ -3062,6 +3065,14 @@ func (s *Syncer) trackOriginDDL(ev *replication.QueryEvent, ec eventContext) (ma
 	return affectedTbls, nil
 }
 
+func (s *Syncer) getBAList() *filter.Filter {
+	return s.baList.Load()
+}
+
+func (s *Syncer) setBAList(baList *filter.Filter) {
+	s.baList.Store(baList)
+}
+
 func (s *Syncer) genRouter() error {
 	s.tableRouter, _ = regexprrouter.NewRegExprRouter(s.cfg.CaseSensitive, []*router.TableRule{})
 	for _, rule := range s.cfg.RouteRules {
@@ -3539,7 +3550,7 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err err
 			return
 		}
 		if oldBaList != nil {
-			s.baList = oldBaList
+			s.setBAList(oldBaList)
 		}
 		if oldTableRouter != nil {
 			s.tableRouter = oldTableRouter
@@ -3550,11 +3561,12 @@ func (s *Syncer) Update(ctx context.Context, cfg *config.SubTaskConfig) (err err
 	}()
 
 	// update block-allow-list
-	oldBaList = s.baList
-	s.baList, err = filter.New(cfg.CaseSensitive, cfg.BAList)
+	oldBaList = s.getBAList()
+	baList, err := filter.New(cfg.CaseSensitive, cfg.BAList)
 	if err != nil {
 		return terror.ErrSyncerUnitGenBAList.Delegate(err)
 	}
+	s.setBAList(baList)
 
 	// update route
 	oldTableRouter = s.tableRouter
@@ -3847,7 +3859,7 @@ func (s *Syncer) precheckForeignKeyRouteTopology(ctx context.Context) error {
 		)
 	}
 
-	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.baList)
+	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.getBAList())
 	if err != nil {
 		return err
 	}
