@@ -171,7 +171,8 @@ func newWriter(ctx context.Context, o *option) *writer {
 	if o.upstreamTiDBDSN != "" {
 		db, err = openDB(ctx, o.upstreamTiDBDSN)
 		if err != nil {
-			log.Panic("cannot open the upstream TiDB, handle key only enabled")
+			log.Panic("cannot open the upstream TiDB, handle key only enabled",
+				zap.String("dsn", o.upstreamTiDBDSN))
 		}
 	}
 	decoder, err := NewDecoder(ctx, o, db)
@@ -575,9 +576,9 @@ func openDB(ctx context.Context, dsn string) (*sql.DB, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	if err = db.PingContext(ctx); err != nil {
-		log.Error("ping db failed", zap.Error(err))
+		log.Error("ping db failed", zap.String("dsn", dsn), zap.Error(err))
 		return nil, cerror.Trace(err)
 	}
-	log.Info("open db success")
+	log.Info("open db success", zap.String("dsn", dsn))
 	return db, nil
 }

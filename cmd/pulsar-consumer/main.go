@@ -183,12 +183,13 @@ func run(_ *cobra.Command, _ []string) {
 
 	upstreamURI, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Panic("invalid upstream-uri", zap.Error(util.MaskSensitiveDataInURLError(err)))
+		log.Panic("invalid upstream-uri", zap.Error(err))
 	}
 	scheme := strings.ToLower(upstreamURI.Scheme)
 	if !sink.IsPulsarScheme(scheme) {
 		log.Panic("invalid upstream-uri scheme, the scheme of upstream-uri must be pulsar schema",
-			zap.String("schema", scheme))
+			zap.String("schema", scheme),
+			zap.String("upstreamURI", upstreamURIStr))
 	}
 
 	consumerOption.Adjust(upstreamURI, configFile)

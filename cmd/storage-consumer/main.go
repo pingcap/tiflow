@@ -97,7 +97,7 @@ func init() {
 
 	uri, err := url.Parse(upstreamURIStr)
 	if err != nil {
-		log.Error("invalid upstream-uri", zap.Error(putil.MaskSensitiveDataInURLError(err)))
+		log.Error("invalid upstream-uri", zap.Error(err))
 		os.Exit(1)
 	}
 	upstreamURI = uri

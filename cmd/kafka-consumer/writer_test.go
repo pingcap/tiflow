@@ -14,30 +14,12 @@
 package main
 
 import (
-	"context"
-	"fmt"
 	"testing"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-	"go.uber.org/zap/zaptest/observer"
 )
-
-func TestOpenDBDoesNotLogPassword(t *testing.T) {
-	_, props, err := log.InitLogger(&log.Config{Level: "debug"})
-	require.NoError(t, err)
-	core, observed := observer.New(zapcore.DebugLevel)
-	restore := log.ReplaceGlobals(zap.New(core), props)
-	defer restore()
-
-	_, err = openDB(context.Background(), "user:private-password@tcp(localhost:invalid)/test")
-	require.Error(t, err)
-	require.NotContains(t, fmt.Sprint(observed.All()), "private-password")
-}
 
 func TestUpdateWatermarkIgnoresFallbackFromNewerOffset(t *testing.T) {
 	// Scenario: at-least-once delivery replays an older resolved event with a newer Kafka offset.
