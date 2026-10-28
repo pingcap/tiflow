@@ -80,11 +80,21 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 	return causality.outCh
 }
 
+// keyPipeline has one preparation worker, independent of downstream I/O concurrency.
+func (c *causality) keyPipeline() *causalityKeyPipeline {
+	return newCausalityKeyPipeline(c.inCh, c.sessCtx)
+}
+
 // run receives dml jobs and send causality jobs by adding causality key.
 // When meet conflict, sends a conflict job.
 func (c *causality) run() {
-	for j := range c.inCh {
-		c.metricProxies.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source).Set(float64(len(c.inCh)))
+	// These labels are constant for this pipeline lifetime. Keep updates per row,
+	// but do not re-hash labels and look up the same gauge on every row.
+	inputQueueSize := c.metricProxies.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source)
+	pipeline := c.keyPipeline()
+	for prepared := range pipeline.ordered {
+		j := prepared.job
+		inputQueueSize.Set(float64(len(c.inCh)))
 
 		startTime := time.Now()
 
@@ -96,69 +106,30 @@ func (c *causality) run() {
 			c.relation.gc(j.flushSeq)
 			continue
 		default:
-			keys := j.dml.CausalityKeys()
+			keys := prepared.keys
 
-			// detectConflict before add
-			if c.detectConflict(keys) {
-				c.logger.Debug("meet causality key, will generate a conflict job to flush all sqls", zap.Strings("keys", keys))
+			queueKey, conflicted := c.relation.assign(keys)
+			if conflicted {
+				if ce := c.logger.Check(zap.DebugLevel, "meet causality key, will generate a conflict job to flush all sqls"); ce != nil {
+					ce.Write(zap.Strings("keys", keys))
+				}
 				c.outCh <- newConflictJob(c.workerCount)
-				c.relation.clear()
 			}
-			j.dmlQueueKey = c.add(keys)
-			c.logger.Debug("key for keys", zap.String("key", j.dmlQueueKey), zap.Strings("keys", keys))
+			j.dmlQueueKey = queueKey
+			if ce := c.logger.Check(zap.DebugLevel, "key for keys"); ce != nil {
+				ce.Write(zap.String("key", j.dmlQueueKey), zap.Strings("keys", keys))
+			}
 		}
-		c.metricProxies.Metrics.ConflictDetectDurationHistogram.Observe(time.Since(startTime).Seconds())
+		c.metricProxies.Metrics.ConflictDetectDurationHistogram.Observe((time.Since(startTime) + prepared.keyTime).Seconds())
 
 		c.outCh <- j
 	}
+	pipeline.wg.Wait()
 }
 
 // close closes outer channel.
 func (c *causality) close() {
 	close(c.outCh)
-}
-
-// add adds keys relation and return the relation. The keys must `detectConflict` first to ensure correctness.
-func (c *causality) add(keys []string) string {
-	if len(keys) == 0 {
-		return ""
-	}
-
-	// find causal key
-	selectedRelation := keys[0]
-	var nonExistKeys []string
-	for _, key := range keys {
-		if val, ok := c.relation.get(key); ok {
-			selectedRelation = val
-		} else {
-			nonExistKeys = append(nonExistKeys, key)
-		}
-	}
-	// set causal relations for those non-exist keys
-	for _, key := range nonExistKeys {
-		c.relation.set(key, selectedRelation)
-	}
-
-	return selectedRelation
-}
-
-// detectConflict detects whether there is a conflict.
-func (c *causality) detectConflict(keys []string) bool {
-	if len(keys) == 0 {
-		return false
-	}
-
-	var existedRelation string
-	for _, key := range keys {
-		if val, ok := c.relation.get(key); ok {
-			if existedRelation != "" && val != existedRelation {
-				return true
-			}
-			existedRelation = val
-		}
-	}
-
-	return false
 }
 
 // dmlJobKeyRelationGroup stores a group of dml job key relations as data, and a flush job seq representing last flush job before adding any job keys.
@@ -170,12 +141,51 @@ type dmlJobKeyRelationGroup struct {
 // causalityRelation stores causality keys by group, where each group created on each flush and it helps to remove stale causality keys.
 type causalityRelation struct {
 	groups []*dmlJobKeyRelationGroup
+	// Scratch space owned by the ordered stage. Cleared after every assignment.
+	missing []string
 }
 
 func newCausalityRelation() *causalityRelation {
 	m := &causalityRelation{}
 	m.rotate(-1)
 	return m
+}
+
+// assign resolves a row against the existing relations in one lookup pass.
+// If it joins different relations, the returned conflict flag requires the
+// caller to emit a barrier before this row. No relation update runs in parallel.
+func (m *causalityRelation) assign(keys []string) (string, bool) {
+	if len(keys) == 0 {
+		return "", false
+	}
+	selected, existing := keys[0], ""
+	missing := m.missing[:0]
+	conflicted := false
+	for _, key := range keys {
+		if value, ok := m.get(key); ok {
+			if existing != "" && value != existing {
+				conflicted = true
+				break
+			}
+			existing, selected = value, value
+		} else {
+			missing = append(missing, key)
+		}
+	}
+	if conflicted {
+		m.clear()
+		selected = keys[0]
+		for _, key := range keys {
+			m.set(key, selected)
+		}
+	} else {
+		for _, key := range missing {
+			m.set(key, selected)
+		}
+	}
+	clear(missing)
+	m.missing = missing[:0]
+	return selected, conflicted
 }
 
 func (m *causalityRelation) get(key string) (string, bool) {
