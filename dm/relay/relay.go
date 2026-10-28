@@ -1150,6 +1150,9 @@ func (r *Relay) setSyncConfig() error {
 		if err != nil {
 			return terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}
+		if tlsConfig != nil {
+			tlsConfig.CipherSuites = conn.MySQLTLSCipherSuites()
+		}
 	}
 
 	h, _ := os.Hostname()

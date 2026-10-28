@@ -1,5 +1,9 @@
 run:
+<<<<<<< HEAD
   go: "1.23"
+=======
+  go: "1.27.3"
+>>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
   build-tags:
     - intest
 linters:

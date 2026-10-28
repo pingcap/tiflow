@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 FROM golang:1.16
+=======
+FROM golang:1.27.3
+>>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
 
 RUN apt-get update && \
     apt-get -y install \

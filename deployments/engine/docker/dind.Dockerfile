@@ -1,6 +1,10 @@
 # In this file, we build an image with `docker-cli in docker` for engine integration tests.
 # For `dockerd in docker`, please refer to https://hub.docker.com/_/docker/tags?page=1&name=dind.
+<<<<<<< HEAD
 FROM golang:1.25-alpine as builder
+=======
+FROM golang:1.27.3-alpine as builder
+>>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
 
 # If you add a new command dependency to engine integration test, add here and 
 # rebuild this image as well

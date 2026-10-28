@@ -155,6 +155,9 @@ func subtaskCfg2BinlogSyncerCfg(cfg *config.SubTaskConfig, timezone *time.Locati
 		if err != nil {
 			return replication.BinlogSyncerConfig{}, terror.ErrConnInvalidTLSConfig.Delegate(err)
 		}
+		if tlsConfig != nil {
+			tlsConfig.CipherSuites = conn.MySQLTLSCipherSuites()
+		}
 	}
 
 	var rowsEventDecodeFunc func(*replication.RowsEvent, []byte) error

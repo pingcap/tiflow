@@ -1,6 +1,10 @@
 module canal-json-handle-key-only-example
 
+<<<<<<< HEAD
 go 1.25.14
+=======
+go 1.27.3
+>>>>>>> 4ff802a6ab (*: upgrade go version to 1.27.3 (#12904))
 
 require (
 	github.com/go-sql-driver/mysql v1.7.1
