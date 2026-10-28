@@ -122,7 +122,7 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 	rows, err := conn.DBConn.QueryContext(tctx.Context(), query, args...)
 	if err != nil {
 		tctx.L().ErrorFilterContextCanceled("query statement failed",
-			zap.String("query", utils.TruncateString(query, -1)),
+			log.RedactField(zap.String("query", utils.TruncateString(query, -1))),
 			log.ZapRedactString("argument", utils.TruncateInterface(args, -1)),
 			log.ShortError(err))
 		return nil, terror.ErrDBQueryFailed.Delegate(err, utils.TruncateString(query, -1))
@@ -197,21 +197,21 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 		} else {
 			if ignoreErr != nil && ignoreErr(err2) {
 				tctx.L().Warn("execute statement failed and will ignore this error",
-					zap.String("query", utils.TruncateString(query, -1)),
+					log.RedactField(zap.String("query", utils.TruncateString(query, -1))),
 					log.ZapRedactString("argument", utils.TruncateInterface(arg, -1)),
 					log.ShortError(err2))
 				continue
 			}
 
 			tctx.L().ErrorFilterContextCanceled("execute statement failed",
-				zap.String("query", utils.TruncateString(query, -1)),
+				log.RedactField(zap.String("query", utils.TruncateString(query, -1))),
 				log.ZapRedactString("argument", utils.TruncateInterface(arg, -1)), log.ShortError(err2))
 
 			startTime = time.Now()
 			rerr := txn.Rollback()
 			if rerr != nil {
 				tctx.L().Error("rollback failed",
-					zap.String("query", utils.TruncateString(query, -1)),
+					log.RedactField(zap.String("query", utils.TruncateString(query, -1))),
 					log.ZapRedactString("argument", utils.TruncateInterface(arg, -1)),
 					log.ShortError(rerr))
 			} else if hVec != nil {

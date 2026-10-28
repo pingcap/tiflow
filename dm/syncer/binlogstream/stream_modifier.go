@@ -116,7 +116,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 		m.ops = append(m.ops, toInject)
 		m.logger.Info("set a new operator",
 			zap.Stringer("position", pos),
-			zap.Stringer("new operator", toInject))
+			log.RedactField(zap.Stringer("new operator", toInject)))
 		return nil
 	}
 
@@ -125,7 +125,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 		m.ops[toInsertIndex] = toInject
 		m.logger.Warn("overwrite operator",
 			zap.Stringer("position", pos),
-			zap.Stringer("old operator", pre))
+			log.RedactField(zap.Stringer("old operator", pre)))
 		return nil
 	}
 
@@ -137,7 +137,7 @@ func (m *streamModifier) Set(req *pb.HandleWorkerErrorRequest, events []*replica
 	}
 	m.logger.Info("set a new operator",
 		zap.Stringer("position", pos),
-		zap.Stringer("new operator", toInject))
+		log.RedactField(zap.Stringer("new operator", toInject)))
 	return nil
 }
 

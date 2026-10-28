@@ -60,7 +60,7 @@ type Dumpling struct {
 func NewDumpling(cfg *config.SubTaskConfig) *Dumpling {
 	logger := log.L()
 	if cfg.FrameworkLogger != nil {
-		logger = log.Logger{Logger: cfg.FrameworkLogger}
+		logger = log.Logger{Logger: log.WithRedaction(cfg.FrameworkLogger)}
 	}
 	m := &Dumpling{
 		cfg:    cfg,
@@ -108,7 +108,7 @@ func (m *Dumpling) Init(ctx context.Context) error {
 		m.dumpConfig.PromRegistry = prometheus.DefaultGatherer.(prometheus.Registerer)
 	}
 
-	m.logger.Info("create dumpling", zap.Stringer("config", m.dumpConfig))
+	m.logger.Info("create dumpling", zap.String("config", log.RedactConfigJSON(m.dumpConfig.String())))
 	return nil
 }
 

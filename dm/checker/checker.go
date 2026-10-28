@@ -819,7 +819,7 @@ func (c *Checker) IsFreshTask() (bool, error) {
 	}
 	var existCheckpoint bool
 	for _, sql := range checkpointSQLs {
-		c.tctx.Logger.Info("exec query", zap.String("sql", sql))
+		c.tctx.Logger.Info("exec query", log.RedactField(zap.String("sql", sql)))
 		rows, err := instance.targetDB.DB.QueryContext(c.tctx.Ctx, sql)
 		if err != nil {
 			if conn.IsMySQLError(err, mysql.ErrNoSuchTable) {

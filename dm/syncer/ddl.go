@@ -264,7 +264,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		}
 		// don't return error if filter success
 		ddl.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", ddl.name, ddl.sourceID).Observe(time.Since(ec.startTime).Seconds())
-		ddl.logger.Warn("skip event", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		ddl.logger.Warn("skip event", zap.String("event", "query"), log.RedactField(zap.Stringer("query event context", qec)))
 		err = ddl.recordSkipSQLsLocation(&ec)
 	}()
 
@@ -288,7 +288,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 
 	if _, ok := stmt.(ast.DDLNode); !ok {
 		ddl.logger.Info("ddl that dm doesn't handle, skip it", zap.String("event", "query"),
-			zap.Stringer("queryEventContext", qec))
+			log.RedactField(zap.Stringer("queryEventContext", qec)))
 		return ddl.recordSkipSQLsLocation(qec.eventContext)
 	}
 
@@ -298,7 +298,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		// for optimistic ddl, we can resync idemponent ddl.
 		cmp := binlog.CompareLocation(qec.shardingReSync.currLocation, qec.shardingReSync.latestLocation, ddl.enableGTID)
 		if cmp > 0 || (cmp == 0 && ddl.shardMode != config.ShardOptimistic) {
-			ddl.logger.Info("re-replicate shard group was completed", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+			ddl.logger.Info("re-replicate shard group was completed", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 			return qec.closeShardingResync()
 		} else if ddl.shardMode != config.ShardOptimistic {
 			ddl.logger.Debug("skip event in re-replicating sharding group", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
@@ -308,7 +308,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		// we split ddls and handle the appliedDDLs
 	}
 
-	ddl.logger.Info("ready to split ddl", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("ready to split ddl", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 
 	// TiDB can't handle multi schema change DDL, so we split it here.
 	qec.splitDDLs, err = parserpkg.SplitDDL(stmt, qec.ddlSchema)
@@ -323,12 +323,12 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 	for _, sql := range qec.splitDDLs {
 		sqls, err2 := ddl.processOneDDL(qec, sql)
 		if err2 != nil {
-			ddl.logger.Error("fail to process ddl", zap.String("event", "query"), zap.Stringer("queryEventContext", qec), log.ShortError(err2))
+			ddl.logger.Error("fail to process ddl", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)), log.ShortError(err2))
 			return err2
 		}
 		qec.appliedDDLs = append(qec.appliedDDLs, sqls...)
 	}
-	ddl.logger.Info("resolve sql", zap.String("event", "query"), zap.Strings("appliedDDLs", qec.appliedDDLs), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("resolve sql", zap.String("event", "query"), log.RedactField(zap.Strings("appliedDDLs", qec.appliedDDLs)), log.RedactField(zap.Stringer("queryEventContext", qec)))
 
 	ddl.metricsProxies.BinlogEventCost.WithLabelValues(metrics.BinlogEventCostStageGenQuery, ddl.name, ddl.workerName, ddl.sourceID).Observe(time.Since(qec.startTime).Seconds())
 
@@ -362,14 +362,14 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		targetTable := ddlInfo.targetTables[0]
 		if len(ddlInfo.routedDDL) == 0 {
 			ddl.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", ddl.name, ddl.sourceID).Observe(time.Since(qec.startTime).Seconds())
-			ddl.logger.Warn("skip event", zap.String("event", "query"), zap.String("statement", sql), zap.String("schema", qec.ddlSchema))
+			ddl.logger.Warn("skip event", zap.String("event", "query"), log.RedactField(zap.String("statement", sql)), zap.String("schema", qec.ddlSchema))
 			continue
 		}
 
 		// DDL is sequentially synchronized in this syncer's main process goroutine
 		// filter DDL that is older or same as table checkpoint, to avoid sync again for already synced DDLs
 		if ddl.checkpoint.IsOlderThanTablePoint(sourceTable, qec.endLocation) {
-			ddl.logger.Info("filter obsolete DDL", zap.String("event", "query"), zap.String("statement", sql), log.WrapStringerField("location", qec.endLocation))
+			ddl.logger.Info("filter obsolete DDL", zap.String("event", "query"), log.RedactField(zap.String("statement", sql)), log.WrapStringerField("location", qec.endLocation))
 			continue
 		}
 
@@ -389,9 +389,9 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		}
 	}
 
-	ddl.logger.Info("prepare to handle ddls", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("prepare to handle ddls", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 	if len(qec.needHandleDDLs) == 0 {
-		ddl.logger.Info("skip event, need handled ddls is empty", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+		ddl.logger.Info("skip event, need handled ddls is empty", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 		return ddl.recordSkipSQLsLocation(qec.eventContext)
 	}
 
@@ -417,7 +417,7 @@ func (ddl *Normal) preFilter(*ddlInfo, *queryEventContext, *filter.Table, *filte
 }
 
 func (ddl *Normal) handleDDL(qec *queryEventContext) error {
-	ddl.logger.Info("start to handle ddls in normal mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("start to handle ddls in normal mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 
 	// interrupted after flush old checkpoint and before track DDL.
 	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
@@ -458,13 +458,13 @@ func (ddl *Normal) handleDDL(qec *queryEventContext) error {
 		return nil
 	}
 
-	ddl.logger.Info("finish to handle ddls in normal mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("finish to handle ddls in normal mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 
 	if qec.onlineDDLTable != nil {
 		ddl.logger.Info("finish online ddl and clear online ddl metadata in normal mode",
 			zap.String("event", "query"),
-			zap.Strings("ddls", qec.needHandleDDLs),
-			zap.String("raw statement", qec.originSQL),
+			log.RedactField(zap.Strings("ddls", qec.needHandleDDLs)),
+			log.RedactField(zap.String("raw statement", qec.originSQL)),
 			zap.Stringer("table", qec.onlineDDLTable))
 		err2 := ddl.onlineDDL.Finish(qec.tctx, qec.onlineDDLTable)
 		if err2 != nil {
@@ -495,7 +495,7 @@ func (ddl *Pessimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, source
 		}
 		return true, nil
 	case *ast.TruncateTableStmt:
-		ddl.logger.Info("filter truncate table statement in shard group", zap.String("event", "query"), zap.String("statement", ddlInfo.routedDDL))
+		ddl.logger.Info("filter truncate table statement in shard group", zap.String("event", "query"), log.RedactField(zap.String("statement", ddlInfo.routedDDL)))
 		return true, nil
 	}
 
@@ -548,7 +548,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 		if !active {
 			ddl.logger.Info("skip in-activeDDL",
 				zap.String("event", "query"),
-				zap.Stringer("queryEventContext", qec),
+				log.RedactField(zap.Stringer("queryEventContext", qec)),
 				zap.String("sourceTableID", sourceTableID),
 				zap.Bool("in-sharding", needShardingHandle),
 				zap.Bool("is-synced", synced),
@@ -559,7 +559,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 
 	ddl.logger.Info(annotate,
 		zap.String("event", "query"),
-		zap.Stringer("queryEventContext", qec),
+		log.RedactField(zap.Stringer("queryEventContext", qec)),
 		zap.String("sourceTableID", sourceTableID),
 		zap.Bool("in-sharding", needShardingHandle),
 		zap.Bool("is-synced", synced),
@@ -646,7 +646,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 			return err2
 		}
 		ddl.metricsProxies.Metrics.ShardLockResolving.Set(1) // block and wait DDL lock to be synced
-		ddl.logger.Info("putted shard DDL info", zap.Stringer("info", shardInfo), zap.Int64("revision", rev))
+		ddl.logger.Info("putted shard DDL info", log.RedactField(zap.Stringer("info", shardInfo)), zap.Int64("revision", rev))
 
 		shardOp, err2 := ddl.pessimist.GetOperation(qec.tctx.Ctx, shardInfo, rev+1)
 		ddl.metricsProxies.Metrics.ShardLockResolving.Set(0)
@@ -676,19 +676,19 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 
 			ddl.logger.Info("execute DDL job",
 				zap.String("event", "query"),
-				zap.Stringer("queryEventContext", qec),
+				log.RedactField(zap.Stringer("queryEventContext", qec)),
 				zap.String("sourceTableID", sourceTableID),
-				zap.Stringer("operation", shardOp))
+				log.RedactField(zap.Stringer("operation", shardOp)))
 		} else {
 			ddl.logger.Info("ignore DDL job",
 				zap.String("event", "query"),
-				zap.Stringer("queryEventContext", qec),
+				log.RedactField(zap.Stringer("queryEventContext", qec)),
 				zap.String("sourceTableID", sourceTableID),
-				zap.Stringer("operation", shardOp))
+				log.RedactField(zap.Stringer("operation", shardOp)))
 		}
 	}
 
-	ddl.logger.Info("start to handle ddls in shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("start to handle ddls in shard mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 
 	// interrupted after track DDL and before execute DDL.
 	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
@@ -718,7 +718,7 @@ func (ddl *Pessimist) handleDDL(qec *queryEventContext) error {
 		}
 	}
 
-	ddl.logger.Info("finish to handle ddls in shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("finish to handle ddls in shard mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 	return nil
 }
 
@@ -738,7 +738,7 @@ func (ddl *Optimist) preFilter(ddlInfo *ddlInfo, qec *queryEventContext, sourceT
 	}
 	switch ddlInfo.stmtCache.(type) {
 	case *ast.TruncateTableStmt:
-		ddl.logger.Info("filter truncate table statement in shard group", zap.String("event", "query"), zap.String("statement", ddlInfo.routedDDL))
+		ddl.logger.Info("filter truncate table statement in shard group", zap.String("event", "query"), log.RedactField(zap.String("statement", ddlInfo.routedDDL)))
 		return true, nil
 	case *ast.RenameTableStmt:
 		return false, terror.ErrSyncerUnsupportedStmt.Generate("RENAME TABLE", config.ShardOptimistic)
@@ -834,7 +834,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 		op.DDLs = qec.needHandleDDLs
 		skipOp = true
 		if err = ddl.checkpoint.FlushPointsWithTableInfos(qec.tctx, []*filter.Table{upTable}, []*model.TableInfo{tiAfter}); err != nil {
-			ddl.logger.Error("failed to flush create table info", zap.Stringer("table", upTable), zap.Strings("ddls", qec.needHandleDDLs), log.ShortError(err))
+			ddl.logger.Error("failed to flush create table info", zap.Stringer("table", upTable), log.RedactField(zap.Strings("ddls", qec.needHandleDDLs)), log.ShortError(err))
 		}
 		if _, err = ddl.optimist.AddTable(info); err != nil {
 			return err
@@ -852,14 +852,14 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 		}
 	}
 
-	ddl.logger.Info("putted a shard DDL info into etcd", zap.Stringer("info", info))
+	ddl.logger.Info("putted a shard DDL info into etcd", log.RedactField(zap.Stringer("info", info)))
 	if !skipOp {
 		for {
 			op, err = ddl.optimist.GetOperation(qec.tctx.Ctx, info, rev+1)
 			if err != nil {
 				return err
 			}
-			ddl.logger.Info("got a shard DDL lock operation", zap.Stringer("operation", op))
+			ddl.logger.Info("got a shard DDL lock operation", log.RedactField(zap.Stringer("operation", op)))
 			if op.ConflictStage != optimism.ConflictDetected {
 				break
 			}
@@ -867,7 +867,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 				return terror.ErrSyncerShardDDLConflict.Generate(qec.needHandleDDLs, op.ConflictMsg)
 			}
 			rev = op.Revision
-			ddl.logger.Info("operation conflict detected, waiting for resolve", zap.Stringer("info", info))
+			ddl.logger.Info("operation conflict detected, waiting for resolve", log.RedactField(zap.Stringer("info", info)))
 		}
 	}
 
@@ -895,7 +895,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 			if err != nil {
 				ddl.logger.Error("fail to recreate table to rollback table in schema tracker", zap.Stringer("table", upTable))
 			} else {
-				ddl.logger.Info("skip conflict ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+				ddl.logger.Info("skip conflict ddls in optimistic shard mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 			}
 		}
 		return err
@@ -904,7 +904,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	// updated needHandleDDLs to DDLs received from DM-master.
 	qec.needHandleDDLs = op.DDLs
 
-	ddl.logger.Info("start to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("start to handle ddls in optimistic shard mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 
 	// interrupted after track DDL and before execute DDL.
 	failpoint.Inject("FlushCheckpointStage", func(val failpoint.Value) {
@@ -931,8 +931,8 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	if qec.onlineDDLTable != nil {
 		ddl.logger.Info("finish online ddl and clear online ddl metadata in optimistic shard mode",
 			zap.String("event", "query"),
-			zap.Strings("ddls", qec.needHandleDDLs),
-			zap.String("raw statement", qec.originSQL),
+			log.RedactField(zap.Strings("ddls", qec.needHandleDDLs)),
+			log.RedactField(zap.String("raw statement", qec.originSQL)),
 			zap.Stringer("table", qec.onlineDDLTable))
 		err = ddl.onlineDDL.Finish(qec.tctx, qec.onlineDDLTable)
 		if err != nil {
@@ -947,7 +947,7 @@ func (ddl *Optimist) handleDDL(qec *queryEventContext) error {
 	// If we resolveOptimisticDDL here, if this ddl event is idempotent, it may falsely resolve the conflict which
 	// has a totally different ddl.
 
-	ddl.logger.Info("finish to handle ddls in optimistic shard mode", zap.String("event", "query"), zap.Stringer("queryEventContext", qec))
+	ddl.logger.Info("finish to handle ddls in optimistic shard mode", zap.String("event", "query"), log.RedactField(zap.Stringer("queryEventContext", qec)))
 	return nil
 }
 
@@ -981,11 +981,11 @@ func parseOneStmt(qec *queryEventContext) (stmt ast.StmtNode, err error) {
 	})
 	// We use Parse not ParseOneStmt here, because sometimes we got a commented out ddl which can't be parsed
 	// by ParseOneStmt(it's a limitation of tidb parser.)
-	qec.tctx.L().Info("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
+	qec.tctx.L().Info("parse ddl", zap.String("event", "query"), log.RedactField(zap.Stringer("query event context", qec)))
 	stmts, err := parserpkg.Parse(qec.p, qec.originSQL, "", "")
 	if err != nil {
 		// log error rather than fatal, so other defer can be executed
-		qec.tctx.L().Error("parse ddl", zap.String("event", "query"), zap.Stringer("query event context", qec))
+		qec.tctx.L().Error("parse ddl", zap.String("event", "query"), log.RedactField(zap.Stringer("query event context", qec)))
 		return nil, terror.ErrSyncerParseDDL.Delegate(err, qec.originSQL)
 	}
 	if len(stmts) == 0 {
@@ -1253,10 +1253,10 @@ func (ddl *DDLWorker) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (
 			// In the case of online-ddl, if the generated table is skipped, track ddl will failed.
 			err := ddl.trackDDL(qec.ddlSchema, ddlInfo, qec.eventContext)
 			if err != nil {
-				ddl.logger.Warn("track ddl failed", zap.Stringer("ddl info", ddlInfo))
+				ddl.logger.Warn("track ddl failed", log.RedactField(zap.Stringer("ddl info", ddlInfo)))
 			}
 			ddl.saveTablePoint(table, qec.lastLocation)
-			ddl.logger.Warn("track skipped ddl and return empty string", zap.String("origin sql", qec.originSQL), zap.Stringer("ddl info", ddlInfo))
+			ddl.logger.Warn("track skipped ddl and return empty string", log.RedactField(zap.String("origin sql", qec.originSQL)), log.RedactField(zap.Stringer("ddl info", ddlInfo)))
 			ddlInfo.originDDL = ""
 			return true, nil
 		}
@@ -1288,7 +1288,7 @@ func (ddl *DDLWorker) processOneDDL(qec *queryEventContext, sql string) ([]strin
 	}
 	if shouldSkip {
 		ddl.metricsProxies.SkipBinlogDurationHistogram.WithLabelValues("query", ddl.name, ddl.sourceID).Observe(time.Since(qec.startTime).Seconds())
-		qec.tctx.L().Warn("skip event", zap.String("event", "query"), zap.String("statement", sql), zap.Stringer("query event context", qec))
+		qec.tctx.L().Warn("skip event", zap.String("event", "query"), log.RedactField(zap.String("statement", sql)), log.RedactField(zap.Stringer("query event context", qec)))
 		if ddl.onlineDDL == nil || len(ddlInfo.originDDL) != 0 {
 			return nil, nil
 		}
@@ -1462,16 +1462,16 @@ func (ddl *DDLWorker) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, chars
 			}
 		}
 		if justCharset == "" {
-			ddl.logger.Warn("detect create table risk which use implicit charset and collation", zap.String("originSQL", ddlInfo.originDDL))
+			ddl.logger.Warn("detect create table risk which use implicit charset and collation", log.RedactField(zap.String("originSQL", ddlInfo.originDDL)))
 			return
 		}
 		// just has charset, can add collation by charset and default collation map
 		collation, ok := charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
 		if !ok {
-			ddl.logger.Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
+			ddl.logger.Warn("not found charset default collation.", log.RedactField(zap.String("originSQL", ddlInfo.originDDL)), zap.String("charset", strings.ToLower(justCharset)))
 			return
 		}
-		ddl.logger.Info("detect create table risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+		ddl.logger.Info("detect create table risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", log.RedactField(zap.String("originSQL", ddlInfo.originDDL)), zap.String("collation", collation))
 		createStmt.Options = append(createStmt.Options, &ast.TableOption{Tp: ast.TableOptionCollate, StrValue: collation})
 
 	case *ast.CreateDatabaseStmt:
@@ -1492,23 +1492,23 @@ func (ddl *DDLWorker) adjustCollation(ddlInfo *ddlInfo, statusVars []byte, chars
 		if justCharset != "" {
 			collation, ok = charsetAndDefaultCollationMap[strings.ToLower(justCharset)]
 			if !ok {
-				ddl.logger.Warn("not found charset default collation.", zap.String("originSQL", ddlInfo.originDDL), zap.String("charset", strings.ToLower(justCharset)))
+				ddl.logger.Warn("not found charset default collation.", log.RedactField(zap.String("originSQL", ddlInfo.originDDL)), zap.String("charset", strings.ToLower(justCharset)))
 				return
 			}
-			ddl.logger.Info("detect create database risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+			ddl.logger.Info("detect create database risk which use explicit charset and implicit collation, we will add collation by INFORMATION_SCHEMA.COLLATIONS", log.RedactField(zap.String("originSQL", ddlInfo.originDDL)), zap.String("collation", collation))
 		} else {
 			// has no charset and collation
 			// add collation by server collation from binlog statusVars
 			collation, err = event.GetServerCollationByStatusVars(statusVars, idAndCollationMap)
 			if err != nil {
-				ddl.logger.Error("can not get charset server collation from binlog statusVars.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
+				ddl.logger.Error("can not get charset server collation from binlog statusVars.", zap.Error(err), log.RedactField(zap.String("originSQL", ddlInfo.originDDL)))
 			}
 			if collation == "" {
-				ddl.logger.Error("get server collation from binlog statusVars is nil.", zap.Error(err), zap.String("originSQL", ddlInfo.originDDL))
+				ddl.logger.Error("get server collation from binlog statusVars is nil.", zap.Error(err), log.RedactField(zap.String("originSQL", ddlInfo.originDDL)))
 				return
 			}
 			// add collation
-			ddl.logger.Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", zap.String("originSQL", ddlInfo.originDDL), zap.String("collation", collation))
+			ddl.logger.Info("detect create database risk which use implicit charset and collation, we will add collation by binlog status_vars", log.RedactField(zap.String("originSQL", ddlInfo.originDDL)), zap.String("collation", collation))
 		}
 		createStmt.Options = append(createStmt.Options, &ast.DatabaseOption{Tp: ast.DatabaseOptionCollate, Value: collation})
 	}

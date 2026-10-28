@@ -80,11 +80,15 @@ func (s *Security) LoadTLSContent() error {
 	return firstErr
 }
 
-// ClearSSLBytesData clear all tls config bytes data.
+// ClearSSLBytesData clears TLS contents in both byte and Base64 representations
+// before displaying configuration. Certificate paths remain available.
 func (s *Security) ClearSSLBytesData() {
 	s.SSLCABytes = s.SSLCABytes[:0]
 	s.SSLKeyBytes = s.SSLKeyBytes[:0]
 	s.SSLCertBytes = s.SSLCertBytes[:0]
+	s.SSLCABase64 = ""
+	s.SSLKeyBase64 = ""
+	s.SSLCertBase64 = ""
 }
 
 // Clone returns a deep copy of Security.
