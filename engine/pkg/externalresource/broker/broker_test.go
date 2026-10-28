@@ -47,8 +47,7 @@ func newBroker(t *testing.T) (*DefaultBroker, *manager.MockClient, string) {
 }
 
 func TestNewBroker(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	c := client.NewMockServerMasterClient(gomock.NewController(t))
 

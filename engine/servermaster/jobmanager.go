@@ -757,7 +757,7 @@ func (jm *JobManagerImpl) OnWorkerOffline(worker framework.WorkerHandle, reason 
 }
 
 // OnWorkerMessage implements frame.MasterImpl.OnWorkerMessage
-func (jm *JobManagerImpl) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message interface{}) error {
+func (jm *JobManagerImpl) OnWorkerMessage(worker framework.WorkerHandle, topic p2p.Topic, message any) error {
 	log.Info("on worker message", zap.Any("id", worker.ID()), zap.Any("topic", topic), zap.Any("message", message))
 	return nil
 }

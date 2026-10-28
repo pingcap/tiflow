@@ -101,7 +101,7 @@ func TestJobOperator(t *testing.T) {
 	err = oper.MarkJobCanceling(ctx, jobID)
 	require.NoError(t, err)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		err = oper.Tick(ctx)
 		require.NoError(t, err)
 		router.checkCancelCalls(t, jobID, i+1)

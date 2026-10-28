@@ -100,7 +100,7 @@ func TestImplHasMember(t *testing.T) {
 	type myImpl struct {
 		MyMember int
 	}
-	type myIface interface{}
+	type myIface any
 
 	var iface myIface = &myImpl{}
 	require.True(t, implHasMember(iface, "MyMember"))
@@ -110,12 +110,12 @@ func TestImplHasMember(t *testing.T) {
 func TestSetImplMember(t *testing.T) {
 	t.Parallel()
 
-	type MyBase interface{}
+	type MyBase any
 
 	type myImpl struct {
 		MyBase
 	}
-	type myImplIface interface{}
+	type myImplIface any
 
 	var iface myImplIface = &myImpl{}
 

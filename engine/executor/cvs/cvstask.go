@@ -72,7 +72,7 @@ func (c *connPool) getConn(addr string) (*grpc.ClientConn, error) {
 	defer c.Unlock()
 	arr, ok := c.pool[addr]
 	if !ok {
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			conn, err := grpc.Dial(addr, grpc.WithInsecure())
 			if err != nil {
 				return nil, err

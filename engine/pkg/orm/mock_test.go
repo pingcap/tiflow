@@ -39,7 +39,7 @@ func TestGenEpochMock(t *testing.T) {
 	defer cancel()
 
 	var epoch int64
-	for j := 0; j < 10; j++ {
+	for range 10 {
 		epoch, err = mock.GenEpoch(ctx)
 		require.NoError(t, err)
 	}
@@ -47,11 +47,11 @@ func TestGenEpochMock(t *testing.T) {
 }
 
 type mCase struct {
-	fn     string        // function name
-	inputs []interface{} // function args
+	fn     string // function name
+	inputs []any  // function args
 
-	output interface{} // function output
-	err    error       // function error
+	output any   // function output
+	err    error // function error
 }
 
 func TestInitializeMock(t *testing.T) {
@@ -74,7 +74,7 @@ func TestProjectMock(t *testing.T) {
 	testCases := []mCase{
 		{
 			fn: "CreateProject",
-			inputs: []interface{}{
+			inputs: []any{
 				&model.ProjectInfo{
 					Model: model.Model{
 						CreatedAt: createdAt,
@@ -87,7 +87,7 @@ func TestProjectMock(t *testing.T) {
 		},
 		{
 			fn: "CreateProject",
-			inputs: []interface{}{
+			inputs: []any{
 				&model.ProjectInfo{
 					Model: model.Model{
 						SeqID:     2,
@@ -101,19 +101,19 @@ func TestProjectMock(t *testing.T) {
 		},
 		{
 			fn: "DeleteProject",
-			inputs: []interface{}{
+			inputs: []any{
 				"p111",
 			},
 		},
 		{
 			fn: "DeleteProject",
-			inputs: []interface{}{
+			inputs: []any{
 				"p114",
 			},
 		},
 		{
 			fn:     "QueryProjects",
-			inputs: []interface{}{},
+			inputs: []any{},
 			output: []*model.ProjectInfo{
 				{
 					// FIXME: ??
@@ -132,7 +132,7 @@ func TestProjectMock(t *testing.T) {
 		{
 			// SELECT * FROM `project_infos` WHERE project_id = '111-222-333' ORDER BY `project_infos`.`id` LIMIT 1
 			fn: "GetProjectByID",
-			inputs: []interface{}{
+			inputs: []any{
 				"p112",
 			},
 			output: &model.ProjectInfo{
@@ -147,7 +147,7 @@ func TestProjectMock(t *testing.T) {
 		},
 		{
 			fn: "GetProjectByID",
-			inputs: []interface{}{
+			inputs: []any{
 				"p113",
 			},
 			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
@@ -173,7 +173,7 @@ func TestProjectOperationMock(t *testing.T) {
 	testCases := []mCase{
 		{
 			fn: "CreateProjectOperation",
-			inputs: []interface{}{
+			inputs: []any{
 				&model.ProjectOperation{
 					ProjectID: "p111",
 					Operation: "Submit",
@@ -184,7 +184,7 @@ func TestProjectOperationMock(t *testing.T) {
 		},
 		{
 			fn: "CreateProjectOperation",
-			inputs: []interface{}{
+			inputs: []any{
 				&model.ProjectOperation{
 					ProjectID: "p111",
 					Operation: "Pause",
@@ -196,7 +196,7 @@ func TestProjectOperationMock(t *testing.T) {
 		{
 			// SELECT * FROM `project_operations` WHERE project_id = '111'
 			fn: "QueryProjectOperations",
-			inputs: []interface{}{
+			inputs: []any{
 				"p111",
 			},
 			output: []*model.ProjectOperation{
@@ -219,7 +219,7 @@ func TestProjectOperationMock(t *testing.T) {
 		{
 			// SELECT * FROM `project_operations` WHERE project_id = '111' AND created_at >= '2022-04-13 23:51:42.46' AND created_at <= '2022-04-13 23:51:42.46'
 			fn: "QueryProjectOperationsByTimeRange",
-			inputs: []interface{}{
+			inputs: []any{
 				"p111",
 				TimeRange{
 					start: tm2,
@@ -256,7 +256,7 @@ func TestJobMock(t *testing.T) {
 	testCases := []mCase{
 		{
 			fn: "UpsertJob",
-			inputs: []interface{}{
+			inputs: []any{
 				&frameModel.MasterMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
@@ -275,7 +275,7 @@ func TestJobMock(t *testing.T) {
 		},
 		{
 			fn: "UpsertJob",
-			inputs: []interface{}{
+			inputs: []any{
 				&frameModel.MasterMeta{
 					ProjectID: "p111",
 					ID:        "j111",
@@ -289,7 +289,7 @@ func TestJobMock(t *testing.T) {
 		},
 		{
 			fn: "DeleteJob",
-			inputs: []interface{}{
+			inputs: []any{
 				"j112",
 			},
 			output: ormResult{
@@ -299,7 +299,7 @@ func TestJobMock(t *testing.T) {
 		{
 			// DELETE FROM `master_meta` WHERE project_id = '111-222-334' AND job_id = '111'
 			fn: "DeleteJob",
-			inputs: []interface{}{
+			inputs: []any{
 				"j113",
 			},
 			output: ormResult{
@@ -309,7 +309,7 @@ func TestJobMock(t *testing.T) {
 		{
 			// SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_id = '111' ORDER BY `master_meta`.`id` LIMIT 1
 			fn: "GetJobByID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 			},
 			output: &frameModel.MasterMeta{
@@ -330,7 +330,7 @@ func TestJobMock(t *testing.T) {
 		},
 		{
 			fn: "GetJobByID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j113",
 			},
 			err: errors.ErrMetaEntryNotFound.GenWithStackByArgs(),
@@ -338,7 +338,7 @@ func TestJobMock(t *testing.T) {
 		{
 			// SELECT * FROM `master_meta` WHERE project_id = '111-222-333'
 			fn: "QueryJobsByProjectID",
-			inputs: []interface{}{
+			inputs: []any{
 				"p111",
 			},
 			output: []*frameModel.MasterMeta{
@@ -361,7 +361,7 @@ func TestJobMock(t *testing.T) {
 		},
 		{
 			fn: "QueryJobsByProjectID",
-			inputs: []interface{}{
+			inputs: []any{
 				"p113",
 			},
 			output: []*frameModel.MasterMeta{},
@@ -369,7 +369,7 @@ func TestJobMock(t *testing.T) {
 		{
 			//  SELECT * FROM `master_meta` WHERE project_id = '111-222-333' AND job_status = 1
 			fn: "QueryJobsByState",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 				2,
 			},
@@ -393,7 +393,7 @@ func TestJobMock(t *testing.T) {
 		},
 		{
 			fn: "QueryJobsByState",
-			inputs: []interface{}{
+			inputs: []any{
 				"j113",
 				1,
 			},
@@ -422,7 +422,7 @@ func TestWorkerMock(t *testing.T) {
 			// `worker_statuses`,`worker_err_msg`,`worker_config`,`id`) VALUES ('2022-04-14 11:35:06.119','2022-04-14 11:35:06.119',
 			// '111-222-333','111','222',1,1,'error','<binary>',1)
 			fn: "UpsertWorker",
-			inputs: []interface{}{
+			inputs: []any{
 				&frameModel.WorkerStatus{
 					Model: model.Model{
 						CreatedAt: createdAt,
@@ -440,7 +440,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			fn: "UpsertWorker",
-			inputs: []interface{}{
+			inputs: []any{
 				&frameModel.WorkerStatus{
 					Model: model.Model{
 						CreatedAt: createdAt,
@@ -458,7 +458,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			fn: "DeleteWorker",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 				"w223",
 			},
@@ -469,7 +469,7 @@ func TestWorkerMock(t *testing.T) {
 		{
 			// DELETE FROM `worker_statuses` WHERE project_id = '111-222-334' AND job_id = '111' AND worker_id = '222'
 			fn: "DeleteWorker",
-			inputs: []interface{}{
+			inputs: []any{
 				"j112",
 				"w224",
 			},
@@ -481,7 +481,7 @@ func TestWorkerMock(t *testing.T) {
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND
 			// worker_id = '222' ORDER BY `worker_statuses`.`id` LIMIT 1
 			fn: "GetWorkerByID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 				"w222",
 			},
@@ -502,7 +502,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			fn: "GetWorkerByID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 				"w225",
 			},
@@ -511,7 +511,7 @@ func TestWorkerMock(t *testing.T) {
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111'
 			fn: "QueryWorkersByMasterID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 			},
 			output: []*frameModel.WorkerStatus{
@@ -533,7 +533,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			fn: "QueryWorkersByMasterID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j113",
 			},
 			output: []*frameModel.WorkerStatus{},
@@ -541,7 +541,7 @@ func TestWorkerMock(t *testing.T) {
 		{
 			// SELECT * FROM `worker_statuses` WHERE project_id = '111-222-333' AND job_id = '111' AND worker_statuses = 1
 			fn: "QueryWorkersByState",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 				1,
 			},
@@ -564,7 +564,7 @@ func TestWorkerMock(t *testing.T) {
 		},
 		{
 			fn: "QueryWorkersByState",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 				4,
 			},
@@ -590,7 +590,7 @@ func TestResourceMock(t *testing.T) {
 	testCases := []mCase{
 		{
 			fn: "UpsertResource",
-			inputs: []interface{}{
+			inputs: []any{
 				&resModel.ResourceMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
@@ -607,7 +607,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "UpsertResource",
-			inputs: []interface{}{
+			inputs: []any{
 				&resModel.ResourceMeta{
 					Model: model.Model{
 						CreatedAt: createdAt,
@@ -624,7 +624,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "DeleteResource",
-			inputs: []interface{}{
+			inputs: []any{
 				ResourceKey{
 					JobID: "j111",
 					ID:    "r334",
@@ -636,7 +636,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "DeleteResource",
-			inputs: []interface{}{
+			inputs: []any{
 				ResourceKey{
 					JobID: "j111",
 					ID:    "r335",
@@ -648,7 +648,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "GetResourceByID",
-			inputs: []interface{}{
+			inputs: []any{
 				ResourceKey{
 					JobID: "j111",
 					ID:    "r333",
@@ -670,7 +670,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "GetResourceByID",
-			inputs: []interface{}{
+			inputs: []any{
 				ResourceKey{
 					JobID: "j111",
 					ID:    "r335",
@@ -680,7 +680,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "QueryResourcesByJobID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j111",
 			},
 			output: []*resModel.ResourceMeta{
@@ -701,14 +701,14 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "QueryResourcesByJobID",
-			inputs: []interface{}{
+			inputs: []any{
 				"j112",
 			},
 			output: []*resModel.ResourceMeta{},
 		},
 		{
 			fn: "QueryResourcesByExecutorIDs",
-			inputs: []interface{}{
+			inputs: []any{
 				engineModel.ExecutorID("e444"),
 			},
 			output: []*resModel.ResourceMeta{
@@ -729,7 +729,7 @@ func TestResourceMock(t *testing.T) {
 		},
 		{
 			fn: "QueryResourcesByExecutorIDs",
-			inputs: []interface{}{
+			inputs: []any{
 				engineModel.ExecutorID("e444"),
 			},
 			output: []*resModel.ResourceMeta{},

@@ -377,10 +377,8 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 	// run task manager
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.NewTicker(50 * time.Millisecond)
 		for {
 			select {
@@ -390,7 +388,7 @@ func (t *testDMJobmasterSuite) TestTaskManager() {
 				taskManager.DoTick(ctx)
 			}
 		}
-	}()
+	})
 
 	syncStatus1 := runtime.TaskStatus{
 		Unit:  frameModel.WorkerDMSync,
