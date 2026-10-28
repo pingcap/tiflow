@@ -1,6 +1,6 @@
 module avro-checksum-sample
 
-go 1.26.9
+go 1.27.3
 
 require (
 	github.com/linkedin/goavro/v2 v2.11.1
