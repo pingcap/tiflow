@@ -184,13 +184,7 @@ func (r *RowChange) TargetTableID() string {
 // TiDB TableInfo contains some internal columns like expression index, they
 // are not included in this count.
 func (r *RowChange) ColumnCount() int {
-	c := 0
-	for _, col := range r.sourceTableInfo.Columns {
-		if !col.Hidden {
-			c++
-		}
-	}
-	return c
+	return VisibleColumnCount(r.sourceTableInfo.Columns)
 }
 
 // SourceTableInfo returns the TableInfo of source table.
@@ -242,15 +236,13 @@ func (r *RowChange) lazyInitWhereHandle() {
 // dmlRowMapping returns DML column/value mapping without initializing the full
 // where handle. CDC insert/update paths can use this without paying the WHERE
 // handle build cost, while DM paths reuse the injected cached handle.
-func (r *RowChange) dmlRowMapping() (rowValueMapper, []*timodel.ColumnInfo) {
+func (r *RowChange) dmlRowMapping() (RowImageLayout, []*timodel.ColumnInfo) {
 	if r.whereHandle != nil {
-		return r.whereHandle.rowMapper, r.whereHandle.writableColumns
+		return r.whereHandle.rowMapper, r.whereHandle.rowMapper.WritableColumns()
 	}
 
-	// Keep this fallback mapping consistent with GetWhereHandle until the row
-	// image mapping is centralized.
-	rowMapper := newRowValueMapper(r.sourceTableInfo.Columns)
-	return rowMapper, writableSourceColumns(rowMapper.visibleColumns, r.targetTableInfo.Columns)
+	layout := NewRowImageLayout(r.sourceTableInfo, r.targetTableInfo)
+	return layout, layout.WritableColumns()
 }
 
 // whereColumnsAndValues returns columns and values to identify the row, to form
