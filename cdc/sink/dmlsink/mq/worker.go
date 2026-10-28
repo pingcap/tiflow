@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/codec"
 	"go.uber.org/zap"
@@ -138,7 +139,7 @@ func (w *worker) nonBatchEncodeRun(ctx context.Context) error {
 				log.Debug("Skip event of stopped table",
 					zap.String("namespace", w.changeFeedID.Namespace),
 					zap.String("changefeed", w.changeFeedID.ID),
-					zap.Any("event", event))
+					logutil.ZapRedactAny("event", event))
 				continue
 			}
 			if err := w.encoderGroup.AddEvents(
@@ -252,7 +253,7 @@ func (w *worker) group(
 		// Skip this event when the table is stopping.
 		if msg.rowEvent.GetTableSinkState() != state.TableSinkSinking {
 			msg.rowEvent.Callback()
-			log.Debug("Skip event of stopped table", zap.Any("event", msg.rowEvent))
+			log.Debug("Skip event of stopped table", logutil.ZapRedactAny("event", msg.rowEvent))
 			continue
 		}
 		if _, ok := groupedMsgs[msg.key]; !ok {

@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
@@ -136,7 +137,7 @@ func (d *drainCaptureScheduler) Schedule(
 				zap.String("namespace", d.changefeedID.Namespace),
 				zap.String("changefeed", d.changefeedID.ID),
 				zap.String("target", d.target),
-				zap.Any("replication", rep))
+				logutil.ZapRedactAny("replication", rep))
 			skipDrain = true
 			return false
 		}
