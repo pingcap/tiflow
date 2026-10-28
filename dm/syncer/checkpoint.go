@@ -1030,109 +1030,71 @@ func (cp *RemoteCheckPoint) Load(tctx *tcontext.Context) error {
 	cp.Lock()
 	defer cp.Unlock()
 
-	query := `SELECT cp_schema, cp_table, binlog_name, binlog_pos, binlog_gtid, exit_safe_binlog_name, exit_safe_binlog_pos, exit_safe_binlog_gtid, table_info, is_global FROM ` + cp.tableName + ` WHERE id = ?`
-	rows, err := cp.dbConn.QuerySQL(tctx, cp.metricProxies, query, cp.id)
-	defer func() {
-		if rows != nil {
-			rows.Close()
-		}
-	}()
-
-	failpoint.Inject("LoadCheckpointFailed", func(val failpoint.Value) {
-		err = tmysql.NewErr(uint16(val.(int)))
-		log.L().Warn("Load failed", zap.String("failpoint", "LoadCheckpointFailed"), zap.Error(err))
-	})
-
-	if err != nil {
-		return terror.WithScope(err, terror.ScopeDownstream)
+	query := func(query string, args ...interface{}) (*sql.Rows, error) {
+		rows, err := cp.dbConn.QuerySQL(tctx, cp.metricProxies, query, args...)
+		failpoint.Inject("LoadCheckpointFailed", func(val failpoint.Value) {
+			err = tmysql.NewErr(uint16(val.(int)))
+			log.L().Warn("Load failed", zap.String("failpoint", "LoadCheckpointFailed"), zap.Error(err))
+		})
+		return rows, err
 	}
+	// Checkpoints in DB have higher priority; remove-meta clears them before loading.
+	return cputil.LoadSyncerCheckpoint(query, cp.tableName, cp.id, cp.cfg.Flavor, true,
+		func(row cputil.SyncerCheckpointRow) error {
+			location := row.Location
+			if row.IsGlobal {
+				// Use IsFreshPosition here to make sure checkpoint can be updated if gset is empty
+				if !binlog.IsFreshPosition(location, cp.cfg.Flavor, cp.cfg.EnableGTID) {
+					cp.globalPoint = newBinlogPoint(location, location, nil, nil, cp.cfg.EnableGTID)
+					cp.logCtx.L().Info("fetch global checkpoint from DB", log.WrapStringerField("global checkpoint", cp.globalPoint))
+				}
 
-	// checkpoints in DB have higher priority
-	// if don't want to use checkpoint in DB, set `remove-meta` to `true`
-	var (
-		cpSchema              string
-		cpTable               string
-		binlogName            string
-		binlogPos             uint32
-		binlogGTIDSet         sql.NullString
-		exitSafeBinlogName    string
-		exitSafeBinlogPos     uint32
-		exitSafeBinlogGTIDSet sql.NullString
-		tiBytes               []byte
-		isGlobal              bool
-	)
-	for rows.Next() {
-		err := rows.Scan(&cpSchema, &cpTable, &binlogName, &binlogPos, &binlogGTIDSet, &exitSafeBinlogName, &exitSafeBinlogPos, &exitSafeBinlogGTIDSet, &tiBytes, &isGlobal)
-		if err != nil {
-			return terror.DBErrorAdapt(err, cp.dbConn.Scope(), terror.ErrDBDriverError)
-		}
-
-		gset, err := gtid.ParserGTID(cp.cfg.Flavor, binlogGTIDSet.String) // default to "".
-		if err != nil {
-			return err
-		}
-
-		location := binlog.NewLocation(
-			mysql.Position{
-				Name: binlogName,
-				Pos:  binlogPos,
-			},
-			gset,
-		)
-		if isGlobal {
-			// Use IsFreshPosition here to make sure checkpoint can be updated if gset is empty
-			if !binlog.IsFreshPosition(location, cp.cfg.Flavor, cp.cfg.EnableGTID) {
-				cp.globalPoint = newBinlogPoint(location, location, nil, nil, cp.cfg.EnableGTID)
-				cp.logCtx.L().Info("fetch global checkpoint from DB", log.WrapStringerField("global checkpoint", cp.globalPoint))
+				if cp.cfg.EnableGTID {
+					// gtid set default is "", but upgrade may cause NULL value
+					if row.ExitSafeBinlogGTID.Valid && row.ExitSafeBinlogGTID.String != "" {
+						gset2, err2 := gtid.ParserGTID(cp.cfg.Flavor, row.ExitSafeBinlogGTID.String)
+						if err2 != nil {
+							return err2
+						}
+						exitSafeModeLoc := binlog.NewLocation(
+							mysql.Position{
+								Name: row.ExitSafeBinlogName,
+								Pos:  row.ExitSafeBinlogPos,
+							},
+							gset2,
+						)
+						cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
+					} // TODO: we forget to handle else...
+				} else {
+					if row.ExitSafeBinlogName != "" {
+						exitSafeModeLoc := binlog.Location{
+							Position: mysql.Position{
+								Name: row.ExitSafeBinlogName,
+								Pos:  row.ExitSafeBinlogPos,
+							},
+						}
+						cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
+					}
+				}
+				return nil // skip global checkpoint
 			}
 
-			if cp.cfg.EnableGTID {
-				// gtid set default is "", but upgrade may cause NULL value
-				if exitSafeBinlogGTIDSet.Valid && exitSafeBinlogGTIDSet.String != "" {
-					gset2, err2 := gtid.ParserGTID(cp.cfg.Flavor, exitSafeBinlogGTIDSet.String)
-					if err2 != nil {
-						return err2
-					}
-					exitSafeModeLoc := binlog.NewLocation(
-						mysql.Position{
-							Name: exitSafeBinlogName,
-							Pos:  exitSafeBinlogPos,
-						},
-						gset2,
-					)
-					cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
-				} // TODO: we forget to handle else...
-			} else {
-				if exitSafeBinlogName != "" {
-					exitSafeModeLoc := binlog.Location{
-						Position: mysql.Position{
-							Name: exitSafeBinlogName,
-							Pos:  exitSafeBinlogPos,
-						},
-					}
-					cp.SaveSafeModeExitPoint(&exitSafeModeLoc)
+			var ti *model.TableInfo
+			if !bytes.Equal(row.TableInfo, []byte("null")) {
+				// only create table if `table_info` is not `null`.
+				if err := json.Unmarshal(row.TableInfo, &ti); err != nil {
+					return terror.ErrSchemaTrackerInvalidJSON.Delegate(err, row.Schema, row.Table)
 				}
 			}
-			continue // skip global checkpoint
-		}
 
-		var ti *model.TableInfo
-		if !bytes.Equal(tiBytes, []byte("null")) {
-			// only create table if `table_info` is not `null`.
-			if err = json.Unmarshal(tiBytes, &ti); err != nil {
-				return terror.ErrSchemaTrackerInvalidJSON.Delegate(err, cpSchema, cpTable)
+			mSchema, ok := cp.points[row.Schema]
+			if !ok {
+				mSchema = make(map[string]*binlogPoint)
+				cp.points[row.Schema] = mSchema
 			}
-		}
-
-		mSchema, ok := cp.points[cpSchema]
-		if !ok {
-			mSchema = make(map[string]*binlogPoint)
-			cp.points[cpSchema] = mSchema
-		}
-		mSchema[cpTable] = newBinlogPoint(location, location, ti, ti, cp.cfg.EnableGTID)
-	}
-
-	return terror.DBErrorAdapt(rows.Err(), cp.dbConn.Scope(), terror.ErrDBDriverError)
+			mSchema[row.Table] = newBinlogPoint(location, location, ti, ti, cp.cfg.EnableGTID)
+			return nil
+		})
 }
 
 // LoadIntoSchemaTracker loads table infos of all points into schema tracker.

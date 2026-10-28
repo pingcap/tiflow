@@ -147,7 +147,7 @@ func (t *testDMJobmasterSuite) TestRunDMJobMaster() {
 	mockDB.ExpectExec(".*").WillReturnResult(sqlmock.NewResult(1, 1))
 	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
 	mockDB.ExpectQuery("SHOW DATABASES").WillReturnRows(sqlmock.NewRows([]string{"Database"}))
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64, _ ...checker.Option) (string, error) {
 		return "check pass", nil
 	}
 	require.NoError(t.T(), jobmaster.Init(context.Background()))
@@ -212,7 +212,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 		AddRow("version", "5.7.25-TiDB-v6.1.0"))
 	precheckError := errors.New("precheck error")
 	exitError := errors.New("exit error")
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64, _ ...checker.Option) (string, error) {
 		return "", precheckError
 	}
 	mockBaseJobmaster.On("MetaKVClient").Return(metaKVClient)
@@ -234,7 +234,7 @@ func (t *testDMJobmasterSuite) TestDMJobmaster() {
 	require.EqualError(t.T(), jm.InitImpl(context.Background()), exitError.Error())
 
 	jm.initJobCfg.TaskMode = dmconfig.ModeAll
-	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64) (string, error) {
+	checker.CheckSyncConfigFunc = func(_ context.Context, _ []*dmconfig.SubTaskConfig, _, _ int64, _ ...checker.Option) (string, error) {
 		return "check pass", nil
 	}
 	verDB = conn.InitVersionDB()
