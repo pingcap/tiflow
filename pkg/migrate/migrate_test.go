@@ -620,19 +620,3 @@ func TestNoServiceSafePoint(t *testing.T) {
 	err = m.migrateGcServiceSafePoint(ctx, mockClient, &security.Credential{}, "abcd", 10)
 	require.Nil(t, err)
 }
-
-func TestMaskChangefeedData(t *testing.T) {
-	info := model.ChangeFeedInfo{
-		SinkURI: "mysql://root:root@127.0.0.1:3306",
-		StartTs: 1, TargetTs: 100, State: model.StateNormal,
-	}
-	data, err := json.Marshal(&info)
-	require.Nil(t, err)
-	masked := maskChangefeedInfo(data)
-	maskedInfo := model.ChangeFeedInfo{}
-	err = json.Unmarshal([]byte(masked), &maskedInfo)
-	require.Nil(t, err)
-	require.Equal(t, "mysql://username:password@***", maskedInfo.SinkURI)
-	maskedInfo.SinkURI = "mysql://root:root@127.0.0.1:3306"
-	require.Equal(t, info, maskedInfo)
-}

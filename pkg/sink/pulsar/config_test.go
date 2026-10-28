@@ -21,9 +21,37 @@ import (
 
 	"github.com/apache/pulsar-client-go/pulsar"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
+
+func TestNewPulsarConfigDoesNotLogCredentials(t *testing.T) {
+	_, props, err := log.InitLogger(&log.Config{Level: "debug"})
+	require.NoError(t, err)
+	core, observed := observer.New(zapcore.DebugLevel)
+	restore := log.ReplaceGlobals(zap.New(core), props)
+	defer restore()
+
+	sink, err := url.Parse("pulsar://user:uri-password@localhost:6650/test?token=uri-token")
+	require.NoError(t, err)
+	cfg := &config.PulsarConfig{
+		BasicPassword:       aws.String("basic-password"),
+		AuthenticationToken: aws.String("auth-token"),
+		OAuth2:              &config.OAuth2{OAuth2PrivateKey: "private-key"},
+	}
+	_, err = NewPulsarConfig(sink, cfg)
+	require.NoError(t, err)
+
+	logs := fmt.Sprint(observed.All())
+	for _, secret := range []string{"uri-password", "uri-token", "basic-password", "auth-token", "private-key"} {
+		assert.NotContains(t, logs, secret)
+	}
+}
 
 func TestPulsarConfig(t *testing.T) {
 	p := &config.PulsarConfig{

@@ -313,7 +313,7 @@ func NewBaseMaster(
 		metaBytes := ctx.Environ.MasterMetaBytes
 		err := errors.Trace(masterMeta.Unmarshal(metaBytes))
 		if err != nil {
-			log.Warn("invalid master meta", zap.ByteString("data", metaBytes), zap.Error(err))
+			log.Warn("invalid master meta", zap.Error(err))
 		}
 	}
 
@@ -691,7 +691,6 @@ func (m *DefaultBaseMaster) CreateWorker(
 ) (frameModel.WorkerID, error) {
 	m.Logger().Info("CreateWorker",
 		zap.Stringer("worker-type", workerType),
-		zap.Any("worker-config", config),
 		zap.String("master-id", m.id))
 
 	rawConfig, workerID, err := m.PrepareWorkerConfig(workerType, config)

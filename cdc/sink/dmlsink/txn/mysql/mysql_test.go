@@ -415,6 +415,74 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	require.Nil(t, sink.Close())
 }
 
+func TestDMLLogsDoNotIncludeRowValues(t *testing.T) {
+	const secret = "sensitive-row-value"
+	core, logs := observer.New(zap.DebugLevel)
+	_, props, err := log.InitLogger(&log.Config{Level: "debug"})
+	require.NoError(t, err)
+	restore := log.ReplaceGlobals(zap.New(core), props)
+	defer restore()
+
+	for _, multiStmt := range []bool{true, false} {
+		name := "sequence"
+		if multiStmt {
+			name = "multi-statement"
+		}
+		t.Run(name, func(t *testing.T) {
+			logs.TakeAll()
+			dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
+			dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
+				db, mock := newTestMockDB(t)
+				mock.ExpectBegin()
+				mock.ExpectExec("INSERT INTO `s1`.`t1` (`id`,`secret`) VALUES (?,?)").
+					WithArgs(1, secret).
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+				mock.ExpectClose()
+				return db, nil
+			})
+
+			sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?worker-count=1&cache-prep-stmts=false")
+			require.NoError(t, err)
+			backend, err := newMySQLBackend(context.Background(), model.DefaultChangeFeedID("test-changefeed"),
+				sinkURI, config.GetDefaultReplicaConfig(), dbConnFactory)
+			require.NoError(t, err)
+			backend.cfg.MultiStmtEnable = multiStmt
+
+			tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
+				{Name: "id", Type: mysql.TypeLong, Flag: model.HandleKeyFlag | model.PrimaryKeyFlag},
+				{Name: "secret", Type: mysql.TypeVarchar},
+			}, [][]int{{0}})
+			row := &model.RowChangedEvent{
+				StartTs: 1, CommitTs: 2, TableInfo: tableInfo,
+				Columns: model.Columns2ColumnDatas([]*model.Column{
+					{Name: "id", Value: 1}, {Name: "secret", Value: secret},
+				}, tableInfo),
+			}
+			backend.OnTxnEvent(&dmlsink.TxnCallbackableEvent{Event: &model.SingleTableTxn{Rows: []*model.RowChangedEvent{row}}})
+			require.NoError(t, backend.Flush(context.Background()))
+			require.NoError(t, backend.Close())
+
+			entries := logs.All()
+			require.Equal(t, 1, logs.FilterMessage("prepare DMLs").Len())
+			require.Equal(t, 1, logs.FilterMessage("exec row").Len())
+			require.Contains(t, fmt.Sprint(logs.FilterMessage("prepare DMLs").All()), "VALUES (?,?)")
+			require.NotContains(t, fmt.Sprint(entries), secret)
+		})
+	}
+
+	logs.TakeAll()
+	backend := newMySQLBackendWithoutDB()
+	backend.changefeed = "test-changefeed"
+	err = backend.execDMLWithMaxRetries(context.Background(), &preparedDMLs{
+		sqls:   []string{"INSERT INTO `s1`.`t1` (`secret`) VALUES (?)"},
+		values: [][]interface{}{{secret}, {secret}},
+	})
+	require.Error(t, err)
+	require.Equal(t, 1, logs.FilterMessage("unexpected number of sqls and values").Len())
+	require.NotContains(t, fmt.Sprint(logs.All()), secret)
+}
+
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{

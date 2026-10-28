@@ -28,6 +28,7 @@ import (
 	cmdconetxt "github.com/pingcap/tiflow/pkg/cmd/context"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/logutil"
+	uriutil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"golang.org/x/net/http/httpproxy"
@@ -104,10 +105,10 @@ func findProxyFields() []zap.Field {
 	proxyCfg := httpproxy.FromEnvironment()
 	fields := make([]zap.Field, 0, 3)
 	if proxyCfg.HTTPProxy != "" {
-		fields = append(fields, zap.String("http_proxy", proxyCfg.HTTPProxy))
+		fields = append(fields, zap.String("http_proxy", uriutil.MaskSensitiveDataInURIForError(proxyCfg.HTTPProxy)))
 	}
 	if proxyCfg.HTTPSProxy != "" {
-		fields = append(fields, zap.String("https_proxy", proxyCfg.HTTPSProxy))
+		fields = append(fields, zap.String("https_proxy", uriutil.MaskSensitiveDataInURIForError(proxyCfg.HTTPSProxy)))
 	}
 	if proxyCfg.NoProxy != "" {
 		fields = append(fields, zap.String("no_proxy", proxyCfg.NoProxy))

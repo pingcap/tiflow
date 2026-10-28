@@ -225,8 +225,8 @@ func (s *mysqlBackend) Flush(ctx context.Context) (err error) {
 	}
 
 	dmls := s.prepareDMLs()
-	log.Debug("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Any("rows", s.rows),
-		zap.Strings("sqls", dmls.sqls), zap.Any("values", dmls.values))
+	log.Debug("prepare DMLs", zap.String("changefeed", s.changefeed), zap.Int("rows", s.rows),
+		zap.Strings("sqls", dmls.sqls))
 
 	start := time.Now()
 	if err := s.execDMLWithMaxRetries(ctx, dmls); err != nil {
@@ -636,7 +636,7 @@ func (s *mysqlBackend) multiStmtExecute(
 	multiStmtSQL := strings.Join(dmls.sqls, ";")
 
 	log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
-		zap.String("sql", multiStmtSQL), zap.Any("args", multiStmtArgs))
+		zap.String("sql", multiStmtSQL))
 	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	start := time.Now()
@@ -663,7 +663,7 @@ func (s *mysqlBackend) sequenceExecute(
 	for i, query := range dmls.sqls {
 		args := dmls.values[i]
 		log.Debug("exec row", zap.String("changefeed", s.changefeed), zap.Int("workerID", s.workerID),
-			zap.String("sql", query), zap.Any("args", args))
+			zap.String("sql", query))
 		ctx, cancelFunc := context.WithTimeout(ctx, writeTimeout)
 
 		var prepStmt *sql.Stmt
@@ -709,8 +709,8 @@ func (s *mysqlBackend) execDMLWithMaxRetries(pctx context.Context, dmls *prepare
 	if len(dmls.sqls) != len(dmls.values) {
 		log.Error("unexpected number of sqls and values",
 			zap.String("changefeed", s.changefeed),
-			zap.Strings("sqls", dmls.sqls),
-			zap.Any("values", dmls.values))
+			zap.Int("sqlCount", len(dmls.sqls)),
+			zap.Int("valuesCount", len(dmls.values)))
 		return cerror.ErrUnexpected.FastGenByArgs("unexpected number of sqls and values")
 	}
 
