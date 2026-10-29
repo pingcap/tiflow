@@ -37,3 +37,7 @@ insert into t_extract(j)values ('"string"');
 insert into t_extract(j)values ('1');
 insert into t_extract(j)values ('3.14');
 insert into t_extract(j)values ('{"a":1, "b": {"a":1}, "c": "string"}');
+
+insert into t_json_double values (2, '{"amount": 2500.0, "pct": 15.0, "zero": 0.0, "rate": 12.5, "qty": 3, "arr": [1.0, 2.5, 7]}');
+-- the row loaded in the full phase is rewritten by binlog replication
+update t_json_double set doc = json_set(doc, '$.pct', 20.0e0) where id = 1;
