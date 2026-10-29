@@ -261,6 +261,26 @@ func (s *testLocationSuite) generateExpectedLocations(
 	return expected
 }
 
+// Heartbeats only describe the stream position; they do not advance a
+// transaction checkpoint, whether the parser returns a typed or raw event.
+func (s *testLocationSuite) TestHeartbeatDoesNotAdvanceLocation() {
+	for _, tp := range []replication.EventType{replication.HEARTBEAT_EVENT, replication.HEARTBEAT_LOG_EVENT_V2} {
+		for _, body := range []replication.Event{&replication.GenericEvent{}, &replication.HeartbeatEvent{}} {
+			r := newLocationRecorder()
+			r.reset(s.loc)
+			e := &replication.BinlogEvent{
+				Header: &replication.EventHeader{EventType: tp, EventSize: 100, LogPos: s.loc.Position.Pos + 100},
+				Event:  body,
+			}
+			s.Require().False(shouldUpdatePos(e))
+			r.update(e)
+			s.Require().Equal(s.loc, r.curStartLocation)
+			s.Require().Equal(s.loc, r.curEndLocation)
+			s.Require().Equal(s.loc, r.txnEndLocation)
+		}
+	}
+}
+
 func (s *testLocationSuite) TestDMLUpdateLocationsGTID() {
 	events := s.generateDMLEvents()
 
