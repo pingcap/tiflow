@@ -17,7 +17,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/syncer/metrics"
 	"go.uber.org/zap"
@@ -49,7 +48,6 @@ type causality struct {
 	outCh       chan *job
 	inCh        chan *job
 	logger      log.Logger
-	sessCtx     sessionctx.Context
 	workerCount int
 
 	// for MetricsProxies
@@ -68,7 +66,6 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 		logger:        syncer.tctx.Logger.WithFields(zap.String("component", "causality")),
 		inCh:          inCh,
 		outCh:         make(chan *job, syncer.cfg.QueueSize),
-		sessCtx:       syncer.causalityCtx,
 		workerCount:   syncer.cfg.WorkerCount,
 	}
 
@@ -80,18 +77,13 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 	return causality.outCh
 }
 
-// keyPipeline has one preparation worker, independent of downstream I/O concurrency.
-func (c *causality) keyPipeline() *causalityKeyPipeline {
-	return newCausalityKeyPipeline(c.inCh, c.sessCtx)
-}
-
 // run receives dml jobs and send causality jobs by adding causality key.
 // When meet conflict, sends a conflict job.
 func (c *causality) run() {
 	// These labels are constant for this pipeline lifetime. Keep updates per row,
 	// but do not re-hash labels and look up the same gauge on every row.
 	inputQueueSize := c.metricProxies.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source)
-	pipeline := c.keyPipeline()
+	pipeline := newCausalityKeyPipeline(c.inCh)
 	for prepared := range pipeline.ordered {
 		j := prepared.job
 		inputQueueSize.Set(float64(len(c.inCh)))

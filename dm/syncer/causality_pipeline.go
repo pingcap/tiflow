@@ -17,10 +17,6 @@ package syncer
 import (
 	"sync"
 	"time"
-
-	"github.com/pingcap/tidb/pkg/sessionctx"
-	"github.com/pingcap/tiflow/dm/pkg/utils"
-	"github.com/pingcap/tiflow/pkg/sqlmodel"
 )
 
 // Allow at most 384 rows across the result channel and the two processing
@@ -36,15 +32,15 @@ type preparedCausalityJob struct {
 
 // causalityKeyPipeline prepares keys with one worker and publishes each row
 // directly. The single producer preserves input order, including barriers, so
-// no per-batch completion notification or reorder queue is needed.
+// no per-batch completion notification or reorder queue is needed. Key evaluation
+// uses the original RowChange context and expressions, as in the serial path.
 type causalityKeyPipeline struct {
 	ordered chan preparedCausalityJob
 	wg      sync.WaitGroup
 }
 
-func newCausalityKeyPipeline(in <-chan *job, ctx sessionctx.Context) *causalityKeyPipeline {
+func newCausalityKeyPipeline(in <-chan *job) *causalityKeyPipeline {
 	p := &causalityKeyPipeline{ordered: make(chan preparedCausalityJob, causalityRowQueueSize)}
-	generator := sqlmodel.NewCausalityKeyGenerator(privateCausalityContext(ctx))
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
@@ -53,30 +49,11 @@ func newCausalityKeyPipeline(in <-chan *job, ctx sessionctx.Context) *causalityK
 			prepared := preparedCausalityJob{job: j}
 			if j.tp == dml {
 				start := time.Now()
-				prepared.keys = generator.Keys(j.dml)
+				prepared.keys = j.dml.CausalityKeys()
 				prepared.keyTime = time.Since(start)
 			}
-			// No schema/expression references survive into the next row.
-			generator.Reset()
 			p.ordered <- prepared
 		}
 	}()
 	return p
-}
-
-// Type conversion can update statement state, so every worker uses its own
-// context. Copy the fixed apply settings, not mutable session/statement objects.
-func privateCausalityContext(source sessionctx.Context) sessionctx.Context {
-	if source == nil {
-		return utils.NewSessionCtx(nil)
-	}
-	vars := source.GetSessionVars()
-	mode, _ := vars.GetSystemVar("sql_mode")
-	charset, collation := vars.GetCharsetInfo()
-	ctx := utils.NewSessionCtx(map[string]string{
-		"sql_mode": mode, "character_set_connection": charset, "collation_connection": collation,
-	})
-	ctx.GetSessionVars().TimeZone = vars.Location()
-	ctx.GetSessionVars().StmtCtx.SetTimeZone(vars.Location())
-	return ctx
 }

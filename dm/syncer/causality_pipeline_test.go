@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/go-mysql-org/go-mysql/replication"
+	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	cdcmodel "github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/dm/config"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -116,9 +117,64 @@ func TestCausalityPipelineOrderAndBarriers(t *testing.T) {
 	}
 }
 
+// Keep key semantics covered at the pipeline boundary, rather than testing a
+// separate generator. Each schema has a cold, shared handle in the pipeline;
+// the serial oracle uses independent handles so it cannot warm that cache.
+func TestCausalityPipelineKeysAndSchemaChange(t *testing.T) {
+	parent := mockTableInfo(t, "CREATE TABLE p(id INT PRIMARY KEY)")
+	source := &cdcmodel.TableName{Schema: "DB", Table: "Child"}
+	canonical := &cdcmodel.TableName{Schema: "db", Table: "child"}
+	ctx := utils.NewSessionCtx(map[string]string{"time_zone": "+08:00", "sql_mode": "STRICT_ALL_TABLES"})
+	var jobs []*job
+	var want [][]string
+	for _, schema := range []string{
+		"CREATE TABLE c(id INT PRIMARY KEY, p INT, s VARCHAR(64), UNIQUE KEY u(s(3))) CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci",
+		"CREATE TABLE c(id INT PRIMARY KEY, p INT, s VARCHAR(64), UNIQUE KEY u((lower(s))))",
+		"CREATE TABLE c(id INT, p INT, s VARCHAR(64))",
+	} {
+		ti := mockTableInfo(t, schema)
+		handle := sqlmodel.GetWhereHandle(ti, ti)
+		for _, value := range []any{nil, "AbCdEF", "中文字符"} {
+			for _, images := range [][2][]any{
+				{nil, {1, 10, value}},
+				{{1, 10, value}, {2, nil, value}},
+				{{1, 10, value}, nil},
+			} {
+				makeRow := func() *sqlmodel.RowChange {
+					row := sqlmodel.NewRowChange(source, nil, images[0], images[1], ti, nil, ctx)
+					row.SetCausalityKeySourceTable(canonical)
+					row.SetForeignKeyRelations([]sqlmodel.ForeignKeyCausalityRelation{{ParentTable: "db.p", ParentColumns: []*timodel.ColumnInfo{parent.Columns[0]}, ChildColumnIdx: []int{1}}})
+					return row
+				}
+				row := makeRow()
+				row.SetWhereHandle(handle)
+				jobs = append(jobs, &job{tp: dml, dml: row})
+				keys := makeRow().CausalityKeys()
+				require.Contains(t, keys, "10.id.db.p")
+				want = append(want, keys)
+			}
+		}
+	}
+	input := make(chan *job, len(jobs))
+	for _, j := range jobs {
+		input <- j
+	}
+	close(input)
+	p := newCausalityKeyPipeline(input)
+	count := 0
+	for prepared := range p.ordered {
+		require.Less(t, count, len(jobs))
+		require.Same(t, jobs[count], prepared.job)
+		require.Equal(t, want[count], prepared.keys)
+		count++
+	}
+	p.wg.Wait()
+	require.Equal(t, len(jobs), count)
+}
+
 func TestCausalityPipelineBoundAndClose(t *testing.T) {
 	input := make(chan *job)
-	p := newCausalityKeyPipeline(input, nil)
+	p := newCausalityKeyPipeline(input)
 	// Fill the result queue and leave one row held by the preparation worker.
 	for i := 0; i < causalityRowQueueSize+1; i++ {
 		input <- &job{tp: flush}
@@ -149,7 +205,7 @@ func TestCausalityPipelineSparseAndOversized(t *testing.T) {
 	table := &cdcmodel.TableName{Schema: "db", Table: "t"}
 	for _, size := range []uint32{0, 4 << 20} {
 		input := make(chan *job)
-		p := newCausalityKeyPipeline(input, nil)
+		p := newCausalityKeyPipeline(input)
 		j := &job{tp: dml, dml: sqlmodel.NewRowChange(table, nil, nil, []any{1}, ti, nil, nil), eventHeader: &replication.EventHeader{EventSize: size}}
 		input <- j
 		// No second row, input close, or timer should be needed to publish this row.
@@ -167,23 +223,10 @@ func TestCausalityPipelineSparseAndOversized(t *testing.T) {
 	}
 	input := make(chan *job)
 	close(input)
-	p := newCausalityKeyPipeline(input, nil)
+	p := newCausalityKeyPipeline(input)
 	_, ok := <-p.ordered
 	require.False(t, ok)
 	p.wg.Wait()
-}
-
-func TestPrivateCausalityContext(t *testing.T) {
-	source := utils.NewSessionCtx(map[string]string{"time_zone": "+08:00", "sql_mode": "STRICT_ALL_TABLES,NO_ZERO_DATE", "character_set_connection": "utf8mb4", "collation_connection": "utf8mb4_bin"})
-	c := privateCausalityContext(source)
-	require.NotSame(t, source.GetSessionVars(), c.GetSessionVars())
-	require.NotSame(t, source.GetSessionVars().StmtCtx, c.GetSessionVars().StmtCtx)
-	require.Equal(t, source.GetSessionVars().Location(), c.GetSessionVars().Location())
-	require.Equal(t, source.GetSessionVars().SQLMode, c.GetSessionVars().SQLMode)
-	a, b := source.GetSessionVars().GetCharsetInfo()
-	x, y := c.GetSessionVars().GetCharsetInfo()
-	require.Equal(t, a, x)
-	require.Equal(t, b, y)
 }
 
 // The pre-pipeline two-pass algorithm is retained only as a test oracle.
@@ -299,19 +342,6 @@ func TestCausalityPipelineDrainAfterApplyError(t *testing.T) {
 		case <-timeout:
 			t.Fatal("pipeline did not drain after apply errors")
 		}
-	}
-}
-
-func TestCausalityKeyPipelineIndependentOfDMLWorkers(t *testing.T) {
-	for _, downstreamWorkers := range []int{1, 4, 512} {
-		input := make(chan *job)
-		close(input)
-		c := &causality{inCh: input, workerCount: downstreamWorkers}
-		p := c.keyPipeline()
-		require.Equal(t, causalityRowQueueSize, cap(p.ordered))
-		_, ok := <-p.ordered
-		require.False(t, ok)
-		p.wg.Wait()
 	}
 }
 
