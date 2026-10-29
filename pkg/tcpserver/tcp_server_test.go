@@ -322,6 +322,9 @@ func TestTcpServerClose(t *testing.T) {
 	}()
 
 	httpServer := &http.Server{}
+	defer func() {
+		require.NoError(t, httpServer.Close())
+	}()
 	http.HandleFunc("/", func(writer http.ResponseWriter, _ *http.Request) {
 		writer.WriteHeader(200)
 		_, err := writer.Write([]byte("ok"))

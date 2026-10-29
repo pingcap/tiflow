@@ -22,6 +22,7 @@ PROJECT=tiflow
 P=3
 
 FAIL_ON_STDOUT := awk '{ print } END { if (NR > 0) { exit 1  }  }'
+GOLANGCI_LINT_BASE ?= $(if $(PULL_BASE_SHA),$(PULL_BASE_SHA),origin/release-8.5)
 
 CURDIR := $(shell pwd)
 path_to_add := $(addsuffix /bin,$(subst :,/bin:,$(GOPATH)))
@@ -341,8 +342,8 @@ tidy:
 
 # TODO: Unified cdc and dm config.
 check-static: tools/bin/golangci-lint
-	tools/bin/golangci-lint run --timeout 10m0s --exclude-dirs "^dm/","^tests/"
-	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s
+	tools/bin/golangci-lint run --timeout 10m0s --new-from-merge-base $(GOLANGCI_LINT_BASE)
+	cd dm && ../tools/bin/golangci-lint run --timeout 10m0s --new-from-merge-base $(GOLANGCI_LINT_BASE)
 
 check: check-copyright generate_mock go-generate fmt check-static tidy terror_check errdoc \
 	check-merge-conflicts check-ticdc-dashboard check-diff-line-width check-makefiles \

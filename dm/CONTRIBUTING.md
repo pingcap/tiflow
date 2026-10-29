@@ -16,7 +16,7 @@ See [Step by Step Contribute Example](step_by_step_contribute.md) for a more det
 
 Developing DM requires:
 
-* [Go 1.26.9+](http://golang.org/doc/code.html)
+* [Go 1.27.3+](http://golang.org/doc/code.html)
 * An internet connection to download the dependencies
 
 Simply run `make` to build the program.

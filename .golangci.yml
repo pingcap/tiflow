@@ -1,117 +1,115 @@
+version: "2"
 run:
-  go: "1.26.9"
+  go: 1.27.3
   build-tags:
     - intest
 linters:
-  # temp disable errcheck because of panic of lint check with go 1.23.
-  disable-all: true
+  default: none
   enable:
-    - unconvert
-    - unparam
-    - revive
-    - depguard
-    - misspell
-    - ineffassign
-    - typecheck
-    - unused
-    - gosimple
-    #- errcheck
-    - staticcheck
-    - stylecheck
-    - gosec
     - asciicheck
+    - bodyclose
     - copyloopvar
+    - depguard
+    - gosec
+    - ineffassign
     - makezero
-    - tparallel
+    - misspell
+    - noctx
+    - revive
     - rowserrcheck
     - sqlclosecheck
-    - noctx
-    - bodyclose
-    - misspell
-
-linters-settings:
-  revive:
-    ignore-generated-header: false
-    severity: error
-    confidence: 0.8
-    error-code: -1
-    warning-code: -1
+    - staticcheck
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+  settings:
+    depguard:
+      rules:
+        main:
+          files:
+            - $all
+          deny:
+            - pkg: github.com/juju/errors
+              desc: error handling is allowed only by pingcap/errors
+    gosec:
+      excludes:
+        - G404
+        - G601
+        - G108
+        - G114
+        - G115
+        - G201
+        - G202
+        - G401
+        - G501
+    revive:
+      confidence: 0.8
+      severity: error
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: var-naming
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: modifies-parameter
+        - name: unreachable-code
+    staticcheck:
+      checks:
+        - -SA2002
+        - -ST1003
+        - S1002
+        - S1004
+        - S1007
+        - S1009
+        - S1010
+        - S1012
+        - S1019
+        - S1020
+        - S1021
+        - S1024
+        - S1030
+        - SA2*
+        - SA3*
+        - SA4009
+        - SA5*
+        - SA6000
+        - SA6001
+        - SA6005
+  exclusions:
+    generated: lax
+    presets:
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: var-naming
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-      - name: superfluous-else
-      - name: modifies-parameter
-      - name: unreachable-code
-
-  depguard:
-    rules:
-      main:
-        files:
-          - $all
-        deny:
-          - pkg: "github.com/juju/errors"
-            desc: error handling is allowed only by pingcap/errors
-  staticcheck:
-    checks:
-      [
-        "S1002",
-        "S1004",
-        "S1007",
-        "S1009",
-        "S1010",
-        "S1012",
-        "S1019",
-        "S1020",
-        "S1021",
-        "S1024",
-        "S1030",
-        "SA2*",
-        "SA3*",
-        "SA4009",
-        "SA5*",
-        "SA6000",
-        "SA6001",
-        "SA6005",
-        "-SA2002",
-      ]
-  stylecheck:
-    checks: ["-ST1003"]
-  gosec:
-    # exclude G115, G202 check, when upgrade go 1.23, later should be fixed if necessary.
-    excludes:
-      - G404
-      - G601
-      - G108
-      - G114
-      - G115
-      - G201
-      - G202
-      - G401
-      - G501
-
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
-        - gosec
-        - makezero
-    # G113 Potential uncontrolled memory consumption in Rat.SetString (CVE-2022-23772)
-    # only affects gp < 1.16.14. and go < 1.17.7
-    - text: "(G113)"
-      linters:
-        - gosec
-  include:
-    - EXC0012 # exported (.+) should have comment( \(or a comment on this block\))? or be unexported)
-    - EXC0014 # comment on exported (.+) should be of the form "(.+)..."
+      - linters:
+          - errcheck
+          - gosec
+          - makezero
+        path: _test\.go
+      - linters:
+          - gosec
+        text: (G113)
+    paths:
+      - ^dm/
+      - ^tests/
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

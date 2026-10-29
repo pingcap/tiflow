@@ -74,7 +74,7 @@ func encodeUvarintReversed(bits []byte, data uint64) ([]byte, int) {
 	return bits, i + 1
 }
 
-//nolint:unused,deadcode
+//nolint:unused
 func encodeBytes(bits []byte, data []byte) []byte {
 	l := len(data)
 	bits = encodeUvarint(bits, uint64(l))
@@ -114,7 +114,7 @@ func encodeNullableStringChunk(bits []byte, data []*string) []byte {
 	return bits
 }
 
-//nolint:unused,deadcode
+//nolint:unused
 func encodeBytesChunk(bits []byte, data [][]byte) []byte {
 	for _, b := range data {
 		bits = encodeUvarint(bits, uint64(len(b)))

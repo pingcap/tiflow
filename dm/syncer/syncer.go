@@ -1572,7 +1572,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			case s.optimist.PendingOperation() == nil:
 				err = terror.ErrWorkerDDLLockOpNotFound.Generate(shardInfo)
 			default:
-				err = s.optimist.DoneOperation(*(s.optimist.PendingOperation()))
+				err = s.optimist.DoneOperation(*s.optimist.PendingOperation())
 			}
 		}
 		if err != nil {

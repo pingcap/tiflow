@@ -1,4 +1,4 @@
-FROM golang:1.26.9
+FROM golang:1.27.3
 
 RUN apt-get update && \
     apt-get -y install \
