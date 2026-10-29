@@ -16,6 +16,7 @@ package relay
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -519,20 +520,28 @@ func (t *testRelaySuite) TestHandleEvent(c *check.C) {
 	c.Assert(pos.Pos, check.Equals, queryEv.Header.LogPos)
 	c.Assert(gs, check.DeepEquals, queryEv2.GSet) // got GTID sets
 
-	// transformer return ignorable for the event
+	// Neither raw nor parsed heartbeats may reach the writer or advance meta.
 	reader2.err = nil
-	reader2.result.Event = &replication.BinlogEvent{
-		Header: &replication.EventHeader{EventType: replication.HEARTBEAT_EVENT},
-		Event:  &replication.GenericEvent{},
-	}
-	ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel4()
-	err = r.handleEvents(ctx4, reader2, parser2)
-	c.Assert(errors.Cause(err), check.Equals, ctx.Err())
-	select {
-	case <-ctx4.Done():
-	default:
-		c.Fatalf("ignorable event for transformer not ignored")
+	for _, tp := range []replication.EventType{replication.HEARTBEAT_EVENT, replication.HEARTBEAT_LOG_EVENT_V2} {
+		for _, body := range []replication.Event{&replication.GenericEvent{}, &replication.HeartbeatEvent{}} {
+			_, beforePos := r.meta.Pos()
+			_, beforeGTID := r.meta.GTID()
+			beforeGTID = beforeGTID.Clone()
+			writer2.latestEvent = nil
+			reader2.result.Event = &replication.BinlogEvent{
+				Header: &replication.EventHeader{EventType: tp, EventSize: 100, LogPos: beforePos.Pos + 100},
+				Event:  body,
+			}
+			ctx4, cancel4 := context.WithTimeout(context.Background(), 10*time.Millisecond)
+			err = r.handleEvents(ctx4, reader2, parser2)
+			cancel4()
+			c.Assert(errors.Cause(err), check.Equals, context.DeadlineExceeded)
+			c.Assert(writer2.latestEvent, check.IsNil)
+			_, afterPos := r.meta.Pos()
+			_, afterGTID := r.meta.GTID()
+			c.Assert(afterPos, check.DeepEquals, beforePos)
+			c.Assert(afterGTID, check.DeepEquals, beforeGTID)
+		}
 	}
 
 	// writer return ignorable for the event
@@ -625,6 +634,13 @@ func (t *testRelaySuite) TestReSetupMeta(c *check.C) {
 	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
 }
 
+func (t *testRelaySuite) TestSetSyncConfigReadAhead(c *check.C) {
+	r := NewRelay(newRelayCfg(c, gmysql.MySQLFlavor)).(*Relay)
+	c.Assert(r.setSyncConfig(), check.IsNil)
+	c.Assert(r.syncerCfg.TLSConfig, check.IsNil)
+	c.Assert(r.syncerCfg.ReadAheadBufferSize, check.Equals, 16*1024*1024)
+}
+
 func (t *testRelaySuite) TestSetSyncConfigTLSCipherSuites(c *check.C) {
 	ca, err := os.ReadFile("../tests/tls/conf/ca.pem")
 	c.Assert(err, check.IsNil)
@@ -635,6 +651,7 @@ func (t *testRelaySuite) TestSetSyncConfigTLSCipherSuites(c *check.C) {
 	c.Assert(r.setSyncConfig(), check.IsNil)
 	c.Assert(r.syncerCfg.TLSConfig, check.NotNil)
 	c.Assert(r.syncerCfg.TLSConfig.CipherSuites, check.DeepEquals, conn.MySQLTLSCipherSuites())
+	c.Assert(r.syncerCfg.ReadAheadBufferSize, check.Equals, 16*1024*1024)
 }
 
 func (t *testRelaySuite) verifyMetadata(c *check.C, r *Relay, uuidExpected string,
@@ -761,18 +778,38 @@ func (t *testRelaySuite) TestPreprocessEvent(c *check.C) {
 		},
 	})
 
-	// GenericEvent, HEARTBEAT_EVENT
-	genericHeader := *header
-	ev = &replication.BinlogEvent{Header: &genericHeader, Event: &replication.GenericEvent{}}
-	ev.Header.EventType = replication.HEARTBEAT_EVENT
-	cases = append(cases, Case{
-		event: ev,
-		result: preprocessResult{
-			Ignore:       true,
-			IgnoreReason: ignoreReasonHeartbeat,
-			LogPos:       ev.Header.LogPos,
-		},
-	})
+	// Decode real heartbeat packets in both modes: newer go-mysql returns a
+	// HeartbeatEvent in parsed mode, while raw mode still returns GenericEvent.
+	for _, eventType := range []replication.EventType{replication.HEARTBEAT_EVENT, replication.HEARTBEAT_LOG_EVENT_V2} {
+		for _, rawMode := range []bool{false, true} {
+			filename := []byte("mysql-bin.000001")
+			body := filename
+			if eventType == replication.HEARTBEAT_LOG_EVENT_V2 {
+				body = append([]byte{replication.OTW_HB_LOG_FILENAME_FIELD, byte(len(filename))}, filename...)
+				body = append(body, replication.OTW_HB_HEADER_END_MARK)
+			}
+			data := make([]byte, replication.EventHeaderSize)
+			data[4] = byte(eventType)
+			binary.LittleEndian.PutUint32(data[5:9], header.ServerID)
+			binary.LittleEndian.PutUint32(data[9:13], uint32(len(data)+len(body)))
+			binary.LittleEndian.PutUint32(data[13:17], latestPos)
+			binlogParser := replication.NewBinlogParser()
+			binlogParser.SetRawMode(rawMode)
+			heartbeat, parseErr := binlogParser.Parse(append(data, body...))
+			c.Assert(parseErr, check.IsNil)
+			if rawMode {
+				c.Assert(heartbeat.Event, check.FitsTypeOf, &replication.GenericEvent{})
+			} else {
+				c.Assert(heartbeat.Event, check.FitsTypeOf, &replication.HeartbeatEvent{})
+			}
+			cases = append(cases, Case{
+				event: heartbeat,
+				result: preprocessResult{
+					Ignore: true, IgnoreReason: ignoreReasonHeartbeat, LogPos: latestPos,
+				},
+			})
+		}
+	}
 
 	// other event type without LOG_EVENT_ARTIFICIAL_F
 	ev, err = event.GenCommonGTIDEvent(gmysql.MySQLFlavor, header.ServerID, latestPos, gtidSet, false, 0)

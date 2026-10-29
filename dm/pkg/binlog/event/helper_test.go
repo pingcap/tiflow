@@ -79,3 +79,18 @@ func TestGTIDsFromMariaDBGTIDListEvent(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, gSetExpect, gSet)
 }
+
+func TestGTIDsFromLegacyMariaDBGTIDListEvent(t *testing.T) {
+	t.Parallel()
+	for _, positions := range [][]gmysql.MariadbGTID{
+		{{DomainID: 1, ServerID: 1, SequenceNumber: 12}, {DomainID: 1, ServerID: 2, SequenceNumber: 9}},
+		{{DomainID: 1, ServerID: 2, SequenceNumber: 9}, {DomainID: 1, ServerID: 1, SequenceNumber: 12}},
+	} {
+		e := &replication.BinlogEvent{Event: &replication.MariadbGTIDListEvent{GTIDs: positions}}
+		set, err := GTIDsFromMariaDBGTIDListEvent(e)
+		require.NoError(t, err)
+		require.Equal(t, "1-1-12", set.String())
+		positions[0].SequenceNumber = 100
+		require.Equal(t, "1-1-12", set.String())
+	}
+}
