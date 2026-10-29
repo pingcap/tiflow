@@ -429,7 +429,7 @@ func TestAddGSetWithPurged(t *testing.T) {
 			getGSetFromString(t, "3ccc475b-2343-11e7-be21-6c0b84d59f30:6-14"),
 			mariaGTID,
 			nil,
-			errors.New("invalid GTID format, must UUID:interval[:interval]"),
+			errors.New("invalid GTID format, must UUID[:tag]:interval[[:tag]:interval]"),
 		},
 	}
 
@@ -438,7 +438,7 @@ func TestAddGSetWithPurged(t *testing.T) {
 			sqlmock.NewRows([]string{"@@GLOBAL.gtid_purged"}).AddRow(tc.purgedSet.String()))
 		originSet := tc.originGSet.Clone()
 		newSet, err := AddGSetWithPurged(ctx, originSet, conn)
-		require.True(t, errors.ErrorEqual(err, tc.err))
+		require.True(t, errors.ErrorEqual(err, tc.err), "expected %v, got %v", tc.err, err)
 		require.Equal(t, tc.expectedSet, newSet)
 		// make sure origin gSet hasn't changed
 		require.Equal(t, tc.originGSet, originSet)

@@ -49,6 +49,11 @@ func GTIDsFromMariaDBGTIDListEvent(e *replication.BinlogEvent) (gmysql.GTIDSet, 
 	}
 	mGSet := ggSet.(*gmysql.MariadbGTIDSet)
 	for _, mGTID := range gtidListEv.GTIDs {
+		// Older DM relay files can contain multiple servers for one domain.
+		// Keep its highest recorded sequence, as when restoring a checkpoint.
+		if previous := mGSet.Sets[mGTID.DomainID]; previous != nil && previous.SequenceNumber > mGTID.SequenceNumber {
+			continue
+		}
 		mgClone := mGTID // use another variable so we can get different pointer (&mgClone below) when iterating
 		err = mGSet.AddSet(&mgClone)
 		if err != nil {

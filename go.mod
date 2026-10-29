@@ -47,7 +47,7 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
-	github.com/go-mysql-org/go-mysql v1.13.0
+	github.com/go-mysql-org/go-mysql v1.16.1-0.20261029090001-ee84a566ad3e
 	github.com/go-oauth2/oauth2/v4 v4.5.4
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.8.1
@@ -70,10 +70,10 @@ require (
 	github.com/integralist/go-findroot v0.0.0-20160518114804-ac90681525dc
 	github.com/jarcoal/httpmock v1.2.0
 	github.com/jcmturner/gokrb5/v8 v8.4.4
-	github.com/jmoiron/sqlx v1.3.3
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/json-iterator/go v1.1.12
 	github.com/kami-zh/go-capturer v0.0.0-20171211120116-e492ea43421d
-	github.com/klauspost/compress v1.20.1
+	github.com/klauspost/compress v1.20.3
 	github.com/labstack/gommon v0.4.0
 	github.com/linkedin/goavro/v2 v2.14.0
 	github.com/mailru/easyjson v0.7.7
@@ -84,7 +84,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.31
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20260508054701-306e305bcf41
-	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
+	github.com/pingcap/failpoint v0.0.0-20260406204437-bbc9d102c19e
 	github.com/pingcap/kvproto v0.0.0-20261016101550-f8ad079c8e98
 	github.com/pingcap/log v1.1.1-0.20261007233122-0034994d1a22
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
@@ -99,7 +99,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/segmentio/kafka-go v0.4.41-0.20230526171612-f057b1d369cd
 	github.com/shirou/gopsutil/v3 v3.24.5
-	github.com/shopspring/decimal v1.3.0
+	github.com/shopspring/decimal v1.4.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -126,7 +126,7 @@ require (
 	go.uber.org/mock v0.5.2
 	go.uber.org/multierr v1.11.0
 	go.uber.org/ratelimit v0.2.0
-	go.uber.org/zap v1.27.1
+	go.uber.org/zap v1.28.0
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96
 	golang.org/x/net v0.61.0
 	golang.org/x/oauth2 v0.36.0
