@@ -119,6 +119,10 @@ func TestMaskSensitiveDataInURI(t *testing.T) {
 			"abc",
 			"abc",
 		},
+		{
+			"kafka:alice:verysecure@broker:9092/topic",
+			"",
+		},
 	}
 	for _, q := range sensitiveQueryParameterNames {
 		tests = append(tests, struct {
@@ -143,6 +147,7 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 		"mysql://root:xxxxx@127.0.0.1:3306/?sasl-password=xxxxx",
 		MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1:3306/?sasl-password=rawsecret"))
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1/%zz"))
+	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("kafka:alice:verysecure@broker:9092/topic"))
 }
 
 func TestMaskSensitiveDataInURLError(t *testing.T) {
@@ -153,5 +158,10 @@ func TestMaskSensitiveDataInURLError(t *testing.T) {
 	maskedErr := MaskSensitiveDataInURLError(err)
 	require.NotContains(t, maskedErr.Error(), "verysecure")
 	require.Contains(t, maskedErr.Error(), `parse "<invalid uri>"`)
-	require.Contains(t, maskedErr.Error(), "invalid URL escape")
+	require.Equal(t, `parse "<invalid uri>": invalid URI`, maskedErr.Error())
+
+	_, err = url.Parse("mysql://root:verysecure/more@host:3306/")
+	require.Error(t, err)
+	maskedErr = MaskSensitiveDataInURLError(err)
+	require.NotContains(t, maskedErr.Error(), "verysecure")
 }

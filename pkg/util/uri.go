@@ -14,6 +14,7 @@
 package util
 
 import (
+	"errors"
 	"net"
 	"net/url"
 	"strings"
@@ -94,7 +95,7 @@ var sensitiveQueryParameterNames = []string{
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
 func MaskSensitiveDataInURI(uri string) string {
 	uriParsed, err := url.Parse(uri)
-	if err != nil {
+	if err != nil || uriParsed.Opaque != "" {
 		return ""
 	}
 	queries := uriParsed.Query()
@@ -131,6 +132,6 @@ func MaskSensitiveDataInURLError(err error) error {
 	return &url.Error{
 		Op:  urlErr.Op,
 		URL: MaskSensitiveDataInURIForError(urlErr.URL),
-		Err: urlErr.Err,
+		Err: errors.New("invalid URI"),
 	}
 }
