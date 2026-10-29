@@ -21,7 +21,8 @@ import (
 
 // causalityRowQueueSize bounds prepared rows waiting for dependency processing.
 // It is independent of downstream worker-count. The producer and consumer can
-// each hold one additional row. This is a row-count bound, not a byte bound.
+// each hold one additional row. Compaction disables this extra queue to
+// preserve upstream backpressure. This is a row-count bound, not a byte bound.
 const causalityRowQueueSize = 1024
 
 type preparedCausalityJob struct {
@@ -39,8 +40,8 @@ type causalityKeyPipeline struct {
 	wg      sync.WaitGroup
 }
 
-func newCausalityKeyPipeline(in <-chan *job) *causalityKeyPipeline {
-	p := &causalityKeyPipeline{ordered: make(chan preparedCausalityJob, causalityRowQueueSize)}
+func newCausalityKeyPipeline(in <-chan *job, queueSize int) *causalityKeyPipeline {
+	p := &causalityKeyPipeline{ordered: make(chan preparedCausalityJob, queueSize)}
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()

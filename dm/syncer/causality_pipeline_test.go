@@ -86,34 +86,36 @@ func TestCausalityPipelineOrderAndBarriers(t *testing.T) {
 		}
 		want = append(want, result{tp: j.tp, key: key, seq: j.flushSeq})
 	}
-	for _, workers := range []int{1, 4, 512} {
-		jobs := make(chan *job, 2000)
-		s := &Syncer{cfg: &config.SubTaskConfig{Name: "pipeline", SourceID: "source", SyncerConfig: config.SyncerConfig{QueueSize: 128, WorkerCount: workers}}, tctx: tcontext.Background().WithLogger(log.L()), causalityCtx: ctx}
-		s.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("pipeline", "worker", "source")
-		output := causalityWrap(jobs, s)
-		for _, j := range input {
-			jobs <- j.clone()
-		}
-		close(jobs)
-		got := []result{}
-		timeout := time.After(10 * time.Second)
-	collect:
-		for {
-			select {
-			case j, ok := <-output:
-				if !ok {
-					break collect
-				}
-				if j.tp == conflict {
-					got = append(got, result{tp: conflict})
-				} else {
-					got = append(got, result{tp: j.tp, key: j.dmlQueueKey, seq: j.flushSeq})
-				}
-			case <-timeout:
-				t.Fatal("pipeline did not drain after input close")
+	for _, compact := range []bool{false, true} {
+		for _, workers := range []int{1, 4, 512} {
+			jobs := make(chan *job, 2000)
+			s := &Syncer{cfg: &config.SubTaskConfig{Name: "pipeline", SourceID: "source", SyncerConfig: config.SyncerConfig{QueueSize: 128, WorkerCount: workers, Compact: compact}}, tctx: tcontext.Background().WithLogger(log.L()), causalityCtx: ctx}
+			s.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask("pipeline", "worker", "source")
+			output := causalityWrap(jobs, s)
+			for _, j := range input {
+				jobs <- j.clone()
 			}
+			close(jobs)
+			got := []result{}
+			timeout := time.After(10 * time.Second)
+		collect:
+			for {
+				select {
+				case j, ok := <-output:
+					if !ok {
+						break collect
+					}
+					if j.tp == conflict {
+						got = append(got, result{tp: conflict})
+					} else {
+						got = append(got, result{tp: j.tp, key: j.dmlQueueKey, seq: j.flushSeq})
+					}
+				case <-timeout:
+					t.Fatal("pipeline did not drain after input close")
+				}
+			}
+			require.Equal(t, want, got, "compact=%t workers=%d", compact, workers)
 		}
-		require.Equal(t, want, got)
 	}
 }
 
@@ -160,7 +162,7 @@ func TestCausalityPipelineKeysAndSchemaChange(t *testing.T) {
 		input <- j
 	}
 	close(input)
-	p := newCausalityKeyPipeline(input)
+	p := newCausalityKeyPipeline(input, causalityRowQueueSize)
 	count := 0
 	for prepared := range p.ordered {
 		require.Less(t, count, len(jobs))
@@ -174,7 +176,7 @@ func TestCausalityPipelineKeysAndSchemaChange(t *testing.T) {
 
 func TestCausalityPipelineBoundAndClose(t *testing.T) {
 	input := make(chan *job)
-	p := newCausalityKeyPipeline(input)
+	p := newCausalityKeyPipeline(input, causalityRowQueueSize)
 	require.Equal(t, causalityRowQueueSize, cap(p.ordered))
 	// Fill the result queue and leave one row held by the preparation worker.
 	for i := 0; i < causalityRowQueueSize+1; i++ {
@@ -201,12 +203,62 @@ func TestCausalityPipelineBoundAndClose(t *testing.T) {
 	require.Equal(t, causalityRowQueueSize+2, count)
 }
 
+func TestCausalityPreservesCompactorBackpressure(t *testing.T) {
+	input := make(chan *job)
+	s := &Syncer{
+		cfg: &config.SubTaskConfig{
+			Name: "compact-backpressure", SourceID: "source",
+			SyncerConfig: config.SyncerConfig{QueueSize: 1, WorkerCount: 1, Compact: true},
+		},
+		tctx: tcontext.Background().WithLogger(log.L()),
+	}
+	s.metricsProxies = metrics.DefaultMetricsProxies.CacheForOneTask(s.cfg.Name, "worker", s.cfg.SourceID)
+	output := causalityWrap(input, s)
+	accepted := make(chan struct{}, 4)
+	go func() {
+		defer close(input)
+		for i := 0; i < 4; i++ {
+			input <- &job{tp: flush, flushSeq: int64(i)}
+			accepted <- struct{}{}
+		}
+	}()
+	// Always release the blocked stages, including after an assertion failure.
+	t.Cleanup(func() {
+		deadline := time.After(5 * time.Second)
+		for {
+			select {
+			case _, ok := <-output:
+				if !ok {
+					return
+				}
+			case <-deadline:
+				t.Error("compact pipeline did not drain")
+				return
+			}
+		}
+	})
+	// One output slot, one consumer-held job and one producer-held job. A
+	// fourth must stay upstream so the compactor can observe downstream load.
+	for i := 0; i < 3; i++ {
+		select {
+		case <-accepted:
+		case <-time.After(5 * time.Second):
+			t.Fatal("pipeline did not accept its bounded in-flight jobs")
+		}
+	}
+	select {
+	case <-accepted:
+		t.Fatal("causality read-ahead masked downstream backpressure from compactor")
+	case <-time.After(20 * time.Millisecond):
+	}
+}
+
 func TestCausalityPipelineSparseAndOversized(t *testing.T) {
 	ti := mockTableInfo(t, "CREATE TABLE t(id INT PRIMARY KEY)")
 	table := &cdcmodel.TableName{Schema: "db", Table: "t"}
 	for _, size := range []uint32{0, 4 << 20} {
 		input := make(chan *job)
-		p := newCausalityKeyPipeline(input)
+		p := newCausalityKeyPipeline(input, causalityRowQueueSize)
 		j := &job{tp: dml, dml: sqlmodel.NewRowChange(table, nil, nil, []any{1}, ti, nil, nil), eventHeader: &replication.EventHeader{EventSize: size}}
 		input <- j
 		// No second row, input close, or timer should be needed to publish this row.
@@ -224,7 +276,7 @@ func TestCausalityPipelineSparseAndOversized(t *testing.T) {
 	}
 	input := make(chan *job)
 	close(input)
-	p := newCausalityKeyPipeline(input)
+	p := newCausalityKeyPipeline(input, causalityRowQueueSize)
 	_, ok := <-p.ordered
 	require.False(t, ok)
 	p.wg.Wait()

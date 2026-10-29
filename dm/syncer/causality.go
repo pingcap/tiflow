@@ -49,6 +49,7 @@ type causality struct {
 	inCh        chan *job
 	logger      log.Logger
 	workerCount int
+	compact     bool
 
 	// for MetricsProxies
 	task          string
@@ -67,6 +68,7 @@ func causalityWrap(inCh chan *job, syncer *Syncer) chan *job {
 		inCh:          inCh,
 		outCh:         make(chan *job, syncer.cfg.QueueSize),
 		workerCount:   syncer.cfg.WorkerCount,
+		compact:       syncer.cfg.Compact,
 	}
 
 	go func() {
@@ -83,7 +85,14 @@ func (c *causality) run() {
 	// These labels are constant for this pipeline lifetime. Keep updates per row,
 	// but do not re-hash labels and look up the same gauge on every row.
 	inputQueueSize := c.metricProxies.QueueSizeGauge.WithLabelValues(c.task, "causality_input", c.source)
-	pipeline := newCausalityKeyPipeline(c.inCh)
+	queueSize := causalityRowQueueSize
+	if c.compact {
+		// The compactor uses its output queue to detect downstream load. Do
+		// not drain that queue into another buffer and hide backpressure;
+		// doing so makes it flush individual rows instead of compacting them.
+		queueSize = 0
+	}
+	pipeline := newCausalityKeyPipeline(c.inCh, queueSize)
 	for prepared := range pipeline.ordered {
 		j := prepared.job
 		inputQueueSize.Set(float64(len(c.inCh)))
