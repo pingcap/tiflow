@@ -625,6 +625,13 @@ func (t *testRelaySuite) TestReSetupMeta(c *check.C) {
 	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
 }
 
+func (t *testRelaySuite) TestSetSyncConfigReadAhead(c *check.C) {
+	r := NewRelay(newRelayCfg(c, gmysql.MySQLFlavor)).(*Relay)
+	c.Assert(r.setSyncConfig(), check.IsNil)
+	c.Assert(r.syncerCfg.TLSConfig, check.IsNil)
+	c.Assert(r.syncerCfg.ReadAheadBufferSize, check.Equals, 16*1024*1024)
+}
+
 func (t *testRelaySuite) TestSetSyncConfigTLSCipherSuites(c *check.C) {
 	ca, err := os.ReadFile("../tests/tls/conf/ca.pem")
 	c.Assert(err, check.IsNil)
@@ -635,6 +642,7 @@ func (t *testRelaySuite) TestSetSyncConfigTLSCipherSuites(c *check.C) {
 	c.Assert(r.setSyncConfig(), check.IsNil)
 	c.Assert(r.syncerCfg.TLSConfig, check.NotNil)
 	c.Assert(r.syncerCfg.TLSConfig.CipherSuites, check.DeepEquals, conn.MySQLTLSCipherSuites())
+	c.Assert(r.syncerCfg.ReadAheadBufferSize, check.Equals, 16*1024*1024)
 }
 
 func (t *testRelaySuite) verifyMetadata(c *check.C, r *Relay, uuidExpected string,
