@@ -175,6 +175,7 @@ func TestCausalityPipelineKeysAndSchemaChange(t *testing.T) {
 func TestCausalityPipelineBoundAndClose(t *testing.T) {
 	input := make(chan *job)
 	p := newCausalityKeyPipeline(input)
+	require.Equal(t, causalityRowQueueSize, cap(p.ordered))
 	// Fill the result queue and leave one row held by the preparation worker.
 	for i := 0; i < causalityRowQueueSize+1; i++ {
 		input <- &job{tp: flush}

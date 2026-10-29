@@ -19,10 +19,10 @@ import (
 	"time"
 )
 
-// Allow at most 384 rows across the result channel and the two processing
-// stages: 382 queued, one being prepared, and one being consumed. This is a
-// row-count bound, not a byte bound; a single row can be arbitrarily large.
-const causalityRowQueueSize = 3*128 - 2
+// causalityRowQueueSize bounds prepared rows waiting for dependency processing.
+// It is independent of downstream worker-count. The producer and consumer can
+// each hold one additional row. This is a row-count bound, not a byte bound.
+const causalityRowQueueSize = 1024
 
 type preparedCausalityJob struct {
 	job     *job
