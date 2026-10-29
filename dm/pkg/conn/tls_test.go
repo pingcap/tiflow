@@ -27,6 +27,7 @@ import (
 )
 
 func TestMySQLTLSCipherSuites(t *testing.T) {
+	ctx := t.Context()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	template := &x509.Certificate{
@@ -55,24 +56,26 @@ func TestMySQLTLSCipherSuites(t *testing.T) {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		connection, err := listener.Accept()
-		if err != nil {
-			serverErr <- err
+		connection, acceptErr := listener.Accept()
+		if acceptErr != nil {
+			serverErr <- acceptErr
 			return
 		}
 		defer connection.Close()
-		serverErr <- connection.(*tls.Conn).Handshake()
+		serverErr <- connection.(*tls.Conn).HandshakeContext(ctx)
 	}()
 
-	client, err := tls.Dial("tcp", listener.Addr().String(), &tls.Config{
+	dialer := &tls.Dialer{Config: &tls.Config{
 		RootCAs:      roots,
 		ServerName:   "localhost",
 		MinVersion:   tls.VersionTLS12,
 		MaxVersion:   tls.VersionTLS12,
 		CipherSuites: MySQLTLSCipherSuites(),
-	})
+	}}
+	connection, err := dialer.DialContext(ctx, "tcp", listener.Addr().String())
 	require.NoError(t, err)
+	client := connection.(*tls.Conn)
 	defer client.Close()
-	require.Equal(t, uint16(tls.TLS_RSA_WITH_AES_128_CBC_SHA), client.ConnectionState().CipherSuite)
+	require.Equal(t, tls.TLS_RSA_WITH_AES_128_CBC_SHA, client.ConnectionState().CipherSuite)
 	require.NoError(t, <-serverErr)
 }
