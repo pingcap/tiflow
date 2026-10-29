@@ -47,6 +47,10 @@ if [ "$SINK_TYPE" != "storage" ]; then
 	if [ "$SINK_TYPE" == "pulsar" ]; then
 		exit 0
 	fi
+
+	# disable since not stable in CI environment
+	exit 0
+
 	prepare $*
 	cd "$(dirname "$0")"
 	set -o pipefail

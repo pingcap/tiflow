@@ -30,7 +30,7 @@ git remote -v # Confirms that your remote makes sense
 
     > **Note:**
     >
-    > DM uses [`Go Modules`](https://github.com/golang/go/wiki/Modules) to manage dependencies. The version of Go should be **1.16** or above.
+    > DM uses [`Go Modules`](https://github.com/golang/go/wiki/Modules) to manage dependencies. The version of Go should be **1.27.3** or above.
 
     You'll need `GOPATH` defined, and `PATH` modified to access your Go binaries. A
     common setup is the following but you could always google a setup for your own
