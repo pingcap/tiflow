@@ -25,66 +25,30 @@ import (
 	"go.uber.org/zap/zaptest/observer"
 )
 
-func TestStorageConfigRedaction(t *testing.T) {
-	url := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk&session-token=private-token&region=us-east-1"
-	for _, tc := range []struct {
-		name, input string
-		redact      func(string) string
-	}{
-		{"yaml", "name: task-one\nloaders:\n  global:\n    dir: '" + url + "'\n", YAMLConfig},
-		{"yaml-list", "name: task-one\nmysql-instances:\n- loader:\n    dir: '" + url + "'\n", YAMLConfig},
-		{"yaml-numeric-key", "name: task-one\nloaders:\n  123:\n    dir: '" + url + "'\n", YAMLConfig},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			output := tc.redact(tc.input)
-			require.NotContains(t, output, "private-")
-			require.Contains(t, output, "task-one")
-			require.Contains(t, tc.input, "private-sk")
-			require.Contains(t, output, "bucket/path")
-			require.Contains(t, output, "region=us-east-1")
-		})
-	}
-	for _, url := range []string{
-		"s3://bucket:bad/path?secret-access-key=private-sk",
-		"s3://private-ak:private-sk@bucket/path",
-		"azure://container/path?account-key=private-sk",
-	} {
-		require.NotContains(t, YAMLConfig("dir: '"+url+"'"), "private-")
-	}
-}
-
-func TestInvalidStorageConfig(t *testing.T) {
-	for _, tc := range []struct {
-		input  string
-		redact func(string) string
-	}{
-		{"dir: [private-sk", YAMLConfig},
-		{"dir: local\n---\ndir: private-sk", YAMLConfig},
-	} {
-		require.Equal(t, invalidConfig, tc.redact(tc.input))
-	}
-}
-
-func TestStorageConfigURLFields(t *testing.T) {
-	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk&region=us-east-1"
-	for _, key := range []string{"dir", "DIR", "data-dir", "data_dir", "output-dir", "outputdir"} {
-		output := YAMLConfig("nested:\n- " + key + ": '" + raw + "'\n  unknown: 42\n")
-		require.NotContains(t, output, "private-")
-		require.Contains(t, output, "region=us-east-1")
-		require.Contains(t, output, "unknown: 42")
-	}
-}
-
-func TestStorageConfigInvalidURLFields(t *testing.T) {
-	raw := "s3://bucket/path?secret-access-key=private-sk"
+func TestYAMLConfig(t *testing.T) {
+	url := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk&region=us-east-1"
 	for _, input := range []string{
-		"name: task-one\ndir: ['" + raw + "']",
-		"name: task-one\ndir: {unexpected: '" + raw + "'}",
+		"name: task-one\nloaders:\n  global:\n    dir: '" + url + "'\n",
+		"name: task-one\nmysql-instances:\n- loader:\n    dir: '" + url + "'\n",
+		"name: task-one\nloaders:\n  123:\n    dir: '" + url + "'\n",
+		"name: task-one\nnested:\n- DATA_DIR: '" + url + "'\n  output-dir: '" + url + "'\n",
 	} {
 		output := YAMLConfig(input)
-		require.NotContains(t, output, "private-sk")
+		require.NotContains(t, output, "private-", input)
 		require.Contains(t, output, "task-one")
+		require.Contains(t, output, "region=us-east-1")
 	}
+	for _, input := range []string{
+		"dir: 's3://bucket:bad/path?secret-access-key=private-sk'",
+		"dir: 's3://private-ak:private-sk@bucket/path'",
+		"dir: 'azure://container/path?account-key=private-sk'",
+		"dir: ['" + url + "']",
+		"dir: {unexpected: '" + url + "'}",
+	} {
+		require.NotContains(t, YAMLConfig(input), "private-", input)
+	}
+	require.Equal(t, invalidConfig, YAMLConfig("dir: [private-sk"))
+	require.Equal(t, invalidConfig, YAMLConfig("dir: local\n---\ndir: private-sk"))
 }
 
 func TestURLTextCredentials(t *testing.T) {

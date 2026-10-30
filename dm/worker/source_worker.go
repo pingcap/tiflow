@@ -546,11 +546,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		return err
 	}
 
-	redactedSubTasks := make(map[string]config.SubTaskConfig, len(subTaskCfgM))
-	for name, cfg := range subTaskCfgM {
-		redactedSubTasks[name] = *cfg.Redacted()
-	}
-	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), zap.Any("subTasks", redactedSubTasks))
+	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), zap.Any("subTasks", config.RedactedSubTaskConfigs(subTaskCfgM)))
 
 	for _, subTaskCfg := range subTaskCfgM {
 		expectStage := subTaskStages[subTaskCfg.Name]

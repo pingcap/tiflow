@@ -3472,15 +3472,11 @@ func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb
 	}, nil
 }
 
-// redactedSubTaskCfgs returns copies of subtask configs for logging, with
-// storage credentials hidden.
+// redactedSubTaskCfgs returns copies of the subtask configs of tasks for diagnostics.
 func redactedSubTaskCfgs(cfgs map[string]map[string]config.SubTaskConfig) map[string]map[string]config.SubTaskConfig {
 	result := make(map[string]map[string]config.SubTaskConfig, len(cfgs))
 	for task, sourceCfgs := range cfgs {
-		result[task] = make(map[string]config.SubTaskConfig, len(sourceCfgs))
-		for source, cfg := range sourceCfgs {
-			result[task][source] = *cfg.Redacted()
-		}
+		result[task] = config.RedactedSubTaskConfigs(sourceCfgs)
 	}
 	return result
 }

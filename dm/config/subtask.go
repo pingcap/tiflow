@@ -245,6 +245,15 @@ func (c *SubTaskConfig) Redacted() *SubTaskConfig {
 	return &result
 }
 
+// RedactedSubTaskConfigs returns Redacted copies of cfgs for diagnostics.
+func RedactedSubTaskConfigs(cfgs map[string]SubTaskConfig) map[string]SubTaskConfig {
+	result := make(map[string]SubTaskConfig, len(cfgs))
+	for name, cfg := range cfgs {
+		result[name] = *cfg.Redacted()
+	}
+	return result
+}
+
 // Toml returns TOML format representation of config.
 // Note: The atomic.Uint64 fields (IOTotalBytes and DumpIOTotalBytes) are not
 // encoded in the TOML output because they do not implement the necessary

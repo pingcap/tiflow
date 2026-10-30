@@ -14,6 +14,8 @@
 package pb
 
 import (
+	"fmt"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/pkg/logutil"
@@ -24,28 +26,29 @@ import (
 func (m *StartTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
 	clone.Task = redact.YAMLConfig(m.Task)
-	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
-	return nil
+	return addHiddenObject(enc, &clone)
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *CheckTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
 	clone.Task = redact.YAMLConfig(m.Task)
-	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
-	return nil
+	return addHiddenObject(enc, &clone)
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *UpdateTaskRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
 	clone := *m
 	clone.Task = redact.YAMLConfig(m.Task)
-	enc.AddString("HidePasswordObject", logutil.HideSensitive(clone.String()))
-	return nil
+	return addHiddenObject(enc, &clone)
 }
 
 // MarshalLogObject implements zapcore.ObjectMarshaler.
 func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	return addHiddenObject(enc, m)
+}
+
+func addHiddenObject(enc zapcore.ObjectEncoder, m fmt.Stringer) error {
 	enc.AddString("HidePasswordObject", logutil.HideSensitive(m.String()))
 	return nil
 }
