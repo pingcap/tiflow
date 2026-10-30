@@ -703,7 +703,7 @@ func (s *Server) GetSubTaskCfg(ctx context.Context, req *pb.GetSubTaskCfgRequest
 	cfgs := make([]string, 0, len(subCfgs))
 
 	for _, cfg := range subCfgs {
-		cfgBytes, err := cfg.Toml()
+		cfgBytes, err := cfg.Redacted().Toml()
 		if err != nil {
 			// nolint:nilerr
 			return &pb.GetSubTaskCfgResponse{
