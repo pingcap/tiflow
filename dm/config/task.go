@@ -641,9 +641,7 @@ func (c *TaskConfig) String() string {
 	return string(cfg)
 }
 
-// Redacted returns a response copy with storage credentials hidden, keeping
-// the struct-based formatting of String. It copies every loader before masking
-// its storage URL, and must not be used for execution or persistence.
+// Redacted returns a copy for diagnostics with storage credentials hidden.
 func (c *TaskConfig) Redacted() *TaskConfig {
 	result := *c
 	cloneLoader := func(loader *LoaderConfig) *LoaderConfig {

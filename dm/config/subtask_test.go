@@ -571,3 +571,19 @@ func TestLoaderConfigImportModeImportInto(t *testing.T) {
 	err = cfg.Adjust(false)
 	require.ErrorContains(t, err, "invalid load mode")
 }
+
+func TestSubTaskConfigRedacted(t *testing.T) {
+	cfg := NewSubTaskConfig()
+	cfg.Name = "task-one"
+	cfg.LoaderConfig.Dir = "./dump"
+	require.Equal(t, cfg.String(), cfg.Redacted().String(),
+		"log formatting must not change for ordinary configurations")
+	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
+	cfg.LoaderConfig.Dir = raw
+	before := cfg.String()
+	output := cfg.Redacted().String()
+	require.NotContains(t, output, "private-")
+	require.Contains(t, output, "bucket/path")
+	require.Equal(t, before, cfg.String())
+	require.Equal(t, raw, cfg.LoaderConfig.Dir)
+}

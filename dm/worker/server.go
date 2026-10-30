@@ -799,8 +799,7 @@ func (s *Server) disableRelay(source string) error {
 }
 
 // QueryStatus implements WorkerServer.QueryStatus.
-func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (result *pb.QueryStatusResponse, resultErr error) {
-	defer func() { result = result.Redacted() }()
+func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*pb.QueryStatusResponse, error) {
 	log.L().Info("", zap.String("request", "QueryStatus"), zap.Stringer("payload", req))
 
 	sourceStatus := s.getSourceStatus(true)
@@ -1028,8 +1027,6 @@ func (s *Server) CheckSubtasksCanUpdate(ctx context.Context, req *pb.CheckSubtas
 		// nolint:nilerr
 		return resp, nil
 	}
-	// The decoded config is logged instead of the raw TOML, so that storage
-	// credentials can be hidden by Redacted.
 	log.L().Info("check whether subtask config can be updated", zap.Stringer("config", cfg.Redacted()))
 	if err := w.CheckCfgCanUpdated(cfg); err != nil {
 		resp.Msg = err.Error()

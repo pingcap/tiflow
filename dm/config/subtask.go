@@ -238,9 +238,7 @@ func (c *SubTaskConfig) String() string {
 	return string(cfg)
 }
 
-// Redacted returns a diagnostic copy with storage credentials hidden. The
-// shallow copy shares the IO counters, so it must not be used for execution
-// or persistence.
+// Redacted returns a shallow copy for diagnostics with storage credentials hidden.
 func (c *SubTaskConfig) Redacted() *SubTaskConfig {
 	result := *c
 	result.LoaderConfig.Dir = objstore.RedactURL(c.LoaderConfig.Dir)

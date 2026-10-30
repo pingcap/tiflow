@@ -26,8 +26,7 @@ import (
 
 const invalidConfig = "(invalid config; redacted)"
 
-// YAMLConfig hides storage URL credentials in a single configuration
-// document, retaining unknown fields and leaving the original request untouched.
+// YAMLConfig hides storage URL credentials in a single YAML configuration.
 func YAMLConfig(input string) string {
 	if input == "" {
 		return ""
@@ -50,16 +49,13 @@ func YAMLConfig(input string) string {
 	return string(data)
 }
 
-// redactConfigURL only mutates decoded diagnostic copies. URL credential rules
-// belong to objstore.RedactURL; other configuration fields are left unchanged.
 func redactConfigURL(key string, value any) any {
 	switch strings.ToLower(key) {
 	case "dir", "data-dir", "data_dir", "output-dir", "outputdir":
 		if raw, ok := value.(string); ok {
 			return objstore.RedactURL(raw)
 		}
-		// Requests are logged before schema validation. Do not echo malformed
-		// URL fields, which can contain credentials inside arrays or objects.
+		// A malformed URL field may hide credentials inside arrays or objects.
 		if value != nil {
 			return objstore.InvalidURLPlaceholder
 		}
@@ -82,22 +78,17 @@ func redactConfigURL(key string, value any) any {
 	return value
 }
 
-// diagnosticURL only locates URLs in free-form text. Credential selection and
-// malformed-URL handling belong to TiDB's objstore.RedactURL, not this package.
-// A single slash also matches paths normalized by filepath, such as s3:/bucket.
-// It stops at apostrophes, so adjacent quoted URLs are redacted separately.
+// diagnosticURL matches URLs in text, including s3:/bucket normalized by
+// filepath. It stops at apostrophes to split adjacent quoted URLs.
 var diagnosticURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*:/{1,2}[^\s"'<>]+`)
 
-// apostropheURL also spans apostrophes, which are valid in URL paths and
-// userinfo, so credentials after them are not cut off from their URL.
+// apostropheURL also spans apostrophes, which are valid in URL paths and userinfo.
 var apostropheURL = regexp.MustCompile(`[a-zA-Z][a-zA-Z0-9+.-]*:/{1,2}[^\s"<>]+`)
 
-// escapedAmpersand matches '&' as escaped by encoding/json (\u0026), with
-// more backslashes when that JSON is itself embedded in a JSON string.
+// escapedAmpersand matches '&' escaped by encoding/json, possibly nested.
 var escapedAmpersand = regexp.MustCompile(`\\+u0026`)
 
-// Text hides the credentials of the storage URLs embedded in diagnostic text,
-// using the same TiDB URL policy as objstore.RedactURL.
+// Text hides the credentials of the storage URLs in text.
 func Text(text string) string {
 	if !strings.Contains(text, "'") {
 		return diagnosticURL.ReplaceAllStringFunc(text, redactTextURL)
@@ -114,10 +105,8 @@ func Text(text string) string {
 	})
 }
 
-// redactBeforeApostrophes redacts the URLs that end at a delimiter. A URL cut
-// off by an apostrophe that cannot be parsed, such as one with an apostrophe
-// in its password, is kept, so that it is redacted as a whole together with
-// its remainder instead of leaving the remainder unredacted.
+// redactBeforeApostrophes redacts the URLs that end at a delimiter. An invalid
+// URL cut off by an apostrophe is kept for Text to redact as a whole.
 func redactBeforeApostrophes(text string) string {
 	var b strings.Builder
 	last := 0
@@ -136,13 +125,9 @@ func redactBeforeApostrophes(text string) string {
 	return b.String()
 }
 
-// redactTextURL restores JSON-escaped query separators before redaction.
-// Otherwise every parameter after the first one is parsed as part of the
-// first value, and is kept whenever the first parameter is not sensitive.
+// redactTextURL redacts a matched URL, keeping its JSON-escaped query
+// separators and the trailing backslashes and apostrophe that end it.
 func redactTextURL(match string) string {
-	// Trailing backslashes escape the delimiter that ended the match, such as
-	// a quote in nested JSON, and a trailing apostrophe closes a quoted URL,
-	// so they are not part of the URL.
 	raw := strings.TrimRight(match, `\'`)
 	suffix := match[len(raw):]
 	escaped := escapedAmpersand.FindString(raw)
@@ -153,10 +138,7 @@ func redactTextURL(match string) string {
 	return strings.ReplaceAll(redacted, "&", escaped) + suffix
 }
 
-// Error replaces zap.Error for errors that may contain storage URLs, such as
-// storage SDK errors, and hides the credentials of these URLs. It formats the
-// error without exposing an unredacted verbose representation, and never
-// changes the error used for execution or retries.
+// Error is zap.Error with the credentials of storage URLs in err hidden.
 func Error(err error) zap.Field {
 	if err == nil {
 		return zap.Skip()
@@ -164,10 +146,7 @@ func Error(err error) zap.Field {
 	return zap.String("error", Text(err.Error()))
 }
 
-// ProxyURL hides the credentials of a proxy URL. It adapts scheme-less proxy
-// syntax before using TiDB's URL redactor.
-// Without the temporary scheme, user:password@host:port is treated as a local
-// path by objstore.RedactURL and is returned unchanged.
+// ProxyURL hides the credentials of a proxy URL, which may omit the scheme.
 func ProxyURL(raw string) string {
 	if !strings.Contains(raw, "://") {
 		return strings.TrimPrefix(objstore.RedactURL("http://"+raw), "http://")

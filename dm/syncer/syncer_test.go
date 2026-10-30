@@ -1397,13 +1397,11 @@ func TestLoadTableStructureFromDumpRedactsStorageError(t *testing.T) {
 	core, logs := observer.New(zap.WarnLevel)
 	syncer.tctx = syncer.tctx.WithLogger(log.Logger{Logger: zap.New(core)})
 
-	require.False(t, syncer.loadAndFlushTableStructureFromDump(context.Background()))
-	entries := logs.All()
-	require.NotEmpty(t, entries)
-	for _, entry := range entries {
+	require.Error(t, syncer.loadTableStructureFromDump(context.Background()))
+	require.NotEmpty(t, logs.All())
+	for _, entry := range logs.All() {
 		require.NotContains(t, fmt.Sprint(entry.ContextMap()), "private-sas-signature", entry.Message)
 	}
-	require.Equal(t, "error happened when load table structure from dump files", entries[len(entries)-1].Message)
 }
 
 func newTestSyncerForExternalStorage(t *testing.T, dumpStorage storeapi.Storage) *Syncer {

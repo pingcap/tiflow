@@ -14,12 +14,15 @@
 package openapi
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/check"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 )
@@ -56,4 +59,24 @@ func (t *zapLoggerSuite) TestZapLogger(c *check.C) {
 	c.Assert(logFields["user_agent"], check.NotNil)
 	c.Assert(logFields["request"], check.NotNil)
 	c.Assert(logFields["error"], check.IsNil)
+}
+
+func TestAccessLogURLCredentials(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	router := gin.New()
+	router.Use(ZapLogger(zap.New(core)))
+	router.GET("/test", func(c *gin.Context) {
+		require.Equal(t, "private-ak", c.Query("access-key"))
+		_ = c.Error(errors.New("storage denied https://host/path?sig=private-signature"))
+		c.Status(http.StatusBadRequest)
+	})
+	req := httptest.NewRequest(http.MethodGet, "/test?access-key=private-ak&unknown-auth-token=private-token&source_name=source-one", nil)
+	router.ServeHTTP(httptest.NewRecorder(), req)
+	require.Len(t, logs.All(), 1)
+	data, err := json.Marshal(logs.All()[0].ContextMap())
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "private-")
+	require.NotContains(t, string(data), "source-one")
+	require.Equal(t, "GET /test", logs.All()[0].ContextMap()["request"])
+	require.Contains(t, req.RequestURI, "private-ak")
 }

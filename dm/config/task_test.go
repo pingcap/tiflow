@@ -1251,3 +1251,20 @@ func TestTaskYamlForDowngrade(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, originCfg.TargetDB.Password, decryptedPass)
 }
+
+func TestTaskConfigRedacted(t *testing.T) {
+	cfg := NewTaskConfig()
+	cfg.Name = "task-one"
+	cfg.Loaders["local"] = &LoaderConfig{Dir: "./dump"}
+	require.Equal(t, cfg.String(), cfg.Redacted().String(),
+		"get-config formatting must not change for ordinary configurations")
+	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
+	cfg.Loaders["remote"] = &LoaderConfig{Dir: raw}
+	cfg.MySQLInstances = []*MySQLInstance{{Loader: cfg.Loaders["remote"]}}
+	before := cfg.String()
+	output := cfg.Redacted().String()
+	require.NotContains(t, output, "private-")
+	require.Contains(t, output, "bucket/path")
+	require.Equal(t, before, cfg.String())
+	require.Equal(t, raw, cfg.MySQLInstances[0].Loader.Dir)
+}

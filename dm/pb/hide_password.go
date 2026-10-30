@@ -50,8 +50,8 @@ func (m *OperateSourceRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error
 	return nil
 }
 
-// Redacted masks storage credentials in a response copy, including
-// errors received from older workers. It leaves internal status data untouched.
+// Redacted returns a copy with storage credentials hidden, also for errors
+// from older workers.
 func (m *QueryStatusResponse) Redacted() *QueryStatusResponse {
 	if m == nil {
 		return nil
