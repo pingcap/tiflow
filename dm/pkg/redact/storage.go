@@ -104,10 +104,13 @@ func Text(text string) string {
 	}
 	text = redactBeforeApostrophes(text)
 	return apostropheURL.ReplaceAllStringFunc(text, func(match string) string {
-		if !strings.Contains(strings.TrimRight(match, `\'`), "'") {
+		redacted := redactTextURL(match)
+		// The first pass also defers invalid URLs followed only by a closing quote.
+		if !strings.Contains(strings.TrimRight(match, `\'`), "'") &&
+			!strings.HasPrefix(redacted, objstore.InvalidURLPlaceholder) {
 			return match
 		}
-		return redactTextURL(match)
+		return redacted
 	})
 }
 

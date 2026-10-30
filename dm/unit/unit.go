@@ -71,34 +71,20 @@ type Unit interface {
 	IsFreshTask(ctx context.Context) (bool, error)
 }
 
-// NewProcessError creates a new ProcessError
-// we can refine to add error scope field if needed.
-func NewProcessError(err error) (result *pb.ProcessError) {
-	defer func() {
-		result.Message = redact.Text(result.Message)
-		result.RawCause = redact.Text(result.RawCause)
-		result.Workaround = redact.Text(result.Workaround)
-	}()
-	if e, ok := err.(*terror.Error); ok {
-		return &pb.ProcessError{
-			ErrCode:    int32(e.Code()),
-			ErrClass:   e.Class().String(),
-			ErrScope:   e.Scope().String(),
-			ErrLevel:   e.Level().String(),
-			Message:    terror.Message(e),
-			RawCause:   terror.Message(e.Cause()),
-			Workaround: e.Workaround(),
-		}
+// NewProcessError creates a ProcessError with storage URL credentials redacted.
+func NewProcessError(err error) *pb.ProcessError {
+	e, ok := err.(*terror.Error)
+	if !ok {
+		e = terror.ErrNotSet
 	}
-
 	return &pb.ProcessError{
-		ErrCode:    int32(terror.ErrNotSet.Code()),
-		ErrClass:   terror.ErrNotSet.Class().String(),
-		ErrScope:   terror.ErrNotSet.Scope().String(),
-		ErrLevel:   terror.ErrNotSet.Level().String(),
-		Message:    terror.Message(err),
-		RawCause:   terror.Message(terror.ErrNotSet.Cause()),
-		Workaround: terror.ErrNotSet.Workaround(),
+		ErrCode:    int32(e.Code()),
+		ErrClass:   e.Class().String(),
+		ErrScope:   e.Scope().String(),
+		ErrLevel:   e.Level().String(),
+		Message:    redact.Text(terror.Message(err)),
+		RawCause:   redact.Text(terror.Message(e.Cause())),
+		Workaround: redact.Text(e.Workaround()),
 	}
 }
 

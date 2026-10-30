@@ -174,6 +174,10 @@ func TestURLTextApostrophe(t *testing.T) {
 		require.NotContains(t, output, "password", text)
 	}
 
+	// Invalid URLs deferred by the first pass must not survive a closing quote.
+	require.Equal(t, "dir: '"+objstore.InvalidURLPlaceholder+"'\nnext",
+		Text("dir: 's3://bucket:bad/path?secret-access-key=private-sk'\nnext"))
+
 	// Quoted URLs keep their quotes, and adjacent ones are still redacted.
 	require.Equal(t, "dir: '"+objstore.RedactURL("s3://bucket/path?secret-access-key=private-sk")+"'\nnext",
 		Text("dir: 's3://bucket/path?secret-access-key=private-sk'\nnext"))
