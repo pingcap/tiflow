@@ -32,9 +32,10 @@ import (
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
+	"go.uber.org/zap"
 )
 
 const (
@@ -89,7 +90,7 @@ func getDMTaskCfg(dmAddr, task string) ([]*SubTaskConfig, error) {
 		subTaskCfgs = append(subTaskCfgs, subtaskCfg)
 	}
 
-	log.Info("dm sub task configs", logutil.ZapRedactReflect("cfgs", subTaskCfgs))
+	log.Info("dm sub task configs", dmlog.ZapRedact(zap.Reflect("cfgs", subTaskCfgs)))
 	return subTaskCfgs, nil
 }
 

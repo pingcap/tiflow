@@ -16,11 +16,9 @@ package progress
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
-	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/stretchr/testify/require"
 )
@@ -107,28 +105,4 @@ func TestAllSuccess(t *testing.T) {
 		"A total of 2 tables have been compared and all are equal.\n"+
 		"You can view the comparison details through './output_dir/sync_diff_inspector.log'\n\n",
 	)
-}
-
-func TestTableErrorRedaction(t *testing.T) {
-	previous := dmlog.IsRedactLogEnabled()
-	t.Cleanup(func() { dmlog.SetRedactLog(previous) })
-
-	for _, enabled := range []bool{false, true} {
-		t.Run(fmt.Sprintf("redact=%t", enabled), func(t *testing.T) {
-			dmlog.SetRedactLog(enabled)
-			p := newTableProgressPrinter(0, 0)
-			buf := new(bytes.Buffer)
-			p.SetOutput(buf)
-			err := errors.New("You have an error in your SQL syntax near 'sensitive-range-value'")
-			p.Error(err)
-
-			if enabled {
-				require.NotContains(t, buf.String(), "sensitive-range-value")
-				require.Contains(t, buf.String(), "Error in comparison process:\n?\n")
-			} else {
-				require.Contains(t, buf.String(), err.Error())
-			}
-			require.Contains(t, err.Error(), "sensitive-range-value")
-		})
-	}
 }

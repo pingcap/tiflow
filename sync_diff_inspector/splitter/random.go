@@ -26,7 +26,6 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -54,7 +53,7 @@ func getRowCount(ctx context.Context, db dbutil.QueryExecutor, schemaName string
 	if len(where) > 0 {
 		query += fmt.Sprintf(" WHERE %s", where)
 	}
-	log.Debug("get row count", dmlog.ZapRedactString("sql", query), logutil.ZapRedactReflect("args", args))
+	log.Debug("get row count", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", args)))
 
 	var cnt sql.NullInt64
 	if err := db.QueryRowContext(ctx, query, args...).Scan(&cnt); err != nil {
@@ -229,7 +228,7 @@ func (s *RandomIterator) Next() (*chunk.Range, error) {
 			lowerBounds[i] = bound.Lower
 			upperBounds[i] = bound.Upper
 		}
-		log.Info("failpoint print-chunk-info injected (random splitter)", logutil.ZapRedactStrings("lowerBounds", lowerBounds), logutil.ZapRedactStrings("upperBounds", upperBounds), zap.String("indexCode", c.Index.ToString()))
+		log.Info("failpoint print-chunk-info injected (random splitter)", dmlog.ZapRedact(zap.Strings("lowerBounds", lowerBounds)), dmlog.ZapRedact(zap.Strings("upperBounds", upperBounds)), zap.String("indexCode", c.Index.ToString()))
 	})
 	return c, nil
 }
@@ -302,7 +301,7 @@ func splitRangeByRandom(ctx context.Context, db *sql.DB, chunk *chunk.Range, cou
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
-	log.Debug("get split values by random", logutil.ZapRedactStringer("chunk", chunk), zap.Int("random values num", len(randomValues)))
+	log.Debug("get split values by random", dmlog.ZapRedact(zap.Stringer("chunk", chunk)), zap.Int("random values num", len(randomValues)))
 	for i := 0; i <= len(randomValues); i++ {
 		newChunk := chunk.Copy()
 
@@ -321,6 +320,6 @@ func splitRangeByRandom(ctx context.Context, db *sql.DB, chunk *chunk.Range, cou
 		}
 		chunks = append(chunks, newChunk)
 	}
-	log.Debug("split range by random", logutil.ZapRedactStringer("origin chunk", chunk), zap.Int("split num", len(chunks)))
+	log.Debug("split range by random", dmlog.ZapRedact(zap.Stringer("origin chunk", chunk)), zap.Int("split num", len(chunks)))
 	return chunks, nil
 }

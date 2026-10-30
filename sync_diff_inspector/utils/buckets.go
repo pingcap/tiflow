@@ -23,7 +23,6 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"go.uber.org/zap"
 )
 
@@ -46,7 +45,7 @@ func AnalyzeValuesFromBuckets(valueString string, cols []*model.ColumnInfo) ([]s
 		value, err := dbutil.DecodeTimeInBucket(values[i])
 		if err != nil {
 			log.Error("analyze values from buckets", zap.String("column", col.Name.O),
-				dmlog.ZapRedactString("value", values[i]), logutil.ZapRedactError(err))
+				dmlog.ZapRedact(zap.String("value", values[i])), dmlog.ZapRedact(zap.Error(err)))
 			return nil, errors.Trace(err)
 		}
 		values[i] = value

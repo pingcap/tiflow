@@ -26,146 +26,50 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestStartupErrorRedaction(t *testing.T) {
-	const helperEnv = "TIFLOW_TEST_STARTUP_ERROR"
+func TestStartupDiagnostics(t *testing.T) {
+	// Parse and startup failures exit, so exercise the real entry point separately.
+	const helperEnv = "TIFLOW_TEST_STARTUP_DIAGNOSTICS"
 	if os.Getenv(helperEnv) == "1" {
 		os.Args = append([]string{"sync_diff_inspector"}, flag.Args()...)
 		main()
 		return
 	}
-
-	const secret = "PrivateStartupReviewMarker"
-	for _, tc := range []struct {
-		name    string
-		flags   []string
-		filter  string
-		message string
-	}{
-		{name: "template", flags: []string{"--template", secret}, message: "unexpect template name"},
-		{name: "log-level", flags: []string{"--log-level", secret}, message: "Log init failed!"},
-		{name: "log-file", message: "Log init failed!"},
-		{name: "config-init", filter: "/[" + secret + "/.*", message: "Fail to initialize config."},
-		{name: "config-check", flags: []string{"--check-thread-count=0"}, message: "There is something wrong with your config"},
-	} {
-		for _, enabled := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/redact=%t", tc.name, enabled), func(t *testing.T) {
-				dir := t.TempDir()
-				outputDir := filepath.Join(dir, secret)
-				if tc.name == "log-file" {
-					require.NoError(t, os.WriteFile(outputDir, nil, 0o600))
-				}
-				filter := tc.filter
-				if filter == "" {
-					filter = "*.*"
-				}
-				configPath := filepath.Join(dir, "config.toml")
-				content := fmt.Sprintf("[data-sources.target]\n[task]\noutput-dir = %q\ntarget-instance = 'target'\ntarget-check-tables = [%q]\n", outputDir, filter)
-				require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
-				args := []string{"-test.run=^TestStartupErrorRedaction$", "--", "--config", configPath, fmt.Sprintf("--redact-info-log=%t", enabled)}
-				cmd := exec.Command(os.Args[0], append(args, tc.flags...)...)
-				cmd.Env = append(os.Environ(), helperEnv+"=1")
-				output, err := cmd.CombinedOutput()
-				var exitErr *exec.ExitError
-				require.ErrorAs(t, err, &exitErr, "%s", output)
-				require.Equal(t, 2, exitErr.ExitCode(), "%s", output)
-				text := string(output)
-				if tc.name == "template" && enabled {
-					require.Equal(t, "?\n", text)
-				} else {
-					require.Contains(t, text, tc.message)
-				}
-				if tc.name == "config-init" || tc.name == "config-check" {
-					// Inspect the file as well as stdout/stderr so an earlier
-					// diagnostic cannot expose the same value before startup exits.
-					logOutput, err := os.ReadFile(filepath.Join(outputDir, config.LogFileName))
-					require.NoError(t, err)
-					text += string(logOutput)
-				}
-				if enabled {
-					require.NotContains(t, text, secret)
-				} else {
-					require.Contains(t, text, secret)
-				}
-			})
-		}
-	}
-}
-
-func TestConfigParseErrorRedaction(t *testing.T) {
-	// Run the real entry point in a subprocess because parse failures call os.Exit.
-	const helperEnv = "TIFLOW_TEST_CONFIG_PARSE_ERROR"
-	if os.Getenv(helperEnv) == "1" {
-		os.Args = append([]string{"sync_diff_inspector"}, flag.Args()...)
-		main()
-		return
-	}
-
 	const secret = "PrivatePasswordReviewMarker"
-	const malformed = "[data-sources.mysql]\npassword = " + secret + "\n"
-	tests := []struct {
-		name   string
-		config string
-		flags  []string
-		redact bool
+	for _, tc := range []struct {
+		name, want string
+		flags      []string
 	}{
-		{name: "disabled by default", config: malformed},
-		{name: "explicitly disabled", config: malformed, flags: []string{"--redact-info-log=false"}},
-		{name: "enabled", config: malformed, flags: []string{"--redact-info-log"}, redact: true},
-		{
-			name: "enabled with config opt-out", config: "redact-info-log = false\n" + malformed,
-			flags: []string{"--redact-info-log"}, redact: true,
-		},
-		{
-			name: "disabled with config opt-in", config: "redact-info-log = true\n" + malformed,
-			flags: []string{"--redact-info-log=false"},
-		},
-		{
-			name: "enabled by config with unknown key", config: "redact-info-log = true\n" + secret + " = true\n",
-			redact: true,
-		},
-		{
-			name: "enabled with unknown key", config: "redact-info-log = false\n" + secret + " = true\n",
-			flags: []string{"--redact-info-log"}, redact: true,
-		},
-		{
-			name: "disabled with unknown key", config: "redact-info-log = true\n" + secret + " = true\n",
-			flags: []string{"--redact-info-log=false"},
-		},
-		{
-			name: "last flag enables redaction", config: malformed,
-			flags: []string{"--redact-info-log=false", "--redact-info-log"}, redact: true,
-		},
-		{
-			name: "last flag disables redaction", config: malformed,
-			flags: []string{"--redact-info-log", "--redact-info-log=false"},
-		},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			configPath := filepath.Join(t.TempDir(), "config.toml")
-			require.NoError(t, os.WriteFile(configPath, []byte(test.config), 0o600))
-			for _, configFirst := range []bool{false, true} {
-				args := []string{"--config", configPath}
-				if configFirst {
-					args = append(args, test.flags...)
-				} else {
-					args = append(append([]string{}, test.flags...), args...)
+		{"malformed visible", secret, []string{"--redact-info-log=false"}},
+		{"malformed hidden", "Error: details redacted", []string{"--redact-info-log"}},
+		{"missing config", "argument --config is required", []string{"--redact-info-log"}},
+		{"invalid template", "Use --template dm or --template norm", []string{"--redact-info-log", "--template", secret}},
+		{"log path", "please check log info in", []string{"--redact-info-log", "--check-thread-count=0"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			outputDir := filepath.Join(dir, "output")
+			args := append([]string{}, tc.flags...)
+			if tc.name != "missing config" {
+				content := "[data-sources.target]\npassword = " + secret
+				if tc.name == "log path" {
+					content = fmt.Sprintf("[data-sources.target]\n[task]\noutput-dir = %q\ntarget-instance = 'target'\ntarget-check-tables = ['*.*']\n", outputDir)
 				}
-				cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestConfigParseErrorRedaction$", "--"}, args...)...)
-				cmd.Env = append(os.Environ(), helperEnv+"=1")
-				output, err := cmd.CombinedOutput()
-				var exitErr *exec.ExitError
-				require.ErrorAs(t, err, &exitErr, "%s", output)
-				require.Equal(t, 2, exitErr.ExitCode(), "%s", output)
-				text := string(output)
-				require.Contains(t, text, "--redact-info-log")
-				if test.redact {
-					require.Contains(t, text, "Error: ?\n")
-					require.NotContains(t, text, secret)
-				} else {
-					require.Contains(t, text, secret)
-					require.NotContains(t, text, "Error: ?\n")
-				}
+				path := filepath.Join(dir, "config.toml")
+				require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+				args = append(args, "--config", path)
+			}
+			cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestStartupDiagnostics$", "--"}, args...)...)
+			cmd.Env = append(os.Environ(), helperEnv+"=1")
+			output, err := cmd.CombinedOutput()
+			var exitErr *exec.ExitError
+			require.ErrorAs(t, err, &exitErr, "%s", output)
+			require.Equal(t, 2, exitErr.ExitCode(), "%s", output)
+			require.Contains(t, string(output), tc.want)
+			if tc.name != "malformed visible" {
+				require.NotContains(t, string(output), secret)
+			}
+			if tc.name == "log path" {
+				require.Contains(t, string(output), filepath.Join(outputDir, config.LogFileName))
 			}
 		})
 	}

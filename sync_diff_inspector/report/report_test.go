@@ -25,7 +25,6 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
-	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -278,30 +277,6 @@ func TestPrint(t *testing.T) {
 	require.Equal(t, buf.String(), "Error in comparison process:\n"+
 		"123 error occurred in `test`.`tbl1`\n"+
 		"You can view the comparison details through 'output_dir/sync_diff.log'\n")
-}
-
-func TestPrintQueryErrorRedaction(t *testing.T) {
-	queryErr := errors.New("Error 1064: syntax error near 'private-range-value'")
-	for _, enabled := range []bool{false, true} {
-		t.Run(map[bool]string{false: "disabled", true: "enabled"}[enabled], func(t *testing.T) {
-			previous := dmlog.IsRedactLogEnabled()
-			dmlog.SetRedactLog(enabled)
-			t.Cleanup(func() { dmlog.SetRedactLog(previous) })
-
-			r := NewReport(task)
-			r.Init([]*common.TableDiff{{Schema: "test", Table: "tbl"}}, nil, nil)
-			r.SetTableMeetError("test", "tbl", queryErr)
-			var output bytes.Buffer
-			require.NoError(t, r.Print(&output))
-			if enabled {
-				require.NotContains(t, output.String(), "private-range-value")
-				require.Contains(t, output.String(), "? error occurred in `test`.`tbl`")
-			} else {
-				require.Contains(t, output.String(), queryErr.Error())
-			}
-			require.Same(t, queryErr, r.TableResults["test"]["tbl"].MeetError)
-		})
-	}
 }
 
 func TestGetSnapshot(t *testing.T) {

@@ -23,9 +23,9 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	tiflowdbutil "github.com/pingcap/tiflow/pkg/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -139,7 +139,7 @@ func (s *BucketIterator) Next() (*chunk.Range, error) {
 			lowerBounds[i] = bound.Lower
 			upperBounds[i] = bound.Upper
 		}
-		log.Info("failpoint print-chunk-info injected (bucket splitter)", logutil.ZapRedactStrings("lowerBounds", lowerBounds), logutil.ZapRedactStrings("upperBounds", upperBounds), zap.String("indexCode", c.Index.ToString()))
+		log.Info("failpoint print-chunk-info injected (bucket splitter)", dmlog.ZapRedact(zap.Strings("lowerBounds", lowerBounds)), dmlog.ZapRedact(zap.Strings("upperBounds", upperBounds)), zap.String("indexCode", c.Index.ToString()))
 	})
 	return c, nil
 }
@@ -151,8 +151,7 @@ func (s *BucketIterator) init(ctx context.Context, startRange *RangeInfo) error 
 	}
 
 	s.nextChunk = 0
-	buckets, err := tiflowdbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info,
-		tiflowdbutil.WithBucketDecodeErrorField(logutil.ZapRedactError))
+	buckets, err := tiflowdbutil.GetBucketsInfo(ctx, s.dbConn, s.table.Schema, s.table.Table, s.table.Info)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -203,7 +202,7 @@ NEXTINDEX:
 			// the random splitter.
 			return errors.NotFoundf("index %s in buckets info", index.Name.O)
 		}
-		log.Debug("buckets for index", zap.String("index", index.Name.O), logutil.ZapRedactReflect("buckets", buckets))
+		log.Debug("buckets for index", zap.String("index", index.Name.O), dmlog.ZapRedact(zap.Reflect("buckets", buckets)))
 
 		s.buckets = bucket
 		s.indexColumns = indexColumns

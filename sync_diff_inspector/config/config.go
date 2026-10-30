@@ -38,7 +38,7 @@ import (
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/security"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
@@ -65,6 +65,9 @@ const (
 	// UnifiedTimeZone is the time zone
 	UnifiedTimeZone string = "+0:00"
 )
+
+// ErrConfigRequired indicates that no configuration file was specified.
+var ErrConfigRequired = errors.New("argument --config is required")
 
 // TableConfig is the config of table.
 type TableConfig struct {
@@ -290,7 +293,7 @@ func (t *TaskConfig) Init(
 
 	t.TargetCheckTables, err = filter.Parse(t.CheckTables)
 	if err != nil {
-		log.Error("parse check tables failed", logutil.ZapRedactError(err))
+		log.Error("parse check tables failed", dmlog.ZapRedact(zap.Error(err)))
 		return errors.Annotate(err, "parse check tables failed")
 	}
 
@@ -495,7 +498,7 @@ func (c *Config) Parse(arguments []string) error {
 
 	// Load config file if specified.
 	if c.ConfigFile == "" {
-		return errors.Errorf("argument --config is required")
+		return ErrConfigRequired
 	}
 	redactInfoLog := c.RedactInfoLog
 	err = c.configFromFile(c.ConfigFile)
@@ -503,6 +506,8 @@ func (c *Config) Parse(arguments []string) error {
 	if c.FlagSet.Changed("redact-info-log") {
 		c.RedactInfoLog = redactInfoLog
 	}
+	// Apply the resolved policy before any subsequent diagnostic logging.
+	dmlog.SetRedactLog(c.RedactInfoLog)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -521,12 +526,7 @@ func (c *Config) Parse(arguments []string) error {
 	if c.Task.OutputDir == "" {
 		c.Task.OutputDir = timestampOutputDir()
 		if err := os.RemoveAll(c.Task.OutputDir); err != nil && !os.IsNotExist(err) {
-			// Parse runs before the global redaction setting is initialized.
-			path, errText := c.Task.OutputDir, err.Error()
-			if c.RedactInfoLog {
-				path, errText = "?", "?"
-			}
-			log.Fatal("fail to remove the temp directory", zap.String("path", path), zap.String("error", errText))
+			log.Fatal("fail to remove the temp directory", zap.String("path", c.Task.OutputDir), dmlog.ZapRedact(zap.Error(err)))
 		}
 	}
 

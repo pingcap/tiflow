@@ -34,7 +34,6 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -73,7 +72,7 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, falling back to random", logutil.ZapRedactError(err))
+	log.Info("failed to build bucket iterator, falling back to random", dmlog.ZapRedact(zap.Error(err)))
 	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
 }
 
@@ -330,7 +329,7 @@ func (s *TiDBSource) GetRowsIterator(ctx context.Context, tableRange *splitter.R
 	rowsQuery, _ := utils.GetTableRowsQueryFormat(matchedSource.OriginSchema, matchedSource.OriginTable, table.Info, table.Collation)
 	query := fmt.Sprintf(rowsQuery, chunk.Where)
 
-	log.Debug("select data", dmlog.ZapRedactString("sql", query), logutil.ZapRedactReflect("args", chunk.Args))
+	log.Debug("select data", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", chunk.Args)))
 	rows, err := s.dbConn.QueryContext(ctx, query, chunk.Args...)
 	defer func() {
 		if rows != nil {

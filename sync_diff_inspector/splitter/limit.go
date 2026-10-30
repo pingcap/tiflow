@@ -24,8 +24,8 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
-	"github.com/pingcap/tiflow/sync_diff_inspector/logutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
@@ -209,8 +209,8 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 					upperBounds[i] = bound.Upper
 				}
 				log.Info("failpoint print-chunk-info injected (limit splitter)",
-					logutil.ZapRedactStrings("lowerBounds", lowerBounds),
-					logutil.ZapRedactStrings("upperBounds", upperBounds),
+					dmlog.ZapRedact(zap.Strings("lowerBounds", lowerBounds)),
+					dmlog.ZapRedact(zap.Strings("upperBounds", upperBounds)),
 					zap.String("indexCode", c.Index.ToString()))
 			})
 		}

@@ -20,6 +20,7 @@ import (
 	"strings"
 	"testing"
 
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,29 +134,42 @@ func TestInitNormalizesSplitterStrategyBeforeCheckpointHash(t *testing.T) {
 }
 
 func TestParseRedactInfoLog(t *testing.T) {
-	// disabled by default
-	cfg := NewConfig()
-	require.NoError(t, cfg.Parse([]string{"--config", "config.toml"}))
-	require.False(t, cfg.RedactInfoLog)
-
-	// from the command line
-	cfg = NewConfig()
-	require.NoError(t, cfg.Parse([]string{"--config", "config.toml", "--redact-info-log"}))
-	require.True(t, cfg.RedactInfoLog)
-
-	// from the config file
+	previous := dmlog.IsRedactLogEnabled()
+	t.Cleanup(func() { dmlog.SetRedactLog(previous) })
 	content, err := os.ReadFile("config.toml")
 	require.NoError(t, err)
-	path := filepath.Join(t.TempDir(), "config.toml")
-	require.NoError(t, os.WriteFile(path, append([]byte("redact-info-log = true\n"), content...), LocalFilePerm))
-	cfg = NewConfig()
-	require.NoError(t, cfg.Parse([]string{"--config", path}))
-	require.True(t, cfg.RedactInfoLog)
-
-	// the command line overrides the config file
-	cfg = NewConfig()
-	require.NoError(t, cfg.Parse([]string{"--config", path, "--redact-info-log=false"}))
-	require.False(t, cfg.RedactInfoLog)
+	for _, tc := range []struct {
+		name, prefix string
+		flags        []string
+		want, fails  bool
+	}{
+		{name: "default"},
+		{name: "CLI", flags: []string{"--redact-info-log"}, want: true},
+		{name: "TOML", prefix: "redact-info-log = true\n", want: true},
+		{name: "CLI false overrides TOML", prefix: "redact-info-log = true\n", flags: []string{"--redact-info-log=false"}},
+		{name: "CLI true overrides TOML", prefix: "redact-info-log = false\n", flags: []string{"--redact-info-log"}, want: true},
+		{name: "last flag wins", flags: []string{"--redact-info-log", "--redact-info-log=false"}},
+		{name: "unknown key from TOML", prefix: "redact-info-log = true\nunknown = true\n", want: true, fails: true},
+		{name: "unknown key CLI override", prefix: "redact-info-log = true\nunknown = true\n", flags: []string{"--redact-info-log=false"}, fails: true},
+		{name: "malformed TOML CLI true", prefix: "redact-info-log = false\npassword = PrivateMarker\n", flags: []string{"--redact-info-log"}, want: true, fails: true},
+		{name: "malformed TOML CLI false", prefix: "redact-info-log = true\npassword = PrivateMarker\n", flags: []string{"--redact-info-log=false"}, fails: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			require.NoError(t, os.WriteFile(path, append([]byte(tc.prefix), content...), LocalFilePerm))
+			// Start with the opposite mode to check that Parse applies its policy.
+			dmlog.SetRedactLog(!tc.want)
+			cfg := NewConfig()
+			err := cfg.Parse(append([]string{"--config", path}, tc.flags...))
+			if tc.fails {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.want, cfg.RedactInfoLog)
+			require.Equal(t, tc.want, dmlog.IsRedactLogEnabled())
+		})
+	}
 }
 
 func TestError(t *testing.T) {

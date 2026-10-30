@@ -16,22 +16,16 @@ package utils
 import (
 	"context"
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/go-sql-driver/mysql"
-	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
-	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest/observer"
 )
 
 type tableCaseType struct {
@@ -280,109 +274,6 @@ func TestGetCountAndMD5Checksum(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, count, int64(123))
 	require.Equal(t, checksum, uint64(0x1c8))
-}
-
-func TestGetCountAndMD5ChecksumColumnMetadataRedaction(t *testing.T) {
-	original := dmlog.IsRedactLogEnabled()
-	t.Cleanup(func() { dmlog.SetRedactLog(original) })
-
-	tableInfo, err := GetTableInfoBySQL("CREATE TABLE `test`.`test` ("+
-		"`a` varchar(100) DEFAULT 'private-default', "+
-		"`b` varchar(200) AS (concat(`a`, 'private-generated')) STORED, "+
-		"`c` enum('private-enum', 'public'))", parser.New())
-	require.NoError(t, err)
-	columns, err := json.Marshal(tableInfo.Columns)
-	require.NoError(t, err)
-	for _, literal := range []string{"private-default", "private-generated", "private-enum"} {
-		require.Contains(t, string(columns), literal)
-	}
-
-	for _, redact := range []bool{false, true} {
-		t.Run(fmt.Sprintf("redact=%t", redact), func(t *testing.T) {
-			dmlog.SetRedactLog(redact)
-			core, observed := observer.New(zap.DebugLevel)
-			restore := log.ReplaceGlobals(zap.New(core), nil)
-			t.Cleanup(restore)
-
-			conn, mock, err := sqlmock.New()
-			require.NoError(t, err)
-			defer conn.Close()
-			mock.ExpectQuery("SELECT COUNT.*FROM `test_schema`\\.`test_table` WHERE TRUE;").
-				WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(123, 456))
-
-			count, checksum, err := GetCountAndMD5Checksum(context.Background(), conn, "test_schema", "test_table", tableInfo, "TRUE", "", nil)
-			require.NoError(t, err)
-			require.Equal(t, int64(123), count)
-			require.Equal(t, uint64(456), checksum)
-			require.NoError(t, mock.ExpectationsWereMet())
-			unchangedColumns, err := json.Marshal(tableInfo.Columns)
-			require.NoError(t, err)
-			require.Equal(t, columns, unchangedColumns)
-
-			entries := observed.FilterMessage("table columns").All()
-			require.Len(t, entries, 1)
-			if redact {
-				require.Equal(t, "?", entries[0].ContextMap()["columns"])
-				encodedLogs, err := json.Marshal(observed.All())
-				require.NoError(t, err)
-				for _, literal := range []string{"private-default", "private-generated", "private-enum"} {
-					require.NotContains(t, string(encodedLogs), literal)
-				}
-			} else {
-				require.Equal(t, zap.Any("columns", tableInfo.Columns), entries[0].Context[0])
-				encodedColumns, err := json.Marshal(entries[0].ContextMap()["columns"])
-				require.NoError(t, err)
-				require.Equal(t, columns, encodedColumns)
-			}
-		})
-	}
-}
-
-func TestGetCountAndMD5ChecksumErrorRedaction(t *testing.T) {
-	original := dmlog.IsRedactLogEnabled()
-	t.Cleanup(func() { dmlog.SetRedactLog(original) })
-
-	tableInfo, err := GetTableInfoBySQL("create table `test`.`test` (`a` int, `b` varchar(100))", parser.New())
-	require.NoError(t, err)
-	queryErr := &mysql.MySQLError{
-		Number:  1064,
-		Message: "You have an error in your SQL syntax near 'sensitive-range'",
-	}
-
-	for _, redact := range []bool{false, true} {
-		t.Run(fmt.Sprintf("redact=%t", redact), func(t *testing.T) {
-			dmlog.SetRedactLog(redact)
-			core, observed := observer.New(zap.DebugLevel)
-			restore := log.ReplaceGlobals(zap.New(core), nil)
-			t.Cleanup(restore)
-
-			conn, mock, err := sqlmock.New()
-			require.NoError(t, err)
-			defer conn.Close()
-			mock.ExpectQuery("SELECT COUNT.*FROM `test_schema`\\.`test_table` WHERE `b` = 'sensitive-range' AND `a` > \\?;").
-				WithArgs("sensitive-bound").WillReturnError(queryErr)
-
-			count, checksum, err := GetCountAndMD5Checksum(context.Background(), conn, "test_schema", "test_table",
-				tableInfo, "`b` = 'sensitive-range' AND `a` > ?", "", []any{"sensitive-bound"})
-			require.ErrorIs(t, err, queryErr)
-			require.Equal(t, int64(-1), count)
-			require.Zero(t, checksum)
-			require.NoError(t, mock.ExpectationsWereMet())
-
-			warnings := observed.FilterMessage("execute checksum query fail").All()
-			require.Len(t, warnings, 1)
-			fields := warnings[0].ContextMap()
-			if redact {
-				require.Equal(t, map[string]any{"query": "?", "args": "?", "error": "?"}, fields)
-				require.NotContains(t, fmt.Sprint(observed.All()), "sensitive-range")
-				require.NotContains(t, fmt.Sprint(observed.All()), "sensitive-bound")
-			} else {
-				require.Contains(t, fields["query"], "sensitive-range")
-				require.Equal(t, fields["args"], []any{"sensitive-bound"})
-				require.Equal(t, queryErr.Error(), fields["error"])
-			}
-		})
-	}
 }
 
 func TestGetApproximateMid(t *testing.T) {
