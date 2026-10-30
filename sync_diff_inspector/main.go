@@ -78,7 +78,7 @@ func main() {
 	conf.File.Filename = filepath.Join(cfg.Task.OutputDir, config.LogFileName)
 	lg, p, e := log.InitLogger(conf)
 	if e != nil {
-		log.Error("Log init failed!", zap.String("error", utils.DiagnosticError(e)))
+		log.Error("Log init failed!", utils.ZapDiagnosticError(e))
 		os.Exit(2)
 	}
 	log.ReplaceGlobals(lg, p)

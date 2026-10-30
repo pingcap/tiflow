@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/errors"
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
 
 func TestDiagnosticError(t *testing.T) {
@@ -63,6 +64,29 @@ func TestDiagnosticError(t *testing.T) {
 			} else {
 				require.Empty(t, DiagnosticError(tc.err))
 			}
+		})
+	}
+}
+
+func TestZapDiagnosticError(t *testing.T) {
+	previous := dmlog.IsRedactLogEnabled()
+	t.Cleanup(func() { dmlog.SetRedactLog(previous) })
+	pathErr := &os.PathError{Op: "open", Path: "/tmp/report.txt", Err: syscall.EACCES}
+	cases := []struct {
+		name string
+		err  error
+		want zap.Field
+	}{
+		{"nil", nil, zap.Error(nil)},
+		{"filesystem", errors.Annotate(pathErr, "private-literal"), zap.String("error", pathErr.Error())},
+		{"sql", &mysql.MySQLError{Number: 1064, Message: "syntax error near 'private-literal'"}, zap.String("error", "details redacted")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dmlog.SetRedactLog(false)
+			require.Equal(t, zap.Error(tc.err), ZapDiagnosticError(tc.err))
+			dmlog.SetRedactLog(true)
+			require.Equal(t, tc.want, ZapDiagnosticError(tc.err))
 		})
 	}
 }

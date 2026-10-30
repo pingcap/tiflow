@@ -139,7 +139,7 @@ func (df *Diff) PrintSummary(ctx context.Context) bool {
 	df.report.CalculateTotalSize(ctx, df.downstream.GetDB())
 	err := df.report.CommitSummary()
 	if err != nil {
-		log.Fatal("failed to commit report", dmlog.ZapRedact(zap.Error(err)))
+		log.Fatal("failed to commit report", utils.ZapDiagnosticError(err))
 	}
 	df.report.Print(os.Stdout)
 	return df.report.Result == report.Pass
@@ -160,7 +160,7 @@ func (df *Diff) Close() {
 	})
 
 	if err := os.Remove(filepath.Join(df.CheckpointDir, checkpointFile)); err != nil && !os.IsNotExist(err) {
-		log.Fatal("fail to remove the checkpoint file", dmlog.ZapRedact(zap.Error(err)))
+		log.Fatal("fail to remove the checkpoint file", utils.ZapDiagnosticError(err))
 	}
 }
 
@@ -816,7 +816,7 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				}
 				fixSQLFile, err := os.Create(fixSQLPath)
 				if err != nil {
-					log.Fatal("write sql failed: cannot create file", dmlog.ZapRedact(zap.Strings("sql", dml.sqls)), dmlog.ZapRedact(zap.Error(err)))
+					log.Fatal("write sql failed: cannot create file", dmlog.ZapRedact(zap.Strings("sql", dml.sqls)), utils.ZapDiagnosticError(err))
 				}
 				// write chunk meta
 				chunkRange := dml.node.ChunkRange
@@ -827,7 +827,7 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				for _, sql := range dml.sqls {
 					_, err = fixSQLFile.WriteString(fmt.Sprintf("%s\n", sql))
 					if err != nil {
-						log.Fatal("write sql failed", dmlog.ZapRedact(zap.String("sql", sql)), dmlog.ZapRedact(zap.Error(err)))
+						log.Fatal("write sql failed", dmlog.ZapRedact(zap.String("sql", sql)), utils.ZapDiagnosticError(err))
 					}
 				}
 				fixSQLFile.Close()

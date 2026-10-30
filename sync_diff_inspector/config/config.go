@@ -526,7 +526,7 @@ func (c *Config) Parse(arguments []string) error {
 	if c.Task.OutputDir == "" {
 		c.Task.OutputDir = timestampOutputDir()
 		if err := os.RemoveAll(c.Task.OutputDir); err != nil && !os.IsNotExist(err) {
-			log.Fatal("fail to remove the temp directory", zap.String("path", c.Task.OutputDir), dmlog.ZapRedact(zap.Error(err)))
+			log.Fatal("fail to remove the temp directory", zap.String("path", c.Task.OutputDir), utils.ZapDiagnosticError(err))
 		}
 	}
 

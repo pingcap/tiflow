@@ -24,7 +24,17 @@ import (
 
 	"github.com/pingcap/errors"
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
+	"go.uber.org/zap"
 )
+
+// ZapDiagnosticError preserves useful operational error details while hiding
+// data-bearing contents when redaction is enabled.
+func ZapDiagnosticError(err error) zap.Field {
+	if err == nil || !dmlog.IsRedactLogEnabled() {
+		return zap.Error(err)
+	}
+	return zap.String("error", DiagnosticError(err))
+}
 
 // DiagnosticError keeps native connection and filesystem diagnostics useful when
 // redaction is enabled, including addresses and paths, while hiding data-bearing
