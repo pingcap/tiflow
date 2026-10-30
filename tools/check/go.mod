@@ -1,6 +1,6 @@
 module github.com/pingcap/tidb-cdc/_tools
 
-go 1.26.9
+go 1.27.3
 
 require (
 	github.com/AlekSi/gocov-xml v1.1.0
@@ -19,11 +19,11 @@ require (
 	github.com/tinylib/msgp v1.5.0
 	github.com/vektra/mockery/v2 v2.14.1
 	github.com/zhouqiang-cl/gocovmerge v0.0.0-20190125174600-5256314471af
-	golang.org/x/tools v0.49.0
+	golang.org/x/tools v0.50.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0
 	google.golang.org/protobuf v1.36.5
 	gotest.tools/gotestsum v1.13.0
-	mvdan.cc/gofumpt v0.7.0
+	mvdan.cc/gofumpt v0.12.0
 	mvdan.cc/sh/v3 v3.3.1
 )
 
@@ -176,7 +176,7 @@ require (
 	github.com/quasilyte/stdinfo v0.0.0-20220114132959-f7386bf02567 // indirect
 	github.com/raeperd/recvcheck v0.2.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/rs/zerolog v1.27.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/ryancurrah/gomodguard v1.3.5 // indirect
@@ -233,7 +233,7 @@ require (
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/sync v0.23.0 // indirect
 	golang.org/x/sys v0.48.0 // indirect
-	golang.org/x/telemetry v0.0.0-20260811182544-a038080d80e5 // indirect
+	golang.org/x/telemetry v0.0.0-20260908163034-4bcc4b2ee518 // indirect
 	golang.org/x/term v0.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	golang.org/x/tools/go/expect v0.1.1-deprecated // indirect

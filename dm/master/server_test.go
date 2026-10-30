@@ -297,12 +297,12 @@ func newMockRPCClient(client pb.WorkerClient) workerrpc.Client {
 
 func defaultWorkerSource() ([]string, []string) {
 	return []string{
-			"mysql-replica-01",
-			"mysql-replica-02",
-		}, []string{
-			"127.0.0.1:8262",
-			"127.0.0.1:8263",
-		}
+		"mysql-replica-01",
+		"mysql-replica-02",
+	}, []string{
+		"127.0.0.1:8262",
+		"127.0.0.1:8263",
+	}
 }
 
 func makeNilWorkerClients(workers []string) map[string]workerrpc.Client {

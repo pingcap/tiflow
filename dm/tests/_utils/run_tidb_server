@@ -93,7 +93,13 @@ if [ "$USE_TLS" = "0" ]; then
 	mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_clustered_index = 'INT_ONLY'" || true
 	# Next-gen DDL relies on the distributed execution framework (DXF) and fast
 	# reorg via tikv-worker; disabling them breaks ADD INDEX / ADD COLUMN.
-	if [ "${NEXT_GEN:-}" != "1" ]; then
+	if [ "${NEXT_GEN:-}" = "1" ]; then
+		# Next-gen rejects local-sort ADD INDEX / MODIFY COLUMN. Reuse the
+		# cluster's MinIO backend for global sort, including after TiDB restarts.
+		cloud_storage_uri="s3://${MINIO_BUCKET:-next-gen-test}/dm-global-sort?endpoint=http://${MINIO_ADDR:-127.0.0.1:9000}"
+		cloud_storage_uri="${cloud_storage_uri}&access-key=${MINIO_ACCESS_KEY:-minioadmin}&secret-access-key=${MINIO_SECRET_KEY:-minioadmin}&provider=minio"
+		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_cloud_storage_uri = '$cloud_storage_uri'"
+	else
 		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_ddl_enable_fast_reorg = 0" || true
 		mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET @@global.tidb_enable_dist_task = 0" || true
 	fi
