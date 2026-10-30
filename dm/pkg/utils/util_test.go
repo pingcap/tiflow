@@ -27,6 +27,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestProxyFieldsHideCredentials(t *testing.T) {
+	for _, name := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("HTTP_PROXY", "user:private-password@proxy.invalid:8080")
+	t.Setenv("HTTPS_PROXY", "https://user:private-password@proxy.invalid:8080")
+	fields := proxyFields()
+	require.Len(t, fields, 2)
+	for _, field := range fields {
+		require.NotContains(t, field.String, "private-password")
+	}
+}
+
 func TestDecodeBinlogPosition(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {

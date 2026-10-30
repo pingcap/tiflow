@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/dumpling/export"
+	"github.com/pingcap/tidb/pkg/objstore"
 	tidbpromutil "github.com/pingcap/tidb/pkg/util/promutil"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/dm/config"
@@ -33,6 +34,7 @@ import (
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	dutils "github.com/pingcap/tiflow/dm/pkg/dumpling"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
@@ -154,8 +156,8 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 	if m.cfg.ExtStorage == nil {
 		err := storage.RemoveAll(ctx, m.cfg.Dir, nil)
 		if err != nil {
-			m.logger.Error("fail to remove output directory", zap.String("directory", m.cfg.Dir), log.ShortError(err))
-			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+m.cfg.Dir))
+			m.logger.Error("fail to remove output directory", zap.String("directory", objstore.RedactURL(m.cfg.Dir)), redact.Error(err))
+			processError := unit.NewProcessError(terror.ErrDumpUnitRuntime.Delegate(err, "fail to remove output directory: "+objstore.RedactURL(m.cfg.Dir)))
 			m.handleExitErrMetric(processError)
 			errs = append(errs, processError)
 			pr <- pb.ProcessResult{
@@ -188,7 +190,7 @@ func (m *Dumpling) Process(ctx context.Context, pr chan pb.ProcessResult) {
 		})
 		dumpling.Close()
 	} else {
-		m.logger.Warn("error occurred during NewDumper", zap.Error(err))
+		m.logger.Warn("error occurred during NewDumper", redact.Error(err))
 	}
 	cancel()
 

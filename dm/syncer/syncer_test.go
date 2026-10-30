@@ -1381,6 +1381,29 @@ func TestLoadTableStructureFromExternalStorageReadError(t *testing.T) {
 	require.NoError(t, err)
 }
 
+type walkErrorStorage struct {
+	storeapi.Storage
+	err error
+}
+
+func (s *walkErrorStorage) WalkDir(context.Context, *storeapi.WalkOption, func(string, int64) error) error {
+	return s.err
+}
+
+func TestLoadTableStructureFromDumpRedactsStorageError(t *testing.T) {
+	// Azure SDK errors contain the complete request URL, including SAS signatures.
+	storageErr := errors.New(`Get "https://account.blob.core.windows.net/container?comp=list&restype=container&sig=private-sas-signature&sv=2024-11-04": dial tcp: connection refused`)
+	syncer := newTestSyncerForExternalStorage(t, &walkErrorStorage{err: storageErr})
+	core, logs := observer.New(zap.WarnLevel)
+	syncer.tctx = syncer.tctx.WithLogger(log.Logger{Logger: zap.New(core)})
+
+	require.Error(t, syncer.loadTableStructureFromDump(context.Background()))
+	require.NotEmpty(t, logs.All())
+	for _, entry := range logs.All() {
+		require.NotContains(t, fmt.Sprint(entry.ContextMap()), "private-sas-signature", entry.Message)
+	}
+}
+
 func newTestSyncerForExternalStorage(t *testing.T, dumpStorage storeapi.Storage) *Syncer {
 	t.Helper()
 	ctx := context.Background()
