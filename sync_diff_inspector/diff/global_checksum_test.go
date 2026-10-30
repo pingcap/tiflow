@@ -14,6 +14,7 @@
 package diff
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -21,8 +22,14 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-sql-driver/mysql"
+	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
@@ -31,7 +38,11 @@ import (
 	"github.com/pingcap/tiflow/sync_diff_inspector/source"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest"
 )
 
 type mockChecksumIterator struct {
@@ -235,6 +246,89 @@ func TestGetSourceGlobalChecksumResumeFromLastRange(t *testing.T) {
 	require.NotNil(t, src.startRange.ChunkRange)
 	require.Equal(t, 3, src.startRange.ChunkRange.Index.ChunkIndex)
 	require.NotSame(t, state.LastRange, src.startRange.ChunkRange)
+}
+
+// queryChecksumSource keeps chunk scheduling in memory while using the real
+// checksum query path, so this test covers logging across package boundaries.
+type queryChecksumSource struct {
+	*mockChecksumSource
+	db *sql.DB
+}
+
+func (s *queryChecksumSource) GetCountAndMD5(ctx context.Context, r *splitter.RangeInfo) *source.ChecksumInfo {
+	table := s.tables[r.GetTableIndex()]
+	c := r.GetChunk()
+	count, checksum, err := utils.GetCountAndMD5Checksum(ctx, s.db, table.Schema, table.Table, table.Info, c.Where, "", c.Args)
+	return &source.ChecksumInfo{Count: count, Checksum: checksum, Err: err}
+}
+
+func TestGlobalChecksumRedaction(t *testing.T) {
+	previous := dmlog.IsRedactLogEnabled()
+	t.Cleanup(func() { dmlog.SetRedactLog(previous) })
+	tableInfo, err := utils.GetTableInfoBySQL("CREATE TABLE test.tbl (id varchar(100) DEFAULT 'private-default')", parser.New())
+	require.NoError(t, err)
+	queryErr := &mysql.MySQLError{Number: 1064, Message: "syntax error near 'private-range'"}
+	for _, failQuery := range []bool{false, true} {
+		for _, redact := range []bool{false, true} {
+			t.Run(fmt.Sprintf("query-error=%t/redact=%t", failQuery, redact), func(t *testing.T) {
+				dmlog.SetRedactLog(redact)
+				logs := new(zaptest.Buffer)
+				level := zap.NewAtomicLevelAt(zap.DebugLevel)
+				core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), logs, level)
+				t.Cleanup(log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Core: core, Syncer: logs, Level: level}))
+
+				db, mock, err := sqlmock.New()
+				require.NoError(t, err)
+				defer db.Close()
+				query := mock.ExpectQuery("SELECT COUNT.*FROM `test`\\.`tbl` WHERE `id` != 'private-range' AND `id` > \\?;").WithArgs("private-bound")
+				if failQuery {
+					query.WillReturnError(queryErr)
+				} else {
+					query.WillReturnRows(sqlmock.NewRows([]string{"CNT", "CHECKSUM"}).AddRow(17, 19))
+				}
+				tables := []*common.TableDiff{{Schema: "test", Table: "tbl", Info: tableInfo}}
+				newSource := func() *mockChecksumSource {
+					return &mockChecksumSource{
+						iterator: &mockChecksumIterator{chunks: []*chunk.Range{{
+							Index: &chunk.CID{ChunkCnt: 1}, Where: "`id` != 'private-range' AND `id` > ?", Args: []any{"private-bound"},
+						}}},
+						tables: tables, infos: map[int]*source.ChecksumInfo{0: {Count: 17, Checksum: 19}},
+					}
+				}
+				checkpointDir := t.TempDir()
+				df := &Diff{
+					upstream: &queryChecksumSource{mockChecksumSource: newSource(), db: db}, downstream: newSource(),
+					checkThreadCount: 1, cp: new(checkpoints.Checkpoint),
+					report: report.NewReport(&config.TaskConfig{OutputDir: checkpointDir}), CheckpointDir: checkpointDir,
+				}
+				df.report.Init(tables, nil, nil)
+				var output bytes.Buffer
+				progress.Init(1, 0)
+				progress.SetOutput(&output)
+				require.NoError(t, df.equalByGlobalChecksum(context.Background()))
+				progress.Close()
+				require.NoError(t, df.report.Print(&output))
+				require.NoError(t, mock.ExpectationsWereMet())
+				result := df.report.TableResults["test"]["tbl"]
+				if failQuery {
+					require.Same(t, queryErr, errors.Cause(result.MeetError))
+				} else {
+					require.Nil(t, result.MeetError)
+					require.True(t, result.DataEqual)
+					require.Equal(t, int64(17), result.UpCount)
+					require.Equal(t, result.UpCount, result.DownCount)
+				}
+				wholeOutput := logs.String() + output.String()
+				if redact {
+					require.NotContains(t, wholeOutput, "private-")
+				} else {
+					for _, value := range []string{"private-default", "private-range", "private-bound"} {
+						require.Contains(t, wholeOutput, value)
+					}
+				}
+			})
+		}
+	}
 }
 
 func TestGlobalChecksumErrorCheckpointStopsAtCurrentTable(t *testing.T) {

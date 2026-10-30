@@ -24,6 +24,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/report"
@@ -288,7 +289,7 @@ func (cp *Checkpoint) SaveChunk(ctx context.Context, fileName string, cur *Node,
 		return nil, err
 	}
 	log.Info("save checkpoint",
-		zap.Any("chunk", cur),
+		dmlog.ZapRedact(zap.Reflect("chunk", cur)),
 		zap.String("state", cur.GetState()))
 	return cur.GetID(), nil
 }

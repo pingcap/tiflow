@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 )
 
 type atomicWriter struct {
@@ -251,7 +252,7 @@ func (tpp *tableProgressPrinter) Error(err error) {
 	<-tpp.finishCh
 	var cleanStr, fixStr string
 	cleanStr = "\x1b[1A\x1b[J"
-	fixStr = fmt.Sprintf("\nError in comparison process:\n%v\n\nYou can view the comparison details through './output_dir/sync_diff_inspector.log'\n", err)
+	fixStr = fmt.Sprintf("\nError in comparison process:\n%s\n\nYou can view the comparison details through './output_dir/sync_diff_inspector.log'\n", utils.DiagnosticError(err))
 	tpp.output.Write("%s%s", cleanStr, fixStr)
 }
 

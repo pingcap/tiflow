@@ -24,9 +24,11 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/collate"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/diff"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 	flag "github.com/spf13/pflag"
 	"go.uber.org/zap"
 )
@@ -38,12 +40,17 @@ func init() {
 func main() {
 	cfg := config.NewConfig()
 	err := cfg.Parse(os.Args[1:])
+	dmlog.SetRedactLog(cfg.RedactInfoLog)
 	switch errors.Cause(err) {
 	case nil:
 	case flag.ErrHelp:
 		os.Exit(0)
 	default:
-		fmt.Printf("Error: %s\n", err.Error())
+		message := utils.DiagnosticError(err)
+		if errors.Cause(err) == config.ErrConfigRequired {
+			message = err.Error()
+		}
+		fmt.Printf("Error: %s\n", message)
 		cfg.FlagSet.PrintDefaults()
 		os.Exit(2)
 	}
@@ -55,7 +62,11 @@ func main() {
 
 	if cfg.Template != "" {
 		if err := config.ExportTemplateConfig(cfg.Template); err != nil {
-			fmt.Printf("%s\n", err.Error())
+			if dmlog.IsRedactLogEnabled() {
+				fmt.Println("Unknown template. Use --template dm or --template norm.")
+			} else {
+				fmt.Printf("%s\n", err.Error())
+			}
 			os.Exit(2)
 		}
 		return
@@ -67,7 +78,7 @@ func main() {
 	conf.File.Filename = filepath.Join(cfg.Task.OutputDir, config.LogFileName)
 	lg, p, e := log.InitLogger(conf)
 	if e != nil {
-		log.Error("Log init failed!", zap.String("error", e.Error()))
+		log.Error("Log init failed!", utils.ZapDiagnosticError(e))
 		os.Exit(2)
 	}
 	log.ReplaceGlobals(lg, p)
@@ -77,7 +88,7 @@ func main() {
 	// Initial config
 	err = cfg.Init()
 	if err != nil {
-		fmt.Printf("Fail to initialize config.\n%s\n", err.Error())
+		fmt.Printf("Fail to initialize config.\n%s\n", utils.DiagnosticError(err))
 		os.Exit(2)
 	}
 
@@ -87,7 +98,7 @@ func main() {
 		os.Exit(2)
 	}
 
-	log.Info("", zap.Stringer("config", cfg))
+	log.Info("", dmlog.ZapRedact(zap.Stringer("config", cfg)))
 
 	ctx := context.Background()
 	if !checkSyncState(ctx, cfg) {
@@ -106,8 +117,8 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 	d, err := diff.NewDiff(ctx, cfg)
 	if err != nil {
 		fmt.Printf("An error occurred while initializing diff: %s, please check log info in %s for full details\n",
-			err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
-		log.Fatal("failed to initialize diff process", zap.Error(err))
+			utils.DiagnosticError(err), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+		log.Fatal("failed to initialize diff process", dmlog.ZapRedact(zap.Error(err)))
 		return false
 	}
 	defer d.Close()
@@ -116,8 +127,8 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		err = d.StructEqual(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table structure: %s, please check log info in %s for full details\n",
-				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
-			log.Fatal("failed to check structure difference", zap.Error(err))
+				utils.DiagnosticError(err), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+			log.Fatal("failed to check structure difference", dmlog.ZapRedact(zap.Error(err)))
 			return false
 		}
 	} else {
@@ -130,8 +141,8 @@ func checkSyncState(ctx context.Context, cfg *config.Config) bool {
 		err = d.Equal(ctx)
 		if err != nil {
 			fmt.Printf("An error occurred while comparing table data: %s, please check log info in %s for full details\n",
-				err, filepath.Join(cfg.Task.OutputDir, config.LogFileName))
-			log.Fatal("failed to check data difference", zap.Error(err))
+				utils.DiagnosticError(err), filepath.Join(cfg.Task.OutputDir, config.LogFileName))
+			log.Fatal("failed to check data difference", dmlog.ZapRedact(zap.Error(err)))
 			return false
 		}
 	} else {

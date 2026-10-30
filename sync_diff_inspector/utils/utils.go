@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/collate"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"go.uber.org/zap"
 )
@@ -635,11 +636,11 @@ func CompareData(map1, map2 map[string]*dbutil.ColumnData, orderKeyCols, columns
 		}
 
 		if cmp == 0 {
-			log.Warn("find different row", zap.String("column", key), zap.String("row1", rowToString(map1)), zap.String("row2", rowToString(map2)))
+			log.Warn("find different row", zap.String("column", key), dmlog.ZapRedact(zap.String("row1", rowToString(map1))), dmlog.ZapRedact(zap.String("row2", rowToString(map2))))
 		} else if cmp > 0 {
-			log.Warn("target had superfluous data", zap.String("row", rowToString(map2)))
+			log.Warn("target had superfluous data", dmlog.ZapRedact(zap.String("row", rowToString(map2))))
 		} else {
-			log.Warn("target lack data", zap.String("row", rowToString(map1)))
+			log.Warn("target lack data", dmlog.ZapRedact(zap.String("row", rowToString(map1))))
 		}
 	}()
 
@@ -818,7 +819,7 @@ func GetApproximateMidBySize(ctx context.Context, db *sql.DB, schema, table stri
 		limitRange,
 		strings.Join(columnNames, ", "),
 		count/2)
-	log.Debug("get mid by size", zap.String("sql", query), zap.Reflect("args", args))
+	log.Debug("get mid by size", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", args)))
 	rows, err := db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, errors.Trace(err)
@@ -875,7 +876,8 @@ func GetCountAndMD5Checksum(
 	*/
 	columnNames := make([]string, 0, len(tbInfo.Columns))
 	columnIsNull := make([]string, 0, len(tbInfo.Columns))
-	log.Debug("table columns", zap.Any("columns", tbInfo.Columns))
+	// ColumnInfo can contain default values, generated expressions, and enum/set literals.
+	log.Debug("table columns", dmlog.ZapRedact(zap.Reflect("columns", tbInfo.Columns)))
 	for _, col := range tbInfo.Columns {
 		if col.Hidden {
 			continue
@@ -901,18 +903,19 @@ func GetCountAndMD5Checksum(
 		dbutil.TableName(schemaName, tableName),
 		limitRange,
 	)
-	log.Debug("count and checksum", zap.String("sql", query), zap.Reflect("args", args))
+	// limitRange can contain configured SQL literals, so mask query text as well as arguments.
+	log.Debug("count and checksum", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", args)))
 
 	var count sql.NullInt64
 	var checksum uint64
 	err := db.QueryRowContext(ctx, query, args...).Scan(&count, &checksum)
 	if err != nil {
-		log.Warn("execute checksum query fail", zap.String("query", query), zap.Reflect("args", args), zap.Error(err))
+		log.Warn("execute checksum query fail", dmlog.ZapRedact(zap.String("query", query)), dmlog.ZapRedact(zap.Reflect("args", args)), dmlog.ZapRedact(zap.Error(err)))
 		return -1, 0, errors.Trace(err)
 	}
 	if !count.Valid {
 		// if don't have any data, the checksum will be `NULL`
-		log.Warn("get empty count", zap.String("sql", query), zap.Reflect("args", args))
+		log.Warn("get empty count", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", args)))
 		return 0, 0, nil
 	}
 	return count.Int64, checksum, nil
@@ -947,7 +950,7 @@ func GetRandomValues(
 
 	query := fmt.Sprintf("SELECT %[1]s FROM (SELECT %[1]s, rand() rand_value FROM %[2]s WHERE %[3]s ORDER BY rand_value LIMIT %[4]d)rand_tmp ORDER BY %[5]s",
 		strings.Join(columnNames, ", "), dbutil.TableName(schema, table), limitRange, num, BuildOrderByClause(columns, collation))
-	log.Debug("get random values", zap.String("sql", query), zap.Reflect("args", limitArgs))
+	log.Debug("get random values", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", limitArgs)))
 
 	rows, err := db.QueryContext(ctx, query, limitArgs...)
 	if err != nil {
@@ -1082,12 +1085,12 @@ func GetSelectivity(ctx context.Context, db *sql.DB, schemaName, tableName, colu
 	args := []interface{}{}
 	err := db.QueryRowContext(ctx, query, args...).Scan(&selectivity)
 	if err != nil {
-		log.Warn("execute get selectivity query fail", zap.String("query", query))
+		log.Warn("execute get selectivity query fail", dmlog.ZapRedact(zap.String("query", query)))
 		return 0.0, errors.Trace(err)
 	}
 	if !selectivity.Valid {
 		// if don't have any data, the checksum will be `NULL`
-		log.Warn("get empty count or checksum", zap.String("sql", query))
+		log.Warn("get empty count or checksum", dmlog.ZapRedact(zap.String("sql", query)))
 		return 0.0, nil
 	}
 	return selectivity.Float64, nil
