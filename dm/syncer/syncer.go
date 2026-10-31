@@ -2108,15 +2108,38 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	// eventIndex is the rows event index in this transaction, it's used to avoiding read duplicate event in gtid mode
 	eventIndex := 0
-	// affectedSourceTables is used for gtid mode to update table point's gtid set after receiving a xid event,
-	// which means this whole event is finished
-	affectedSourceTables := make(map[string]map[string]struct{}, 0)
+	rowHandler := &orderedRowHandler{syncer: s, affectedSourceTables: make(map[string]map[string]struct{})}
+	rowExecutor := newRowEventExecutor(s.runCtx.Ctx, rowEventQueueSize, rowEventQueueBytes, rowHandler.handle, s.runCancel)
+	drainRows := func() error {
+		if err := rowExecutor.Drain(); err != nil {
+			return err
+		}
+		// A graceful stop may finish at a queued XID while Run is waiting
+		// on this barrier. Do not execute a later control event in that case.
+		return s.runCtx.Ctx.Err()
+	}
+	// Join row processing before the earlier defers flush checkpoints and close
+	// DML queues. Read-ahead locations must never stand in for committed work.
+	defer func() {
+		if rowErr := rowExecutor.Close(); rowErr != nil {
+			err = rowErr
+		}
+		if errors.Cause(err) == context.Canceled && s.runCtx.Ctx.Err() != nil {
+			err = nil
+		}
+	}()
 	// the relay log file may be truncated(not end with an RotateEvent), in this situation, we may read some rows events
 	// and then read from the gtid again, so we force enter safe-mode for one more transaction to avoid failure due to
 	// conflict
 
 	// binlog event loop
 	for {
+		if err := rowExecutor.err.Load(); err != nil {
+			return err
+		}
+		if waitXIDStatus(s.waitXIDJob.Load()) == waitComplete {
+			return nil
+		}
 		if s.execError.Load() != nil {
 			return nil
 		}
@@ -2147,6 +2170,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		// fetch from sharding resync channel if needed, and redirect global
 		// stream to current binlog position recorded by ShardingReSync
 		if len(shardingReSyncCh) > 0 && shardingReSync == nil {
+			if err := drainRows(); err != nil {
+				return err
+			}
 			// some sharding groups need to re-syncing
 			shardingReSync = <-shardingReSyncCh
 			s.tctx.L().Debug("starts to handle new shardingResync operation", zap.Stringer("shardingResync", shardingReSync))
@@ -2185,6 +2211,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			if canRedirect {
 				op, targetTableID := s.optimist.PendingRedirectOperation()
 				if op != nil {
+					if err := drainRows(); err != nil {
+						return err
+					}
 					// for optimistic sharding mode, if a new sharding group is resolved when syncer is redirecting,
 					// instead of using the endLocation, the next redirection should share the same latestLocation with the current shardingResync.
 					// This is to avoid syncer syncs to current shardingResync.latestLocation before,
@@ -2238,6 +2267,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 				time.Sleep(6 * time.Second)
 			}
 		})
+		if err != nil {
+			if rowErr := drainRows(); rowErr != nil {
+				return rowErr
+			}
+		}
 		switch {
 		case err == context.Canceled:
 			s.tctx.L().Info("binlog replication main routine quit(context canceled)!", zap.Stringer("last location", lastTxnEndLocation))
@@ -2322,6 +2356,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		switch op {
 		case pb.ErrorOp_Skip:
+			if err := drainRows(); err != nil {
+				return err
+			}
 			// try to handle pessimistic sharding?
 			queryEvent, ok := e.Event.(*replication.QueryEvent)
 			if !ok {
@@ -2363,6 +2400,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		safeModeExitLoc := s.checkpoint.SafeModeExitPoint()
 		if safeModeExitLoc != nil && shardingReSync == nil {
 			if binlog.CompareLocation(endLocation, *safeModeExitLoc, s.cfg.EnableGTID) > 0 {
+				if err := drainRows(); err != nil {
+					return err
+				}
 				s.checkpoint.SaveSafeModeExitPoint(nil)
 				// must flush here to avoid the following situation:
 				// 1. quit safe mode
@@ -2387,6 +2427,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		}
 		// check if need to exit safe mode by binlog header TS
 		if s.exitSafeModeTS != nil && shardingReSync == nil {
+			if int64(e.Header.Timestamp) > *s.exitSafeModeTS {
+				if err := drainRows(); err != nil {
+					return err
+				}
+			}
 			if checkErr := s.checkAndExitSafeModeByBinlogTS(s.runCtx, int64(e.Header.Timestamp)); checkErr != nil {
 				return checkErr
 			}
@@ -2405,6 +2450,16 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			shardingReSyncCh:    &shardingReSyncCh,
 		}
 
+		_, compressedTransaction := e.Event.(*replication.TransactionPayloadEvent)
+		// Sharding may inspect or change row-handler state before an event is
+		// dispatched. Keep it synchronous until that ownership is separated.
+		asyncRows := s.cfg.ShardMode == "" && shardingReSync == nil && !compressedTransaction
+		if !asyncRows {
+			if err := drainRows(); err != nil {
+				return err
+			}
+		}
+
 		var originSQL string // show origin sql when error, only ddl now
 		var err2 error
 		var sourceTable *filter.Table
@@ -2414,12 +2469,10 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		funcCommit := func() (bool, error) {
 			// reset eventIndex and force safeMode flag here.
 			eventIndex = 0
-			for schemaName, tableMap := range affectedSourceTables {
-				for table := range tableMap {
-					s.saveTablePoint(&filter.Table{Schema: schemaName, Name: table}, endLocation)
-				}
+			if asyncRows {
+				return false, rowExecutor.Submit(nil, ec)
 			}
-			affectedSourceTables = make(map[string]map[string]struct{})
+			rowHandler.saveAffected(endLocation)
 			if shardingReSync != nil {
 				// TODO: why shardingReSync need to do so, shardingReSync need refactor
 				shardingReSync.currLocation = endLocation
@@ -2443,16 +2496,20 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 		switch ev := e.Event.(type) {
 		case *replication.RotateEvent:
+			if err := drainRows(); err != nil {
+				return err
+			}
 			err2 = s.handleRotateEvent(ev, ec)
 		case *replication.RowsEvent:
 			eventIndex++
 			s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(ev.Rows)))
-			sourceTable, err2 = s.handleRowsEvent(ev, ec)
-			if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
-				if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
-					affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
+			if asyncRows {
+				err2 = rowExecutor.Submit(ev, ec)
+			} else {
+				sourceTable, err2 = s.handleRowsEvent(ev, ec)
+				if err2 == nil {
+					rowHandler.recordAffected(sourceTable)
 				}
-				affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
 			}
 		case *replication.QueryEvent:
 			originSQL = strings.TrimSpace(string(ev.Query))
@@ -2463,6 +2520,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					continue
 				}
 			} else {
+				if originSQL != "BEGIN" {
+					if err := drainRows(); err != nil {
+						return err
+					}
+				}
 				err2 = s.ddlWorker.HandleQueryEvent(ev, ec, originSQL)
 			}
 		case *replication.XIDEvent:
@@ -2473,6 +2535,9 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 			}
 		case *replication.GenericEvent:
 			if e.Header.EventType == replication.HEARTBEAT_EVENT {
+				if err := drainRows(); err != nil {
+					return err
+				}
 				// flush checkpoint even if there are no real binlog events
 				if s.checkpoint.LastFlushOutdated() {
 					s.tctx.L().Info("meet heartbeat event and then flush jobs")
@@ -2492,11 +2557,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 					s.metricsProxies.Metrics.BinlogEventRowHistogram.Observe(float64(len(tpevt.Rows)))
 					ec.header.EventType = tpev.Header.EventType
 					sourceTable, err2 = s.handleRowsEvent(tpevt, ec)
-					if sourceTable != nil && err2 == nil && s.cfg.EnableGTID {
-						if _, ok := affectedSourceTables[sourceTable.Schema]; !ok {
-							affectedSourceTables[sourceTable.Schema] = make(map[string]struct{})
-						}
-						affectedSourceTables[sourceTable.Schema][sourceTable.Name] = struct{}{}
+					if err2 == nil {
+						rowHandler.recordAffected(sourceTable)
 					}
 				case *replication.QueryEvent:
 					originSQL = strings.TrimSpace(string(tpevt.Query))
@@ -2518,7 +2580,13 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 		default:
 			s.recordUnhandledEvent("unhandled event", ev)
 		}
+		if rowErr := rowExecutor.err.Load(); rowErr != nil {
+			return rowErr
+		}
 		if err2 != nil {
+			if err2 == context.Canceled && s.runCtx.Ctx.Err() != nil {
+				return nil
+			}
 			if err := s.handleEventError(err2, startLocation, endLocation, e.Header.EventType == replication.QUERY_EVENT, originSQL); err != nil {
 				return err
 			}
