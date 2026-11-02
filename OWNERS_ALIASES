@@ -2,8 +2,8 @@
 # The members of 'sig-community-*' are synced from memberships defined in repository: https://github.com/pingcap/community.
 aliases:
   sig-critical-approvers-cdc:
-    - yudongusa
-    - likidu
+    - lidezhu
+    - nongfushanquan
   sig-critical-approvers-dm:
     - yudongusa
     - likidu
