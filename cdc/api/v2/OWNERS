@@ -5,7 +5,4 @@ filters:
   # include *.go but ignore *_test.go files.
   "^.*([^t]|[^s]t|[^e]st|[^t]est|[^_]test)[.]go$":
     approvers:
-      - sig-approvers-cdc-api
-  "^OWNERS$":
-    approvers:
-      - sig-approvers-cdc-api
+      - sig-critical-approvers-cdc
