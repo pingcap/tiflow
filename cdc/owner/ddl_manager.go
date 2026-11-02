@@ -278,10 +278,12 @@ func (m *ddlManager) tick(
 	}
 
 	// drain all ddl jobs from ddlPuller
+	var ddlPullerResolvedTs uint64
 	for {
-		_, job := m.ddlPuller.PopFrontDDL()
+		resolvedTs, job := m.ddlPuller.PopFrontDDL()
 		// no more ddl jobs
 		if job == nil {
+			ddlPullerResolvedTs = resolvedTs
 			break
 		}
 
@@ -358,8 +360,10 @@ func (m *ddlManager) tick(
 	nextDDL := m.getNextDDL()
 	// The internal checkpoint must reach a DDL's commit ts before it can be
 	// executed. Do not emit that ts to the downstream until all DDLs at the
-	// same ts have finished.
-	if m.executingDDL == nil && m.ddlResolvedTs >= m.checkpointTs &&
+	// same ts have finished. ResolvedTs may reflect a queued job's FinishedTS,
+	// so use the puller's actual resolved ts from the empty PopFrontDDL call.
+	if m.executingDDL == nil && ddlPullerResolvedTs >= m.checkpointTs &&
+		m.ddlResolvedTs >= m.checkpointTs &&
 		(nextDDL == nil || nextDDL.CommitTs > m.checkpointTs) {
 		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
 	}

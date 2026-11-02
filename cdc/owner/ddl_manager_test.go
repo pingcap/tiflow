@@ -150,6 +150,37 @@ func TestCheckpointWaitsForDDLPuller(t *testing.T) {
 	require.Equal(t, checkpointTs, emittedTs)
 }
 
+type mockDDLPullerWithAheadResolvedTs struct {
+	*mockDDLPuller
+	reportedTs model.Ts
+}
+
+func (m *mockDDLPullerWithAheadResolvedTs) ResolvedTs() model.Ts {
+	return m.reportedTs
+}
+
+func TestCheckpointWaitsForActualPullerResolvedTs(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	puller := dm.ddlPuller.(*mockDDLPuller)
+	puller.resolvedTs = checkpointTs - 1
+	// A DDL at checkpointTs can enter the queue after PopFrontDDL returns nil.
+	// ResolvedTs then reports its FinishedTS ahead of the actual resolved ts.
+	dm.ddlPuller = &mockDDLPullerWithAheadResolvedTs{puller, checkpointTs}
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	require.Equal(t, checkpointTs, dm.ddlResolvedTs)
+	emittedTs, _ := dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Less(t, emittedTs, checkpointTs)
+
+	puller.resolvedTs = checkpointTs
+	_, _, err = dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ = dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
+}
+
 func TestCheckpointAdvancesBeforeFutureDDL(t *testing.T) {
 	const checkpointTs = uint64(10)
 	dm := createDDLManagerForTest(t, false)
