@@ -281,10 +281,6 @@ func (m *ddlManager) tick(
 		return nil, nil, nil
 	}
 
-	if m.executingDDL == nil {
-		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
-	}
-
 	tableIDs, err := m.allPhysicalTables(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
@@ -395,6 +391,13 @@ func (m *ddlManager) tick(
 	}
 
 	nextDDL := m.getNextDDL()
+	// The internal checkpoint must reach a DDL's commit ts before it can be
+	// executed. Do not emit that ts to the downstream until all DDLs at the
+	// same ts have finished.
+	if m.executingDDL == nil && m.ddlResolvedTs >= m.checkpointTs &&
+		(nextDDL == nil || nextDDL.CommitTs > m.checkpointTs) {
+		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
+	}
 	if nextDDL != nil {
 		if m.checkpointTs > nextDDL.CommitTs {
 			log.Panic("checkpointTs is greater than next ddl commitTs",

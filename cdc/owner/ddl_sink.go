@@ -304,9 +304,8 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
-			// `ticker.C` and `ddlCh` may can be triggered at the same time, it
-			// does not matter which one emit first, since TiCDC allow DDL with
-			// CommitTs equal to the last CheckpointTs be emitted later.
+			// The owner only advances the emitted checkpoint after all DDLs at
+			// that ts have finished, so either channel can be selected first.
 			select {
 			case <-ctx.Done():
 				err = ctx.Err()

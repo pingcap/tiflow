@@ -467,6 +467,9 @@ func TestEmitCheckpointTs(t *testing.T) {
 	// pre check and initialize
 	tickThreeTime()
 	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
+	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller.resolvedTs = startTs
+	tickThreeTime()
 
 	tables, err := cf.ddlManager.allTables(ctx)
 	require.Nil(t, err)
@@ -478,7 +481,6 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
-	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs + 1000
 	cf.ddlManager.schema.AdvanceResolvedTs(mockDDLPuller.resolvedTs)
 	cf.state.Status.CheckpointTs = mockDDLPuller.resolvedTs
@@ -493,7 +495,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Len(t, tables, 1)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
-	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Equal(t, startTs, ts)
+	require.Equal(t, mockDDLPuller.resolvedTs, cf.ddlManager.checkpointTs)
 	require.Len(t, names, 1)
 
 	// executing the ddl finished
