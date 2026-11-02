@@ -18,7 +18,37 @@ import (
 
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/config"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 )
+
+func (t *testForEtcd) TestLegacyBinlogFilterRecovery(c *check.C) {
+	defer clearTestInfoOperation(c)
+	cfg := config.NewSubTaskConfig()
+	c.Assert(cfg.Decode(config.SampleSubtaskConfig, true), check.IsNil)
+	cfg.FilterRules = []*bf.BinlogEventRule{
+		{SchemaPattern: "db", TablePattern: "t", Events: []bf.EventType{bf.DeleteEvent}, Action: bf.Ignore},
+		{SchemaPattern: "db", TablePattern: "t", Events: []bf.EventType{bf.UpdateEvent}, Action: bf.Ignore},
+		{SchemaPattern: "legacy", Events: []bf.EventType{"truncate"}, Action: bf.Ignore},
+	}
+	_, err := PutSubTaskCfgStage(etcdTestCli, []config.SubTaskConfig{*cfg}, []Stage{}, nil)
+	c.Assert(err, check.IsNil)
+
+	// Master recovery and worker loading must still accept persisted legacy rules.
+	all, _, err := GetAllSubTaskCfg(etcdTestCli)
+	c.Assert(err, check.IsNil)
+	c.Assert(all[cfg.SourceID][cfg.Name].FilterRules, check.HasLen, 3)
+	loaded, _, err := GetSubTaskCfg(etcdTestCli, cfg.SourceID, cfg.Name, 0)
+	c.Assert(err, check.IsNil)
+	recovered := loaded[cfg.Name]
+	c.Assert(recovered.Adjust(true), check.IsNil)
+	f, err := bf.NewBinlogEvent(recovered.CaseSensitive, recovered.FilterRules)
+	c.Assert(err, check.IsNil)
+	for event, want := range map[bf.EventType]bf.ActionType{bf.DeleteEvent: bf.Ignore, bf.UpdateEvent: bf.Do} {
+		action, filterErr := f.Filter("db", "t", event, "")
+		c.Assert(filterErr, check.IsNil)
+		c.Assert(action, check.Equals, want)
+	}
+}
 
 func (t *testForEtcd) TestSubTaskEtcd(c *check.C) {
 	defer clearTestInfoOperation(c)

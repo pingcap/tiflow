@@ -1718,6 +1718,9 @@ func (s *Server) generateSubTask(
 func (s *Server) generateSubTasksForCheck(stCfgs []*config.SubTaskConfig) ([]*config.SubTaskConfig, error) {
 	sourceIDs := make([]string, 0, len(stCfgs))
 	for _, stCfg := range stCfgs {
+		if err := checkDuplicateBinlogFilterRules(stCfg); err != nil {
+			return nil, err
+		}
 		sourceIDs = append(sourceIDs, stCfg.SourceID)
 	}
 
