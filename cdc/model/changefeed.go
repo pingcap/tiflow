@@ -347,8 +347,8 @@ func (info *ChangeFeedInfo) RmUnusedFields() {
 	if err != nil {
 		log.Warn(
 			"failed to parse the sink uri",
-			zap.Error(err),
-			zap.Any("sinkUri", info.SinkURI),
+			zap.Error(util.MaskSensitiveDataInURLError(err)),
+			zap.Any("sinkURI", util.MaskSensitiveDataInURIForError(info.SinkURI)),
 		)
 		return
 	}
@@ -488,7 +488,7 @@ func (info *ChangeFeedInfo) fixState() {
 func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
-		log.Warn("parse sink URI failed", zap.Error(err))
+		log.Warn("parse sink URI failed", zap.Error(util.MaskSensitiveDataInURLError(err)))
 		// SAFETY: It is safe to ignore this unresolvable sink URI here,
 		// as it is almost impossible for this to happen.
 		// If we ignore it when fixing it after it happens,
@@ -518,7 +518,7 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 	uri, err := url.Parse(info.SinkURI)
 	if err != nil {
-		log.Warn("parse sink URI failed", zap.Error(err))
+		log.Warn("parse sink URI failed", zap.Error(util.MaskSensitiveDataInURLError(err)))
 		return
 	}
 
