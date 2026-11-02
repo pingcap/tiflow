@@ -463,6 +463,7 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		return
 	}
 	res.CheckResult = redact.Text(res.CheckResult)
+	res.Task = redactTaskForResponse(res.Task)
 	c.IndentedJSON(http.StatusCreated, res)
 }
 
@@ -479,6 +480,7 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		return
 	}
 	res.CheckResult = redact.Text(res.CheckResult)
+	res.Task = redactTaskForResponse(res.Task)
 	c.IndentedJSON(http.StatusOK, res)
 }
 
@@ -509,7 +511,7 @@ func (s *Server) DMAPIGetTask(c *gin.Context, taskName string, params openapi.DM
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, redactTaskForResponse(*task))
 }
 
 // DMAPIGetTaskStatus url is:(GET /api/v1/tasks/{task-name}/status).
@@ -532,6 +534,9 @@ func (s *Server) DMAPIGetTaskList(c *gin.Context, params openapi.DMAPIGetTaskLis
 	if err != nil {
 		_ = c.Error(err)
 		return
+	}
+	for i := range taskList {
+		taskList[i] = redactTaskForResponse(taskList[i])
 	}
 	resp := openapi.GetTaskListResponse{Total: len(taskList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
