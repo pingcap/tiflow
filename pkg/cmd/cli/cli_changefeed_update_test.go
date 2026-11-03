@@ -80,6 +80,22 @@ func TestApplyChanges(t *testing.T) {
 		newInfo.Config.Sink.SchemaRegistry)
 }
 
+func TestUpdateWithoutReplicaConfig(t *testing.T) {
+	for _, flag := range []string{"--config=unused.toml", "--schema-registry=https://registry"} {
+		t.Run(flag, func(t *testing.T) {
+			cmd := NewCmdCli()
+			o := newUpdateChangefeedOptions(newChangefeedCommonOptions())
+			o.addFlags(cmd)
+			require.NoError(t, cmd.ParseFlags([]string{flag}))
+			info := &v2.ChangeFeedInfo{ID: "orders", SinkURI: "mysql://user:xxxxx@localhost/"}
+			var err error
+			require.NotPanics(t, func() { _, err = o.applyChanges(info, cmd) })
+			require.ErrorContains(t, err, "configuration is unavailable")
+			require.Nil(t, info.Config)
+		})
+	}
+}
+
 func initTestLogger(filename string) (func(), error) {
 	logConfig := &log.Config{
 		File: log.FileLogConfig{

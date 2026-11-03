@@ -30,6 +30,9 @@ const (
 	Write  Action = "changefeed.write"
 	List   Action = "changefeed.list"
 	Create Action = "changefeed.create"
+	// ReadTSO permits entering the TSO handler, which checks upstream ownership.
+	ReadTSO Action = "upstream.tso"
+	Metrics Action = "metrics.read"
 	// InspectUpstream permits the read-only helpers used by CLI create/resume.
 	InspectUpstream Action = "upstream.inspect"
 	Admin           Action = "cluster.manage"
@@ -75,18 +78,24 @@ func Can(ctx context.Context, action Action, resource model.ChangeFeedID) bool {
 			continue
 		}
 		switch action {
-		case Read, Write, List, Create, InspectUpstream, Admin, Unsafe:
+		case Read, Write, List, Create, ReadTSO, Metrics, InspectUpstream, Admin, Unsafe:
 		default:
 			return false
 		}
 		if binding.Role == security.RoleAdmin && binding.Namespace == "" && binding.Changefeed == "" {
 			return true
 		}
+		if binding.Role == security.RoleMonitor && binding.Namespace == "" && binding.Changefeed == "" {
+			if action == Metrics {
+				return true
+			}
+			continue
+		}
 		if binding.Namespace == "" || binding.Changefeed == "" {
 			continue
 		}
 		switch action {
-		case Read, List:
+		case Read, List, ReadTSO:
 			if binding.Role != security.RoleViewer && binding.Role != security.RoleOperator {
 				continue
 			}
@@ -97,7 +106,7 @@ func Can(ctx context.Context, action Action, resource model.ChangeFeedID) bool {
 		default:
 			continue
 		}
-		if action == List || action == Create || action == InspectUpstream {
+		if action == List || action == Create || action == ReadTSO || action == InspectUpstream {
 			return true
 		}
 		if (binding.Namespace == "*" || binding.Namespace == resource.Namespace) &&

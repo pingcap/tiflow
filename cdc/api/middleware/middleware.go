@@ -14,6 +14,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/errorutil"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"go.uber.org/zap"
 )
@@ -133,11 +135,26 @@ func CheckServerReadyMiddleware(capture capture.Capture) gin.HandlerFunc {
 func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		if err := authenticate(ctx, capture); err != nil {
-			ctx.AbortWithStatusJSON(http.StatusUnauthorized, model.NewHTTPError(err))
+			abortAuthentication(ctx, err)
 			return
 		}
 		ctx.Next()
 	}
+}
+
+func abortAuthentication(ctx *gin.Context, err error) {
+	status := http.StatusUnauthorized
+	switch {
+	case errors.ErrCredentialNotFound.Equal(err), errors.ErrUnauthorized.Equal(err):
+	case errorutil.IsAccessDeniedError(err):
+		username, _, _ := ctx.Request.BasicAuth()
+		err = errors.ErrUnauthorized.GenWithStackByArgs(username, "invalid upstream credentials")
+	default:
+		status = http.StatusServiceUnavailable
+		// Backend errors belong in server logs, not credential responses.
+		err = errors.ErrServerIsNotReady
+	}
+	ctx.AbortWithStatusJSON(status, model.NewHTTPError(err))
 }
 
 func authenticate(ctx *gin.Context, capture capture.Capture) error {
@@ -199,8 +216,10 @@ func verify(ctx *gin.Context, up *upstream.Upstream) error {
 		}
 		return errors.ErrUnauthorized.GenWithStackByArgs(username, errMsg)
 	}
-	if err := up.VerifyTiDBUser(ctx, username, password); err != nil {
-		return errors.ErrUnauthorized.GenWithStackByArgs(username, err.Error())
+	verifyCtx, cancel := context.WithTimeout(ctx.Request.Context(), 10*time.Second)
+	defer cancel()
+	if err := up.VerifyTiDBUser(verifyCtx, username, password); err != nil {
+		return errors.Trace(err)
 	}
 	return nil
 }

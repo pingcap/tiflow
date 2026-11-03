@@ -495,6 +495,7 @@ def authorization():
     reader = ('cdc_reader', 'authz_secret')
     operator = ('cdc_operator', 'authz_secret')
     unbound = ('cdc_unbound', 'authz_secret')
+    monitor = ('cdc_monitor', 'authz_secret')
 
     def request(method, base, path, expected, auth=None, **kwargs):
         resp = rq.request(method, base + path, auth=auth,
@@ -532,6 +533,15 @@ def authorization():
         request('DELETE', base, '/unsafe/service_gc_safepoint', 403, operator, json={})
         request('POST', base, '/owner/resign', 403, operator)
         request('POST', base, '/tso', 200, operator, json={})
+        request('POST', base, '/tso', 200, reader, json={'id': detail['upstream_id']})
+        request('POST', base, '/tso', 403, reader, json={'pd_addrs': ['http://untrusted:2379']})
+        request('POST', base, '/verify_table', 403, reader, json={})
+        request('GET', base, '/changefeeds', 403, monitor)
+        request('POST', base, '/unsafe/resolve_lock', 403, monitor, json={})
+        server = base[:-len('/api/v2')]
+        request('GET', server, '/metrics', 200, monitor)
+        request('GET', server, '/metrics', 403, reader)
+        request('GET', server, '/config', 403, monitor)
         request('DELETE', base, '/changefeeds/changefeed-test1', 403, reader,
                 headers={'X-TiCDC-Role': 'admin', 'TiCDC-ForwardFromCapture': 'trusted'})
         request('POST', base, '/changefeeds', 403, operator,

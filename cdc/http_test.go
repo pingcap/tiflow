@@ -82,11 +82,12 @@ func TestAPIScopedAccess(t *testing.T) {
 	t.Cleanup(func() { config.StoreGlobalServerConfig(original) })
 	cfg := config.GetDefaultServerConfig()
 	cfg.Security.ClientUserRequired = true
-	cfg.Security.ClientAllowedUser = []string{"reader", "writer", "admin"}
+	cfg.Security.ClientAllowedUser = []string{"reader", "writer", "admin", "monitor"}
 	cfg.Security.ClientAuthorization = &security.ClientAuthorization{Bindings: []security.ClientRoleBinding{
 		{User: "reader", Role: security.RoleViewer, Namespace: "default", Changefeed: "orders"},
 		{User: "writer", Role: security.RoleOperator, Namespace: "team-a", Changefeed: "*"},
 		{User: "admin", Role: security.RoleAdmin},
+		{User: "monitor", Role: security.RoleMonitor},
 	}}
 	config.StoreGlobalServerConfig(cfg)
 	router := gin.New()
@@ -103,6 +104,14 @@ func TestAPIScopedAccess(t *testing.T) {
 		{"reader", "GET", "/api/v2/changefeeds/orders/meta_info", 403},
 		{"reader", "GET", "/config", 403},
 		{"reader", "GET", "/metrics", 403},
+		{"reader", "POST", "/api/v2/tso", 204},
+		{"reader", "POST", "/api/v2/verify_table", 403},
+		{"monitor", "GET", "/metrics", 204},
+		{"monitor", "GET", "/config", 403},
+		{"monitor", "GET", "/debug/pprof/", 403},
+		{"monitor", "GET", "/api/v2/changefeeds", 403},
+		{"monitor", "POST", "/api/v2/unsafe/resolve_lock", 403},
+		{"monitor", "POST", "/capture/owner/admin", 403},
 		{"reader", "POST", "/capture/owner/admin", 403},
 		{"writer", "DELETE", "/api/v2/changefeeds/orders?namespace=team-a", 204},
 		{"writer", "DELETE", "/api/v2/changefeeds/orders?namespace=team-b", 403},

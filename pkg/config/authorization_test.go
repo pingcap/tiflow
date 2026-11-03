@@ -27,7 +27,7 @@ func TestServerConfigClientAuthorization(t *testing.T) {
 	_, err := toml.Decode(`
 [security]
 client-user-required = true
-client-allowed-user = ["reader", "admin"]
+client-allowed-user = ["reader", "admin", "monitor"]
 [[security.client-authorization.bindings]]
 user = "reader"
 role = "viewer"
@@ -36,6 +36,9 @@ changefeed = "orders"
 [[security.client-authorization.bindings]]
 user = "admin"
 role = "admin"
+[[security.client-authorization.bindings]]
+user = "monitor"
+role = "monitor"
 `, cfg)
 	require.NoError(t, err)
 	require.NoError(t, cfg.ValidateAndAdjust())
@@ -56,6 +59,7 @@ role = "admin"
 		{"missing namespace", func(c *security.Credential) { c.ClientAuthorization.Bindings[0].Namespace = "" }},
 		{"missing changefeed", func(c *security.Credential) { c.ClientAuthorization.Bindings[0].Changefeed = "" }},
 		{"scoped admin", func(c *security.Credential) { c.ClientAuthorization.Bindings[1].Namespace = "team-a" }},
+		{"scoped monitor", func(c *security.Credential) { c.ClientAuthorization.Bindings[2].Changefeed = "orders" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			invalid := cfg.Clone()

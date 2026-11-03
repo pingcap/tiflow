@@ -27,7 +27,7 @@ function run() {
 		--ssl-cert=$TLS_DIR/server.pem \
 		--ssl-key=$TLS_DIR/server-key.pem
 
-	for user in cdc_reader cdc_operator cdc_unbound; do
+	for user in cdc_reader cdc_operator cdc_unbound cdc_monitor; do
 		run_sql "CREATE USER '$user'@'%' IDENTIFIED BY 'authz_secret';" ${TLS_TIDB_HOST} ${TLS_TIDB_PORT} \
 			--ssl-ca=$TLS_DIR/ca.pem \
 			--ssl-cert=$TLS_DIR/server.pem \
@@ -43,7 +43,7 @@ function run() {
    key-path = \"$TLS_DIR/server-key.pem\"
    cert-allowed-cn = [\"fake_cn\"]
    client-user-required = true
-   client-allowed-user=[\"ticdc\", \"cdc_reader\", \"cdc_operator\", \"cdc_unbound\"]
+   client-allowed-user=[\"ticdc\", \"cdc_reader\", \"cdc_operator\", \"cdc_unbound\", \"cdc_monitor\"]
   " >$WORK_DIR/server.toml
 
 	cat >>"$WORK_DIR/server.toml" <<'EOF'
@@ -60,6 +60,9 @@ user = "cdc_operator"
 role = "operator"
 namespace = "team-a"
 changefeed = "*"
+[[security.client-authorization.bindings]]
+user = "cdc_monitor"
+role = "monitor"
 EOF
 
 	run_cdc_server \

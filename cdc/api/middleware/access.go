@@ -73,7 +73,7 @@ var routePermissions = map[string]authorization.Action{
 	"POST /api/v2/owner/resign":                                      authorization.Admin,
 	"POST /api/v2/log":                                               authorization.Admin,
 	"POST /api/v2/verify_table":                                      authorization.InspectUpstream,
-	"POST /api/v2/tso":                                               authorization.InspectUpstream,
+	"POST /api/v2/tso":                                               authorization.ReadTSO,
 	"GET /api/v2/unsafe/metadata":                                    authorization.Unsafe,
 	"POST /api/v2/unsafe/resolve_lock":                               authorization.Unsafe,
 	"DELETE /api/v2/unsafe/service_gc_safepoint":                     authorization.Unsafe,
@@ -93,7 +93,7 @@ var routePermissions = map[string]authorization.Action{
 	"GET /debug/pprof/symbol":               authorization.Admin,
 	"GET /debug/pprof/trace":                authorization.Admin,
 	"GET /debug/pprof/threadcreate":         authorization.Admin,
-	"GET /metrics":                          authorization.Admin,
+	"GET /metrics":                          authorization.Metrics,
 }
 
 const accessCheckedKey = "ticdc-access-checked"
@@ -117,7 +117,7 @@ func AccessMiddleware(capture capture.Capture) gin.HandlerFunc {
 		}
 		if err := authenticate(c, capture); err != nil {
 			log.Warn("cdc open api authentication failed", zap.String("path", c.Request.URL.Path), zap.Error(err))
-			c.AbortWithStatusJSON(http.StatusUnauthorized, model.NewHTTPError(err))
+			abortAuthentication(c, err)
 			return
 		}
 		action, registered := routePermissions[key]

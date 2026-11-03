@@ -22,6 +22,8 @@ const (
 	RoleOperator = "operator"
 	// RoleAdmin allows cluster administration, including unsafe operations.
 	RoleAdmin = "admin"
+	// RoleMonitor allows reading cluster-wide metrics without management access.
+	RoleMonitor = "monitor"
 )
 
 // ClientAuthorization enables explicit, deny-by-default API authorization.
@@ -32,7 +34,7 @@ type ClientAuthorization struct {
 
 // ClientRoleBinding grants a role to an authenticated default-upstream user.
 // Scoped roles require an explicit namespace and changefeed; "*" matches all.
-// Admin bindings must omit both scope fields because admins are cluster-wide.
+// Admin and monitor bindings must omit scope fields because they are cluster-wide.
 type ClientRoleBinding struct {
 	User       string `toml:"user" json:"user"`
 	Role       string `toml:"role" json:"role"`
@@ -64,9 +66,9 @@ func (s *Credential) ValidateClientAuthorization() error {
 			return fmt.Errorf("client-authorization user %q must appear in client-allowed-user", binding.User)
 		}
 		switch binding.Role {
-		case RoleAdmin:
+		case RoleAdmin, RoleMonitor:
 			if binding.Namespace != "" || binding.Changefeed != "" {
-				return fmt.Errorf("client-authorization admin binding must not specify a resource scope")
+				return fmt.Errorf("client-authorization %s binding must not specify a resource scope", binding.Role)
 			}
 		case RoleViewer, RoleOperator:
 			if binding.Namespace == "" || binding.Changefeed == "" {

@@ -28,11 +28,12 @@ func TestAuthorization(t *testing.T) {
 	t.Cleanup(func() { config.StoreGlobalServerConfig(original) })
 	cfg := config.GetDefaultServerConfig()
 	cfg.Security.ClientUserRequired = true
-	cfg.Security.ClientAllowedUser = []string{"viewer", "operator", "admin", "unbound"}
+	cfg.Security.ClientAllowedUser = []string{"viewer", "operator", "admin", "monitor", "unbound"}
 	cfg.Security.ClientAuthorization = &security.ClientAuthorization{Bindings: []security.ClientRoleBinding{
 		{User: "viewer", Role: security.RoleViewer, Namespace: "team-a", Changefeed: "orders"},
 		{User: "operator", Role: security.RoleOperator, Namespace: "team-b", Changefeed: "*"},
 		{User: "admin", Role: security.RoleAdmin},
+		{User: "monitor", Role: security.RoleMonitor},
 	}}
 	config.StoreGlobalServerConfig(cfg)
 	for _, tc := range []struct {
@@ -47,6 +48,8 @@ func TestAuthorization(t *testing.T) {
 		{"viewer", "", "", List, true},
 		{"viewer", "", "", Create, false},
 		{"viewer", "", "", InspectUpstream, false},
+		{"viewer", "", "", ReadTSO, true},
+		{"viewer", "", "", Metrics, false},
 		{"viewer", "", "", Admin, false},
 		{"viewer", "", "", Unsafe, false},
 		{"operator", "team-b", "orders", Write, true},
@@ -57,6 +60,13 @@ func TestAuthorization(t *testing.T) {
 		{"operator", "", "", Unsafe, false},
 		{"admin", "team-a", "orders", Write, true},
 		{"admin", "", "", Unsafe, true},
+		{"admin", "", "", Metrics, true},
+		{"monitor", "", "", Metrics, true},
+		{"monitor", "", "", ReadTSO, false},
+		{"monitor", "", "", InspectUpstream, false},
+		{"monitor", "", "", List, false},
+		{"monitor", "", "", Unsafe, false},
+		{"monitor", "", "", Admin, false},
 		{"admin", "", "", Action("unregistered"), false},
 		{"unbound", "team-a", "orders", Read, false},
 		{"unbound", "", "", List, false},

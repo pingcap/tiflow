@@ -53,20 +53,32 @@ max-backups = 0
 # Authorization requires client-user-required = true. Every bound user must
 # also appear in client-allowed-user; unbound users have no API permissions.
 # Upgrade and configure ALL captures before relying on resource isolation.
+# Update API/monitoring clients to send credentials before upgrading captures.
+# Upgrade all binaries using the existing allow-list first, then deploy identical
+# bindings on every capture. Add new restricted accounts together with bindings;
+# adding them to an unbound legacy allow-list would grant administrator access.
 #
 # viewer: read scoped changefeed status and processors, with filtered collection
 # results. Detail responses omit replica configuration and redact URI secrets.
+# TSO reads are limited to upstreams of readable changefeeds; specifying custom
+# PD addresses or TLS paths still requires operator or admin permissions.
 # operator: viewer permissions plus create/update/pause/resume/delete and table
 # scheduling within the bound scope, and the TSO/table-verification helpers used
 # by CLI create/resume. Creation without an ID requires changefeed
 # = "*", since the server generates an ID after authorization.
 # admin: all registered APIs, including unsafe GC/lock operations, raw metadata,
 # config, metrics, profiling, and the legacy /capture/owner/* management API.
+# monitor: read cluster-wide /metrics only, including labels for all changefeeds.
+# Monitor bindings omit namespace and changefeed. They do not grant access to
+# changefeed APIs, configuration, profiling, TSO, table verification or unsafe APIs.
 # The legacy admin endpoint accepts only stop (1), resume (2), and remove (3).
 # The v2 meta_info endpoint also redacts sink URI credentials, including for
 # administrators and deployments without client-user-required enabled.
 # Legacy operation logs include the verified actor, target, job type and result;
 # a username supplied without successful authentication is not a verified actor.
+# Missing/invalid credentials return HTTP 401; unavailable authentication backends
+# return HTTP 503. Verification uses the request context with a 10-second limit.
+# Monitoring still uses upstream TiDB authentication; credentials are not cached.
 #
 # Namespace and changefeed match exact identifiers or the complete string "*".
 # Scoped roles require both fields; admin bindings must omit both scope fields.
@@ -89,3 +101,7 @@ max-backups = 0
 # [[security.client-authorization.bindings]]
 # user = "cdc-admin"
 # role = "admin"
+#
+# [[security.client-authorization.bindings]]
+# user = "cdc-monitor" # Also add this account to client-allowed-user above.
+# role = "monitor"
