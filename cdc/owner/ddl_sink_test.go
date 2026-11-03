@@ -31,10 +31,11 @@ import (
 
 type mockSink struct {
 	ddlsink.Sink
-	checkpointTs model.Ts
-	ddl          *model.DDLEvent
-	ddlMu        sync.Mutex
-	ddlError     error
+	checkpointTs     model.Ts
+	checkpointTables [][]model.TableName
+	ddl              *model.DDLEvent
+	ddlMu            sync.Mutex
+	ddlError         error
 }
 
 func (m *mockSink) WriteDDLEvent(ctx context.Context, ddl *model.DDLEvent) error {
@@ -49,6 +50,11 @@ func (m *mockSink) WriteCheckpointTs(ctx context.Context,
 	ts uint64, tables []*model.TableInfo,
 ) error {
 	atomic.StoreUint64(&m.checkpointTs, ts)
+	names := make([]model.TableName, 0, len(tables))
+	for _, table := range tables {
+		names = append(names, table.TableName)
+	}
+	m.checkpointTables = append(m.checkpointTables, names)
 	return nil
 }
 
@@ -98,6 +104,45 @@ func TestCheckpoint(t *testing.T) {
 	require.Nil(t, waitCheckpointGrowingUp(mSink, 1))
 	ddlSink.emitCheckpointTs(10, nil)
 	require.Nil(t, waitCheckpointGrowingUp(mSink, 10))
+}
+
+func TestCheckpointIncludesRenamedTables(t *testing.T) {
+	ddlSink, sink := newDDLSink4Test(func(error) {}, func(error) {})
+	s := ddlSink.(*ddlSinkImpl)
+	ctx := context.Background()
+	oldTables := []*model.TableInfo{
+		{TableName: model.TableName{Schema: "test", Table: "table1"}},
+		{TableName: model.TableName{Schema: "test", Table: "table2"}},
+	}
+	newTables := []*model.TableInfo{
+		{TableName: model.TableName{Schema: "test", Table: "table10"}},
+		{TableName: model.TableName{Schema: "test", Table: "table20"}},
+	}
+	for i := range oldTables {
+		require.NoError(t, s.writeDDLEvent(ctx, &model.DDLEvent{
+			CommitTs:     10,
+			PreTableInfo: oldTables[i],
+			TableInfo:    newTables[i],
+		}))
+	}
+
+	var lastCheckpointTs model.Ts
+	s.emitCheckpointTs(9, newTables)
+	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
+	require.ElementsMatch(t, []model.TableName{newTables[0].TableName, newTables[1].TableName}, sink.checkpointTables[0])
+	require.Len(t, s.pendingDDLTables, 2)
+
+	s.emitCheckpointTs(10, newTables)
+	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
+	require.ElementsMatch(t, []model.TableName{
+		oldTables[0].TableName, oldTables[1].TableName,
+		newTables[0].TableName, newTables[1].TableName,
+	}, sink.checkpointTables[1])
+	require.Empty(t, s.pendingDDLTables)
+
+	s.emitCheckpointTs(11, newTables)
+	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
+	require.ElementsMatch(t, []model.TableName{newTables[0].TableName, newTables[1].TableName}, sink.checkpointTables[2])
 }
 
 func TestExecDDLEvents(t *testing.T) {

@@ -74,6 +74,9 @@ type ddlSinkImpl struct {
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
 	ddlSentTsMap map[*model.DDLEvent]model.Ts
+	// Keep tables whose DDLs were sent to their old topics until a checkpoint
+	// covering those DDLs has also been sent to those topics.
+	pendingDDLTables map[model.TableName]pendingDDLTable
 
 	ddlCh chan *model.DDLEvent
 
@@ -93,15 +96,21 @@ type ddlSinkImpl struct {
 	reportWarning func(err error)
 }
 
+type pendingDDLTable struct {
+	commitTs model.Ts
+	table    *model.TableInfo
+}
+
 func newDDLSink(
 	changefeedID model.ChangeFeedID, info *model.ChangeFeedInfo,
 	reportError func(err error), reportWarning func(err error),
 ) DDLSink {
 	res := &ddlSinkImpl{
-		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
-		ddlCh:           make(chan *model.DDLEvent, 1),
-		sinkInitHandler: ddlSinkInitializer,
-		cancel:          func() {},
+		ddlSentTsMap:     make(map[*model.DDLEvent]uint64),
+		pendingDDLTables: make(map[model.TableName]pendingDDLTable),
+		ddlCh:            make(chan *model.DDLEvent, 1),
+		sinkInitHandler:  ddlSinkInitializer,
+		cancel:           func() {},
 
 		changefeedID: changefeedID,
 		info:         info,
@@ -226,12 +235,22 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 		tables := make([]*model.TableInfo, 0, len(s.mu.currentTables))
 		tables = append(tables, s.mu.currentTables...)
 		s.mu.Unlock()
+		for _, pending := range s.pendingDDLTables {
+			if pending.commitTs <= checkpointTs {
+				tables = append(tables, pending.table)
+			}
+		}
 
 		if err = s.makeSinkReady(ctx); err == nil {
 			err = s.sink.WriteCheckpointTs(ctx, checkpointTs, tables)
 		}
 		if err == nil {
 			*lastCheckpointTs = checkpointTs
+			for name, pending := range s.pendingDDLTables {
+				if pending.commitTs <= checkpointTs {
+					delete(s.pendingDDLTables, name)
+				}
+			}
 		}
 		return
 	}
@@ -268,7 +287,12 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 		return
 	}
 
-	return s.observedRetrySinkAction(ctx, "writeDDLEvent", doWrite)
+	err := s.observedRetrySinkAction(ctx, "writeDDLEvent", doWrite)
+	if err == nil && ddl.PreTableInfo != nil && ddl.PreTableInfo.TableName.Table != "" {
+		table := ddl.PreTableInfo
+		s.pendingDDLTables[table.TableName] = pendingDDLTable{commitTs: ddl.CommitTs, table: table}
+	}
+	return err
 }
 
 func (s *ddlSinkImpl) run(ctx context.Context) {
