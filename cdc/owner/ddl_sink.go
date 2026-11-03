@@ -49,6 +49,8 @@ type DDLSink interface {
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
 	emitCheckpointTs(ts uint64, tables []*model.TableInfo)
+	// getLastWrittenCheckpointTs returns the latest checkpoint successfully written to the sink.
+	getLastWrittenCheckpointTs() model.Ts
 	// emitDDLEvent emits DDL event and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
@@ -68,8 +70,9 @@ type ddlSinkImpl struct {
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
 		sync.Mutex
-		checkpointTs  model.Ts
-		currentTables []*model.TableInfo
+		checkpointTs        model.Ts
+		writtenCheckpointTs model.Ts
+		currentTables       []*model.TableInfo
 	}
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
@@ -251,6 +254,9 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 					delete(s.pendingDDLTables, name)
 				}
 			}
+			s.mu.Lock()
+			s.mu.writtenCheckpointTs = checkpointTs
+			s.mu.Unlock()
 		}
 		return
 	}
@@ -346,6 +352,12 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	defer s.mu.Unlock()
 	s.mu.checkpointTs = ts
 	s.mu.currentTables = tables
+}
+
+func (s *ddlSinkImpl) getLastWrittenCheckpointTs() model.Ts {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.writtenCheckpointTs
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.

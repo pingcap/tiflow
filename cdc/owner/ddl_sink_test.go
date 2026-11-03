@@ -129,11 +129,13 @@ func TestCheckpointIncludesRenamedTables(t *testing.T) {
 	var lastCheckpointTs model.Ts
 	s.emitCheckpointTs(9, newTables)
 	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
+	require.Equal(t, model.Ts(9), s.getLastWrittenCheckpointTs())
 	require.ElementsMatch(t, []model.TableName{newTables[0].TableName, newTables[1].TableName}, sink.checkpointTables[0])
 	require.Len(t, s.pendingDDLTables, 2)
 
 	s.emitCheckpointTs(10, newTables)
 	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
+	require.Equal(t, model.Ts(10), s.getLastWrittenCheckpointTs())
 	require.ElementsMatch(t, []model.TableName{
 		oldTables[0].TableName, oldTables[1].TableName,
 		newTables[0].TableName, newTables[1].TableName,

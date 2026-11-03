@@ -98,11 +98,13 @@ type mockDDLSink struct {
 	ddlHistory []*model.DDLEvent
 	mu         struct {
 		sync.Mutex
-		checkpointTs  model.Ts
-		currentTables []*model.TableInfo
+		checkpointTs        model.Ts
+		writtenCheckpointTs model.Ts
+		currentTables       []*model.TableInfo
 	}
-	syncPoint    model.Ts
-	syncPointHis []model.Ts
+	holdCheckpointAck bool
+	syncPoint         model.Ts
+	syncPointHis      []model.Ts
 
 	bootstrapError bool
 
@@ -146,6 +148,15 @@ func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	defer m.mu.Unlock()
 	m.mu.checkpointTs = ts
 	m.mu.currentTables = tables
+	if !m.holdCheckpointAck {
+		m.mu.writtenCheckpointTs = ts
+	}
+}
+
+func (m *mockDDLSink) getLastWrittenCheckpointTs() model.Ts {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mu.writtenCheckpointTs
 }
 
 func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {

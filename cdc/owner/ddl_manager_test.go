@@ -131,6 +131,42 @@ func TestCheckpointWaitsForAllDDLEventsAtSameTs(t *testing.T) {
 	require.Equal(t, ddlTs, checkpointTs)
 }
 
+func TestRenameKeepsBarrierUntilCheckpointWritten(t *testing.T) {
+	const ddlTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	sink := dm.ddlSink.(*mockDDLSink)
+	sink.holdCheckpointAck = true
+	ddl := newFakeDDLEvent(1, "table10", timodel.ActionRenameTable, ddlTs)
+	ddl.Query = "RENAME TABLE test.table1 TO test.table10"
+	ddl.PreTableInfo = newFakeDDLEvent(1, "table1", timodel.ActionRenameTable, ddlTs).TableInfo
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, barrier, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	sink.ddlDone = true
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	require.Nil(t, dm.executingDDL)
+
+	// The owner has offered WM(T), but the Kafka sink has not written it yet.
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	emittedTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Equal(t, ddlTs, emittedTs)
+	require.Less(t, sink.getLastWrittenCheckpointTs(), ddlTs)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+
+	sink.mu.Lock()
+	sink.mu.writtenCheckpointTs = ddlTs
+	sink.mu.Unlock()
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Greater(t, barrier.MinTableBarrierTs, ddlTs)
+}
+
 func TestCheckpointWaitsForDDLPuller(t *testing.T) {
 	const checkpointTs = uint64(10)
 	dm := createDDLManagerForTest(t, false)

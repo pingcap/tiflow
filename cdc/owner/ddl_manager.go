@@ -123,6 +123,9 @@ type ddlManager struct {
 	// justSentDDL is the ddl that just be sent to the downstream in the current tick.
 	// we need it to prevent the checkpointTs from advancing in the same tick.
 	justSentDDL *model.DDLEvent
+	// Keep the persisted barrier at a table name change until its old topic
+	// receives a covering checkpoint. A new owner can then replay the DDL.
+	checkpointPendingDDL model.Ts
 	// tableInfoCache is the tables that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
@@ -475,6 +478,10 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if done {
+		switch m.executingDDL.Type {
+		case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView:
+			m.checkpointPendingDDL = m.executingDDL.CommitTs
+		}
 		m.cleanCache("execute a ddl event successfully")
 	}
 	return nil
@@ -558,6 +565,13 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 					tableBarrierMap[id] = ddl.CommitTs
 				}
 			}
+		}
+	}
+	if m.checkpointPendingDDL != 0 {
+		if m.ddlSink.getLastWrittenCheckpointTs() >= m.checkpointPendingDDL {
+			m.checkpointPendingDDL = 0
+		} else if m.checkpointPendingDDL < barrier.MinTableBarrierTs {
+			barrier.MinTableBarrierTs = m.checkpointPendingDDL
 		}
 	}
 
