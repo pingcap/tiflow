@@ -130,7 +130,7 @@ EOF
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(curl -s -X GET "https://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem" 2>&1)
+	changefeed_info=$(curl --user ticdc:ticdc_secret -s -X GET "https://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem" 2>&1)
 	if [[ ! $changefeed_info == *"\"case_sensitive\":true"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
@@ -184,7 +184,7 @@ EOF
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID --ts=$TS
 
 	# Smoke test change log level
-	curl -X POST -d '"warn"' https://127.0.0.1:8300/api/v1/log --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem"
+	curl --user ticdc:ticdc_secret -X POST -d '"warn"' https://127.0.0.1:8300/api/v1/log --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem"
 	sleep 3
 	# make sure TiCDC does not panic
 	curl https://127.0.0.1:8300/status --cacert "${TLS_DIR}/ca.pem" --cert "${TLS_DIR}/client.pem" --key "${TLS_DIR}/client-key.pem"

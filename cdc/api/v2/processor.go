@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/authorization"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
@@ -137,14 +138,17 @@ func (h *OpenAPIV2) listProcessors(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	prcInfos := make([]ProcessorCommonInfo, len(infos))
-	for i, info := range infos {
+	prcInfos := make([]ProcessorCommonInfo, 0, len(infos))
+	for _, info := range infos {
+		if !authorization.Can(ctx, authorization.Read, info.CfID) {
+			continue
+		}
 		resp := ProcessorCommonInfo{
 			Namespace:    info.CfID.Namespace,
 			ChangeFeedID: info.CfID.ID,
 			CaptureID:    info.CaptureID,
 		}
-		prcInfos[i] = resp
+		prcInfos = append(prcInfos, resp)
 	}
 	resp := &ListResponse[ProcessorCommonInfo]{
 		Total: len(prcInfos),

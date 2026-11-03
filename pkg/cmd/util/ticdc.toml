@@ -40,3 +40,52 @@ max-backups = 0
 # cert-allowed-cn = ["cn1","cn2"]
 ## Use mtls or just tls when proper cert/ca/key are provided.
 # mtls = false
+
+# Enable TiDB username/password authentication for every non-public HTTP API.
+# Only health and basic status probes remain public. Metrics, diagnostics, and
+# management clients must supply credentials when this option is enabled.
+# Use TLS to protect credentials in transit.
+# client-user-required = true
+# client-allowed-user = ["cdc-reader", "cdc-operator", "cdc-admin"]
+
+# Explicit role bindings enable deny-by-default authorization. Without this
+# section, allowed users retain the legacy cluster-administrator permissions.
+# Authorization requires client-user-required = true. Every bound user must
+# also appear in client-allowed-user; unbound users have no API permissions.
+# Upgrade and configure ALL captures before relying on resource isolation.
+#
+# viewer: read scoped changefeed status and processors, with filtered collection
+# results. Detail responses omit replica configuration and redact URI secrets.
+# operator: viewer permissions plus create/update/pause/resume/delete and table
+# scheduling within the bound scope, and the TSO/table-verification helpers used
+# by CLI create/resume. Creation without an ID requires changefeed
+# = "*", since the server generates an ID after authorization.
+# admin: all registered APIs, including unsafe GC/lock operations, raw metadata,
+# config, metrics, profiling, and the legacy /capture/owner/* management API.
+# The legacy admin endpoint accepts only stop (1), resume (2), and remove (3).
+# The v2 meta_info endpoint also redacts sink URI credentials, including for
+# administrators and deployments without client-user-required enabled.
+# Legacy operation logs include the verified actor, target, job type and result;
+# a username supplied without successful authentication is not a verified actor.
+#
+# Namespace and changefeed match exact identifiers or the complete string "*".
+# Scoped roles require both fields; admin bindings must omit both scope fields.
+# v1 changefeed operations always use namespace "default", even if a namespace
+# query parameter is supplied. Use v2 for other namespaces.
+# These are CDC permissions; TiDB SQL grants are not used for authorization.
+#
+# [[security.client-authorization.bindings]]
+# user = "cdc-reader"
+# role = "viewer"
+# namespace = "team-a"
+# changefeed = "orders"
+#
+# [[security.client-authorization.bindings]]
+# user = "cdc-operator"
+# role = "operator"
+# namespace = "team-a"
+# changefeed = "*"
+#
+# [[security.client-authorization.bindings]]
+# user = "cdc-admin"
+# role = "admin"

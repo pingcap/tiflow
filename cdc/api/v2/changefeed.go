@@ -28,6 +28,8 @@ import (
 	"github.com/pingcap/tidb/pkg/kv"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/authorization"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/check"
@@ -66,6 +68,17 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 
 	if err := c.BindJSON(&cfg); err != nil {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
+		return
+	}
+	if cfg == nil {
+		_ = c.Error(cerror.ErrAPIInvalidParam.GenWithStack("changefeed config must not be null"))
+		return
+	}
+	namespace := cfg.Namespace
+	if namespace == "" {
+		namespace = model.DefaultNamespace
+	}
+	if !middleware.RequirePermission(c, authorization.Write, model.ChangeFeedID{Namespace: namespace, ID: cfg.ID}) {
 		return
 	}
 	var pdClient pd.Client
@@ -198,7 +211,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		zap.String("changefeed", info.String()))
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
-		nil, true))
+		nil))
 }
 
 // hasRunningImport checks if there is running import tasks on the
@@ -269,7 +282,7 @@ func (h *OpenAPIV2) listChangeFeeds(c *gin.Context) {
 
 	for cfID := range infos {
 		// filter by namespace
-		if cfID.Namespace == namespace {
+		if cfID.Namespace == namespace && authorization.Can(ctx, authorization.Read, cfID) {
 			changefeeds = append(changefeeds, cfID)
 		}
 	}
@@ -549,7 +562,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toAPIModel(newCfInfo,
-		cfStatus.ResolvedTs, cfStatus.CheckpointTs, nil, true))
+		cfStatus.ResolvedTs, cfStatus.CheckpointTs, nil))
 }
 
 // getChangefeed get detailed info of a changefeed
@@ -601,7 +614,12 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 		}
 	}
 	detail := toAPIModel(cfInfo, status.ResolvedTs,
-		status.CheckpointTs, taskStatus, true)
+		status.CheckpointTs, taskStatus)
+	if !authorization.Can(ctx, authorization.Write, changefeedID) {
+		// Replica configuration may contain sink credentials. Read-only users
+		// receive status and task information, not the original configuration.
+		detail.Config = nil
+	}
 	c.JSON(http.StatusOK, detail)
 }
 
@@ -710,7 +728,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, toAPIModel(info, status.ResolvedTs, status.CheckpointTs,
-		taskStatus, false))
+		taskStatus))
 }
 
 // resumeChangefeed handles resume changefeed request.
@@ -1085,7 +1103,6 @@ func toAPIModel(
 	resolvedTs uint64,
 	checkpointTs uint64,
 	taskStatus []model.CaptureTaskStatus,
-	maskSinkURI bool,
 ) *ChangeFeedInfo {
 	var runningError *RunningError
 
@@ -1099,20 +1116,12 @@ func toAPIModel(
 		}
 	}
 
-	sinkURI := info.SinkURI
-	var err error
-	if maskSinkURI {
-		sinkURI, err = util.MaskSinkURI(sinkURI)
-		if err != nil {
-			log.Error("failed to mask sink URI", zap.Error(err))
-		}
-	}
-
 	apiInfoModel := &ChangeFeedInfo{
-		UpstreamID:     info.UpstreamID,
-		Namespace:      info.Namespace,
-		ID:             info.ID,
-		SinkURI:        sinkURI,
+		UpstreamID: info.UpstreamID,
+		Namespace:  info.Namespace,
+		ID:         info.ID,
+		// Metadata and ordinary detail responses must both redact credentials.
+		SinkURI:        util.MaskSensitiveDataInURI(info.SinkURI),
 		CreateTime:     info.CreateTime,
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,

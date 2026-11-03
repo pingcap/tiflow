@@ -1026,4 +1026,8 @@ var (
 		"user %s unauthorized, error: %s",
 		errors.RFCCodeText("CDC:ErrUnauthorized"),
 	)
+	ErrForbidden = errors.Normalize(
+		"permission denied for user %s, action %s",
+		errors.RFCCodeText("CDC:ErrForbidden"),
+	)
 )

@@ -74,6 +74,8 @@ func RegisterOwnerAPIRoutes(router *gin.Engine, capture capture.Capture) {
 
 	owner.Use(middleware.ErrorHandleMiddleware())
 	owner.Use(middleware.LogMiddleware())
+	// Protect standalone registration too, without relying on the root router.
+	owner.Use(middleware.AccessMiddleware(capture))
 
 	owner.POST("/resign", gin.WrapF(ownerAPI.handleResignOwner))
 	owner.POST("/admin", gin.WrapF(ownerAPI.handleChangefeedAdmin))
@@ -84,7 +86,7 @@ func RegisterOwnerAPIRoutes(router *gin.Engine, capture capture.Capture) {
 
 func handleOwnerResp(w http.ResponseWriter, err error) {
 	if err != nil {
-		if errors.Cause(err) == concurrency.ErrElectionNotLeader {
+		if errors.Cause(err) == concurrency.ErrElectionNotLeader || api.IsHTTPBadRequestError(err) {
 			api.WriteError(w, http.StatusBadRequest, err)
 			return
 		}
@@ -120,7 +122,7 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 		return
 	}
 	typeStr := req.Form.Get(api.OpVarAdminJob)
-	typ, err := strconv.ParseInt(typeStr, 10, 64)
+	typ, err := strconv.Atoi(typeStr)
 	if err != nil {
 		api.WriteError(w, http.StatusBadRequest,
 			cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
@@ -129,6 +131,20 @@ func (h *ownerAPI) handleChangefeedAdmin(w http.ResponseWriter, req *http.Reques
 	job := model.AdminJob{
 		CfID: model.DefaultChangeFeedID(req.Form.Get(api.OpVarChangefeedID)),
 		Type: model.AdminJobType(typ),
+	}
+	// AdminFinish and AdminNone are internal states, not public operations.
+	// Passing an unsupported job to the owner's state machine can panic.
+	switch job.Type {
+	case model.AdminStop, model.AdminResume, model.AdminRemove:
+	default:
+		api.WriteError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid admin job type: %s", typeStr))
+		return
+	}
+	if err := model.ValidateChangefeedID(job.CfID.ID); err != nil {
+		api.WriteError(w, http.StatusBadRequest,
+			cerror.ErrAPIInvalidParam.GenWithStack("invalid changefeed id: %s", job.CfID.ID))
+		return
 	}
 
 	err = api.HandleOwnerJob(req.Context(), h.capture, job)
@@ -154,6 +170,11 @@ func (h *ownerAPI) handleRebalanceTrigger(w http.ResponseWriter, req *http.Reque
 		return
 	}
 
+	// Match the existence precondition used by the v1 scheduling API.
+	if err := h.checkSchedulingChangefeed(req.Context(), changefeedID); err != nil {
+		handleOwnerResp(w, err)
+		return
+	}
 	err = api.HandleOwnerBalance(req.Context(), h.capture, changefeedID)
 	handleOwnerResp(w, err)
 }
@@ -191,9 +212,22 @@ func (h *ownerAPI) handleMoveTable(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	if err := h.checkSchedulingChangefeed(req.Context(), changefeedID); err != nil {
+		handleOwnerResp(w, err)
+		return
+	}
 	err = api.HandleOwnerScheduleTable(
 		req.Context(), h.capture, changefeedID, to, tableID)
 	handleOwnerResp(w, err)
+}
+
+func (h *ownerAPI) checkSchedulingChangefeed(ctx context.Context, id model.ChangeFeedID) error {
+	provider := h.capture.StatusProvider()
+	if provider == nil {
+		return cerror.ErrNotOwner.GenWithStackByArgs()
+	}
+	_, err := provider.GetChangeFeedStatus(ctx, id)
+	return err
 }
 
 func (h *ownerAPI) handleChangefeedQuery(w http.ResponseWriter, req *http.Request) {

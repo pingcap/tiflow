@@ -20,8 +20,12 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/cdc/api/authorization"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 type testCaptureInfoProvider struct {
@@ -56,4 +60,38 @@ func TestCheckServerReadyMiddleware(t *testing.T) {
 	require.Nil(t, err)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestLogMiddlewareUsesVerifiedIdentity(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	t.Cleanup(log.ReplaceGlobals(zap.New(core), nil))
+	for _, authenticated := range []bool{false, true} {
+		router := gin.New()
+		router.Use(LogMiddleware())
+		router.POST("/test", func(c *gin.Context) {
+			if authenticated {
+				c.Request = c.Request.WithContext(authorization.WithPrincipal(c.Request.Context(), authorization.Principal{
+					Username: "verified-user", UpstreamID: 42,
+				}))
+			}
+			c.Status(http.StatusNoContent)
+		})
+		req := httptest.NewRequest(http.MethodPost, "/test", nil)
+		req.SetBasicAuth("claimed-user", "password-secret")
+		logs.TakeAll()
+		router.ServeHTTP(httptest.NewRecorder(), req)
+		entries := logs.FilterMessage("cdc open api request").All()
+		require.Len(t, entries, 1)
+		fields := entries[0].ContextMap()
+		require.Equal(t, authenticated, fields["authenticated"])
+		if authenticated {
+			require.Equal(t, "verified-user", fields["username"])
+			require.Equal(t, uint64(42), fields["upstreamID"])
+		} else {
+			require.Empty(t, fields["username"])
+			require.Equal(t, uint64(0), fields["upstreamID"])
+		}
+		require.NotContains(t, fields, "password")
+		require.NotContains(t, fields, "Authorization")
+	}
 }

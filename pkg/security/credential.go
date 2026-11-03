@@ -44,8 +44,9 @@ type Credential struct {
 	// Todo: just enable mTLS for 3) and 4) by default
 	MTLS bool `toml:"mtls" json:"mtls"`
 
-	ClientUserRequired bool     `toml:"client-user-required" json:"client-user-required"`
-	ClientAllowedUser  []string `toml:"client-allowed-user" json:"client-allowed-user"`
+	ClientUserRequired  bool                 `toml:"client-user-required" json:"client-user-required"`
+	ClientAllowedUser   []string             `toml:"client-allowed-user" json:"client-allowed-user"`
+	ClientAuthorization *ClientAuthorization `toml:"client-authorization" json:"client-authorization,omitempty"`
 }
 
 // Value implements the driver.Valuer interface
