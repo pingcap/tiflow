@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/zap"
 )
@@ -78,7 +79,7 @@ func (s *Server) reverseRequestToLeaderMW(tlsCfg *tls.Config) gin.HandlerFunc {
 				transport.TLSClientConfig = tlsCfg
 				simpleProxy.Transport = transport
 			}
-			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.String()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
+			log.L().Info("reverse request to leader", zap.String("Request URL", c.Request.URL.EscapedPath()), zap.String("leader", leaderOpenAPIAddr), zap.Bool("hasTLS", tlsCfg != nil))
 			simpleProxy.ServeHTTP(c.Writer, c.Request)
 			c.Abort()
 		}
@@ -460,6 +461,7 @@ func (s *Server) DMAPICreateTask(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
+	res.CheckResult = redact.Text(res.CheckResult)
 	c.IndentedJSON(http.StatusCreated, res)
 }
 
@@ -475,6 +477,7 @@ func (s *Server) DMAPIUpdateTask(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
+	res.CheckResult = redact.Text(res.CheckResult)
 	c.IndentedJSON(http.StatusOK, res)
 }
 
@@ -815,7 +818,7 @@ func (s *Server) DMAPIImportTaskTemplate(c *gin.Context) {
 				ErrorMsg string `json:"error_msg"`
 				TaskName string `json:"task_name"`
 			}{
-				ErrorMsg: err.Error(),
+				ErrorMsg: redact.Text(err.Error()),
 				TaskName: task.Name,
 			})
 		} else {
@@ -927,6 +930,6 @@ func terrorHTTPErrorHandler() gin.HandlerFunc {
 		} else {
 			msg = gErr.Error()
 		}
-		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: msg, ErrorCode: code})
+		c.IndentedJSON(http.StatusBadRequest, openapi.ErrorWithMessage{ErrorMsg: redact.Text(msg), ErrorCode: code})
 	}
 }
