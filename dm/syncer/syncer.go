@@ -35,6 +35,7 @@ import (
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
 	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -56,6 +57,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
@@ -1924,7 +1926,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if freshAndAllMode {
 		err = s.loadTableStructureFromDump(ctx)
 		if err != nil {
-			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			s.tctx.L().Warn("error happened when load table structure from dump files", redact.Error(err))
 			cleanDumpFile = false
 		} else {
 			err = s.flushCheckPoints()
@@ -1943,7 +1945,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
 		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
-			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
+			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(s.cfg.Dir)), redact.Error(err))
 		}
 	}
 
@@ -3080,14 +3082,14 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		var err error
 		dumpStorage, err = storage.CreateStorage(ctx, s.cfg.LoaderConfig.Dir)
 		if err != nil {
-			logger.Warn("fail to create dump storage", zap.Error(err))
+			logger.Warn("fail to create dump storage", redact.Error(err))
 			return err
 		}
 		defer dumpStorage.Close()
 	}
 	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
-		logger.Warn("fail to get dump files", zap.Error(err))
+		logger.Warn("fail to get dump files", redact.Error(err))
 		return err
 	}
 	var dbs, tables []string
@@ -3127,7 +3129,7 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	if err != nil {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
-			zap.Error(err))
+			redact.Error(err))
 		return err
 	}
 
@@ -3157,9 +3159,9 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
-				zap.String("path", s.cfg.LoaderConfig.Dir),
+				zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 				zap.String("file", file),
-				zap.Error(err2))
+				redact.Error(err2))
 			setFirstErr(err2)
 			continue
 		}
@@ -3173,10 +3175,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if err != nil {
 				logger.Warn("fail to parse statement for creating table in schema tracker",
 					zap.String("db", db),
-					zap.String("path", s.cfg.LoaderConfig.Dir),
+					zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 					zap.String("file", file),
 					zap.ByteString("statement", stmt),
-					zap.Error(err))
+					redact.Error(err))
 				setFirstErr(err)
 				continue
 			}
@@ -3189,10 +3191,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
-						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
 						zap.ByteString("statement", stmt),
-						zap.Error(err))
+						redact.Error(err))
 					setFirstErr(err)
 					continue
 				}
@@ -3204,10 +3206,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
-						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
 						zap.ByteString("statement", stmt),
-						zap.Error(err))
+						redact.Error(err))
 					setFirstErr(err)
 					continue
 				}
@@ -3502,7 +3504,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	newCfg.DumpIOTotalBytes = oldCfg.DumpIOTotalBytes
 
 	if oldCfg.String() != newCfg.String() {
-		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
+		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg.Redacted()), zap.Stringer("new cfg", newCfg.Redacted()))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil
