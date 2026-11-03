@@ -28,6 +28,14 @@ func QuoteName(name string) string {
 	return "`" + EscapeName(name) + "`"
 }
 
+// UnquoteName removes one layer of MySQL identifier quoting and unescapes doubled backticks.
+func UnquoteName(name string) string {
+	if len(name) < 2 || name[0] != '`' || name[len(name)-1] != '`' {
+		return name
+	}
+	return strings.ReplaceAll(name[1:len(name)-1], "``", "`")
+}
+
 // EscapeName replaces all "`" in name with double "`"
 func EscapeName(name string) string {
 	return strings.Replace(name, "`", "``", -1)
