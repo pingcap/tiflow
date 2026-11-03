@@ -897,3 +897,174 @@ func TestQueryStatusSourceStatusTimeout(t *testing.T) {
 	require.Equal(t, subtaskCfg.Name, status[0].Name)
 	require.NotNil(t, w.getSourceStatusErr())
 }
+
+func TestQueryStatusDuringBlockedSubTaskOperation(t *testing.T) {
+	testCases := []struct {
+		name          string
+		op            pb.TaskOp
+		expectedStage pb.Stage
+	}{
+		{name: "pause", op: pb.TaskOp_Pause, expectedStage: pb.Stage_Pausing},
+		{name: "stop", op: pb.TaskOp_Stop, expectedStage: pb.Stage_Pausing},
+		{name: "delete", op: pb.TaskOp_Delete, expectedStage: pb.Stage_Stopping},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			w, st, release := newSourceWorkerWithBlockedSubTask(t)
+			defer w.Stop(true)
+			defer release()
+
+			opDone := make(chan error, 1)
+			go func() {
+				opDone <- w.OperateSubTask(st.cfg.Name, testCase.op)
+			}()
+
+			require.Eventually(t, func() bool {
+				return st.Stage() == testCase.expectedStage
+			}, time.Second, 10*time.Millisecond)
+
+			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer cancel()
+			type queryResult struct {
+				status []*pb.SubTaskStatus
+				err    error
+			}
+			queryDone := make(chan queryResult, 1)
+			go func() {
+				status, _, err := w.QueryStatus(ctx, st.cfg.Name)
+				queryDone <- queryResult{status: status, err: err}
+			}()
+
+			select {
+			case result := <-queryDone:
+				require.NoError(t, result.err)
+				require.Len(t, result.status, 1)
+				require.Equal(t, testCase.expectedStage, result.status[0].Stage)
+			case <-time.After(500 * time.Millisecond):
+				release()
+				<-opDone
+				t.Fatal("QueryStatus blocked behind a subtask lifecycle operation")
+			}
+
+			release()
+			require.NoError(t, <-opDone)
+		})
+	}
+}
+
+func TestCanceledQueryStatusDoesNotQueueBehindSubTaskOperation(t *testing.T) {
+	w, st, release := newSourceWorkerWithBlockedSubTask(t)
+	defer w.Stop(true)
+	defer release()
+
+	opDone := make(chan error, 1)
+	go func() {
+		opDone <- w.OperateSubTask(st.cfg.Name, pb.TaskOp_Pause)
+	}()
+	require.Eventually(t, func() bool {
+		return st.Stage() == pb.Stage_Pausing
+	}, time.Second, 10*time.Millisecond)
+
+	const queryCount = 16
+	var wg sync.WaitGroup
+	errCh := make(chan error, queryCount)
+	wg.Add(queryCount)
+	for range queryCount {
+		go func() {
+			defer wg.Done()
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			status, _, err := w.QueryStatus(ctx, st.cfg.Name)
+			if err != nil {
+				errCh <- err
+				return
+			}
+			if len(status) != 1 || status[0].Stage != pb.Stage_Pausing {
+				errCh <- fmt.Errorf("unexpected status: %+v", status)
+			}
+		}()
+	}
+
+	queriesDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(queriesDone)
+	}()
+	select {
+	case <-queriesDone:
+	case <-time.After(500 * time.Millisecond):
+		release()
+		<-opDone
+		t.Fatal("canceled QueryStatus calls accumulated behind the worker lock")
+	}
+	close(errCh)
+	for err := range errCh {
+		require.NoError(t, err)
+	}
+
+	release()
+	require.NoError(t, <-opDone)
+}
+
+func TestBlockedSubTaskOperationStillSerializesLifecycleOperations(t *testing.T) {
+	w, st, release := newSourceWorkerWithBlockedSubTask(t)
+	defer w.Stop(true)
+	defer release()
+
+	pauseDone := make(chan error, 1)
+	go func() {
+		pauseDone <- w.OperateSubTask(st.cfg.Name, pb.TaskOp_Pause)
+	}()
+	require.Eventually(t, func() bool {
+		return st.Stage() == pb.Stage_Pausing
+	}, time.Second, 10*time.Millisecond)
+
+	deleteDone := make(chan error, 1)
+	go func() {
+		deleteDone <- w.OperateSubTask(st.cfg.Name, pb.TaskOp_Delete)
+	}()
+	select {
+	case err := <-deleteDone:
+		t.Fatalf("concurrent delete was not serialized: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	release()
+	require.NoError(t, <-pauseDone)
+	require.NoError(t, <-deleteDone)
+	require.Nil(t, w.subTaskHolder.findSubTask(st.cfg.Name))
+}
+
+func newSourceWorkerWithBlockedSubTask(t *testing.T) (*SourceWorker, *SubTask, func()) {
+	t.Helper()
+
+	cfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
+	require.NoError(t, err)
+	w, err := NewSourceWorker(cfg, nil, "worker", "")
+	require.NoError(t, err)
+	w.closed.Store(false)
+
+	st := NewSubTaskWithStage(&config.SubTaskConfig{
+		Name:     "blocked-subtask",
+		SourceID: cfg.SourceID,
+	}, pb.Stage_Running, nil, "worker")
+	st.resultWg.Add(1)
+	w.subTaskHolder.recordSubTask(st)
+
+	releaseCh := make(chan struct{})
+	go func() {
+		<-releaseCh
+		switch st.Stage() {
+		case pb.Stage_Pausing:
+			st.setStage(pb.Stage_Paused)
+		case pb.Stage_Stopping:
+			st.setStage(pb.Stage_Stopped)
+		}
+		st.resultWg.Done()
+	}()
+	var once sync.Once
+	return w, st, func() {
+		once.Do(func() { close(releaseCh) })
+	}
+}
