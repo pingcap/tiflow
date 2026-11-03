@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -552,7 +553,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 			errorMsg = fmt.Sprintf("%s, Workaround: %s", errorMsg, err.Workaround)
 		}
 		errorMsg = fmt.Sprintf("%s.", errorMsg)
-		return errorMsg
+		return redact.Text(errorMsg)
 	}
 
 	formatProcessErrors := func(errors []*pb.ProcessError) string {

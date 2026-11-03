@@ -995,6 +995,127 @@ func (s *OpenAPIViewSuite) testSourceOperationWithTask(source *openapi.Source, t
 	s.Equal(int(terror.ErrSchedulerWorkerNotExist.Code()), resp.ErrorCode)
 }
 
+func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s1 := setupTestServer(ctx, s.T())
+	ctrl := gomock.NewController(s.T())
+	defer func() {
+		cancel()
+		s1.Close()
+		ctrl.Finish()
+	}()
+
+	dbCfg := config.GetDBConfigForTest()
+	source1 := openapi.Source{
+		Enable:     true,
+		SourceName: source1Name,
+		EnableGtid: false,
+		Host:       dbCfg.Host,
+		Password:   &dbCfg.Password,
+		Port:       dbCfg.Port,
+		User:       dbCfg.User,
+	}
+	createSourceReq := openapi.CreateSourceRequest{Source: source1}
+	result := testutil.NewRequest().Post("/api/v1/sources").WithJsonBody(createSourceReq).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusCreated, result.Code())
+
+	ctx1, cancel1 := context.WithCancel(ctx)
+	defer cancel1()
+	workerName1 := "worker-1"
+	s.NoError(s1.scheduler.AddWorker(workerName1, "172.16.10.72:8262"))
+	go func(ctx context.Context, workerName string) {
+		s.NoError(ha.KeepAlive(ctx, s1.etcdClient, workerName, keepAliveTTL))
+	}(ctx1, workerName1)
+	s.True(utils.WaitSomething(30, 100*time.Millisecond, func() bool {
+		return s1.scheduler.GetWorkerBySource(source1.SourceName) != nil
+	}))
+
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	s.NoError(err)
+	task.TargetConfig.Host = dbCfg.Host
+	task.TargetConfig.Port = dbCfg.Port
+	task.TargetConfig.User = dbCfg.User
+	task.TargetConfig.Password = dbCfg.Password
+	dataDir := "s3://bucket/dump?access-key=private-ak&secret-access-key=private-sk"
+	task.SourceConfig.FullMigrateConf.DataDir = &dataDir
+
+	taskURL := "/api/v1/tasks"
+	task1URL := taskURL + "/" + task.Name
+	result = testutil.NewRequest().Post(taskURL).WithJsonBody(openapi.CreateTaskRequest{Task: task}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Require().Equal(http.StatusCreated, result.Code(), result.Recorder.Body.String())
+	oldSubTaskCfg := s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name]
+	s.Contains(oldSubTaskCfg.LoaderConfig.Dir, "private-sk")
+
+	// Clients read the full task and submit it back with PUT, or delete the task
+	// with keep_meta and create it again, so the stored data_dir must be returned.
+	result = testutil.NewRequest().Get(taskURL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var taskList openapi.GetTaskListResponse
+	s.NoError(result.UnmarshalBodyToObject(&taskList))
+	s.Require().Len(taskList.Data, 1)
+	s.Equal(dataDir, *taskList.Data[0].SourceConfig.FullMigrateConf.DataDir)
+	result = testutil.NewRequest().Get(task1URL).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var readTask openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&readTask))
+	s.Equal(dataDir, *readTask.SourceConfig.FullMigrateConf.DataDir)
+
+	batch := 1000
+	readTask.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	syncUnit := syncer.NewSyncer(oldSubTaskCfg, nil, nil)
+	mockWorkerClient := pbmock.NewMockWorkerClient(ctrl)
+	mockWorkerClient.EXPECT().CheckSubtasksCanUpdate(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *pb.CheckSubtasksCanUpdateRequest, _ ...grpc.CallOption) (*pb.CheckSubtasksCanUpdateResponse, error) {
+			newSubTaskCfg := config.NewSubTaskConfig()
+			if decodeErr := newSubTaskCfg.Decode(req.SubtaskCfgTomlString, false); decodeErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: decodeErr.Error()}, nil
+			}
+			if guardErr := syncUnit.CheckCanUpdateCfg(newSubTaskCfg); guardErr != nil {
+				return &pb.CheckSubtasksCanUpdateResponse{Msg: guardErr.Error()}, nil
+			}
+			return &pb.CheckSubtasksCanUpdateResponse{Success: true}, nil
+		},
+	)
+	s1.scheduler.SetWorkerClientForTest(workerName1, newMockRPCClient(mockWorkerClient))
+	result = testutil.NewRequest().Put(task1URL).
+		WithJsonBody(openapi.UpdateTaskRequest{Task: readTask}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Require().Equal(http.StatusOK, result.Code(), result.Recorder.Body.String())
+	storedSubTaskCfg := s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name]
+	s.Equal(oldSubTaskCfg.LoaderConfig.Dir, storedSubTaskCfg.LoaderConfig.Dir)
+	s.Equal(batch, storedSubTaskCfg.SyncerConfig.Batch)
+
+	// Replace the task as dmctl stop-task and start-task <config> do.
+	deleteCtx, cancelDelete := context.WithCancel(ctx)
+	defer cancelDelete()
+	mockWorkerClient.EXPECT().QueryStatus(gomock.Any(), &pb.QueryStatusRequest{Name: task.Name}).DoAndReturn(
+		func(context.Context, *pb.QueryStatusRequest, ...grpc.CallOption) (*pb.QueryStatusResponse, error) {
+			cancelDelete()
+			return nil, context.Canceled
+		},
+	)
+	s.NoError(s1.deleteTask(deleteCtx, task.Name, true, true))
+	s.Nil(s1.scheduler.GetSubTaskCfgsByTask(task.Name))
+	result = testutil.NewRequest().Post(taskURL).WithJsonBody(openapi.CreateTaskRequest{Task: readTask}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Require().Equal(http.StatusCreated, result.Code(), result.Recorder.Body.String())
+	s.Equal(oldSubTaskCfg.LoaderConfig.Dir, s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name].LoaderConfig.Dir)
+
+	templateURL := "/api/v1/tasks/templates"
+	result = testutil.NewRequest().Post(templateURL).WithJsonBody(task).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusCreated, result.Code())
+	result = testutil.NewRequest().Get(templateURL+"/"+task.Name).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code())
+	var readTemplate openapi.Task
+	s.NoError(result.UnmarshalBodyToObject(&readTemplate))
+	s.Equal(dataDir, *readTemplate.SourceConfig.FullMigrateConf.DataDir)
+	readTemplate.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	result = testutil.NewRequest().Put(templateURL+"/"+task.Name).WithJsonBody(readTemplate).GoWithHTTPHandler(s.T(), s1.openapiHandles)
+	s.Equal(http.StatusOK, result.Code(), result.Recorder.Body.String())
+	storedTemplate, err := ha.GetOpenAPITaskTemplate(s1.etcdClient, task.Name)
+	s.NoError(err)
+	s.Equal(dataDir, *storedTemplate.SourceConfig.FullMigrateConf.DataDir)
+	s.Equal(batch, *storedTemplate.SourceConfig.IncrMigrateConf.ReplBatch)
+}
+
 func (s *OpenAPIViewSuite) TestTaskAPI() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s1 := setupTestServer(ctx, s.T())

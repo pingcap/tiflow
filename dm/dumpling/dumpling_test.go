@@ -15,6 +15,10 @@ package dumpling
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -34,6 +38,8 @@ import (
 	"github.com/pingcap/tiflow/engine/pkg/promutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 var _ = check.Suite(&testDumplingSuite{})
@@ -289,4 +295,37 @@ func TestBAlist(t *testing.T) {
 	require.NoError(t, err)
 	tableFilter = tfilter.CaseInsensitive(tableFilter)
 	require.Equal(t, tableFilter, m.dumpConfig.TableFilter)
+}
+
+func TestCleanupStorageErrorRedaction(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte("<Error><Code>AccessDenied</Code><Message>bucket access denied</Message><RequestId>test-request-id</RequestId></Error>"))
+	}))
+	defer server.Close()
+	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk&region=us-east-1&endpoint=" + url.QueryEscape(server.URL)
+	cfg := &config.SubTaskConfig{
+		Name: "storage-redaction", SourceID: "source-one",
+		LoaderConfig: config.LoaderConfig{Dir: raw},
+	}
+	d := NewDumpling(cfg)
+	d.metricProxies = defaultMetricProxies
+	core, logs := observer.New(zap.ErrorLevel)
+	d.logger = log.Logger{Logger: zap.New(core)}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	results := make(chan pb.ProcessResult, 1)
+	d.Process(ctx, results)
+	result := <-results
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, int32(32001), result.Errors[0].ErrCode)
+	require.Contains(t, result.Errors[0].Message, "fail to remove output directory")
+	require.Contains(t, result.Errors[0].RawCause, "403")
+	require.NotContains(t, result.String(), "private-")
+	require.Equal(t, raw, cfg.Dir)
+	require.Len(t, logs.All(), 1)
+	data, err := json.Marshal(logs.All()[0].ContextMap())
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "private-")
 }
