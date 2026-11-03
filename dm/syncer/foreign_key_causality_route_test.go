@@ -46,7 +46,8 @@ func newForeignKeyRouteTestSyncer(t *testing.T, workerCount int) (*Syncer, sqlmo
 
 	syncer := NewSyncer(cfg, nil, nil)
 	var err error
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	require.NoError(t, err)
 
 	db, mock, err := sqlmock.New()
@@ -77,7 +78,8 @@ func setForeignKeyRouteTestBAList(t *testing.T, syncer *Syncer, rules *filter.Ru
 
 	syncer.cfg.BAList = rules
 	var err error
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	require.NoError(t, err)
 }
 
@@ -542,7 +544,8 @@ func TestPrepareDownStreamTableInfoRejectsCaseMismatchWithCaseSensitiveRoute(t *
 	syncer, mock := newForeignKeyRouteTestSyncer(t, 2)
 	syncer.cfg.CaseSensitive = true
 	var err error
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	require.NoError(t, err)
 	setForeignKeyRouteTestSourceTableNamesFlavor(t, syncer, conn.LCTableNamesInsensitive)
 	setForeignKeyRouteTestRoutes(t, syncer, []*router.TableRule{
