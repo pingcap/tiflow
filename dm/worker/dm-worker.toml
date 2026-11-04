@@ -3,6 +3,9 @@
 #log configuration
 log-level = "info"
 log-file = "dm-worker.log"
+# Redact sensitive values handled by DM's log redaction helpers by default.
+# Set to false to opt out. The --redact-info-log flag overrides this setting.
+redact-info-log = true
 
 #dm-worker listen address
 worker-addr = ":8262"

@@ -17,10 +17,12 @@ import (
 	"flag"
 	"os"
 	"strings"
+	"testing"
 
 	"github.com/kami-zh/go-capturer"
 	"github.com/pingcap/check"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -62,4 +64,38 @@ func (t *testConfigSuite) TestPrintSampleConfig(c *check.C) {
 		c.Assert(err, check.ErrorMatches, flag.ErrHelp.Error())
 	})
 	c.Assert(strings.TrimSpace(out), check.Equals, strings.TrimSpace(string(buf)))
+}
+
+func TestRedactInfoLog(t *testing.T) {
+	require.True(t, NewConfig().RedactInfoLog)
+
+	for _, tc := range []struct {
+		name    string
+		config  string
+		args    []string
+		enabled bool
+	}{
+		{name: "default", enabled: true},
+		{name: "flag true", args: []string{"--redact-info-log=true"}, enabled: true},
+		{name: "flag false", args: []string{"--redact-info-log=false"}},
+		{name: "file omitted", config: "log-level = \"info\"", enabled: true},
+		{name: "file true", config: "redact-info-log = true", enabled: true},
+		{name: "file false", config: "redact-info-log = false"},
+		{name: "flag overrides file true", config: "redact-info-log = true", args: []string{"--redact-info-log=false"}},
+		{name: "flag overrides file false", config: "redact-info-log = false", args: []string{"--redact-info-log=true"}, enabled: true},
+		{name: "omitted file preserves flag", config: "log-level = \"info\"", args: []string{"--redact-info-log=false"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := []string{"--worker-addr=127.0.0.1:8262"}
+			if tc.config != "" {
+				path := t.TempDir() + "/worker.toml"
+				require.NoError(t, os.WriteFile(path, []byte(tc.config), 0o600))
+				args = append(args, "--config", path)
+			}
+			args = append(args, tc.args...)
+			cfg := NewConfig()
+			require.NoError(t, cfg.Parse(args))
+			require.Equal(t, tc.enabled, cfg.RedactInfoLog)
+		})
+	}
 }

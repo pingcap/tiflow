@@ -49,6 +49,25 @@ func TestTestLogger(t *testing.T) {
 	require.Empty(t, buffer.Stripped())
 }
 
+func TestRedactLog(t *testing.T) {
+	original := IsRedactLogEnabled()
+	t.Cleanup(func() { SetRedactLog(original) })
+	require.True(t, original, "DM log redaction should be enabled by default")
+
+	for _, enabled := range []bool{true, false} {
+		SetRedactLog(enabled)
+		require.Equal(t, enabled, IsRedactLogEnabled())
+		want := "sensitive-value"
+		if enabled {
+			want = "?"
+		}
+		require.Equal(t, want, RedactString("sensitive-value"))
+		logger, buffer := makeTestLogger()
+		logger.Info("redaction test", ZapRedactString("value", "sensitive-value"))
+		require.JSONEq(t, `{"$lvl":"INFO","$msg":"redaction test","value":"`+want+`"}`, buffer.Stripped())
+	}
+}
+
 func TestNewRetrySampleLogger(t *testing.T) {
 	core, observed := observer.New(zap.InfoLevel)
 	base := Logger{zap.New(core).With(zap.String("base", "logger"))}
