@@ -174,12 +174,17 @@ EOF
 	fi
 
 	# Smoke test unsafe commands
-	echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
+	if run_cdc_cli unsafe delete-service-gc-safepoint --no-confirm >"$WORK_DIR/delete_gc.log" 2>&1; then
+		echo "deleting GC protection with unfinished changefeeds should fail"
+		exit 1
+	fi
+	grep -q "unfinished changefeeds" "$WORK_DIR/delete_gc.log"
 	run_cdc_cli unsafe reset --no-confirm --pd=$pd_addr
 	REGION_ID=$(pd-ctl --cacert="${TLS_DIR}/ca.pem" --cert="${TLS_DIR}/client.pem" --key="${TLS_DIR}/client-key.pem" -u=$pd_addr region | jq '.regions[0].id')
 	TS=$(cdc cli tso query --pd=$pd_addr)
 	# wait for owner online
 	sleep 3
+	run_cdc_cli unsafe delete-service-gc-safepoint --no-confirm
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID --ts=$TS
 

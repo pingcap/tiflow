@@ -47,6 +47,13 @@ max-backups = 0
 # Use TLS to protect credentials in transit.
 # client-user-required = true
 # client-allowed-user = ["cdc-reader", "cdc-operator", "cdc-admin"]
+# Unsafe APIs always require client-user-required = true, even when ordinary
+# APIs retain anonymous access for compatibility. Configure an admin binding to
+# restrict unsafe operations when enabling role-based authorization.
+# Metadata diagnostics redact changefeed sink and replica-config credentials.
+# Deleting the service GC safepoint returns HTTP 409 while any unfinished
+# changefeed exists, including stopped or failed changefeeds. Remove or finish
+# these changefeeds before deleting their GC protection.
 
 # Explicit role bindings enable deny-by-default authorization. Without this
 # section, allowed users retain the legacy cluster-administrator permissions.
@@ -66,7 +73,7 @@ max-backups = 0
 # scheduling within the bound scope, and the TSO/table-verification helpers used
 # by CLI create/resume. Creation without an ID requires changefeed
 # = "*", since the server generates an ID after authorization.
-# admin: all registered APIs, including unsafe GC/lock operations, raw metadata,
+# admin: all registered APIs, including unsafe GC/lock operations, metadata,
 # config, metrics, profiling, and the legacy /capture/owner/* management API.
 # monitor: read cluster-wide /metrics only, including labels for all changefeeds.
 # Monitor bindings omit namespace and changefeed. They do not grant access to

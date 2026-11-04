@@ -103,13 +103,25 @@ const accessCheckedKey = "ticdc-access-checked"
 // the full server installs it globally to protect future routes as well.
 func AccessMiddleware(capture capture.Capture) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		credential := config.GetGlobalServerConfig().Security
-		if c.GetBool(accessCheckedKey) || credential == nil ||
-			(!credential.ClientUserRequired && credential.ClientAuthorization == nil) {
+		if c.GetBool(accessCheckedKey) {
 			c.Next()
 			return
 		}
 		key := c.Request.Method + " " + c.FullPath()
+		credential := config.GetGlobalServerConfig().Security
+		// Unsafe operations must never inherit the legacy anonymous API mode.
+		// Basic auth headers or forwarding headers alone cannot enable them.
+		if routePermissions[key] == authorization.Unsafe &&
+			(credential == nil || !credential.ClientUserRequired) {
+			abortAuthentication(c, errors.ErrUnauthorized.GenWithStackByArgs("",
+				"unsafe APIs require client-user-required = true"))
+			return
+		}
+		if credential == nil ||
+			(!credential.ClientUserRequired && credential.ClientAuthorization == nil) {
+			c.Next()
+			return
+		}
 		if publicRoutes[key] {
 			c.Set(accessCheckedKey, true)
 			c.Next()

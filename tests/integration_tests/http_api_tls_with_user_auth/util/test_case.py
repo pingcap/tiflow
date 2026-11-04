@@ -602,6 +602,13 @@ def unsafe_apis():
     url = BASE_URL1_V2+"/unsafe/metadata"
     resp = CLIENT.get(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
+    for pair in resp.json():
+        if '/changefeed/info/' in pair['key']:
+            info = json.loads(pair['value'])
+            uri = urlsplit(info['sink-uri'])
+            if uri.password is not None:
+                assert uri.password == 'xxxxx'
+            assert '123456' not in pair['value']
     print("status code", resp.status_code)
     print("pass test: show metadata")
 
@@ -619,14 +626,28 @@ def unsafe_apis():
     resp = CLIENT.delete(url, auth=Auth, data=data,
                      headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.conflict
 
     data = json.dumps({})
     headers = {"Content-Type": "application/json"}
     resp = CLIENT.delete(url, auth=Auth, data=data,
                      headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.conflict
+
+    # Once all remaining feeds are removed, the administrator may clean up GC.
+    feeds = CLIENT.get(BASE_URL1 + '/changefeeds?state=all',
+                       auth=Auth, cert=CERT, verify=VERIFY).json()
+    for feed in feeds:
+        removed = CLIENT.delete(BASE_URL1_V2 + '/changefeeds/' + feed['id'],
+                                auth=Auth, cert=CERT, verify=VERIFY)
+        assert removed.status_code == rq.codes.ok
+    for _ in range(RETRY_TIME):
+        resp = CLIENT.delete(url, auth=Auth, json={}, cert=CERT, verify=VERIFY)
+        if resp.status_code != rq.codes.conflict:
+            break
+        time.sleep(1)
+    assert resp.status_code == rq.codes.ok, (resp.status_code, resp.text)
     print("pass test: delete service_gc_safepoint")
 
     # create changefeed fail because sink_uri is invalid

@@ -983,7 +983,7 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 		fmt.Fprintln(w, "processor is not initialized")
 		return nil
 	}
-	fmt.Fprintf(w, "%+v\n%+v\n", *p.latestInfo, *p.latestStatus)
+	fmt.Fprintf(w, "%s\n%+v\n", p.latestInfo.String(), *p.latestStatus)
 	spans := p.sinkManager.r.GetAllCurrentTableSpans()
 	for _, span := range spans {
 		state, _ := p.sinkManager.r.GetTableState(span)

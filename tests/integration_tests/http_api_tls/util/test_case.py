@@ -483,7 +483,8 @@ def create_changefeed_v2():
 def unsafe_apis():
     url = BASE_URL1_V2+"/unsafe/metadata"
     resp = rq.get(url, cert=CERT, verify=VERIFY)
-    assert resp.status_code == rq.codes.ok
+    # A TLS client certificate does not enable application-level unsafe APIs.
+    assert resp.status_code == rq.codes.unauthorized
     print("status code", resp.status_code)
     print("pass test: show metadata")
 
@@ -500,13 +501,13 @@ def unsafe_apis():
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.unauthorized
 
     data = json.dumps({})
     headers = {"Content-Type": "application/json"}
     resp = rq.delete(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code == rq.codes.ok
+    assert resp.status_code == rq.codes.unauthorized
     print("pass test: delete service_gc_safepoint")
 
     # create changefeed fail because sink_uri is invalid
@@ -515,7 +516,7 @@ def unsafe_apis():
     headers = {"Content-Type": "application/json"}
     resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
     print("status code", resp.status_code)
-    assert resp.status_code != rq.codes.not_found
+    assert resp.status_code == rq.codes.unauthorized
     print("pass test: resolve lock")
 
 

@@ -15,6 +15,7 @@ package v2
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -22,9 +23,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/txnutil"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
@@ -43,7 +46,7 @@ func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
 	for _, pair := range kvs {
 		resp = append(resp, EtcdData{
 			Key:   string(pair.Key),
-			Value: string(pair.Value),
+			Value: api.RedactEtcdValue(pair.Key, pair.Value),
 		})
 	}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -119,10 +122,31 @@ func (h *OpenAPIV2) DeleteServiceGcSafePoint(c *gin.Context) {
 		_ = c.Error(cerror.WrapError(cerror.ErrAPIInvalidParam, err))
 		return
 	}
-	err := h.withUpstreamConfig(c, upstreamConfig,
+	// Read persistent metadata across all namespaces instead of the owner's
+	// cache. Stopped and failed changefeeds can still need their checkpoints
+	// protected for resumption. Unknown states and incomplete records fail closed.
+	etcdClient := h.capture.GetEtcdClient()
+	kvs, err := etcdClient.GetAllCDCInfo(c)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	for _, pair := range kvs {
+		if !strings.Contains(string(pair.Key), etcd.ChangefeedInfoKey+"/") {
+			continue
+		}
+		var info model.ChangeFeedInfo
+		if json.Unmarshal(pair.Value, &info) != nil ||
+			(info.State != model.StateFinished && info.State != model.StateRemoved) {
+			err := cerror.ErrAPIInvalidParam.GenWithStack(
+				"cannot delete service GC safepoint while unfinished changefeeds exist; remove or finish them first")
+			c.AbortWithStatusJSON(http.StatusConflict, model.NewHTTPError(err))
+			return
+		}
+	}
+	err = h.withUpstreamConfig(c, upstreamConfig,
 		func(ctx context.Context, client pd.Client) error {
-			err := gc.RemoveServiceGCSafepoint(c, client,
-				h.capture.GetEtcdClient().GetGCServiceID())
+			err := gc.RemoveServiceGCSafepoint(ctx, client, etcdClient.GetGCServiceID())
 			if err != nil {
 				return cerror.WrapError(cerror.ErrInternalServerError, err)
 			}
