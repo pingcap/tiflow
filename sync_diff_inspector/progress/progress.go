@@ -223,14 +223,14 @@ func (tpp *tableProgressPrinter) PrintSummary() {
 			if tp.state&(tableStateResultFailStructureDone|tableStateResultFailStructureContinue) != 0 {
 				fixStr = fmt.Sprintf("%sThe structure of %s is not equal.\n", fixStr, tp.name)
 			}
-			if tp.state&(tableStateResultDifferent) != 0 {
+			if tp.state&tableStateResultDifferent != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s is not equal.\n", fixStr, tp.name)
 			}
-			if tp.state&(tableStateNotExistDownstream) != 0 {
+			if tp.state&tableStateNotExistDownstream != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s does not exist in downstream database.\n", fixStr, tp.name)
 				SkippedNum++
 			}
-			if tp.state&(tableStateNotExistUpstream) != 0 {
+			if tp.state&tableStateNotExistUpstream != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s does not exist in upstream database.\n", fixStr, tp.name)
 				SkippedNum++
 			}

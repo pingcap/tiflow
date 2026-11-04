@@ -194,7 +194,7 @@ func (d *drainCaptureScheduler) Schedule(
 				Span:        span,
 				DestCapture: target,
 			},
-			Accept: (replication.Callback)(nil), // No need for accept callback here.
+			Accept: replication.Callback(nil), // No need for accept callback here.
 		})
 
 		// Increase target workload to make sure tables are evenly distributed.
