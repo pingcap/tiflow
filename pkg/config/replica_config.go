@@ -360,3 +360,17 @@ func (c *ReplicaConfig) MaskSensitiveData() {
 		c.Consistent.MaskSensitiveData()
 	}
 }
+
+// RestoreMaskedSensitiveData keeps existing secrets when an API client sends a
+// redacted changefeed config back in an update request.
+func (c *ReplicaConfig) RestoreMaskedSensitiveData(old *ReplicaConfig) {
+	if old == nil {
+		return
+	}
+	if c.Sink != nil && old.Sink != nil {
+		c.Sink.restoreMaskedSensitiveData(old.Sink)
+	}
+	if c.Consistent != nil && old.Consistent != nil {
+		c.Consistent.Storage = restoreMaskedURI(c.Consistent.Storage, old.Consistent.Storage)
+	}
+}

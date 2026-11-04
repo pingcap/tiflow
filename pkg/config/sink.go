@@ -218,6 +218,59 @@ func (s *SinkConfig) MaskSensitiveData() {
 	}
 }
 
+func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) {
+	if s.SchemaRegistry != nil && old.SchemaRegistry != nil {
+		*s.SchemaRegistry = restoreMaskedURI(*s.SchemaRegistry, *old.SchemaRegistry)
+	}
+	if s.KafkaConfig != nil && old.KafkaConfig != nil {
+		current, previous := s.KafkaConfig, old.KafkaConfig
+		restoreMaskedString(&current.SASLPassword, previous.SASLPassword)
+		restoreMaskedString(&current.SASLGssAPIPassword, previous.SASLGssAPIPassword)
+		restoreMaskedString(&current.SASLOAuthClientSecret, previous.SASLOAuthClientSecret)
+		restoreMaskedString(&current.Key, previous.Key)
+		if current.SASLOAuthTokenURL != nil && previous.SASLOAuthTokenURL != nil {
+			*current.SASLOAuthTokenURL = restoreMaskedURI(*current.SASLOAuthTokenURL, *previous.SASLOAuthTokenURL)
+		}
+		if current.LargeMessageHandle != nil && previous.LargeMessageHandle != nil {
+			current.LargeMessageHandle.ClaimCheckStorageURI = restoreMaskedURI(
+				current.LargeMessageHandle.ClaimCheckStorageURI, previous.LargeMessageHandle.ClaimCheckStorageURI)
+		}
+		if current.GlueSchemaRegistryConfig != nil && previous.GlueSchemaRegistryConfig != nil {
+			currentGlue, oldGlue := current.GlueSchemaRegistryConfig, previous.GlueSchemaRegistryConfig
+			restoreMaskedValue(&currentGlue.AccessKey, oldGlue.AccessKey)
+			restoreMaskedValue(&currentGlue.SecretAccessKey, oldGlue.SecretAccessKey)
+			restoreMaskedValue(&currentGlue.Token, oldGlue.Token)
+		}
+	}
+	if s.PulsarConfig != nil && old.PulsarConfig != nil {
+		current, previous := s.PulsarConfig, old.PulsarConfig
+		restoreMaskedString(&current.AuthenticationToken, previous.AuthenticationToken)
+		restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
+		if current.OAuth2 != nil && previous.OAuth2 != nil {
+			restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+		}
+	}
+}
+
+func restoreMaskedString(current **string, previous *string) {
+	if *current != nil && previous != nil {
+		restoreMaskedValue(*current, *previous)
+	}
+}
+
+func restoreMaskedValue(current *string, previous string) {
+	if *current == "******" && previous != "" {
+		*current = previous
+	}
+}
+
+func restoreMaskedURI(current, previous string) string {
+	if masked := util.MaskSensitiveDataInURI(previous); masked != previous && current == masked {
+		return previous
+	}
+	return current
+}
+
 // ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
 // Only enable bootstrap sending function for simple protocol
 // and when both send-bootstrap-interval-in-sec and send-bootstrap-in-msg-count are > 0
@@ -464,17 +517,35 @@ func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
-	k.SASLPassword = aws.String("******")
-	k.SASLGssAPIPassword = aws.String("******")
-	k.SASLOAuthClientSecret = aws.String("******")
-	k.Key = aws.String("******")
+	if k.SASLPassword != nil {
+		k.SASLPassword = aws.String("******")
+	}
+	if k.SASLGssAPIPassword != nil {
+		k.SASLGssAPIPassword = aws.String("******")
+	}
+	if k.SASLOAuthClientSecret != nil {
+		k.SASLOAuthClientSecret = aws.String("******")
+	}
+	if k.Key != nil {
+		k.Key = aws.String("******")
+	}
 	if k.GlueSchemaRegistryConfig != nil {
-		k.GlueSchemaRegistryConfig.AccessKey = "******"
-		k.GlueSchemaRegistryConfig.Token = "******"
-		k.GlueSchemaRegistryConfig.SecretAccessKey = "******"
+		if k.GlueSchemaRegistryConfig.AccessKey != "" {
+			k.GlueSchemaRegistryConfig.AccessKey = "******"
+		}
+		if k.GlueSchemaRegistryConfig.Token != "" {
+			k.GlueSchemaRegistryConfig.Token = "******"
+		}
+		if k.GlueSchemaRegistryConfig.SecretAccessKey != "" {
+			k.GlueSchemaRegistryConfig.SecretAccessKey = "******"
+		}
 	}
 	if k.SASLOAuthTokenURL != nil {
 		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
+	}
+	if k.LargeMessageHandle != nil {
+		k.LargeMessageHandle.ClaimCheckStorageURI = util.MaskSensitiveDataInURI(
+			k.LargeMessageHandle.ClaimCheckStorageURI)
 	}
 }
 
@@ -641,7 +712,9 @@ func (c *PulsarConfig) MaskSensitiveData() {
 		c.BasicPassword = aws.String("******")
 	}
 	if c.OAuth2 != nil {
-		c.OAuth2.OAuth2PrivateKey = "******"
+		if c.OAuth2.OAuth2PrivateKey != "" {
+			c.OAuth2.OAuth2PrivateKey = "******"
+		}
 	}
 }
 

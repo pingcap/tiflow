@@ -320,6 +320,7 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	if cfg.ReplicaConfig != nil {
 		configUpdated = true
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
+		newInfo.Config.RestoreMaskedSensitiveData(oldInfo.Config)
 	}
 	// If the sinkURI is empty, we keep the old sinkURI.
 	if cfg.SinkURI != "" {

@@ -24,6 +24,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/golang/mock/gomock"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
@@ -48,6 +49,40 @@ var (
 	blackholeSink = "blackhole://"
 	mysqlSink     = "mysql://root:123456@127.0.0.1:3306"
 )
+
+func TestChangefeedResponseMasksCredentialsAndPreservesUpdate(t *testing.T) {
+	replicaConfig := config.GetDefaultReplicaConfig()
+	replicaConfig.Sink.KafkaConfig = &config.KafkaConfig{
+		SASLPassword: aws.String("kafka-secret"),
+		LargeMessageHandle: &config.LargeMessageHandleConfig{
+			ClaimCheckStorageURI: "s3://bucket/path?access-key=claim-secret",
+		},
+	}
+	replicaConfig.Consistent = &config.ConsistentConfig{
+		Storage: "s3://bucket/redo?secret-access-key=redo-secret",
+	}
+	info := &model.ChangeFeedInfo{
+		SinkURI: "mysql://root:mysql-secret@127.0.0.1:3306/?token=uri-secret&time-zone=UTC",
+		Config:  replicaConfig,
+	}
+
+	response := toAPIModel(info, 0, 0, nil)
+	data, err := json.Marshal(response)
+	require.NoError(t, err)
+	for _, secret := range []string{"mysql-secret", "uri-secret", "kafka-secret", "claim-secret", "redo-secret"} {
+		require.NotContains(t, string(data), secret)
+	}
+	require.Contains(t, response.SinkURI, "time-zone=UTC")
+	require.Equal(t, "kafka-secret", *info.Config.Sink.KafkaConfig.SASLPassword)
+
+	// The CLI sends the config returned by GET back in an update request.
+	updated := response.Config.ToInternalReplicaConfig()
+	updated.RestoreMaskedSensitiveData(info.Config)
+	require.Equal(t, "kafka-secret", *updated.Sink.KafkaConfig.SASLPassword)
+	require.Equal(t, info.Config.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI,
+		updated.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI)
+	require.Equal(t, info.Config.Consistent.Storage, updated.Consistent.Storage)
+}
 
 func TestCreateChangefeed(t *testing.T) {
 	t.Parallel()
