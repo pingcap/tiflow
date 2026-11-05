@@ -51,7 +51,7 @@ func TestLogCtxTooManyFields(t *testing.T) {
 		fields = append(fields, append(fields[i-1], zap.String(k, v)))
 	}
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		require.Equal(t, fields[i], getZapFieldsFromCtx(ctxs[i]), "failed, index = %d", i)
 	}
 }

@@ -189,9 +189,7 @@ func testElection2After1(t *testElectionSuite, c *check.C, normalExit bool) {
 	c.Assert(resp.Kvs, check.HasLen, 1)
 
 	// if closing the client when campaigning, we should get an error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case err2 := <-e2.ErrorNotify():
 			c.Assert(terror.ErrElectionCampaignFail.Equal(err2), check.IsTrue)
@@ -200,7 +198,7 @@ func testElection2After1(t *testElectionSuite, c *check.C, normalExit bool) {
 		case <-time.After(timeout):
 			c.Fatal("do not receive error for e2")
 		}
-	}()
+	})
 	cli.Close() // close the client
 	wg.Wait()
 
@@ -267,15 +265,13 @@ func (t *testElectionSuite) TestElectionAlways1(c *check.C) {
 
 	// cancel the campaign for e2, should get no errors
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		select {
 		case err2 := <-e2.ErrorNotify():
 			c.Fatalf("cancel the campaign should not get an error, %v", err2)
 		case <-time.After(timeout): // wait 3s
 		}
-	}()
+	})
 	cancel2()
 	wg.Wait()
 

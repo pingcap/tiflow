@@ -111,7 +111,7 @@ func (conn *BaseConn) SetRetryStrategy(strategy retry.Strategy) error {
 }
 
 // QuerySQL runs a query statement.
-func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...interface{}) (*sql.Rows, error) {
+func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...any) (*sql.Rows, error) {
 	if conn == nil || conn.DBConn == nil {
 		return nil, terror.ErrDBUnExpect.Generate("database connection not valid")
 	}
@@ -134,7 +134,7 @@ func (conn *BaseConn) QuerySQL(tctx *tcontext.Context, query string, args ...int
 // return
 // 1. failed: (the index of sqls executed error, error)
 // 2. succeed: (rows affected, nil).
-func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, ignoreErr func(error) bool, queries []string, args ...[]interface{}) (int, error) {
+func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, ignoreErr func(error) bool, queries []string, args ...[]any) (int, error) {
 	var affect int64
 	// inject an error to trigger retry, this should be placed before the real execution of the SQL statement.
 	failpoint.Inject("retryableError", func(val failpoint.Value) {
@@ -174,7 +174,7 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 	l := len(queries)
 
 	for i, query := range queries {
-		var arg []interface{}
+		var arg []any
 		if len(args) > i {
 			arg = args[i]
 		}
@@ -236,7 +236,7 @@ func (conn *BaseConn) ExecuteSQLWithIgnoreError(tctx *tcontext.Context, hVec *pr
 // return
 // 1. failed: (the index of sqls executed error, error)
 // 2. succeed: (rows affected, nil).
-func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, queries []string, args ...[]interface{}) (int, error) {
+func (conn *BaseConn) ExecuteSQL(tctx *tcontext.Context, hVec *prometheus.HistogramVec, task string, queries []string, args ...[]any) (int, error) {
 	return conn.ExecuteSQLWithIgnoreError(tctx, hVec, task, nil, queries, args...)
 }
 
@@ -248,7 +248,7 @@ func (conn *BaseConn) ExecuteSQLsAutoSplit(
 	hVec *prometheus.HistogramVec,
 	task string,
 	queries []string,
-	args ...[]interface{},
+	args ...[]any,
 ) error {
 	_, err := conn.ExecuteSQL(tctx, hVec, task, queries, args...)
 	mysqlErr, ok := errors.Cause(err).(*mysql.MySQLError)
@@ -270,8 +270,8 @@ func (conn *BaseConn) ExecuteSQLsAutoSplit(
 
 // ApplyRetryStrategy apply specify strategy for BaseConn.
 func (conn *BaseConn) ApplyRetryStrategy(tctx *tcontext.Context, params retry.Params,
-	operateFn func(*tcontext.Context) (interface{}, error),
-) (interface{}, int, error) {
+	operateFn func(*tcontext.Context) (any, error),
+) (any, int, error) {
 	return conn.RetryStrategy.Apply(tctx, params, operateFn)
 }
 
@@ -290,7 +290,7 @@ func (conn *BaseConn) forceClose() error {
 		return nil
 	}
 
-	err := conn.DBConn.Raw(func(dc interface{}) error {
+	err := conn.DBConn.Raw(func(dc any) error {
 		// return an `ErrBadConn` to ensure close the connection, but do not put it back to the pool.
 		// if we choose to use `Close`, it will always put the connection back to the pool.
 		return driver.ErrBadConn

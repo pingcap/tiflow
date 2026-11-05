@@ -151,7 +151,7 @@ func (r *TCPReader) GetEvent(ctx context.Context) (*replication.BinlogEvent, err
 }
 
 // Status implements Reader.Status.
-func (r *TCPReader) Status() interface{} {
+func (r *TCPReader) Status() any {
 	r.mu.RLock()
 	stage := r.stage
 	r.mu.RUnlock()

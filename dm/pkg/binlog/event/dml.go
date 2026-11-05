@@ -28,7 +28,7 @@ type DMLData struct {
 	Schema     string
 	Table      string
 	ColumnType []byte
-	Rows       [][]interface{}
+	Rows       [][]any
 
 	// if Query is not empty, we generate a Query event
 	Query string

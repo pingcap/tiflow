@@ -65,7 +65,7 @@ func (t *testEtcdUtilSuite) newConfig(c *check.C, name string, portCount int) *e
 	c.Assert(cfg.Validate(), check.IsNil)
 
 	cfg.ListenClientUrls = []url.URL{}
-	for i := 0; i < portCount; i++ {
+	for range portCount {
 		endPoint := tempurl.Alloc()
 		cu, err2 := url.Parse(endPoint)
 		c.Assert(err2, check.IsNil)
@@ -75,7 +75,7 @@ func (t *testEtcdUtilSuite) newConfig(c *check.C, name string, portCount int) *e
 	cfg.AdvertiseClientUrls = cfg.ListenClientUrls
 	cfg.ListenPeerUrls = []url.URL{}
 	ic := make([]string, 0, portCount)
-	for i := 0; i < portCount; i++ {
+	for range portCount {
 		endPoint := tempurl.Alloc()
 		pu, err2 := url.Parse(endPoint)
 		c.Assert(err2, check.IsNil)

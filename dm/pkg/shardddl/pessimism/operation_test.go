@@ -55,7 +55,7 @@ func watchExactOperations(
 		<-done
 	}()
 	var ops []Operation
-	for i := 0; i < opCnt; i++ {
+	for range opCnt {
 		select {
 		case op := <-opCh:
 			ops = append(ops, op)
