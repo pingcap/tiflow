@@ -159,6 +159,10 @@ EOF
 		echo 'Waiting for TiDB ready...'
 		sleep 3
 	done
+
+	# Tests assert SQL error messages and values, so disable redaction explicitly.
+	mysql -uroot -h$TIDB_IP_TLS -P$TIDB_PORT_TLS --default-character-set utf8 --ssl-ca $CONF_DIR/$DB_CA_FILE \
+		--ssl-cert $CONF_DIR/$DB_CERT_FILE --ssl-key $CONF_DIR/$DB_KEY_FILE --ssl-mode=VERIFY_CA -e "SET GLOBAL tidb_redact_log = 'OFF'"
 }
 rm -rf $WORK_DIR
 mkdir $WORK_DIR

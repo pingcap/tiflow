@@ -81,6 +81,9 @@ while ! mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e 'sele
 	sleep 2
 done
 
+# Tests assert SQL error messages and values, so disable redaction explicitly.
+mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e "SET GLOBAL tidb_redact_log = 'OFF'"
+
 # Skip user/grant setup when TLS is enabled — TiDB enforces TLS on client
 # connections so plain mysql can't connect. The user was already created
 # during the initial non-TLS startup before test_tls switched to TLS.
