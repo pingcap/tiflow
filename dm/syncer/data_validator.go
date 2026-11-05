@@ -231,7 +231,6 @@ func NewContinuousDataValidator(cfg *config.SubTaskConfig, syncerObj *Syncer, st
 		cfg:              cfg,
 		syncer:           syncerObj,
 		startWithSubtask: startWithSubtask,
-		vmetric:          metrics.NewValidatorMetrics(cfg.Name, cfg.SourceID),
 	}
 	v.L = log.With(zap.String("task", cfg.Name), zap.String("unit", "continuous validator"))
 
@@ -269,6 +268,7 @@ func (v *DataValidator) initialize() error {
 	v.ctx, v.cancel = context.WithCancel(context.Background())
 	v.tctx = tcontext.NewContext(v.ctx, v.L)
 	v.reset()
+	v.vmetric = metrics.NewValidatorMetrics(v.cfg.Name, v.cfg.SourceID)
 
 	newCtx, cancelFunc := v.tctx.WithTimeout(unit.DefaultInitTimeout)
 	defer cancelFunc()
