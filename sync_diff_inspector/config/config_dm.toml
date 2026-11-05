@@ -12,11 +12,17 @@ export-fix-sql = true
 # ignore check table's data
 check-struct-only = false
 
-# dm-master's address, the format should like "http://127.0.0.1:8261"
+# Use an https:// address when connecting to a TLS-enabled DM-master.
 dm-addr = "http://127.0.0.1:8261"
 
 # the DM's task name which is willing to check data
 dm-task = "test"
+
+# Optional DM private CA and client certificate for mutual TLS.
+# [dm-security]
+# ca-path = "/path/to/dm-ca.pem"
+# cert-path = "/path/to/client-cert.pem"
+# key-path = "/path/to/client-key.pem"
 
 ######################### Task config #########################
 [task]

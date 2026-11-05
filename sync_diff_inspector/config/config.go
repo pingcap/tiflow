@@ -429,6 +429,8 @@ type Config struct {
 	DMAddr string `toml:"dm-addr" json:"dm-addr"`
 	// DMTask string `toml:"dm-task" json:"dm-task"`
 	DMTask string `toml:"dm-task" json:"dm-task"`
+	// DMSecurity configures server verification and optional mutual TLS for DM.
+	DMSecurity *Security `toml:"dm-security" json:"-"`
 
 	DataSources map[string]*DataSource `toml:"data-sources" json:"data-sources"`
 
@@ -556,7 +558,7 @@ func parseTLSFromDMConfig(config *security.Security) *Security {
 
 func (c *Config) adjustConfigByDMSubTasks() (err error) {
 	// DM's subtask config
-	subTaskCfgs, err := getDMTaskCfg(c.DMAddr, c.DMTask)
+	subTaskCfgs, err := getDMTaskCfgWithSecurity(c.DMAddr, c.DMTask, c.DMSecurity)
 	if err != nil {
 		log.Warn("failed to get config from DM tasks")
 		return errors.Trace(err)

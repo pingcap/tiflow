@@ -14,9 +14,19 @@
 package diff
 
 import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tiflow/sync_diff_inspector/checkpoints"
+	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source"
+	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -103,4 +113,48 @@ func TestGetSnapshot(t *testing.T) {
 		val := GetSnapshot(cs.latestSnapshot, cs.snapshot, conn)
 		require.Equal(t, cs.expected, val, "case %d", i)
 	}
+}
+
+func TestSQLCommentKeepsMetadataInert(t *testing.T) {
+	sql := sqlComment("table: test\r\n; DROP DATABASE prod;\n/*! SELECT 1 */") + "SELECT 1;"
+	stmts, _, err := parser.New().ParseSQL(sql)
+	require.NoError(t, err)
+	require.Len(t, stmts, 1)
+	_, ok := stmts[0].(*ast.SelectStmt)
+	require.True(t, ok)
+	require.True(t, strings.HasPrefix(sql, "-- table:"))
+}
+
+type sqlFileTestSource struct {
+	source.Source
+	tables []*common.TableDiff
+}
+
+func (s *sqlFileTestSource) GetTables() []*common.TableDiff { return s.tables }
+
+func TestWriteSQLsEscapesPathSeparators(t *testing.T) {
+	fixDir := filepath.Join(t.TempDir(), "fix-sql")
+	require.NoError(t, os.Mkdir(fixDir, 0o700))
+	cp := new(checkpoints.Checkpoint)
+	cp.Init()
+	df := &Diff{
+		FixSQLDir: fixDir,
+		downstream: &sqlFileTestSource{tables: []*common.TableDiff{
+			{Schema: "../%2Fschema", Table: `..\table`},
+		}},
+		sqlCh: make(chan *ChunkDML, 1),
+		cp:    cp,
+	}
+	df.sqlCh <- &ChunkDML{
+		node: &checkpoints.Node{ChunkRange: &chunk.Range{Index: &chunk.CID{}}},
+		sqls: []string{"REPLACE INTO t VALUES (1);"},
+	}
+	close(df.sqlCh)
+	df.sqlWg.Add(1)
+	df.writeSQLs(context.Background())
+
+	entries, err := os.ReadDir(fixDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, "..%2F%252Fschema:..%5Ctable:0:0-0:0.sql", entries[0].Name())
 }
