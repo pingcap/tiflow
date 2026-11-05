@@ -40,6 +40,7 @@ func TestStartupDiagnostics(t *testing.T) {
 		flags      []string
 	}{
 		{"malformed visible", secret, []string{"--redact-info-log=false"}},
+		{"malformed hidden by default", "Error: details redacted", nil},
 		{"malformed hidden", "Error: details redacted", []string{"--redact-info-log"}},
 		{"missing config", "argument --config is required", []string{"--redact-info-log"}},
 		{"invalid template", "Use --template dm or --template norm", []string{"--redact-info-log", "--template", secret}},

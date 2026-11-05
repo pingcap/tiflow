@@ -463,7 +463,7 @@ func NewConfig() *Config {
 
 	fs.BoolVarP(&cfg.PrintVersion, "version", "V", false, "print version of sync_diff_inspector")
 	fs.StringVarP(&cfg.LogLevel, "log-level", "L", "info", "log level: debug, info, warn, error, fatal")
-	fs.BoolVar(&cfg.RedactInfoLog, "redact-info-log", false, "whether to enable the log redaction")
+	fs.BoolVar(&cfg.RedactInfoLog, "redact-info-log", true, "whether to enable the log redaction")
 	fs.StringVarP(&cfg.ConfigFile, "config", "C", "", "Config file")
 	fs.StringVarP(&cfg.Template, "template", "T", "", "<dm|norm> export a template config file")
 	fs.StringVar(&cfg.DMAddr, "dm-addr", "", "the address of DM")
