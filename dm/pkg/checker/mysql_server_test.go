@@ -76,3 +76,25 @@ func TestVersionInstruction(t *testing.T) {
 	require.Equal(t, result.Instruction,
 		"It is recommended that you select a database version that meets the requirements before performing data migration. Otherwise data inconsistency or task exceptions might occur.")
 }
+
+func TestMariaDBVersionInstruction(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	versionChecker := &MySQLVersionChecker{
+		db:     db,
+		dbinfo: &dbutil.DBConfig{},
+	}
+	mock.ExpectQuery("SHOW GLOBAL VARIABLES LIKE 'version';").WillReturnRows(
+		sqlmock.NewRows(
+			[]string{"Variable_name", "Value"},
+		).AddRow(
+			"version", "11.4.2-MariaDB"),
+	)
+	result := versionChecker.Check(context.Background())
+	require.Equal(t, result.State, StateWarning)
+	require.Len(t, result.Errors, 1)
+	require.Equal(t, result.Errors[0].ShortErr, "Migrating from MariaDB is still experimental.")
+	require.Equal(t, result.Instruction,
+		"It is recommended that you verify compatibility before performing data migration because migrating from MariaDB is still experimental. Otherwise data inconsistency or task exceptions might occur.")
+	require.NotContains(t, result.Instruction, "10.1.2")
+}
