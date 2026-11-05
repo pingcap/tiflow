@@ -32,10 +32,10 @@ function DM_SKIP_ERROR_CASE() {
 		"binlog skip test" \
 		"\"result\": true" 3
 
-	# insert fail
+	# The type/value arguments can be redacted; keep checking both conversion errors.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error .*: Incorrect int value" 2
+		"Error 1366 .*: Incorrect .* value" 2
 
 	# skip one source
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
@@ -396,9 +396,10 @@ function DM_INJECT_DML_ERROR_CASE() {
 	run_sql_source1 "start transaction;insert into ${db}.${tb1} values(3,3,'33');insert into ${db}.${tb1} values(4,2,'44');insert into ${db}.${tb1} values(5,2,'55');commit;"
 	run_sql_source2 "start transaction;insert into ${db}.${tb2} values(3,3,'33');insert into ${db}.${tb2} values(4,2,'44');insert into ${db}.${tb2} values(5,2,'55');commit;"
 
+	# Keep the duplicate value/key check when the value is redacted to '?'.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Duplicate entry '2' for key 'b'" 4
+		"Duplicate entry '[2?]' for key 'b'" 4
 
 	# inject sqls
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
