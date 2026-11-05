@@ -175,7 +175,7 @@ func (suite *redoLogAdvancerSuite) TestHasEnoughMem() {
 	advancer := newRedoLogAdvancer(task, memoryQuota, 512, manager)
 	require.NotNil(suite.T(), advancer)
 	require.True(suite.T(), advancer.hasEnoughMem())
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		// 6 * 256 = 1536 > 1024
 		advancer.appendEvents([]*model.RowChangedEvent{{}}, 256)
 	}
@@ -204,7 +204,7 @@ func (suite *redoLogAdvancerSuite) TestAppendEvents() {
 	advancer := newRedoLogAdvancer(task, memoryQuota, 512, manager)
 	require.NotNil(suite.T(), advancer)
 	require.True(suite.T(), advancer.hasEnoughMem())
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{{}}, 256)
 	}
 	require.Equal(suite.T(), uint64(512), advancer.pendingTxnSize)
@@ -234,7 +234,7 @@ func (suite *redoLogAdvancerSuite) TestTryMoveMoveToNextTxn() {
 	require.Equal(suite.T(), uint64(1), advancer.currTxnCommitTs)
 
 	// Append 2 events with commit ts 2
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 2},
 		}, 256)
@@ -277,7 +277,7 @@ func (suite *redoLogAdvancerSuite) TestAdvance() {
 	advancer.tryMoveToNextTxn(1, pos)
 
 	// 2. append 2 events with commit ts 2
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 2},
 		}, 256)
@@ -315,7 +315,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	advancer.tryMoveToNextTxn(2, pos)
 
 	// 2. append 3 events with commit ts 3
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -363,7 +363,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeAnd
 	advancer.tryMoveToNextTxn(2, pos)
 
 	// 2. append 2 events with commit ts 3
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -405,7 +405,7 @@ func (suite *redoLogAdvancerSuite) TestFinish() {
 	advancer.tryMoveToNextTxn(2, pos)
 
 	// 2. append 2 events with commit ts 3
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -454,7 +454,7 @@ func (suite *redoLogAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn() {
 	advancer.tryMoveToNextTxn(2, pos)
 
 	// 2. append 3 events with commit ts 3, this will exceed the memory quota.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)

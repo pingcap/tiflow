@@ -16,6 +16,7 @@ package replication
 import (
 	"container/heap"
 	"encoding/json"
+	"maps"
 	"math/rand"
 	"testing"
 	"time"
@@ -784,9 +785,7 @@ func TestReplicationSetRemoveTable(t *testing.T) {
 func clone(r *ReplicationSet) *ReplicationSet {
 	rClone := *r
 	rClone.Captures = make(map[string]Role)
-	for captureID, role := range r.Captures {
-		rClone.Captures[captureID] = role
-	}
+	maps.Copy(rClone.Captures, r.Captures)
 	return &rClone
 }
 
@@ -1679,7 +1678,7 @@ func TestReplicationSetHeap_MinK(t *testing.T) {
 
 	tables := make([]model.TableID, 0)
 	tableCounts := h.Len()
-	for i := 0; i < tableCounts; i++ {
+	for range tableCounts {
 		element := heap.Pop(&h).(*ReplicationSet)
 		t.Log(element.Span)
 		tables = append(tables, element.Span.TableID)

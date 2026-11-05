@@ -16,7 +16,7 @@ package entry
 import (
 	"context"
 	"fmt"
-	"sort"
+	"slices"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -78,9 +78,7 @@ func TestAllPhysicalTables(t *testing.T) {
 		expectedTableIDs = append(expectedTableIDs, p.ID)
 	}
 	sortTableIDs := func(tableIDs []model.TableID) {
-		sort.Slice(tableIDs, func(i, j int) bool {
-			return tableIDs[i] < tableIDs[j]
-		})
+		slices.Sort(tableIDs)
 	}
 	sortTableIDs(expectedTableIDs)
 	tableIDs, err = schema.AllPhysicalTables(context.Background(), job.BinlogInfo.FinishedTS)

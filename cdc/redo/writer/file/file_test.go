@@ -275,8 +275,7 @@ func TestNewFileWriter(t *testing.T) {
 func TestRotateFileWithFileAllocator(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	_, err := NewFileWriter(ctx, nil)
 	require.NotNil(t, err)
 
@@ -341,8 +340,7 @@ func TestRotateFileWithFileAllocator(t *testing.T) {
 func TestRotateFileWithoutFileAllocator(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	_, err := NewFileWriter(ctx, nil)
 	require.NotNil(t, err)
 

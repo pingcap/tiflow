@@ -98,7 +98,7 @@ func (m *matcher) matchCachedRow(initialized bool) []*cdcpb.Event_Row {
 	cachedCommit := m.cachedCommit
 	m.cachedCommit = nil
 	top := 0
-	for i := 0; i < len(cachedCommit); i++ {
+	for i := range cachedCommit {
 		cacheEntry := cachedCommit[i]
 		ok := m.matchRow(cacheEntry, true)
 		if !ok {
@@ -131,7 +131,7 @@ func (m *matcher) matchCachedRollbackRow(initialized bool) {
 	}
 	rollback := m.cachedRollback
 	m.cachedRollback = nil
-	for i := 0; i < len(rollback); i++ {
+	for i := range rollback {
 		cacheEntry := rollback[i]
 		m.rollbackRow(cacheEntry)
 	}

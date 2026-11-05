@@ -14,7 +14,6 @@
 package cloudstorage
 
 import (
-	"context"
 	"fmt"
 	"net/url"
 	"os"
@@ -34,8 +33,7 @@ import (
 )
 
 func TestWriteDDLEvent(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?protocol=csv", parentDir)
 	sinkURI, err := url.Parse(uri)
@@ -101,8 +99,7 @@ func TestWriteDDLEvent(t *testing.T) {
 }
 
 func TestWriteCheckpointTs(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?protocol=csv", parentDir)
 	sinkURI, err := url.Parse(uri)
@@ -146,8 +143,7 @@ func TestWriteCheckpointTs(t *testing.T) {
 func TestCleanupExpiredFiles(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	parentDir := t.TempDir()
 	uri := fmt.Sprintf("file:///%s?protocol=csv", parentDir)
 	sinkURI, err := url.Parse(uri)

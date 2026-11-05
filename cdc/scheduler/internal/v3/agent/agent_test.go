@@ -312,7 +312,7 @@ func TestAgentHandleMessageHeartbeat(t *testing.T) {
 	mockTableExecutor := newMockTableExecutor()
 	a.tableM = newTableSpanManager(model.ChangeFeedID{}, mockTableExecutor)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		a.tableM.addTableSpan(spanz.TableIDToComparableSpan(int64(i)))
 	}
 

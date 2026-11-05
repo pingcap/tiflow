@@ -41,7 +41,7 @@ func BenchmarkSpanFrontier(b *testing.B) {
 
 		b.Run(test.name, func(b *testing.B) {
 			spans := make([]tablepb.Span, 0, n)
-			for i := 0; i < n; i++ {
+			for i := range n {
 				span := tablepb.Span{
 					StartKey: toCMPBytes(i),
 					EndKey:   toCMPBytes(i + 1),
@@ -80,7 +80,7 @@ func BenchmarkSpanFrontierOverlap(b *testing.B) {
 			b.Run(fmt.Sprintf("%s_%d", test.name, step), func(b *testing.B) {
 				spans := make([]tablepb.Span, 0, n)
 				forward := make([]tablepb.Span, 0, n)
-				for i := 0; i < n; i++ {
+				for i := range n {
 					spans = append(spans, tablepb.Span{
 						StartKey: toCMPBytes(i),
 						EndKey:   toCMPBytes(i + 1),

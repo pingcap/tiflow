@@ -676,11 +676,9 @@ LOOP2:
 	c.ddlSink.run(cancelCtx)
 
 	c.ddlPuller = c.newDDLPuller(c.upstream, ddlStartTs, c.id, c.schema, filter)
-	c.wg.Add(1)
-	go func() {
-		defer c.wg.Done()
+	c.wg.Go(func() {
 		c.Throw(ctx)(c.ddlPuller.Run(cancelCtx))
-	}()
+	})
 
 	c.downstreamObserver, err = c.newDownstreamObserver(ctx, c.id, cfInfo.SinkURI, cfInfo.Config)
 	if err != nil {
@@ -690,20 +688,16 @@ LOOP2:
 
 	c.redoDDLMgr = redo.NewDDLManager(c.id, cfInfo.Config.Consistent, ddlStartTs)
 	if c.redoDDLMgr.Enabled() {
-		c.wg.Add(1)
-		go func() {
-			defer c.wg.Done()
+		c.wg.Go(func() {
 			c.Throw(ctx)(c.redoDDLMgr.Run(cancelCtx))
-		}()
+		})
 	}
 
 	c.redoMetaMgr = redo.NewMetaManager(c.id, cfInfo.Config.Consistent, checkpointTs)
 	if c.redoMetaMgr.Enabled() {
-		c.wg.Add(1)
-		go func() {
-			defer c.wg.Done()
+		c.wg.Go(func() {
 			c.Throw(ctx)(c.redoMetaMgr.Run(cancelCtx))
-		}()
+		})
 		log.Info("owner creates redo manager",
 			zap.String("namespace", c.id.Namespace),
 			zap.String("changefeed", c.id.ID))

@@ -135,7 +135,7 @@ func TestPrepareDML(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
-				values:  [][]interface{}{},
+				values:  [][]any{},
 			},
 		},
 		// delete event
@@ -161,7 +161,7 @@ func TestPrepareDML(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813514},
 				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
-				values:          [][]interface{}{{1, 1}},
+				values:          [][]any{{1, 1}},
 				rowCount:        1,
 				approximateSize: 74,
 			},
@@ -190,7 +190,7 @@ func TestPrepareDML(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813516},
 				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
-				values:          [][]interface{}{{2, 2}},
+				values:          [][]any{{2, 2}},
 				rowCount:        1,
 				approximateSize: 63,
 			},
@@ -219,7 +219,7 @@ func TestPrepareDML(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813518},
 				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)"},
-				values:          [][]interface{}{{1, "[1.1,-2,3.33,-4.12,-5]"}},
+				values:          [][]any{{1, "[1.1,-2,3.33,-4.12,-5]"}},
 				rowCount:        1,
 				approximateSize: 63,
 			},
@@ -239,8 +239,7 @@ func TestPrepareDML(t *testing.T) {
 }
 
 func TestAdjustSQLMode(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -261,13 +260,13 @@ func TestAdjustSQLMode(t *testing.T) {
 
 type mockUnavailableMySQL struct {
 	listener net.Listener
-	quit     chan interface{}
+	quit     chan any
 	wg       sync.WaitGroup
 }
 
 func newMockUnavailableMySQL(addr string, t *testing.T) *mockUnavailableMySQL {
 	s := &mockUnavailableMySQL{
-		quit: make(chan interface{}),
+		quit: make(chan any),
 	}
 	l, err := net.Listen("tcp", addr)
 	require.Nil(t, err)
@@ -290,12 +289,10 @@ func (s *mockUnavailableMySQL) serve(t *testing.T) {
 				require.Error(t, err)
 			}
 		} else {
-			s.wg.Add(1)
-			go func() {
+			s.wg.Go(func() {
 				// don't read from TCP connection, to simulate database service unavailable
 				<-s.quit
-				s.wg.Done()
-			}()
+			})
 		}
 	}
 }
@@ -311,8 +308,7 @@ func TestNewMySQLTimeout(t *testing.T) {
 	mockMySQL := newMockUnavailableMySQL(addr, t)
 	defer mockMySQL.Stop()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(fmt.Sprintf("mysql://%s/?read-timeout=1s&timeout=1s", addr))
 	require.Nil(t, err)
@@ -335,8 +331,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	// TODO: Need to test txn sink behavior when cache-prep-stmts is true
 	// I did some attempts to write tests when cache-prep-stmts is true, but failed.
@@ -462,8 +457,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
@@ -529,8 +523,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
@@ -587,7 +580,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
 		db, mock := newTestMockDB(t)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			mock.ExpectBegin()
 			mock.ExpectExec("REPLACE INTO `s1`.`t1` (`a`) VALUES (?),(?)").
 				WithArgs(1, 2).
@@ -598,8 +591,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
@@ -656,8 +648,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&safe-mode=false" +
@@ -692,8 +683,7 @@ func TestNewMySQLBackend(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1" +
@@ -716,8 +706,7 @@ func TestNewMySQLBackendWithIPv6Address(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	// See https://www.ietf.org/rfc/rfc2732.txt, we have to use brackets to wrap IPv6 address.
 	sinkURI, err := url.Parse("mysql://[::1]:3306/?time-zone=UTC&worker-count=1" +
@@ -790,8 +779,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 		return db, nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	changefeed := "test-changefeed"
 	sinkURI, err := url.Parse(
 		"mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&cache-prep-stmts=false")
@@ -891,7 +879,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
-				values:  [][]interface{}{},
+				values:  [][]any{},
 			},
 		}, {
 			name: "insert without PK",
@@ -915,7 +903,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				sqls: []string{
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values:          [][]interface{}{{1, 1}},
+				values:          [][]any{{1, 1}},
 				rowCount:        1,
 				approximateSize: 63,
 			},
@@ -939,7 +927,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813514},
 				sqls:            []string{"INSERT INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)"},
-				values:          [][]interface{}{{1, 1}},
+				values:          [][]any{{1, 1}},
 				rowCount:        1,
 				approximateSize: 52,
 			},
@@ -973,7 +961,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, `a3` = ? " +
 						"WHERE `a1` = ? AND `a3` = ? LIMIT 1",
 				},
-				values:          [][]interface{}{{3, 3, 2, 2}},
+				values:          [][]any{{3, 3, 2, 2}},
 				rowCount:        1,
 				approximateSize: 92,
 			},
@@ -1005,7 +993,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				startTs: []model.Ts{418658114257813516},
 				sqls: []string{"UPDATE `common_1`.`pk` SET `a1` = ?, `a3` = ? " +
 					"WHERE `a1` = ? AND `a3` = ? LIMIT 1"},
-				values:          [][]interface{}{{3, 3, 2, 2}},
+				values:          [][]any{{3, 3, 2, 2}},
 				rowCount:        1,
 				approximateSize: 81,
 			},
@@ -1045,7 +1033,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"INSERT INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 					"INSERT INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values:          [][]interface{}{{3, 3}, {5, 5}},
+				values:          [][]any{{3, 3}, {5, 5}},
 				rowCount:        2,
 				approximateSize: 104,
 			},
@@ -1071,7 +1059,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 				sqls: []string{
 					"REPLACE INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values:          [][]interface{}{{3, 3}},
+				values:          [][]any{{3, 3}},
 				rowCount:        1,
 				approximateSize: 53,
 			},
@@ -1115,7 +1103,7 @@ func TestMysqlSinkSafeModeOff(t *testing.T) {
 					"REPLACE INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 					"REPLACE INTO `common_1`.`pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values:          [][]interface{}{{3, 3}, {5, 5}},
+				values:          [][]any{{3, 3}, {5, 5}},
 				rowCount:        2,
 				approximateSize: 106,
 			},
@@ -1167,7 +1155,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs: []model.Ts{},
 				sqls:    []string{},
-				values:  [][]interface{}{},
+				values:  [][]any{},
 			},
 		},
 		{ // delete event
@@ -1203,7 +1191,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813514},
 				sqls:            []string{"DELETE FROM `common_1`.`uk_without_pk` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)"},
-				values:          [][]interface{}{{1, "你好", 2, "世界"}},
+				values:          [][]any{{1, "你好", 2, "世界"}},
 				rowCount:        2,
 				approximateSize: 115,
 			},
@@ -1241,7 +1229,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 			expected: &preparedDMLs{
 				startTs:         []model.Ts{418658114257813516},
 				sqls:            []string{"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?),(?,?)"},
-				values:          [][]interface{}{{1, "你好", 2, "世界"}},
+				values:          [][]any{{1, "你好", 2, "世界"}},
 				rowCount:        2,
 				approximateSize: 89,
 			},
@@ -1297,7 +1285,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"SET `a1`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END, " +
 					"`a3`=CASE WHEN `a1` = ? AND `a3` = ? THEN ? WHEN `a1` = ? AND `a3` = ? THEN ? END " +
 					"WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)"},
-				values: [][]interface{}{{
+				values: [][]any{{
 					1, "开发", 2, 3, "纽约", 4, 1, "开发", "测试", 3,
 					"纽约", "北京", 1, "开发", 3, "纽约",
 				}},
@@ -1399,7 +1387,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 						"WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)",
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values: [][]interface{}{
+				values: [][]any{
 					{1, "世界", 2, "你好"},
 					{
 						1, "开发", 2, 3, "纽约", 4, 1, "开发", "测试", 3,
@@ -1464,7 +1452,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 					"UPDATE `common_1`.`uk_without_pk` SET `a1` = ?, " +
 						"`a3` = ? WHERE `a1` = ? AND `a3` = ? LIMIT 1",
 				},
-				values:          [][]interface{}{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
+				values:          [][]any{{2, "测试", 1, "开发"}, {4, "北京", 3, "纽约"}},
 				rowCount:        2,
 				approximateSize: 204,
 			},
@@ -1493,7 +1481,7 @@ func TestPrepareBatchDMLs(t *testing.T) {
 				sqls: []string{
 					"INSERT INTO `common_1`.`uk_without_pk` (`a1`,`a3`) VALUES (?,?)",
 				},
-				values: [][]interface{}{
+				values: [][]any{
 					{1, "[1,2,3,4,5]"},
 				},
 				rowCount:        1,
@@ -1710,7 +1698,7 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 		rows                  []*sqlmodel.RowChange
 		maxMultiUpdateRowSize int
 		expectedSQLs          []string
-		expectedValues        [][]interface{}
+		expectedValues        [][]any
 	}{
 		{
 			[]*sqlmodel.RowChange{row1, row2},
@@ -1721,7 +1709,7 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 					"`name`=CASE WHEN `id` = ? THEN ? WHEN `id` = ? THEN ? END " +
 					"WHERE (`id` = ?) OR (`id` = ?)",
 			},
-			[][]interface{}{
+			[][]any{
 				{1, 1, 2, 2, 1, "aa", 2, "bb", 1, 2},
 			},
 		},
@@ -1732,7 +1720,7 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 				"UPDATE `db`.`tb1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
 				"UPDATE `db`.`tb1` SET `id` = ?, `name` = ? WHERE `id` = ? LIMIT 1",
 			},
-			[][]interface{}{
+			[][]any{
 				{1, "aa", 1},
 				{2, "bb", 2},
 			},

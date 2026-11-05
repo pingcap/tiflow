@@ -98,7 +98,7 @@ func buildBalanceMoveTables(
 	moves := newBalanceMoveTables(
 		random, captures, replications, maxTaskConcurrency, changeFeedID)
 	tasks := make([]*replication.ScheduleTask, 0, len(moves))
-	for i := 0; i < len(moves); i++ {
+	for i := range moves {
 		// No need for accept callback here.
 		tasks = append(tasks, &replication.ScheduleTask{MoveTable: &moves[i]})
 	}

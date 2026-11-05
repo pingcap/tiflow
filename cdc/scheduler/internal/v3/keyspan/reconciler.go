@@ -217,17 +217,11 @@ func (m *Reconciler) Reconcile(
 const maxSpanNumber = 100
 
 func getSpansNumber(regionNum, captureNum int) int {
-	coefficient := captureNum - 1
-	if baseSpanNumberCoefficient > coefficient {
-		coefficient = baseSpanNumberCoefficient
-	}
+	coefficient := max(baseSpanNumberCoefficient, captureNum-1)
 	spanNum := 1
 	if regionNum > 1 {
 		// spanNumber = max(captureNum * coefficient, totalRegions / spanRegionLimit)
-		spanNum = captureNum * coefficient
-		if regionNum/spanRegionLimit > spanNum {
-			spanNum = regionNum / spanRegionLimit
-		}
+		spanNum = max(regionNum/spanRegionLimit, captureNum*coefficient)
 	}
 	if spanNum > maxSpanNumber {
 		spanNum = maxSpanNumber

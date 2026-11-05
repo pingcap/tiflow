@@ -130,12 +130,10 @@ func TestCloseTracker(t *testing.T) {
 	require.Equal(t, 3, tracker.trackingCount(), "event should be added")
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		tracker.freezeProcess()
 		tracker.waitClosed(make(chan struct{}))
-		wg.Done()
-	}()
+	})
 
 	cb1()
 	cb2()
@@ -165,12 +163,10 @@ func TestCloseTrackerCancellable(t *testing.T) {
 	}()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		tracker.freezeProcess()
 		tracker.waitClosed(dead)
-		wg.Done()
-	}()
+	})
 	wg.Wait()
 }
 
@@ -180,7 +176,7 @@ func TestTrackerBufferBoundary(t *testing.T) {
 	tracker := newProgressTracker(spanz.TableIDToComparableSpan(1), 8)
 
 	cbs := make([]func(), 0)
-	for i := 0; i < 65; i++ {
+	for range 65 {
 		cbs = append(cbs, tracker.addEvent())
 	}
 	require.Equal(t, 2, len(tracker.pendingEvents))

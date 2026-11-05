@@ -191,12 +191,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndGotSomeFilteredE
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -242,12 +240,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -292,12 +288,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAbortWhenNoMemAn
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -345,12 +339,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndOnlyAdvanceWhenR
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -400,12 +392,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutSplitTxnAndAbortWhenNoMe
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -453,12 +443,10 @@ func (suite *tableSinkWorkerSuite) TestTaskWithoutSplitTxnOnlyAdvanceWhenReachMa
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -502,12 +490,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableWhen
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -555,12 +541,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithSplitTxnAndAdvanceTableIfNo
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.ErrorIs(suite.T(), err, context.Canceled)
-	}()
+	})
 
 	wrapper, _ := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -605,12 +589,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskUseDifferentBatchIDEveryTime() 
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	callback := func(lastWritePos sorter.Position) {
@@ -684,12 +666,10 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 
 	taskChan := make(chan *sinkTask)
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := w.handleTasks(ctx, taskChan)
 		require.Equal(suite.T(), context.Canceled, err)
-	}()
+	})
 
 	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
 	defer sink.Close()

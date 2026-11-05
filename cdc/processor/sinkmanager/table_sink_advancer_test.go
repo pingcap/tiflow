@@ -171,7 +171,7 @@ func (suite *tableSinkAdvancerSuite) TestHasEnoughMem() {
 	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.True(suite.T(), advancer.hasEnoughMem())
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		// 6 * 256 = 1536 > 1024
 		advancer.appendEvents([]*model.RowChangedEvent{{}}, 256)
 	}
@@ -200,7 +200,7 @@ func (suite *tableSinkAdvancerSuite) TestAppendEvents() {
 	advancer := newTableSinkAdvancer(task, true, memoryQuota, 512)
 	require.NotNil(suite.T(), advancer)
 	require.True(suite.T(), advancer.hasEnoughMem())
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{{}}, 256)
 	}
 	require.Equal(suite.T(), uint64(512), advancer.pendingTxnSize)
@@ -234,7 +234,7 @@ func (suite *tableSinkAdvancerSuite) TestTryMoveMoveToNextTxn() {
 	require.Equal(suite.T(), uint64(1), advancer.currTxnCommitTs)
 
 	// Append 2 events with commit ts 2
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 2},
 		}, 256)
@@ -271,7 +271,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithCommitF
 	advancer.tryMoveToNextTxn(1)
 
 	// 2. append 2 events with commit ts 2
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 2},
 		}, 256)
@@ -315,7 +315,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceTheSameCommitTsEventsWithoutComm
 	advancer.tryMoveToNextTxn(1)
 
 	// 2. append 2 events with commit ts 3
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -370,7 +370,7 @@ func (suite *tableSinkAdvancerSuite) TestAdvanceDifferentCommitTsEventsWithSplit
 	}
 
 	// 3. append 2 events with commit ts 3
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -528,7 +528,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenExceedAvailableMem() {
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. append 3 events with commit ts 3
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -583,7 +583,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceWhenReachTheMaxUpdateIntSizeA
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. append 2 events with commit ts 3
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -633,7 +633,7 @@ func (suite *tableSinkAdvancerSuite) TestFinish() {
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. append 2 events with commit ts 3
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -686,7 +686,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndForceAcquireWithoutSplitTx
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. append 3 events with commit ts 3, this will exceed the memory quota.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -736,7 +736,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn()
 	advancer.tryMoveToNextTxn(2)
 
 	// 2. append 3 events with commit ts 3, this will exceed the memory quota.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		advancer.appendEvents([]*model.RowChangedEvent{
 			{CommitTs: 3},
 		}, 256)
@@ -762,8 +762,7 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn()
 	}()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		// Wait all events are flushed.
 		require.Eventually(suite.T(), func() bool {
 			return len(sink.GetEvents()) == 4
@@ -780,7 +779,6 @@ func (suite *tableSinkAdvancerSuite) TestTryAdvanceAndBlockAcquireWithSplitTxn()
 		}, 5*time.Second, 10*time.Millisecond)
 		require.Equal(suite.T(), uint64(0), advancer.committedTxnSize)
 		require.Equal(suite.T(), uint64(0), advancer.pendingTxnSize)
-		wg.Done()
-	}()
+	})
 	wg.Wait()
 }

@@ -59,7 +59,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 		tableName      string
 		createTableDDL string
 		// [] for rows, []interface{} for columns.
-		values [][]interface{}
+		values [][]any
 		// [] for table partition if there is any,
 		// []int for approximateBytes of rows.
 		putApproximateBytes [][]int
@@ -67,25 +67,25 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}{{
 		tableName:           "simple",
 		createTableDDL:      "create table simple(id int primary key)",
-		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		values:              [][]any{{1}, {2}, {3}, {4}, {5}},
 		putApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
 		delApproximateBytes: [][]int{{346, 346, 346, 346, 346}},
 	}, {
 		tableName:           "no_pk",
 		createTableDDL:      "create table no_pk(id int not null unique key)",
-		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		values:              [][]any{{1}, {2}, {3}, {4}, {5}},
 		putApproximateBytes: [][]int{{345, 345, 345, 345, 345}},
 		delApproximateBytes: [][]int{{217, 217, 217, 217, 217}},
 	}, {
 		tableName:           "many_index",
 		createTableDDL:      "create table many_index(id int not null unique key, c1 int unique key, c2 int, INDEX (c2))",
-		values:              [][]interface{}{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
+		values:              [][]any{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}, {5, 5, 5}},
 		putApproximateBytes: [][]int{{638, 638, 638, 638, 638}},
 		delApproximateBytes: [][]int{{254, 254, 254, 254, 254}},
 	}, {
 		tableName:           "default_value",
 		createTableDDL:      "create table default_value(id int primary key, c1 int, c2 int not null default 5, c3 varchar(20), c4 varchar(20) not null default '666')",
-		values:              [][]interface{}{{1}, {2}, {3}, {4}, {5}},
+		values:              [][]any{{1}, {2}, {3}, {4}, {5}},
 		putApproximateBytes: [][]int{{676, 676, 676, 676, 676}},
 		delApproximateBytes: [][]int{{353, 353, 353, 353, 353}},
 	}, {
@@ -105,7 +105,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 				PARTITION p2 VALUES LESS THAN (15),
 				PARTITION p3 VALUES LESS THAN (20)
 			)`,
-		values: [][]interface{}{
+		values: [][]any{
 			{1, "aa", "bb", 12, 12},
 			{6, "aac", "bab", 51, 51},
 			{11, "aad", "bsb", 71, 61},
@@ -127,7 +127,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 				constraint pk
 					primary key (id)
 			);`,
-		values: [][]interface{}{
+		values: [][]any{
 			{1, 1, 2, 3, 4, 5},
 			{2},
 			{3, 3, 4, 5, 6, 7},
@@ -156,7 +156,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			constraint pk
 			primary key (id)
 		);`,
-		values: [][]interface{}{
+		values: [][]any{
 			{1},
 			{
 				2, "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A", "89504E470D0A1A0A",
@@ -191,7 +191,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			constraint pk
 			primary key (id)
 		);`,
-		values: [][]interface{}{
+		values: [][]any{
 			{1},
 			{2, "2020-02-20", "2020-02-20 02:20:20", "2020-02-20 02:20:20", "02:20:20", "2020"},
 		},
@@ -208,7 +208,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 		constraint pk
 		primary key (id)
 	);`,
-		values: [][]interface{}{
+		values: [][]any{
 			{1},
 			{2, "2020.0202", "2020.0303", "2020.0404"},
 		},
@@ -226,7 +226,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 			constraint pk
 			primary key (id)
 		);`,
-		values: [][]interface{}{
+		values: [][]any{
 			{1},
 			{2, "a", "a,c", 888, `{"aa":"bb"}`},
 		},
@@ -235,7 +235,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName:      "clustered_index1",
 		createTableDDL: "CREATE TABLE clustered_index1 (id VARCHAR(255) PRIMARY KEY, data INT);",
-		values: [][]interface{}{
+		values: [][]any{
 			{"hhh"},
 			{"你好😘", 666},
 			{"世界🤪", 888},
@@ -245,7 +245,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}, {
 		tableName:      "clustered_index2",
 		createTableDDL: "CREATE TABLE clustered_index2 (id VARCHAR(255), data INT, ddaa date, PRIMARY KEY (id, data, ddaa), UNIQUE KEY (id, data, ddaa));",
-		values: [][]interface{}{
+		values: [][]any{
 			{"你好😘", 666, "2020-11-20"},
 			{"世界🤪", 888, "2020-05-12"},
 		},
@@ -260,7 +260,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 func testMounterDisableOldValue(t *testing.T, tc struct {
 	tableName           string
 	createTableDDL      string
-	values              [][]interface{}
+	values              [][]any
 	putApproximateBytes [][]int
 	delApproximateBytes [][]int
 },
@@ -338,12 +338,12 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 			if len(row.Columns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.GetColumns())
 				result := tk.MustQuery(checkSQL, params...)
-				result.Check([][]interface{}{{"1"}})
+				result.Check([][]any{{"1"}})
 			}
 			if len(row.PreColumns) != 0 {
 				checkSQL, params := prepareCheckSQL(t, tc.tableName, row.GetPreColumns())
 				result := tk.MustQuery(checkSQL, params...)
-				result.Check([][]interface{}{{"1"}})
+				result.Check([][]any{{"1"}})
 			}
 		})
 		return rows
@@ -387,7 +387,7 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 	var sb strings.Builder
 	_, err := sb.WriteString("INSERT INTO " + tableInfo.Name.O + "(")
 	require.Nil(t, err)
-	for i := 0; i < columnLens; i++ {
+	for i := range columnLens {
 		col := tableInfo.Columns[i]
 		if i != 0 {
 			_, err = sb.WriteString(", ")
@@ -398,7 +398,7 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 	}
 	_, err = sb.WriteString(") VALUES (")
 	require.Nil(t, err)
-	for i := 0; i < columnLens; i++ {
+	for i := range columnLens {
 		if i != 0 {
 			_, err = sb.WriteString(", ")
 			require.Nil(t, err)
@@ -411,11 +411,11 @@ func prepareInsertSQL(t *testing.T, tableInfo *model.TableInfo, columnLens int) 
 	return sb.String()
 }
 
-func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []interface{}) {
+func prepareCheckSQL(t *testing.T, tableName string, cols []*model.Column) (string, []any) {
 	var sb strings.Builder
 	_, err := sb.WriteString("SELECT count(1) FROM " + tableName + " WHERE ")
 	require.Nil(t, err)
-	params := make([]interface{}, 0, len(cols))
+	params := make([]any, 0, len(cols))
 	for i, col := range cols {
 		// Since float type has precision problem, so skip it to avoid compare float number.
 		if col == nil || col.Type == mysql.TypeFloat {
@@ -610,7 +610,7 @@ func TestGetDefaultZeroValue(t *testing.T) {
 	testCases := []struct {
 		Name    string
 		ColInfo timodel.ColumnInfo
-		Res     interface{}
+		Res     any
 	}{
 		{
 			Name:    "mysql flag null",
@@ -1352,7 +1352,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 	type testCase struct {
 		schema  string
 		table   string
-		columns []interface{}
+		columns []any
 		ignored bool
 	}
 
@@ -1360,20 +1360,20 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 		{
 			schema:  "test",
 			table:   "student",
-			columns: []interface{}{1, "dongmen", 20, "male"},
+			columns: []any{1, "dongmen", 20, "male"},
 			ignored: false,
 		},
 		{
 			schema:  "test",
 			table:   "computer",
-			columns: []interface{}{1, "apple", 19999},
+			columns: []any{1, "apple", 19999},
 			ignored: false,
 		},
 		// This case should be ignored by its table name.
 		{
 			schema:  "test",
 			table:   "poet",
-			columns: []interface{}{1, "李白", "静夜思"},
+			columns: []any{1, "李白", "静夜思"},
 			ignored: true,
 		},
 	}
@@ -1642,14 +1642,14 @@ func TestNewDMRowChange(t *testing.T) {
 		recoveredTI := model.BuildTiDBTableInfo(cdcTableInfo.TableName.Table, cols, cdcTableInfo.IndexColumnsOffset)
 		require.Equal(t, c.recovered, showCreateTable(t, recoveredTI))
 		tableName := &model.TableName{Schema: "db", Table: "t1"}
-		rowChange := sqlmodel.NewRowChange(tableName, nil, []interface{}{1, 1, 2}, nil, recoveredTI, nil, nil)
+		rowChange := sqlmodel.NewRowChange(tableName, nil, []any{1, 1, 2}, nil, recoveredTI, nil, nil)
 		sqlGot, argsGot := rowChange.GenSQL(sqlmodel.DMLDelete)
 		require.Equal(t, "DELETE FROM `db`.`t1` WHERE `a1` = ? AND `a3` = ? LIMIT 1", sqlGot)
-		require.Equal(t, []interface{}{1, 2}, argsGot)
+		require.Equal(t, []any{1, 2}, argsGot)
 
 		sqlGot, argsGot = sqlmodel.GenDeleteSQL(rowChange, rowChange)
 		require.Equal(t, "DELETE FROM `db`.`t1` WHERE (`a1` = ? AND `a3` = ?) OR (`a1` = ? AND `a3` = ?)", sqlGot)
-		require.Equal(t, []interface{}{1, 2, 1, 2}, argsGot)
+		require.Equal(t, []any{1, 2, 1, 2}, argsGot)
 	}
 }
 
