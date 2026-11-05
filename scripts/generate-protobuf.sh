@@ -19,9 +19,11 @@ TOOLS_INCLUDE_DIR="tools/include"
 PROTO_DIR="proto"
 DM_PROTO_DIR="dm/proto"
 TiCDC_SOURCE_DIR="cdc"
+NEW_ARCH_DIR="new_arch"
 INCLUDE="-I $PROTO_DIR \
 	-I $TOOLS_INCLUDE_DIR \
 	-I $TiCDC_SOURCE_DIR \
+	-I $NEW_ARCH_DIR \
 	-I $DM_PROTO_DIR"
 
 PROTOC="$TOOLS_BIN_DIR/protoc"
@@ -63,6 +65,11 @@ generate ./dm/pb ./dm/proto/dmmaster.proto plugins=grpc,protoc-gen-grpc-gateway=
 for pb in $(find cdc -name '*.proto'); do
 	# Output generated go files next to protobuf files.
 	generate ./cdc $pb paths="source_relative"
+done
+
+for pb in $(find new_arch -name '*.proto'); do
+	# Output generated go files next to protobuf files.
+	generate ./new_arch $pb paths="source_relative"
 done
 
 echo "generate enginepb..."
