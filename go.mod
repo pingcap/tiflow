@@ -31,7 +31,7 @@ require (
 	github.com/edwingeng/deque v0.0.0-20191220032131-8596380dee17
 	github.com/fatih/color v1.18.0
 	github.com/gavv/monotime v0.0.0-20190418164738-30dba4353424
-	github.com/getkin/kin-openapi v0.144.0
+	github.com/getkin/kin-openapi v0.149.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/glebarez/go-sqlite v1.21.2
 	github.com/glebarez/sqlite v1.7.0
@@ -384,6 +384,10 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/cors v1.7.0 // indirect
+<<<<<<< HEAD
+=======
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
+>>>>>>> 29e8ea9b17 (deps(dm): bump kin-openapi to v0.149.0 to fix five CVEs (#12938))
 	github.com/sasha-s/go-deadlock v0.3.6 // indirect
 	github.com/shoenig/go-m1cpu v0.2.1 // indirect
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
