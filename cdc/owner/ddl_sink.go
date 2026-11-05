@@ -51,6 +51,8 @@ type DDLSink interface {
 	emitCheckpointTs(ts uint64, tables []*model.TableInfo)
 	// getLastWrittenCheckpointTs returns the latest checkpoint successfully written to the sink.
 	getLastWrittenCheckpointTs() model.Ts
+	// retainTablesForCheckpoint keeps old table topics until a covering checkpoint is written.
+	retainTablesForCheckpoint(ts model.Ts, tables []*model.TableInfo)
 	// emitDDLEvent emits DDL event and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
@@ -73,15 +75,13 @@ type ddlSinkImpl struct {
 		checkpointTs        model.Ts
 		writtenCheckpointTs model.Ts
 		currentTables       []*model.TableInfo
+		// Keep old table topics through the first checkpoint covering their DDLs.
+		pendingDDLTables map[model.TableName]pendingDDLTable
 	}
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
 	ddlSentTsMap map[*model.DDLEvent]model.Ts
-	// Keep tables whose DDLs were sent to their old topics until a checkpoint
-	// covering those DDLs has also been sent to those topics.
-	pendingDDLTables map[model.TableName]pendingDDLTable
-
-	ddlCh chan *model.DDLEvent
+	ddlCh        chan *model.DDLEvent
 
 	sink ddlsink.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
@@ -109,11 +109,10 @@ func newDDLSink(
 	reportError func(err error), reportWarning func(err error),
 ) DDLSink {
 	res := &ddlSinkImpl{
-		ddlSentTsMap:     make(map[*model.DDLEvent]uint64),
-		pendingDDLTables: make(map[model.TableName]pendingDDLTable),
-		ddlCh:            make(chan *model.DDLEvent, 1),
-		sinkInitHandler:  ddlSinkInitializer,
-		cancel:           func() {},
+		ddlSentTsMap:    make(map[*model.DDLEvent]uint64),
+		ddlCh:           make(chan *model.DDLEvent, 1),
+		sinkInitHandler: ddlSinkInitializer,
+		cancel:          func() {},
 
 		changefeedID: changefeedID,
 		info:         info,
@@ -122,6 +121,7 @@ func newDDLSink(
 		reportError:   reportError,
 		reportWarning: reportWarning,
 	}
+	res.mu.pendingDDLTables = make(map[model.TableName]pendingDDLTable)
 	return res
 }
 
@@ -237,24 +237,24 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 		}
 		tables := make([]*model.TableInfo, 0, len(s.mu.currentTables))
 		tables = append(tables, s.mu.currentTables...)
-		s.mu.Unlock()
-		for _, pending := range s.pendingDDLTables {
+		for _, pending := range s.mu.pendingDDLTables {
 			if pending.commitTs <= checkpointTs {
 				tables = append(tables, pending.table)
 			}
 		}
+		s.mu.Unlock()
 
 		if err = s.makeSinkReady(ctx); err == nil {
 			err = s.sink.WriteCheckpointTs(ctx, checkpointTs, tables)
 		}
 		if err == nil {
 			*lastCheckpointTs = checkpointTs
-			for name, pending := range s.pendingDDLTables {
+			s.mu.Lock()
+			for name, pending := range s.mu.pendingDDLTables {
 				if pending.commitTs <= checkpointTs {
-					delete(s.pendingDDLTables, name)
+					delete(s.mu.pendingDDLTables, name)
 				}
 			}
-			s.mu.Lock()
 			s.mu.writtenCheckpointTs = checkpointTs
 			s.mu.Unlock()
 		}
@@ -295,8 +295,7 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 
 	err := s.observedRetrySinkAction(ctx, "writeDDLEvent", doWrite)
 	if err == nil && ddl.PreTableInfo != nil && ddl.PreTableInfo.TableName.Table != "" {
-		table := ddl.PreTableInfo
-		s.pendingDDLTables[table.TableName] = pendingDDLTable{commitTs: ddl.CommitTs, table: table}
+		s.retainTablesForCheckpoint(ddl.CommitTs, []*model.TableInfo{ddl.PreTableInfo})
 	}
 	return err
 }
@@ -358,6 +357,14 @@ func (s *ddlSinkImpl) getLastWrittenCheckpointTs() model.Ts {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.writtenCheckpointTs
+}
+
+func (s *ddlSinkImpl) retainTablesForCheckpoint(ts model.Ts, tables []*model.TableInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, table := range tables {
+		s.mu.pendingDDLTables[table.TableName] = pendingDDLTable{commitTs: ts, table: table}
+	}
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.

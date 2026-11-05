@@ -479,6 +479,21 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 	}
 	if done {
 		switch m.executingDDL.Type {
+		case timodel.ActionDropSchema:
+			// The schema DDL goes to the default topic, but tables in the
+			// dropped schema still need a final checkpoint on their own topics.
+			tables, err := m.schema.AllTables(ctx, m.executingDDL.CommitTs-1)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			var droppedTables []*model.TableInfo
+			for _, table := range tables {
+				if table.TableName.Schema == m.executingDDL.TableInfo.TableName.Schema {
+					droppedTables = append(droppedTables, table)
+				}
+			}
+			m.ddlSink.retainTablesForCheckpoint(m.executingDDL.CommitTs, droppedTables)
+			m.checkpointPendingDDL = m.executingDDL.CommitTs
 		case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView:
 			m.checkpointPendingDDL = m.executingDDL.CommitTs
 		}

@@ -11,17 +11,32 @@ SINK_TYPE=$1
 function check_rename_before_watermark() {
 	local log_file=$1
 	local topic=$2
-	local attempt ddl_line ddl_ts ddl_offset line watermark offset found
+	local start_ts=$3
+	local old_table=$4
+	local new_table=$5
+	local attempt ddl_line ddl_ts ddl_offset line watermark offset found expected_ddl
+	printf -v expected_ddl 'RENAME TABLE `test`.`%s` TO `test`.`%s`' "$old_table" "$new_table"
 
 	for attempt in $(seq 1 120); do
-		ddl_line=$(grep -m1 'DDL message received.*RENAME TABLE' "$log_file" 2>/dev/null || true)
+		ddl_line=""
+		if [ ! -f "$log_file" ]; then
+			sleep 1
+			continue
+		fi
+		while IFS= read -r line; do
+			[[ $line == *'DDL message received'* && $line == *"$expected_ddl"* ]] || continue
+			[[ $line =~ \[commitTs=([0-9]+)\] ]] || continue
+			ddl_ts=${BASH_REMATCH[1]}
+			if ((ddl_ts > start_ts)); then
+				ddl_line=$line
+				break
+			fi
+		done <"$log_file"
 		if [ -z "$ddl_line" ]; then
 			sleep 1
 			continue
 		fi
 
-		[[ $ddl_line =~ \[commitTs=([0-9]+)\] ]]
-		ddl_ts=${BASH_REMATCH[1]}
 		[[ $ddl_line =~ \[offset=([0-9]+)\] ]]
 		ddl_offset=${BASH_REMATCH[1]}
 		found=0
@@ -87,7 +102,7 @@ function run() {
 
 	run_sql "rename table test.table1 to test.table10, test.table2 to test.table20" ${UP_TIDB_HOST} ${UP_TIDB_PORT}
 	for i in 1 2; do
-		check_rename_before_watermark "$WORK_DIR/cdc_kafka_consumer${i}.log" "test_table${i}"
+		check_rename_before_watermark "$WORK_DIR/cdc_kafka_consumer${i}.log" "test_table${i}" "$start_ts" "table${i}" "table${i}0"
 	done
 	check_table_exists test.table10 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300
 	check_table_exists test.table20 ${DOWN_TIDB_HOST} ${DOWN_TIDB_PORT} 300

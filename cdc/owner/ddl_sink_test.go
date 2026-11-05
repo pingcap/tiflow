@@ -131,7 +131,7 @@ func TestCheckpointIncludesRenamedTables(t *testing.T) {
 	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
 	require.Equal(t, model.Ts(9), s.getLastWrittenCheckpointTs())
 	require.ElementsMatch(t, []model.TableName{newTables[0].TableName, newTables[1].TableName}, sink.checkpointTables[0])
-	require.Len(t, s.pendingDDLTables, 2)
+	require.Len(t, s.mu.pendingDDLTables, 2)
 
 	s.emitCheckpointTs(10, newTables)
 	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
@@ -140,11 +140,34 @@ func TestCheckpointIncludesRenamedTables(t *testing.T) {
 		oldTables[0].TableName, oldTables[1].TableName,
 		newTables[0].TableName, newTables[1].TableName,
 	}, sink.checkpointTables[1])
-	require.Empty(t, s.pendingDDLTables)
+	require.Empty(t, s.mu.pendingDDLTables)
 
 	s.emitCheckpointTs(11, newTables)
 	require.NoError(t, s.writeCheckpointTs(ctx, &lastCheckpointTs))
 	require.ElementsMatch(t, []model.TableName{newTables[0].TableName, newTables[1].TableName}, sink.checkpointTables[2])
+}
+
+func TestCheckpointIncludesDroppedSchemaTables(t *testing.T) {
+	ddlSink, sink := newDDLSink4Test(func(error) {}, func(error) {})
+	s := ddlSink.(*ddlSinkImpl)
+	oldTables := []*model.TableInfo{
+		{TableName: model.TableName{Schema: "dropped", Table: "table1"}},
+		{TableName: model.TableName{Schema: "dropped", Table: "table2"}},
+	}
+	currentTable := &model.TableInfo{TableName: model.TableName{Schema: "kept", Table: "table3"}}
+	s.retainTablesForCheckpoint(10, oldTables)
+
+	var lastCheckpointTs model.Ts
+	s.emitCheckpointTs(9, []*model.TableInfo{currentTable})
+	require.NoError(t, s.writeCheckpointTs(context.Background(), &lastCheckpointTs))
+	require.Equal(t, []model.TableName{currentTable.TableName}, sink.checkpointTables[0])
+
+	s.emitCheckpointTs(10, []*model.TableInfo{currentTable})
+	require.NoError(t, s.writeCheckpointTs(context.Background(), &lastCheckpointTs))
+	require.ElementsMatch(t, []model.TableName{
+		oldTables[0].TableName, oldTables[1].TableName, currentTable.TableName,
+	}, sink.checkpointTables[1])
+	require.Empty(t, s.mu.pendingDDLTables)
 }
 
 func TestExecDDLEvents(t *testing.T) {

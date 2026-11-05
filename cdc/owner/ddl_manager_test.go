@@ -58,6 +58,19 @@ func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *
 	return res
 }
 
+type schemaStorageWithOldTables struct {
+	entry.SchemaStorage
+	ddlTs  model.Ts
+	tables []*model.TableInfo
+}
+
+func (s *schemaStorageWithOldTables) AllTables(_ context.Context, ts model.Ts) ([]*model.TableInfo, error) {
+	if ts == s.ddlTs-1 {
+		return s.tables, nil
+	}
+	return nil, nil
+}
+
 func newFakeDDLEvent(
 	tableID int64,
 	tableName string,
@@ -159,6 +172,51 @@ func TestRenameKeepsBarrierUntilCheckpointWritten(t *testing.T) {
 	require.Less(t, sink.getLastWrittenCheckpointTs(), ddlTs)
 	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
 
+	sink.mu.Lock()
+	sink.mu.writtenCheckpointTs = ddlTs
+	sink.mu.Unlock()
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Greater(t, barrier.MinTableBarrierTs, ddlTs)
+}
+
+func TestDropSchemaRetainsOldTopicsUntilCheckpointWritten(t *testing.T) {
+	const ddlTs = model.Ts(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	dm.schema = &schemaStorageWithOldTables{
+		SchemaStorage: dm.schema,
+		ddlTs:         ddlTs,
+		tables: []*model.TableInfo{
+			{TableName: model.TableName{Schema: "dropped", Table: "table1"}},
+			{TableName: model.TableName{Schema: "dropped", Table: "table2"}},
+			{TableName: model.TableName{Schema: "kept", Table: "table3"}},
+		},
+	}
+	sink := dm.ddlSink.(*mockDDLSink)
+	sink.holdCheckpointAck = true
+	ddl := newFakeDDLEvent(0, "", timodel.ActionDropSchema, ddlTs)
+	ddl.TableInfo.TableName.Schema = "dropped"
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, _, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	sink.ddlDone = true
+	_, barrier, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Len(t, sink.mu.retainedTables, 2)
+	require.ElementsMatch(t, []model.TableName{
+		{Schema: "dropped", Table: "table1"},
+		{Schema: "dropped", Table: "table2"},
+	}, []model.TableName{
+		sink.mu.retainedTables[0].TableName,
+		sink.mu.retainedTables[1].TableName,
+	})
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
 	sink.mu.Lock()
 	sink.mu.writtenCheckpointTs = ddlTs
 	sink.mu.Unlock()
