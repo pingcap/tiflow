@@ -277,6 +277,7 @@ const (
 	codeConfigImportIntoRequiresSharedStorage
 	codeConfigUnsupportedForeignKeyChecksOption
 	codeConfigInvalidMetricLabels
+	codeConfigInvalidSessionVar
 )
 
 // Binlog operation error code list.
@@ -995,6 +996,7 @@ var (
 	ErrConfigImportIntoRequiresSharedStorage    = New(codeConfigImportIntoRequiresSharedStorage, ClassConfig, ScopeInternal, LevelHigh, "import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s'", "Please use a shared storage URI like s3://bucket/path")
 	ErrConfigUnsupportedForeignKeyChecksOption  = New(codeConfigUnsupportedForeignKeyChecksOption, ClassConfig, ScopeInternal, LevelMedium, "`%s` is not supported when foreign_key_checks=1", "Please disable `foreign_key_checks`, or disable this syncer option in task configuration file.")
 	ErrConfigInvalidMetricLabels                = New(codeConfigInvalidMetricLabels, ClassConfig, ScopeInternal, LevelMedium, "invalid metric labels: %s", "Please check the `metric-labels` config in the task configuration.")
+	ErrConfigInvalidSessionVar                  = New(codeConfigInvalidSessionVar, ClassConfig, ScopeInternal, LevelMedium, "invalid session variable name: %s", "Please check the `session` config in the configuration file, the name can only contain letters, digits, '_', '.' and '-'.")
 
 	// Binlog operation error.
 	ErrBinlogExtractPosition = New(codeBinlogExtractPosition, ClassBinlogOp, ScopeInternal, LevelHigh, "", "")

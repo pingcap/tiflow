@@ -25,6 +25,7 @@ import (
 	"github.com/phayes/freeport"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
+	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,5 +124,32 @@ func TestNeedsModernTerminology(t *testing.T) {
 	for _, tc := range cases {
 		b.Version = tc.version
 		require.Equal(t, tc.modern, b.needsModernTerminology(), b.Version)
+	}
+}
+
+func TestApplyWithInvalidSessionVar(t *testing.T) {
+	// session variable names are interpolated into the DSN, so names that can
+	// inject driver parameters must be rejected before connecting.
+	cases := []string{
+		"tls=skip-verify&x",
+		"allowAllFiles=true&x",
+		"x&allowAllFiles",
+		"a=b",
+		"a'b",
+		"a b",
+		"",
+	}
+	for _, key := range cases {
+		t.Run(key, func(t *testing.T) {
+			cfg := &dbconfig.DBConfig{
+				Host:    "127.0.0.1",
+				Port:    3306,
+				User:    "root",
+				Session: map[string]string{key: "true"},
+			}
+			db, err := DefaultDBProvider.Apply(DownstreamDBConfig(cfg))
+			require.Nil(t, db)
+			require.True(t, terror.ErrConfigInvalidSessionVar.Equal(err), "unexpected error: %v", err)
+		})
 	}
 }
