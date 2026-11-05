@@ -15,6 +15,7 @@ package model
 
 import (
 	"crypto/tls"
+	"maps"
 	"strings"
 
 	validation "github.com/go-ozzo/ozzo-validation/v4"
@@ -153,9 +154,7 @@ func GenerateDSNByParams(storeConf *StoreConfig, pairs map[string]string) (strin
 	dsnCfg.Params["writeTimeout"] = storeConf.WriteTimeout
 	dsnCfg.Params["timeout"] = storeConf.DialTimeout
 
-	for k, v := range pairs {
-		dsnCfg.Params[k] = v
-	}
+	maps.Copy(dsnCfg.Params, pairs)
 
 	return dsnCfg.FormatDSN(), nil
 }

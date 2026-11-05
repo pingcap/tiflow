@@ -95,7 +95,7 @@ func runFakeJobCase(ctx context.Context, cfg *config) error {
 	mvcc := 0
 	interval := 60 * time.Second
 	runTime := 10
-	for i := 0; i < runTime; i++ {
+	for i := range runTime {
 		value := fmt.Sprintf("update-value-index-%d", i)
 		mvcc++
 		start := time.Now()
@@ -119,7 +119,7 @@ func updateKeyAndCheck(
 	ctx context.Context, cli *e2e.ChaosCli, jobID string, workerCount int,
 	updateValue string, expectedMvcc int,
 ) error {
-	for i := 0; i < workerCount; i++ {
+	for i := range workerCount {
 		err := cli.UpdateFakeJobKey(ctx, i, updateValue)
 		if err != nil {
 			return err
@@ -127,7 +127,7 @@ func updateKeyAndCheck(
 	}
 	// retry 6 minutes at most
 	finished := util.WaitSomething(60, time.Second*6, func() bool {
-		for jobIdx := 0; jobIdx < workerCount; jobIdx++ {
+		for jobIdx := range workerCount {
 			err := cli.CheckFakeJobKey(ctx, jobID, jobIdx, expectedMvcc, updateValue)
 			if err != nil {
 				log.Warn("check fail job failed", zap.Error(err))

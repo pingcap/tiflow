@@ -112,7 +112,7 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 			WorkerID: worker,
 		}
 
-		for i := 0; i < numTemporaryResources; i++ {
+		for i := range numTemporaryResources {
 			_, err := fm.CreateResource(ctx, internal.ResourceIdent{
 				ResourceScope: scope,
 				Name:          fmt.Sprintf("temp-resource-%d", i),
@@ -120,7 +120,7 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		for i := 0; i < numPersistedResources; i++ {
+		for i := range numPersistedResources {
 			ident := internal.ResourceIdent{
 				ResourceScope: scope,
 				Name:          fmt.Sprintf("persisted-resource-%d", i),
@@ -138,7 +138,7 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 			Executor: MockExecutorID,
 			WorkerID: worker,
 		}
-		for i := 0; i < numPersistedResources; i++ {
+		for i := range numPersistedResources {
 			ident := internal.ResourceIdent{
 				ResourceScope: scope,
 				Name:          fmt.Sprintf("persisted-resource-%d", i),
@@ -147,7 +147,7 @@ func TestIntegrationS3FileManagerRemoveTemporaryResources(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		for i := 0; i < numTemporaryResources; i++ {
+		for i := range numTemporaryResources {
 			_, err := fm.GetPersistedResource(ctx, internal.ResourceIdent{
 				ResourceScope: scope,
 				Name:          fmt.Sprintf("temp-resource-%d", i),

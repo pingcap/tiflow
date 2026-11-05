@@ -15,6 +15,7 @@ package dm
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"sync"
 
@@ -618,9 +619,7 @@ func (g *shardGroup) allTableLarger(tp tableType) bool {
 }
 
 func (g *shardGroup) resolveTables() {
-	for sourceTable, conflictStmt := range g.conflictTables {
-		g.normalTables[sourceTable] = conflictStmt
-	}
+	maps.Copy(g.normalTables, g.conflictTables)
 	g.conflictTables = make(map[metadata.SourceTable]string)
 	// TODO: redirect for conflict worker.
 }

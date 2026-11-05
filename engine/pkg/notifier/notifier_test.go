@@ -34,11 +34,8 @@ func TestNotifierBasics(t *testing.T) {
 	)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numReceivers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range numReceivers {
+		wg.Go(func() {
 			r := n.NewReceiver()
 			defer r.Close()
 
@@ -55,7 +52,7 @@ func TestNotifierBasics(t *testing.T) {
 				}
 				lastEv = ev
 			}
-		}()
+		})
 	}
 
 	for i := 1; i <= numEvents; i++ {
@@ -78,17 +75,14 @@ func TestNotifierClose(t *testing.T) {
 	)
 	var wg sync.WaitGroup
 
-	for i := 0; i < numReceivers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
+	for range numReceivers {
+		wg.Go(func() {
 			r := n.NewReceiver()
 			defer r.Close()
 
 			_, ok := <-r.C
 			require.False(t, ok)
-		}()
+		})
 	}
 
 	time.Sleep(1 * time.Second)
@@ -102,7 +96,7 @@ func TestReceiverClose(t *testing.T) {
 	r := n.NewReceiver()
 
 	// Send enough events to make sure the receiver channel is full.
-	for i := 0; i < 64; i++ {
+	for i := range 64 {
 		n.Notify(i)
 	}
 	time.Sleep(time.Second)

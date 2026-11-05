@@ -124,7 +124,7 @@ func (r *TaskRunner) cancelAll() {
 	}
 	r.canceled = true
 
-	r.tasks.Range(func(key, value interface{}) bool {
+	r.tasks.Range(func(key, value any) bool {
 		id := key.(RunnableID)
 		t := value.(*taskEntry)
 		t.cancel()

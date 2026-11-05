@@ -118,14 +118,11 @@ func TestRunnerNormalPath(t *testing.T) {
 	task.On("Close", mock.Anything).Return(nil).Once()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		err := runner.Run(context.Background())
 		require.Error(t, err)
 		require.Regexp(t, "injected error", err)
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		return task.status.Load() == toyTaskRunning
@@ -153,14 +150,11 @@ func TestRunnerForcefulExit(t *testing.T) {
 	task.On("Close", mock.Anything).Return(nil).Once()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
+	wg.Go(func() {
 		err := runner.Run(context.Background())
 		require.Error(t, err)
 		require.Regexp(t, "ErrWorkerSuicide", err)
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		return task.status.Load() == toyTaskRunning
@@ -208,13 +202,11 @@ func TestRunnerStopByCancel(t *testing.T) {
 	task.On("Stop", mock.Anything).Return(nil).Once()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := runner.Run(context.Background())
 		require.Error(t, err)
 		require.Regexp(t, "worker is canceled", err)
-	}()
+	})
 
 	require.Eventually(t, func() bool {
 		return task.status.Load() == toyTaskRunning

@@ -43,7 +43,7 @@ func (c *mockClientConn) StoreType() metaModel.StoreType {
 	return metaModel.StoreTypeMockKV
 }
 
-func (c *mockClientConn) GetConn() (interface{}, error) {
+func (c *mockClientConn) GetConn() (any, error) {
 	log.Panic("SHOULD not call GetConn for mock client conn")
 	return nil, nil
 }
@@ -77,7 +77,7 @@ func (c *sqliteClientConn) StoreType() metaModel.StoreType {
 	return metaModel.StoreTypeSQLite
 }
 
-func (c *sqliteClientConn) GetConn() (interface{}, error) {
+func (c *sqliteClientConn) GetConn() (any, error) {
 	if c.db != nil {
 		return c.db, nil
 	}
@@ -111,7 +111,7 @@ func (c *dbClientConn) StoreType() metaModel.StoreType {
 	return metaModel.StoreTypeMySQL
 }
 
-func (c *dbClientConn) GetConn() (interface{}, error) {
+func (c *dbClientConn) GetConn() (any, error) {
 	if c.db != nil {
 		return c.db, nil
 	}

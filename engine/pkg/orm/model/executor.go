@@ -42,7 +42,7 @@ func (s LabelSet) ToMap() map[string]string {
 }
 
 // Scan implements the sql.Scanner interface.
-func (s *LabelSet) Scan(rawInput interface{}) error {
+func (s *LabelSet) Scan(rawInput any) error {
 	*s = make(LabelSet)
 	if rawInput == nil {
 		return nil
@@ -88,8 +88,8 @@ type Executor struct {
 }
 
 // Map is used in gorm update.
-func (e *Executor) Map() map[string]interface{} {
-	return map[string]interface{}{
+func (e *Executor) Map() map[string]any {
+	return map[string]any{
 		"id":      e.ID,
 		"name":    e.Name,
 		"address": e.Address,

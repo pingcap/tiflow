@@ -69,7 +69,7 @@ func (e MasterMetaExt) Value() (driver.Value, error) {
 }
 
 // Scan implements sql.Scanner.
-func (e *MasterMetaExt) Scan(rawInput interface{}) error {
+func (e *MasterMetaExt) Scan(rawInput any) error {
 	// Zero the fields.
 	*e = MasterMetaExt{}
 

@@ -28,7 +28,7 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-var globalModels = []interface{}{
+var globalModels = []any{
 	&model.ProjectInfo{},
 	&model.ProjectOperation{},
 	&frameModel.MasterMeta{},

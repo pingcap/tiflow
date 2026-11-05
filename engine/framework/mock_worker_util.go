@@ -88,7 +88,7 @@ func MockBaseWorkerCheckSendMessage(
 	t *testing.T,
 	worker *DefaultBaseWorker,
 	topic p2p.Topic,
-	message interface{},
+	message any,
 ) {
 	masterNode := worker.masterClient.MasterNode()
 	got, ok := worker.messageSender.(*p2p.MockMessageSender).TryPop(masterNode, topic)
