@@ -1,2 +1,4 @@
 name = "worker2"
 join = "127.0.0.1:8261"
+# Keep the explicit opt-out in the expected get-config output.
+redact-info-log = false
