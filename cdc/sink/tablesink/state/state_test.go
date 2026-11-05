@@ -33,7 +33,6 @@ func TestStateString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.want, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.want, tc.state.String())
