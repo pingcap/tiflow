@@ -47,9 +47,10 @@ max-backups = 0
 # Use TLS to protect credentials in transit.
 # client-user-required = true
 # client-allowed-user = ["cdc-reader", "cdc-operator", "cdc-admin"]
-# Unsafe APIs always require client-user-required = true, even when ordinary
-# APIs retain anonymous access for compatibility. Configure an admin binding to
-# restrict unsafe operations when enabling role-based authorization.
+# Unsafe APIs follow the same client-user-required switch as ordinary APIs.
+# When it is disabled, TLS/mTLS clients do not need TiDB user credentials.
+# Configure an admin binding to restrict unsafe operations when enabling
+# role-based authorization.
 # Metadata diagnostics redact changefeed sink and replica-config credentials.
 # Deleting the service GC safepoint returns HTTP 409 while any unfinished
 # changefeed exists, including stopped or failed changefeeds. Remove or finish

@@ -15,7 +15,10 @@ package v2
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
+	"io"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -105,34 +108,80 @@ func newUnsafeTestRequest(method, path, body string) *http.Request {
 	return req.WithContext(authorization.WithPrincipal(req.Context(), authorization.Principal{Username: "admin"}))
 }
 
-func TestUnsafeAPIsRequireAuthentication(t *testing.T) {
+func TestUnsafeAPIsWithoutUserAuthentication(t *testing.T) {
 	original := config.GetGlobalServerConfig()
 	t.Cleanup(func() { config.StoreGlobalServerConfig(original) })
-	for _, credential := range []*security.Credential{nil, {}, {ClientAllowedUser: []string{"admin"}}} {
-		cfg := config.GetDefaultServerConfig()
-		cfg.Security = credential
-		config.StoreGlobalServerConfig(cfg)
-		cp := mock_capture.NewMockCapture(gomock.NewController(t))
-		cp.EXPECT().IsReady().Return(true).AnyTimes()
-		// No owner, upstream, etcd or PD calls are allowed for denied requests.
-		router := newRouter(NewOpenAPIV2(cp))
-		for _, tc := range []testCase{
-			{url: "/api/v2/unsafe/metadata", method: http.MethodGet},
-			{url: "/api/v2/unsafe/resolve_lock", method: http.MethodPost},
-			{url: "/api/v2/unsafe/service_gc_safepoint", method: http.MethodDelete},
-		} {
-			for _, basicAuth := range []bool{false, true} {
-				req := httptest.NewRequest(tc.method, tc.url, strings.NewReader(`{}`))
-				if basicAuth {
-					req.SetBasicAuth("admin", "unverified")
+	for _, mode := range []struct {
+		name       string
+		credential *security.Credential
+		tls, mtls  bool
+	}{
+		{name: "nil security"},
+		{name: "authentication disabled", credential: &security.Credential{}},
+		{name: "allow-list without authentication", credential: &security.Credential{ClientAllowedUser: []string{"admin"}}},
+		{name: "TLS only", credential: &security.Credential{}, tls: true},
+		{name: "mTLS only", credential: &security.Credential{}, tls: true, mtls: true},
+	} {
+		t.Run(mode.name, func(t *testing.T) {
+			cfg := config.GetDefaultServerConfig()
+			cfg.Security = mode.credential
+			config.StoreGlobalServerConfig(cfg)
+			ctrl := gomock.NewController(t)
+			cp := mock_capture.NewMockCapture(ctrl)
+			cp.EXPECT().IsReady().Return(true).Times(3)
+			cp.EXPECT().IsOwner().Return(true).Times(3)
+			etcdClient := mock_etcd.NewMockCDCEtcdClient(ctrl)
+			cp.EXPECT().GetEtcdClient().Return(etcdClient).Times(2)
+			etcdClient.EXPECT().GetAllCDCInfo(gomock.Any()).Return([]*mvccpb.KeyValue{{
+				Key:   []byte("/tidb/cdc/default/team-a/changefeed/info/orders"),
+				Value: []byte(`{"state":"finished","sink-uri":"mysql://user:legacy-secret@host"}`),
+			}}, nil).Times(2)
+			cp.EXPECT().GetUpstreamManager().Return(upstream.NewManager4Test(&mockPDClient{}), nil)
+			etcdClient.EXPECT().GetGCServiceID().Return("test-service")
+			server := httptest.NewUnstartedServer(newRouter(NewOpenAPIV2(cp)))
+			if mode.tls {
+				ca, err := security.NewCA()
+				require.NoError(t, err)
+				certPEM, keyPEM, err := ca.GenerateCerts("client")
+				require.NoError(t, err)
+				cert, err := tls.X509KeyPair(certPEM, keyPEM)
+				require.NoError(t, err)
+				roots := x509.NewCertPool()
+				require.True(t, roots.AppendCertsFromPEM(ca.CAPEM))
+				server.TLS = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{cert}}
+				if mode.mtls {
+					server.TLS.ClientAuth = tls.RequireAndVerifyClientCert
+					server.TLS.ClientCAs = roots
 				}
-				req.Header.Set("X-TiCDC-Role", "admin")
-				req.Header.Set("TiCDC-ForwardFromCapture", "trusted-capture")
-				w := httptest.NewRecorder()
-				router.ServeHTTP(w, req)
-				require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+				server.StartTLS()
+				clientTLS := server.Client().Transport.(*http.Transport).TLSClientConfig
+				clientTLS.RootCAs = roots
+				clientTLS.Certificates = []tls.Certificate{cert}
+			} else {
+				server.Start()
 			}
-		}
+			t.Cleanup(server.Close)
+			for _, endpoint := range []struct {
+				method, path string
+				status       int
+			}{
+				{http.MethodGet, "/api/v2/unsafe/metadata", http.StatusOK},
+				// Invalid input reaches handler validation instead of an auth gate.
+				{http.MethodPost, "/api/v2/unsafe/resolve_lock", http.StatusBadRequest},
+				{http.MethodDelete, "/api/v2/unsafe/service_gc_safepoint", http.StatusOK},
+			} {
+				req, err := http.NewRequestWithContext(context.Background(), endpoint.method,
+					server.URL+endpoint.path, strings.NewReader(`{}`))
+				require.NoError(t, err)
+				resp, err := server.Client().Do(req)
+				require.NoError(t, err)
+				body, err := io.ReadAll(resp.Body)
+				require.NoError(t, resp.Body.Close())
+				require.NoError(t, err)
+				require.Equal(t, endpoint.status, resp.StatusCode, string(body))
+				require.NotContains(t, string(body), "legacy-secret")
+			}
+		})
 	}
 }
 

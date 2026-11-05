@@ -109,14 +109,8 @@ func AccessMiddleware(capture capture.Capture) gin.HandlerFunc {
 		}
 		key := c.Request.Method + " " + c.FullPath()
 		credential := config.GetGlobalServerConfig().Security
-		// Unsafe operations must never inherit the legacy anonymous API mode.
-		// Basic auth headers or forwarding headers alone cannot enable them.
-		if routePermissions[key] == authorization.Unsafe &&
-			(credential == nil || !credential.ClientUserRequired) {
-			abortAuthentication(c, errors.ErrUnauthorized.GenWithStackByArgs("",
-				"unsafe APIs require client-user-required = true"))
-			return
-		}
+		// Preserve the legacy authentication switch for all APIs, including unsafe
+		// operations and deployments that authenticate clients only through mTLS.
 		if credential == nil ||
 			(!credential.ClientUserRequired && credential.ClientAuthorization == nil) {
 			c.Next()
