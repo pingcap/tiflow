@@ -227,10 +227,7 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 				})
 		}
 	}
-	sinkURI, err := util.MaskSinkURI(info.SinkURI)
-	if err != nil {
-		log.Error("failed to mask sink URI", zap.Error(err))
-	}
+	sinkURI := util.MaskSensitiveDataInURIForError(info.SinkURI)
 
 	changefeedDetail := &model.ChangefeedDetail{
 		UpstreamID:     info.UpstreamID,
