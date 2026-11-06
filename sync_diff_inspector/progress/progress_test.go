@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/stretchr/testify/require"
 )
@@ -59,6 +60,10 @@ func TestProgress(t *testing.T) {
 }
 
 func TestTableError(t *testing.T) {
+	redactLog := dmlog.IsRedactLogEnabled()
+	t.Cleanup(func() { dmlog.SetRedactLog(redactLog) })
+	dmlog.SetRedactLog(false)
+
 	p := newTableProgressPrinter(4, 0)
 	p.RegisterTable("1", true, true, common.AllTableExistFlag)
 	p.StartTable("1", 50, true)
