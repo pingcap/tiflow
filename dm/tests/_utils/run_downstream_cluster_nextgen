@@ -25,57 +25,61 @@ source "$CUR/env_variables"
 WORK_DIR=$1
 
 start_minio() {
+	if [ ! -x bin/mc ]; then
+		make bin/mc || return 1
+	fi
+
 	# Next-gen cleanup preserves the shared storage processes between cases.
-	if curl -fsS -o /dev/null "http://$MINIO_ADDR/minio/health/ready"; then
+	if curl --connect-timeout 2 --max-time 2 -fsS -o /dev/null "http://$MINIO_ADDR/minio/health/ready"; then
 		echo 'Reusing MinIO (next-gen DFS backend)'
-		return
-	fi
+	else
+		echo "Starting MinIO (next-gen DFS backend)..."
+		mkdir -p "$WORK_DIR/minio/data"
 
-	echo "Starting MinIO (next-gen DFS backend)..."
-	mkdir -p "$WORK_DIR/minio/data"
-
-	# Resolve the minio binary: prefer the one shipped under bin/, fall back to
-	# whatever is on PATH, otherwise download the release binary.
-	MINIO_BIN="bin/minio"
-	if [ ! -x "$MINIO_BIN" ]; then
-		MINIO_BIN=$(command -v minio || true)
-	fi
-	if [ -z "$MINIO_BIN" ] || [ ! -x "$MINIO_BIN" ]; then
-		echo "MinIO binary not found, downloading..."
+		# Resolve the minio binary: prefer the one shipped under bin/, fall back to
+		# whatever is on PATH, otherwise download the release binary.
 		MINIO_BIN="bin/minio"
-		curl -sSL -o "$MINIO_BIN" "https://dl.min.io/server/minio/release/linux-amd64/minio"
-		chmod +x "$MINIO_BIN"
+		if [ ! -x "$MINIO_BIN" ]; then
+			MINIO_BIN=$(command -v minio || true)
+		fi
+		if [ -z "$MINIO_BIN" ] || [ ! -x "$MINIO_BIN" ]; then
+			echo "MinIO binary not found, downloading..."
+			MINIO_BIN="bin/minio"
+			curl -sSL -o "$MINIO_BIN" "https://dl.min.io/server/minio/release/linux-amd64/minio"
+			chmod +x "$MINIO_BIN"
+		fi
+
+		MINIO_ROOT_USER="$MINIO_ACCESS_KEY" MINIO_ROOT_PASSWORD="$MINIO_SECRET_KEY" \
+			"$MINIO_BIN" server "$WORK_DIR/minio/data" --address ":9000" \
+			>"$WORK_DIR/minio.log" 2>&1 &
+		minio_pid=$!
+
+		i=0
+		while true; do
+			if ! kill -0 "$minio_pid" 2>/dev/null; then
+				echo 'MinIO exited before becoming ready'
+				cat "$WORK_DIR/minio.log"
+				exit 1
+			fi
+			code=$(curl --connect-timeout 2 --max-time 2 -s -o /dev/null -w "%{http_code}" "http://$MINIO_ADDR/minio/health/ready" || echo "")
+			if [ "$code" = "200" ]; then
+				echo 'Start MinIO success'
+				break
+			fi
+			i=$((i + 1))
+			if [ "$i" -gt 20 ]; then
+				echo 'Failed to start MinIO'
+				exit 1
+			fi
+			echo 'Waiting for MinIO ready...'
+			sleep 2
+		done
 	fi
-
-	MINIO_ROOT_USER="$MINIO_ACCESS_KEY" MINIO_ROOT_PASSWORD="$MINIO_SECRET_KEY" \
-		"$MINIO_BIN" server "$WORK_DIR/minio/data" --address ":9000" \
-		>"$WORK_DIR/minio.log" 2>&1 &
-	minio_pid=$!
-
-	i=0
-	while true; do
-		if ! kill -0 "$minio_pid" 2>/dev/null; then
-			echo 'MinIO exited before becoming ready'
-			cat "$WORK_DIR/minio.log"
-			exit 1
-		fi
-		code=$(curl -s -o /dev/null -w "%{http_code}" "http://$MINIO_ADDR/minio/health/ready" || echo "")
-		if [ "$code" = "200" ]; then
-			echo 'Start MinIO success'
-			break
-		fi
-		i=$((i + 1))
-		if [ "$i" -gt 20 ]; then
-			echo 'Failed to start MinIO'
-			exit 1
-		fi
-		echo 'Waiting for MinIO ready...'
-		sleep 2
-	done
 
 	# Use the S3 API because mkdir does not create buckets in modern MinIO.
-	MC_HOST_dmit="http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@${MINIO_ADDR}" \
-		bin/mc mb --ignore-existing "dmit/$MINIO_BUCKET"
+	local mc_config_dir="$WORK_DIR/minio-mc"
+	bin/mc --config-dir "$mc_config_dir" alias set dmit "http://$MINIO_ADDR" "$MINIO_ACCESS_KEY" "$MINIO_SECRET_KEY" || return 1
+	bin/mc --config-dir "$mc_config_dir" mb --ignore-existing "dmit/$MINIO_BUCKET"
 }
 
 start_pd() {

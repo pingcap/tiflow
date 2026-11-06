@@ -20,15 +20,31 @@ S3_DIR="s3://dmbucket/dump?region=us-east-1\&endpoint=http://127.0.0.1:8688\&acc
 
 # start s3 server
 function start_s3() {
+	if [ ! -x bin/mc ]; then
+		make bin/mc || return 1
+	fi
+
 	export MINIO_ACCESS_KEY=$s3_ACCESS_KEY
 	export MINIO_SECRET_KEY=$s3_SECRET_KEY
 	export MINIO_BROWSER=on
 	export S3_ENDPOINT=$S3_ENDPOINT
-	bin/minio server --address $S3_ENDPOINT "$s3_DBPATH" &
+	if curl --connect-timeout 2 --max-time 2 -fsS -o /dev/null "http://$S3_ENDPOINT/minio/health/ready"; then
+		echo "MinIO endpoint $S3_ENDPOINT is already in use"
+		exit 1
+	fi
+	bin/minio server --address $S3_ENDPOINT "$s3_DBPATH" >"$WORK_DIR/s3.minio.log" 2>&1 &
 	s3_MINIO_PID=$!
 
 	i=0
-	while ! curl -o /dev/null -v -s "http://$S3_ENDPOINT/"; do
+	while true; do
+		if ! kill -0 "$s3_MINIO_PID" 2>/dev/null; then
+			echo 'MinIO exited before becoming ready'
+			cat "$WORK_DIR/s3.minio.log"
+			exit 1
+		fi
+		if curl --connect-timeout 2 --max-time 2 -fsS -o /dev/null "http://$S3_ENDPOINT/minio/health/ready"; then
+			break
+		fi
 		i=$(($i + 1))
 		if [ $i -gt 7 ]; then
 			echo 'Failed to start minio'
@@ -37,8 +53,9 @@ function start_s3() {
 		sleep 2
 	done
 	# Use the S3 API because mkdir does not create buckets in modern MinIO.
-	MC_HOST_dmit="http://${s3_ACCESS_KEY}:${s3_SECRET_KEY}@${S3_ENDPOINT}" \
-		bin/mc mb --ignore-existing "dmit/$s3_bucket"
+	local mc_config_dir="$WORK_DIR/s3-mc"
+	bin/mc --config-dir "$mc_config_dir" alias set dmit "http://$S3_ENDPOINT" "$s3_ACCESS_KEY" "$s3_SECRET_KEY" || return 1
+	bin/mc --config-dir "$mc_config_dir" mb --ignore-existing "dmit/$s3_bucket"
 }
 
 # clean s3 server
