@@ -118,7 +118,7 @@ func (l *locationRecorder) saveTxnEndLocation() {
 // header, heartbeat, etc.
 func shouldUpdatePos(e *replication.BinlogEvent) bool {
 	switch e.Header.EventType {
-	case replication.FORMAT_DESCRIPTION_EVENT, replication.HEARTBEAT_EVENT, replication.IGNORABLE_EVENT,
+	case replication.FORMAT_DESCRIPTION_EVENT, replication.HEARTBEAT_EVENT, replication.HEARTBEAT_LOG_EVENT_V2, replication.IGNORABLE_EVENT,
 		replication.PREVIOUS_GTIDS_EVENT, replication.MARIADB_GTID_LIST_EVENT:
 		return false
 	}

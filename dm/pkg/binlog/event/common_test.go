@@ -211,6 +211,7 @@ func TestGTIDIncrease(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, gSetOut)
 	require.Equal(t, "03fc0263-28c7-11e7-a653-6c0b84d59f30:124", gSetOut.String())
+	require.Equal(t, gSetStr, gSetIn.String())
 
 	// increase for MariaDB
 	flavor = gmysql.MariaDBFlavor
@@ -221,4 +222,22 @@ func TestGTIDIncrease(t *testing.T) {
 	require.Nil(t, err)
 	require.NotNil(t, gSetOut)
 	require.Equal(t, "1-2-4", gSetOut.String())
+	require.Equal(t, gSetStr, gSetIn.String())
+}
+
+func TestGeneratorRejectsTaggedMySQLGTIDs(t *testing.T) {
+	t.Parallel()
+	for _, str := range []string{
+		"03fc0263-28c7-11e7-a653-6c0b84d59f30:tag:123",
+		"03fc0263-28c7-11e7-a653-6c0b84d59f30:123:tag:124",
+	} {
+		set, err := gtid.ParserGTID(gmysql.MySQLFlavor, str)
+		require.NoError(t, err)
+		_, err = GenCommonGTIDEvent(gmysql.MySQLFlavor, 1, 4, set, false, 0)
+		require.Error(t, err)
+		_, err = GTIDIncrease(gmysql.MySQLFlavor, set)
+		require.Error(t, err)
+		_, err = NewGenerator(gmysql.MySQLFlavor, 1, 4, set, set, 0)
+		require.Error(t, err)
+	}
 }

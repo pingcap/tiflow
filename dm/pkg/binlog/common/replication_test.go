@@ -36,11 +36,13 @@ func TestSetDefaultReplicationCfg(t *testing.T) {
 	require.False(t, syncCfg.DisableRetrySync)
 	require.False(t, syncCfg.UseDecimal)
 	require.True(t, syncCfg.UseFloatWithTrailingZero)
+	require.Equal(t, 16*1024*1024, syncCfg.ReadAheadBufferSize)
 
 	retryCnt = 1
 	SetDefaultReplicationCfg(&syncCfg, retryCnt)
 	require.Equal(t, retryCnt, syncCfg.MaxReconnectAttempts)
 	require.True(t, syncCfg.DisableRetrySync)
+	require.Equal(t, 16*1024*1024, syncCfg.ReadAheadBufferSize)
 }
 
 // jsonbDouble encodes f as a JSONB DOUBLE scalar.

@@ -55,20 +55,41 @@ func ParserGTID(flavor, gtidStr string) (mysql.GTIDSet, error) {
 		if IsZeroMariaDBGTIDSet(gtidStr) {
 			gtid, err = mysql.ParseGTIDSet(fla, "")
 		} else {
-			gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
+			gtid, err = parseMariaDBGTIDSet(gtidStr)
 		}
 	case "":
 		fla = mysql.MySQLFlavor
 		gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
 		if err != nil {
-			fla = mysql.MariaDBFlavor
-			gtid, err = mysql.ParseGTIDSet(fla, gtidStr)
+			gtid, err = parseMariaDBGTIDSet(gtidStr)
 		}
 	default:
 		err = terror.ErrNotSupportedFlavor.Generate(flavor)
 	}
 
 	return gtid, err
+}
+
+// parseMariaDBGTIDSet also accepts checkpoints written with older go-mysql
+// versions, which retained a position for each server within a domain. Restore
+// the highest sequence in each domain, rather than whichever server happens to
+// be last in the checkpoint string. Live event updates still use GTIDSet.Update.
+func parseMariaDBGTIDSet(gtidStr string) (mysql.GTIDSet, error) {
+	set := &mysql.MariadbGTIDSet{Sets: make(map[uint32]*mysql.MariadbGTID)}
+	if gtidStr == "" {
+		return set, nil
+	}
+	for _, part := range strings.Split(gtidStr, ",") {
+		gtid, err := mysql.ParseMariadbGTID(part)
+		if err != nil {
+			return nil, err
+		}
+		if previous := set.Sets[gtid.DomainID]; previous != nil && previous.SequenceNumber > gtid.SequenceNumber {
+			continue
+		}
+		set.Sets[gtid.DomainID] = gtid
+	}
+	return set, nil
 }
 
 // ZeroGTIDSet returns an empty GTID set. The flavor must be specified.
