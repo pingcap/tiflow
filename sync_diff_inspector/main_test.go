@@ -59,7 +59,7 @@ func TestStartupDiagnostics(t *testing.T) {
 				require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
 				args = append(args, "--config", path)
 			}
-			cmd := exec.Command(os.Args[0], append([]string{"-test.run=^TestStartupDiagnostics$", "--"}, args...)...)
+			cmd := exec.CommandContext(t.Context(), os.Args[0], append([]string{"-test.run=^TestStartupDiagnostics$", "--"}, args...)...)
 			cmd.Env = append(os.Environ(), helperEnv+"=1")
 			output, err := cmd.CombinedOutput()
 			var exitErr *exec.ExitError
