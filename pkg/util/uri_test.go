@@ -145,6 +145,13 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1/%zz"))
 }
 
+func TestHasMaskedSensitiveDataInURI(t *testing.T) {
+	require.True(t, HasMaskedSensitiveDataInURI("mysql://root:xxxxx@localhost:3306"))
+	require.True(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=xxxxx&region=us-east-1"))
+	require.False(t, HasMaskedSensitiveDataInURI("s3://bucket/path?region=xxxxx"))
+	require.False(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=real-key"))
+}
+
 func TestMaskSensitiveDataInURLError(t *testing.T) {
 	rawURL := "mysql://root:verysecure@127.0.0.1/%zz"
 	_, err := url.Parse(rawURL)

@@ -99,15 +99,46 @@ func MaskSensitiveDataInURI(uri string) string {
 	}
 	queries := uriParsed.Query()
 	for key := range queries {
-		lower := strings.ToLower(key)
-		for _, secretKey := range sensitiveQueryParameterNames {
-			if strings.Contains(lower, secretKey) {
-				queries.Set(key, "xxxxx")
-			}
+		if isSensitiveQueryParameter(key) {
+			queries.Set(key, "xxxxx")
 		}
 	}
 	uriParsed.RawQuery = queries.Encode()
 	return uriParsed.Redacted()
+}
+
+func isSensitiveQueryParameter(key string) bool {
+	lower := strings.ToLower(key)
+	for _, secretKey := range sensitiveQueryParameterNames {
+		if strings.Contains(lower, secretKey) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasMaskedSensitiveDataInURI reports whether a URI still carries a masked
+// credential from a read response.
+func HasMaskedSensitiveDataInURI(uri string) bool {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	if parsed.User != nil {
+		if password, ok := parsed.User.Password(); ok && password == "xxxxx" {
+			return true
+		}
+	}
+	for key, values := range parsed.Query() {
+		if isSensitiveQueryParameter(key) {
+			for _, value := range values {
+				if value == "xxxxx" {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // MaskSensitiveDataInURIForError masks sensitive data in a URI for error messages.
