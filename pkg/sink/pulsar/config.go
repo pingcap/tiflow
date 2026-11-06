@@ -81,7 +81,7 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 	c.BrokerURL = brokerScheme + "://" + sinkURI.Host
 
 	if pulsarConfig == nil {
-		log.L().Debug("new pulsar config", zap.Any("config", c))
+		log.L().Debug("new pulsar config", zap.String("broker", c.BrokerURL))
 		return c, nil
 	}
 
@@ -109,7 +109,7 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		pulsarConfig.SendTimeout = c.SendTimeout
 	}
 
-	log.L().Debug("new pulsar config success", zap.Any("config", pulsarConfig))
+	log.L().Debug("new pulsar config success", zap.String("broker", pulsarConfig.BrokerURL))
 
 	return pulsarConfig, nil
 }

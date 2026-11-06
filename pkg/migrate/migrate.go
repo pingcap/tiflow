@@ -15,9 +15,7 @@ package migrate
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -231,7 +229,6 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 				err = info.Unmarshal(v.Value)
 				if err != nil {
 					log.Error("unmarshal changefeed failed",
-						zap.String("value", string(v.Value)),
 						zap.Error(err))
 					return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 				}
@@ -292,16 +289,16 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 	for _, kvPair := range resp.Kvs {
 		key := string(kvPair.Key)
 		if shouldDelete(key) {
-			value := string(kvPair.Value)
-			if strings.HasPrefix(key, oldChangefeedPrefix) {
-				value = maskChangefeedInfo(kvPair.Value)
-			}
 			// 0 is the backup version. For now, we only support version 0
 			newKey := etcd.MigrateBackupKey(0, key)
-			log.Info("renaming old etcd data",
+			fields := []zap.Field{
 				zap.String("key", key),
 				zap.String("newKey", newKey),
-				zap.String("value", value))
+			}
+			if !strings.HasPrefix(key, oldChangefeedPrefix) {
+				fields = append(fields, zap.String("value", string(kvPair.Value)))
+			}
+			log.Info("renaming old etcd data", fields...)
 			if _, err := client.Put(ctx, newKey,
 				string(kvPair.Value)); err != nil {
 				log.Info("put new key failed", zap.String("key", key),
@@ -336,37 +333,6 @@ func shouldDelete(key string) bool {
 		}
 	}
 	return false
-}
-
-func maskChangefeedInfo(data []byte) string {
-	value := string(data)
-	oldConfig := map[string]any{}
-	err := json.Unmarshal(data, &oldConfig)
-	if err != nil {
-		log.Info("marshal oldConfig failed",
-			zap.Error(err))
-	}
-	sinkURI, ok := oldConfig["sink-uri"]
-	if ok {
-		sinkURIParsed, err := url.Parse(sinkURI.(string))
-		if err != nil {
-			log.Error("failed to parse sink URI", zap.Error(err))
-		}
-		if sinkURIParsed.User != nil && sinkURIParsed.User.String() != "" {
-			sinkURIParsed.User = url.UserPassword("username", "password")
-		}
-		if sinkURIParsed.Host != "" {
-			sinkURIParsed.Host = "***"
-		}
-		oldConfig["sink-uri"] = sinkURIParsed.String()
-		buf, err := json.Marshal(oldConfig)
-		if err != nil {
-			log.Info("marshal oldConfig failed",
-				zap.Error(err))
-		}
-		value = string(buf)
-	}
-	return value
 }
 
 func (m *migrator) migrateGcServiceSafePoint(ctx context.Context,

@@ -220,7 +220,6 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				log.Info("Stale Etcd event dropped",
 					zap.Int64("eventRevision", response.Header.GetRevision()),
 					zap.Int64("previousRevision", worker.revision),
-					zap.Any("events", response.Events),
 					zap.String("role", role))
 				continue
 			}

@@ -337,7 +337,7 @@ func createPlaceholderFile(ctx context.Context, storage storeapi.Storage) error 
 // PreCheckConfig does a preflight check on the executor's storage configurations.
 func PreCheckConfig(config *resModel.Config) error {
 	// TODO: use customized retry policy.
-	log.Debug("pre-checking s3Storage config", zap.Any("config", config))
+	log.Debug("pre-checking s3Storage config")
 	creator := NewCreator(config)
 	_, err := creator.newBucketForScope(context.Background(), internal.ResourceScope{})
 	if err != nil {

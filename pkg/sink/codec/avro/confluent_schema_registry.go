@@ -34,6 +34,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/httputil"
 	"github.com/pingcap/tiflow/pkg/security"
 	"github.com/pingcap/tiflow/pkg/sink/codec/common"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -84,8 +85,9 @@ func NewConfluentSchemaManager(
 	}
 	resp, err := httpCli.Get(ctx, registryURL)
 	if err != nil {
-		log.Error("Test connection to Schema Registry failed", zap.Error(err))
-		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		maskedErr := util.MaskSensitiveDataInURLError(err)
+		log.Error("Test connection to Schema Registry failed", zap.Error(maskedErr))
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, maskedErr)
 	}
 	defer resp.Body.Close()
 
@@ -104,7 +106,7 @@ func NewConfluentSchemaManager(
 
 	log.Info(
 		"Successfully tested connectivity to Schema Registry",
-		zap.String("registryURL", registryURL),
+		zap.String("registryURL", util.MaskSensitiveDataInURIForError(registryURL)),
 	)
 
 	return &confluentSchemaManager{
@@ -139,12 +141,13 @@ func (m *confluentSchemaManager) Register(
 		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
 	}
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaName) + "/versions"
-	log.Info("Registering schema", zap.String("uri", uri), zap.ByteString("payload", payload))
+	log.Info("Registering schema", zap.String("uri", util.MaskSensitiveDataInURIForError(uri)), zap.ByteString("payload", payload))
 
 	req, err := http.NewRequestWithContext(ctx, "POST", uri, bytes.NewReader(payload))
 	if err != nil {
-		log.Error("Failed to NewRequestWithContext", zap.Error(err))
-		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		maskedErr := util.MaskSensitiveDataInURLError(err)
+		log.Error("Failed to NewRequestWithContext", zap.Error(maskedErr))
+		return id, cerror.WrapError(cerror.ErrAvroSchemaAPIError, maskedErr)
 	}
 	req.Header.Add(
 		"Accept",
@@ -171,7 +174,7 @@ func (m *confluentSchemaManager) Register(
 		log.Error(
 			"Failed to register schema to the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode),
-			zap.String("uri", uri),
+			zap.String("uri", util.MaskSensitiveDataInURIForError(uri)),
 			zap.ByteString("requestBody", payload),
 			zap.ByteString("responseBody", body),
 		)
@@ -194,7 +197,7 @@ func (m *confluentSchemaManager) Register(
 
 	log.Info("Registered schema successfully",
 		zap.Int("schemaID", jsonResp.SchemaID),
-		zap.String("uri", uri),
+		zap.String("uri", util.MaskSensitiveDataInURIForError(uri)),
 		zap.ByteString("body", body))
 
 	id.confluentSchemaID = jsonResp.SchemaID
@@ -219,8 +222,9 @@ func (m *confluentSchemaManager) Lookup(
 
 	req, err := http.NewRequestWithContext(ctx, "GET", uri, nil)
 	if err != nil {
-		log.Error("Error constructing request for Registry lookup", zap.Error(err))
-		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		maskedErr := util.MaskSensitiveDataInURLError(err)
+		log.Error("Error constructing request for Registry lookup", zap.Error(maskedErr))
+		return nil, cerror.WrapError(cerror.ErrAvroSchemaAPIError, maskedErr)
 	}
 	req.Header.Add(
 		"Accept",
@@ -243,7 +247,7 @@ func (m *confluentSchemaManager) Lookup(
 	if resp.StatusCode != 200 && resp.StatusCode != 404 {
 		log.Error("Failed to query schema from the Registry, HTTP error",
 			zap.Int("status", resp.StatusCode),
-			zap.String("uri", uri),
+			zap.String("uri", util.MaskSensitiveDataInURIForError(uri)),
 			zap.ByteString("responseBody", body))
 		return nil, cerror.ErrAvroSchemaAPIError.GenWithStack(
 			"Failed to query schema from the Registry, HTTP error",
@@ -356,8 +360,9 @@ func (m *confluentSchemaManager) ClearRegistry(ctx context.Context, schemaSubjec
 	uri := m.registryURL + "/subjects/" + url.QueryEscape(schemaSubject)
 	req, err := http.NewRequestWithContext(ctx, "DELETE", uri, nil)
 	if err != nil {
-		log.Error("Could not construct request for clearRegistry", zap.Error(err))
-		return cerror.WrapError(cerror.ErrAvroSchemaAPIError, err)
+		maskedErr := util.MaskSensitiveDataInURLError(err)
+		log.Error("Could not construct request for clearRegistry", zap.Error(maskedErr))
+		return cerror.WrapError(cerror.ErrAvroSchemaAPIError, maskedErr)
 	}
 	req.Header.Add(
 		"Accept",
@@ -440,7 +445,7 @@ func httpRetry(
 		}
 		resp, err = httpCli.Do(r)
 		if err != nil {
-			log.Warn("HTTP request failed", zap.String("msg", err.Error()))
+			log.Warn("HTTP request failed", zap.Error(util.MaskSensitiveDataInURLError(err)))
 			goto checkCtx
 		}
 

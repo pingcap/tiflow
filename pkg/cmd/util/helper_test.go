@@ -29,6 +29,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestProxyFieldsHideCredentials(t *testing.T) {
+	t.Setenv("HTTP_PROXY", "")
+	t.Setenv("HTTPS_PROXY", "")
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+	t.Setenv("http_proxy", "http://user:proxy-password@localhost:8080?token=proxy-token")
+	t.Setenv("https_proxy", "https://user:tls-password@localhost:8443")
+
+	fields := findProxyFields()
+	require.Len(t, fields, 2)
+	for _, field := range fields {
+		require.NotContains(t, field.String, "proxy-password")
+		require.NotContains(t, field.String, "tls-password")
+		require.NotContains(t, field.String, "proxy-token")
+	}
+}
+
 func TestProxyFields(t *testing.T) {
 	revIndex := map[string]int{
 		"http_proxy":  0,

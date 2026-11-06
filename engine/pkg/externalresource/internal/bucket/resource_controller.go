@@ -36,7 +36,7 @@ type resourceController struct {
 
 // NewResourceController creates a new bucket resourceController.
 func NewResourceController(config *resModel.Config) *resourceController {
-	log.Debug("create bucket resource controller", zap.Any("config", config))
+	log.Debug("create bucket resource controller")
 	fm := NewFileManagerWithConfig(defaultControllerID, config)
 	return &resourceController{fm: fm}
 }

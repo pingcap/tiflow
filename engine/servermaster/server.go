@@ -147,7 +147,7 @@ func newServerMasterMetric() *serverMasterMetric {
 
 // NewServer creates a new master-server.
 func NewServer(cfg *Config) (*Server, error) {
-	log.Info("creating server master", zap.Stringer("config", cfg))
+	log.Info("creating server master", zap.String("name", cfg.Name))
 
 	id := generateNodeID(cfg.Name)
 	msgService := p2p.NewMessageRPCServiceWithRPCServer(id, nil, nil)
@@ -404,7 +404,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	var err error
 	s.frameworkClientConn, err = meta.NewClientConn(cfg.FrameworkMeta)
 	if err != nil {
-		log.Error("connect to framework metastore fail", zap.Any("config", cfg.FrameworkMeta), zap.Error(err))
+		log.Error("connect to framework metastore fail", zap.String("store-id", cfg.FrameworkMeta.StoreID), zap.Error(err))
 		return err
 	}
 	// some components depend on this framework meta client
@@ -413,7 +413,7 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 		log.Error("create framework meta client fail", zap.Error(err))
 		return err
 	}
-	log.Info("register framework metastore successfully", zap.Any("config", cfg.FrameworkMeta))
+	log.Info("register framework metastore successfully", zap.String("store-id", cfg.FrameworkMeta.StoreID))
 
 	// register metastore for business
 	err = s.metaStoreManager.Register(cfg.BusinessMeta.StoreID, cfg.BusinessMeta)
@@ -434,10 +434,10 @@ func (s *Server) registerMetaStore(ctx context.Context) error {
 	}
 	s.businessClientConn, err = meta.NewClientConn(cfg.BusinessMeta)
 	if err != nil {
-		log.Error("connect to business metastore fail", zap.Any("config", cfg.BusinessMeta), zap.Error(err))
+		log.Error("connect to business metastore fail", zap.String("store-id", cfg.BusinessMeta.StoreID), zap.Error(err))
 		return err
 	}
-	log.Info("register business metastore successfully", zap.Any("config", cfg.BusinessMeta))
+	log.Info("register business metastore successfully", zap.String("store-id", cfg.BusinessMeta.StoreID))
 
 	return nil
 }

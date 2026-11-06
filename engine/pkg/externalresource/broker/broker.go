@@ -101,9 +101,7 @@ func NewBrokerWithConfig(
 	executorID resModel.ExecutorID,
 	client client.ResourceManagerClient,
 ) (*DefaultBroker, error) {
-	log.Info("Create new resource broker",
-		zap.String("executor-id", string(executorID)),
-		zap.Any("config", config))
+	log.Info("Create new resource broker", zap.String("executor-id", string(executorID)))
 
 	broker := &DefaultBroker{
 		executorID:     executorID,

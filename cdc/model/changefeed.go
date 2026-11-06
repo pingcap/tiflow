@@ -504,11 +504,10 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	query := uri.Query()
 	protocolStr := query.Get(config.ProtocolKey)
 	if protocolStr != "" || info.Config.Sink.Protocol != nil {
-		maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
+		maskedSinkURI := util.MaskSensitiveDataInURIForError(info.SinkURI)
 		log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
 			zap.String("sinkURI", maskedSinkURI),
-			zap.String("protocol", protocolStr),
-			zap.Any("sinkConfig", info.Config.Sink))
+			zap.String("protocol", protocolStr))
 		// always set protocol of mysql sink to ""
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)
@@ -556,7 +555,7 @@ func (info *ChangeFeedInfo) fixMQSinkProtocol() {
 
 func (info *ChangeFeedInfo) updateSinkURIAndConfigProtocol(uri *url.URL, newProtocol string, newQuery url.Values) {
 	newRawQuery := newQuery.Encode()
-	maskedURI, _ := util.MaskSinkURI(uri.String())
+	maskedURI := util.MaskSensitiveDataInURIForError(uri.String())
 	log.Info("handle incompatible protocol from sink URI",
 		zap.String("oldURI", maskedURI),
 		zap.String("newProtocol", newProtocol))

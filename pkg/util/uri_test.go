@@ -140,6 +140,9 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 	require.Equal(t, "", MaskSensitiveDataInURIForError(""))
 	require.Equal(t, "abc", MaskSensitiveDataInURIForError("abc"))
 	require.Equal(t,
+		"s3://bucket/dump?access_key=xxxxx&region=us-east-1&secret_access_key=xxxxx",
+		MaskSensitiveDataInURIForError("s3://bucket/dump?region=us-east-1&access_key=my-key&secret_access_key=my-secret"))
+	require.Equal(t,
 		"mysql://root:xxxxx@127.0.0.1:3306/?sasl-password=xxxxx",
 		MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1:3306/?sasl-password=rawsecret"))
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1/%zz"))

@@ -47,7 +47,7 @@ func NewMetaStoreManager() MetaStoreManager {
 // Register implements MetaStoreManager.Register
 func (m *metaStoreManagerImpl) Register(id string, store *metaModel.StoreConfig) error {
 	if _, exists := m.id2Store.LoadOrStore(id, store); exists {
-		log.Error("register metastore fail", zap.Any("config", store), zap.String("err", "Duplicate storeID"))
+		log.Error("register metastore fail", zap.String("store-id", id), zap.String("err", "Duplicate storeID"))
 		return errors.ErrMetaStoreIDDuplicate.GenWithStackByArgs()
 	}
 	return nil
