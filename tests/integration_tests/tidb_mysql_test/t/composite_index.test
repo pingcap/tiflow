@@ -1,8 +1,3 @@
-# This case checks literal duplicate-key values in errors, independently of the server default.
---disable_query_log
-SET SESSION tidb_redact_log = 'OFF';
---enable_query_log
-
 DROP TABLE IF EXISTS t;
 
 # create table
