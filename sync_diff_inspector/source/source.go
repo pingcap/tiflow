@@ -28,6 +28,11 @@ import (
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/tiflow/dm/pkg/conn"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
+>>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -292,7 +297,7 @@ func initDBConn(_ context.Context, cfg *config.Config) error {
 		cfg.SplitThreadCount+2*cfg.CheckThreadCount,
 	)
 	if err != nil {
-		log.Error("failed to configure session", zap.String("data-source", cfg.Task.Target), zap.Error(err))
+		log.Error("failed to configure session", zap.String("data-source", cfg.Task.Target), dmlog.ZapRedact(zap.Error(err)))
 		return errors.Trace(err)
 	}
 
@@ -311,7 +316,7 @@ func initDBConn(_ context.Context, cfg *config.Config) error {
 			cfg.SplitThreadCount+2*cfg.CheckThreadCount,
 		)
 		if err != nil {
-			log.Error("failed to configure session", zap.String("data-source", cfg.Task.Source[sourceIdx]), zap.Error(err))
+			log.Error("failed to configure session", zap.String("data-source", cfg.Task.Source[sourceIdx]), dmlog.ZapRedact(zap.Error(err)))
 			return errors.Trace(err)
 		}
 		source.Conn = conn

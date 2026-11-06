@@ -23,6 +23,11 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+<<<<<<< HEAD
+=======
+	"github.com/pingcap/errors"
+	"github.com/pingcap/tidb/pkg/meta/model"
+>>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 	"github.com/pingcap/tidb/pkg/parser"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
@@ -1110,3 +1115,133 @@ func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
 		mock.ExpectQuery("SELECT COUNT\\(DISTINCT *").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
 	}
 }
+<<<<<<< HEAD
+=======
+
+func createAnalyzedBucketTable(t *testing.T) (*sql.DB, *model.TableInfo) {
+	t.Helper()
+
+	ctx := context.Background()
+	store, dom := testkit.CreateMockStoreAndDomain(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("CREATE DATABASE bucket_test")
+	tk.MustExec("USE bucket_test")
+	tk.MustExec("CREATE TABLE test (a INT, b VARCHAR(10), PRIMARY KEY (a, b))")
+	tk.MustExec(buildBucketInsertSQL("test", 320))
+	tk.MustExec("ANALYZE TABLE test WITH 5 BUCKETS, 0 TOPN")
+
+	tbl, err := dom.InfoSchema().TableByName(
+		ctx,
+		ast.NewCIStr("bucket_test"),
+		ast.NewCIStr("test"),
+	)
+	require.NoError(t, err)
+
+	db := testkit.CreateMockDB(tk)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+	return db, tbl.Meta()
+}
+
+func requireBucketChunksCoverTable(
+	t *testing.T,
+	ctx context.Context,
+	db *sql.DB,
+	iter *BucketIterator,
+	expectedRows int,
+) int {
+	t.Helper()
+
+	seen := make(map[int]struct{}, expectedRows)
+	chunkCount := 0
+	for {
+		chunkRange, err := iter.Next()
+		require.NoError(t, err)
+		if chunkRange == nil {
+			break
+		}
+		chunkCount++
+
+		where, args := chunkRange.ToString("")
+		rows, err := db.QueryContext(ctx, "SELECT a FROM bucket_test.test WHERE "+where, args...)
+		require.NoError(t, err)
+		for rows.Next() {
+			var value int
+			require.NoError(t, rows.Scan(&value))
+			_, exists := seen[value]
+			require.False(t, exists, "row %d is covered by multiple chunks", value)
+			seen[value] = struct{}{}
+		}
+		require.NoError(t, rows.Err())
+		require.NoError(t, rows.Close())
+	}
+
+	require.Positive(t, chunkCount)
+	require.Len(t, seen, expectedRows)
+	return chunkCount
+}
+
+func buildBucketInsertSQL(table string, rowCount int) string {
+	values := make([]string, 0, rowCount)
+	for i := range rowCount {
+		values = append(values, fmt.Sprintf("(%d, '%d')", i, i%60))
+	}
+	return fmt.Sprintf("INSERT INTO %s VALUES %s", table, strings.Join(values, ","))
+}
+
+func buildHintInsertSQL(table string, rowCount int) string {
+	values := make([]string, 0, rowCount)
+	for i := range rowCount {
+		values = append(values, fmt.Sprintf("(%d, %d, %d)", i, i%5, i))
+	}
+	return fmt.Sprintf("INSERT INTO %s VALUES %s", table, strings.Join(values, ","))
+}
+
+func TestGetRowCount(t *testing.T) {
+	for _, tc := range []struct {
+		name, where string
+		args        []driver.Value
+	}{
+		{name: "all rows"},
+		{name: "configured range", where: "`id` > 'range-value'"},
+		{name: "checkpoint bound", where: "`id` > ?", args: []driver.Value{"bound-value"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+			require.NoError(t, err)
+			defer db.Close()
+			query := "SELECT COUNT(1) cnt FROM `test`.`test`"
+			if tc.where != "" {
+				query += " WHERE " + tc.where
+			}
+			mock.ExpectQuery(query).WithArgs(tc.args...).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(17))
+			args := make([]any, len(tc.args))
+			for i, arg := range tc.args {
+				args[i] = arg
+			}
+			count, err := getRowCount(context.Background(), db, "test", "test", tc.where, args)
+			require.NoError(t, err)
+			require.Equal(t, int64(17), count)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestGetRowCountErrors(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	queryErr := errors.New("query failed")
+	mock.ExpectQuery("SELECT COUNT").WillReturnError(queryErr)
+	count, err := getRowCount(context.Background(), db, "test", "test", "", nil)
+	require.Zero(t, count)
+	require.Equal(t, queryErr, errors.Cause(err))
+
+	mock.ExpectQuery("SELECT COUNT").WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(nil))
+	count, err = getRowCount(context.Background(), db, "test", "test", "", nil)
+	require.Zero(t, count)
+	require.EqualError(t, err, "table `test`.`test` not found")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+>>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))

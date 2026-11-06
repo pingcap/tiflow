@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -184,6 +185,23 @@ func (lmt *LimitIterator) Next() (*chunk.Range, error) {
 		if !ok && c == nil {
 			return nil, nil
 		}
+<<<<<<< HEAD
+=======
+		if c != nil {
+			failpoint.Inject("print-chunk-info", func() {
+				lowerBounds := make([]string, len(c.Bounds))
+				upperBounds := make([]string, len(c.Bounds))
+				for i, bound := range c.Bounds {
+					lowerBounds[i] = bound.Lower
+					upperBounds[i] = bound.Upper
+				}
+				log.Info("failpoint print-chunk-info injected (limit splitter)",
+					dmlog.ZapRedact(zap.Strings("lowerBounds", lowerBounds)),
+					dmlog.ZapRedact(zap.Strings("upperBounds", upperBounds)),
+					zap.String("indexCode", c.Index.ToString()))
+			})
+		}
+>>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 		return c, nil
 	}
 }
