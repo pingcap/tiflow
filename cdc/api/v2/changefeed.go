@@ -182,7 +182,7 @@ func (h *OpenAPIV2) createChangefeed(c *gin.Context) {
 		zap.String("changefeed", info.String()))
 	c.JSON(http.StatusOK, toAPIModel(info,
 		info.StartTs, info.StartTs,
-		nil, true))
+		nil))
 }
 
 // hasRunningImport checks if there is running import tasks on the
@@ -513,7 +513,7 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, toAPIModel(newCfInfo,
-		cfStatus.ResolvedTs, cfStatus.CheckpointTs, nil, true))
+		cfStatus.ResolvedTs, cfStatus.CheckpointTs, nil))
 }
 
 // getChangefeed get detailed info of a changefeed
@@ -580,7 +580,7 @@ func (h *OpenAPIV2) getChangeFeed(c *gin.Context) {
 		}
 	}
 	detail := toAPIModel(cfInfo, status.ResolvedTs,
-		status.CheckpointTs, taskStatus, true)
+		status.CheckpointTs, taskStatus)
 	c.JSON(http.StatusOK, detail)
 }
 
@@ -704,7 +704,7 @@ func (h *OpenAPIV2) getChangeFeedMetaInfo(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, toAPIModel(info, status.ResolvedTs, status.CheckpointTs,
-		taskStatus, false))
+		taskStatus))
 }
 
 // resumeChangefeed handles resume changefeed request.
@@ -1064,7 +1064,6 @@ func toAPIModel(
 	resolvedTs uint64,
 	checkpointTs uint64,
 	taskStatus []model.CaptureTaskStatus,
-	maskSinkURI bool,
 ) *ChangeFeedInfo {
 	var runningError *RunningError
 
@@ -1078,25 +1077,23 @@ func toAPIModel(
 		}
 	}
 
-	sinkURI := info.SinkURI
-	var err error
-	if maskSinkURI {
-		sinkURI, err = util.MaskSinkURI(sinkURI)
-		if err != nil {
-			log.Error("failed to mask sink URI", zap.Error(err))
-		}
+	var replicaConfig *ReplicaConfig
+	if info.Config != nil {
+		maskedConfig := info.Config.Clone()
+		maskedConfig.MaskSensitiveData()
+		replicaConfig = ToAPIReplicaConfig(maskedConfig)
 	}
 
 	apiInfoModel := &ChangeFeedInfo{
 		UpstreamID:     info.UpstreamID,
 		Namespace:      info.Namespace,
 		ID:             info.ID,
-		SinkURI:        sinkURI,
+		SinkURI:        util.MaskSensitiveDataInURIForError(info.SinkURI),
 		CreateTime:     info.CreateTime,
 		StartTs:        info.StartTs,
 		TargetTs:       info.TargetTs,
 		AdminJobType:   info.AdminJobType,
-		Config:         ToAPIReplicaConfig(info.Config),
+		Config:         replicaConfig,
 		State:          info.State,
 		Error:          runningError,
 		CreatorVersion: info.CreatorVersion,
