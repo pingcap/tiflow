@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -191,6 +192,8 @@ func verifyCreateChangefeedConfig(
 func VerifyUpdateChangefeedConfig(ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	oldInfo *model.ChangeFeedInfo,
+	kvStorage tidbkv.Storage,
+	checkpointTs uint64,
 ) (*model.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
@@ -229,7 +232,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		newInfo.SinkURI = changefeedConfig.SinkURI
 	}
 
-	if sinkConfigUpdated || sinkURIUpdated {
+	if sinkConfigUpdated || sinkURIUpdated || len(changefeedConfig.FilterRules) != 0 {
 		// check sink config is compatible with sinkURI
 		newCfg := newInfo.Config.Sink
 		oldCfg := oldInfo.Config.Sink
@@ -237,7 +240,35 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		if err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
+		sinkURI, err := url.Parse(newInfo.SinkURI)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(
+				cerror.WrapError(cerror.ErrSinkURIInvalid,
+					util.MaskSensitiveDataInURLError(err), util.MaskSensitiveDataInURIForError(newInfo.SinkURI)))
+		}
+		if err := newInfo.Config.ValidateAndAdjust(sinkURI); err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
 
+		mysqlCfg := newInfo.Config.Sink.MySQLConfig
+		if mysqlCfg != nil && len(mysqlCfg.TxnOrderTables) != 0 {
+			f, err := filter.NewFilter(newInfo.Config, "")
+			if err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			// Validate the tables at the paused checkpoint, including tables that
+			// did not exist at the changefeed's start timestamp.
+			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
+			if err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			if err := f.Verify(tableInfos); err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+		}
+	}
+
+	if sinkConfigUpdated || sinkURIUpdated {
 		if err := validator.Validate(ctx,
 			model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
 			newInfo.SinkURI, newInfo.Config, nil); err != nil {

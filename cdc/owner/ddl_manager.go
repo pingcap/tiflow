@@ -309,6 +309,9 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
+			if err := m.filter.VerifyTxnOrderTable(event.TableInfo); err != nil {
+				return nil, nil, err
+			}
 			snap := m.schema.GetLastSnapshot()
 			if event.Type == timodel.ActionCreateTable ||
 				event.Type == timodel.ActionCreateTables {

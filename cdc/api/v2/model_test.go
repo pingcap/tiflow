@@ -255,3 +255,15 @@ func TestMarshalChangefeedCommonInfo(t *testing.T) {
 	require.Nil(t, err)
 	require.True(t, strings.Contains(string(cfInfoJSON), "normal"))
 }
+
+func TestTxnOrderTablesConfigRoundTrip(t *testing.T) {
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.orders", "app.ledger_*"}}
+	apiCfg := ToAPIReplicaConfig(cfg)
+	data, err := json.Marshal(apiCfg)
+	require.NoError(t, err)
+	require.Contains(t, string(data), `"txn_order_tables":["app.orders","app.ledger_*"]`)
+	var decoded ReplicaConfig
+	require.NoError(t, json.Unmarshal(data, &decoded))
+	require.Equal(t, cfg.Sink.MySQLConfig.TxnOrderTables, decoded.ToInternalReplicaConfig().Sink.MySQLConfig.TxnOrderTables)
+}

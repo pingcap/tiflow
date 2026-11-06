@@ -32,7 +32,7 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	// test startTs > targetTs
 	changefeedConfig := model.ChangefeedConfig{TargetTS: 20}
 	oldInfo.StartTs = 40
-	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo, nil, 0)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*can not update target-ts.*less than start-ts.*", err)
 	require.Nil(t, newInfo)
@@ -41,14 +41,14 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	changefeedConfig = model.ChangefeedConfig{SinkURI: "blackhole://"}
 	oldInfo.SinkURI = "blackhole://"
 	oldInfo.Config.Sink.TxnAtomicity = util.AddressOf(config.AtomicityLevel("none"))
-	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
+	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo, nil, 0)
 	require.NotNil(t, err)
 	require.Regexp(t, ".*changefeed config is the same with the old one.*", err)
 	require.Nil(t, newInfo)
 
 	// test verify success
 	changefeedConfig = model.ChangefeedConfig{MounterWorkerNum: 32}
-	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo)
+	newInfo, err = VerifyUpdateChangefeedConfig(ctx, changefeedConfig, oldInfo, nil, 0)
 	require.Nil(t, err)
 	require.NotNil(t, newInfo)
 	require.NotEqual(t, 0, newInfo.Epoch)

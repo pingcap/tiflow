@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/memory"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/require"
@@ -711,4 +712,59 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 	<-chShouldBeClosed
 	cancel()
 	wg.Wait()
+}
+
+func (suite *tableSinkWorkerSuite) TestTxnOrderTablesPreserveTransaction() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	events := []*model.PolymorphicEvent{
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(1, 2, suite.testSpan),
+		genPolymorphicEvent(3, 4, suite.testSpan),
+		genPolymorphicResolvedEvent(5),
+	}
+	w, engine := suite.createWorker(ctx, uint64(testEventSize*3), true)
+	defer w.sinkMemQuota.Close()
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"table.table"}}
+	var err error
+	w.txnOrderFilter, err = cfg.Sink.GetTxnOrderFilter(false)
+	require.NoError(suite.T(), err)
+	suite.addEventsToSortEngine(events, engine)
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, suite.testSpan)
+	task := &sinkTask{
+		span: suite.testSpan, lowerBound: genLowerBound(), getUpperBound: genUpperBoundGetter(4), tableSink: wrapper,
+		callback: func(pos sorter.Position) {
+			require.Equal(suite.T(), uint64(2), pos.CommitTs)
+		}, isCanceled: func() bool { return false },
+	}
+	require.NoError(suite.T(), w.handleTask(ctx, task))
+	require.Len(suite.T(), sink.GetEvents(), 5, "the complete transaction must survive memory pressure")
+}
+
+func (suite *tableSinkWorkerSuite) TestTxnOrderTablesRejectSplitSpan() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	w, engine := suite.createWorker(ctx, uint64(testEventSize*3), true)
+	defer w.sinkMemQuota.Close()
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"table.table"}}
+	var err error
+	w.txnOrderFilter, err = cfg.Sink.GetTxnOrderFilter(false)
+	require.NoError(suite.T(), err)
+	span := suite.testSpan
+	span.StartKey = append(append([]byte(nil), span.StartKey...), 0)
+	w.sinkMemQuota.AddTable(span)
+	engine.AddTable(span, 0)
+	engine.Add(span, genPolymorphicEvent(1, 2, span), genPolymorphicResolvedEvent(5))
+	wrapper, sink := createTableSinkWrapper(suite.testChangefeedID, span)
+	err = w.handleTask(ctx, &sinkTask{
+		span: span, lowerBound: genLowerBound(), getUpperBound: genUpperBoundGetter(4), tableSink: wrapper,
+		callback: func(sorter.Position) {}, isCanceled: func() bool { return false },
+	})
+	require.ErrorContains(suite.T(), err, "does not support split table")
+	require.Empty(suite.T(), sink.GetEvents())
 }
