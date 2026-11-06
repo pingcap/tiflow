@@ -32,10 +32,10 @@ function DM_SKIP_ERROR_CASE() {
 		"binlog skip test" \
 		"\"result\": true" 3
 
-	# Insert fails; TiDB can redact the type name when tidb_redact_log is enabled.
+	# insert fail
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status test" \
-		"Error .*: Incorrect \(int\|?\) value" 2
+		"Error .*: Incorrect int value" 2
 
 	# skip one source
 	run_dm_ctl $WORK_DIR "127.0.0.1:$MASTER_PORT" \
