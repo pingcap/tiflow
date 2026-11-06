@@ -25,11 +25,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/collate"
-<<<<<<< HEAD
-=======
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
-	"github.com/pingcap/tiflow/pkg/version"
->>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/diff"
 	"github.com/pingcap/tiflow/sync_diff_inspector/utils"

@@ -205,26 +205,14 @@ func (df *Diff) initCheckpoint() error {
 			return errors.Annotate(err, "the checkpoint load process failed")
 		}
 
-<<<<<<< HEAD
 		// this need not be synchronized, because at the moment, the is only one thread access the section
 		log.Info("load checkpoint",
 			zap.Any("chunk index", node.GetID()),
-			zap.Reflect("chunk", node),
+			dmlog.ZapRedact(zap.Reflect("chunk", node)),
 			zap.String("state", node.GetState()))
 		df.cp.InitCurrentSavedID(node)
 
 		if node != nil {
-=======
-		if node == nil {
-			log.Warn("checkpoint file exists but contains no chunk info, starting from beginning")
-		} else {
-			// this need not be synchronized, because at the moment, the is only one thread access the section
-			log.Info("load checkpoint",
-				zap.Any("chunk index", node.GetID()),
-				dmlog.ZapRedact(zap.Reflect("chunk", node)),
-				zap.String("state", node.GetState()))
-			df.cp.InitCurrentSavedID(node)
->>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 			// remove the sql file that ID bigger than node.
 			// cause we will generate these sql again.
 			err = df.removeSQLFiles(node.GetID())

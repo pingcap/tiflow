@@ -27,11 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
-<<<<<<< HEAD
-=======
-	"github.com/pingcap/tiflow/dm/pkg/conn"
 	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
->>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -62,8 +58,7 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	if err == nil {
 		return bucketIter, nil
 	}
-<<<<<<< HEAD
-	log.Info("failed to build bucket iterator, fall back to use random iterator", zap.Error(err))
+	log.Info("failed to build bucket iterator, fall back to use random iterator", dmlog.ZapRedact(zap.Error(err)))
 	// fall back to random splitter
 
 	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
@@ -72,10 +67,6 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 		return nil, errors.Trace(err)
 	}
 	return randIter, nil
-=======
-	log.Info("failed to build bucket iterator, falling back to random", dmlog.ZapRedact(zap.Error(err)))
-	return splitter.NewRandomIteratorWithCheckpoint(ctx, progressID, &originTable, a.dbConn, startRange)
->>>>>>> 8d7bf69ae7 (sync-diff-inspector: add optional sensitive log redaction (#12888))
 }
 
 // TiDBRowsIterator is used to iterate rows in TiDB
