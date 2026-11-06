@@ -48,6 +48,67 @@ func TestTestLogger(t *testing.T) {
 	require.Empty(t, buffer.Stripped())
 }
 
+<<<<<<< HEAD
+=======
+func TestRedactLog(t *testing.T) {
+	original := IsRedactLogEnabled()
+	t.Cleanup(func() { SetRedactLog(original) })
+	require.True(t, original, "log redaction should be enabled by default")
+
+	logger, buffer := makeTestLogger()
+	checkRedaction := func(want string) {
+		t.Helper()
+		require.Equal(t, want, RedactString("sensitive value"))
+		buffer.Reset()
+		logger.Info("redaction test", ZapRedactString("value", "sensitive value"))
+		require.JSONEq(t, `{"$lvl":"INFO","$msg":"redaction test","value":"`+want+`"}`, buffer.Stripped())
+	}
+
+	checkRedaction("?")
+	SetRedactLog(false)
+	require.False(t, IsRedactLogEnabled())
+	checkRedaction("sensitive value")
+	SetRedactLog(true)
+	require.True(t, IsRedactLogEnabled())
+	checkRedaction("?")
+}
+
+func TestNewRetrySampleLogger(t *testing.T) {
+	core, observed := observer.New(zap.InfoLevel)
+	base := Logger{zap.New(core).With(zap.String("base", "logger"))}
+	logger := NewRetrySampleLogger(base, zap.String("component", "retry-unit-test"))
+
+	for i := 1; i <= retryLogSampleFirst+1; i++ {
+		logger.Error("retryable operation failed", zap.Int("retryNum", i))
+	}
+	logger.Warn("retryable operation failed", zap.Int("retryNum", 3))
+	logger.Error("another retryable operation failed", zap.Int("retryNum", retryLogSampleFirst+2))
+
+	entries := observed.All()
+	require.Len(t, entries, retryLogSampleFirst+2)
+
+	require.Equal(t, "retryable operation failed", entries[0].Message)
+	require.Equal(t, zap.ErrorLevel, entries[0].Level)
+	require.Equal(t, map[string]any{
+		"base":      "logger",
+		"component": "retry-unit-test",
+		"retryNum":  int64(1),
+		"sampled":   "",
+	}, entries[0].ContextMap())
+
+	require.Equal(t, "retryable operation failed", entries[retryLogSampleFirst-1].Message)
+	require.Equal(t, zap.ErrorLevel, entries[retryLogSampleFirst-1].Level)
+	require.Equal(t, int64(retryLogSampleFirst), entries[retryLogSampleFirst-1].ContextMap()["retryNum"])
+
+	require.Equal(t, "retryable operation failed", entries[retryLogSampleFirst].Message)
+	require.Equal(t, zap.WarnLevel, entries[retryLogSampleFirst].Level)
+
+	require.Equal(t, "another retryable operation failed", entries[retryLogSampleFirst+1].Message)
+	require.Equal(t, zap.ErrorLevel, entries[retryLogSampleFirst+1].Level)
+	require.Equal(t, int64(retryLogSampleFirst+2), entries[retryLogSampleFirst+1].ContextMap()["retryNum"])
+}
+
+>>>>>>> 62d77a3452 (worker(dm): enable log redaction by default (#12940))
 // makeTestLogger creates a Logger instance which produces JSON logs.
 func makeTestLogger() (Logger, *zaptest.Buffer) {
 	buffer := new(zaptest.Buffer)
