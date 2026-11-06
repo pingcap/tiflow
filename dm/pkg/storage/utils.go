@@ -15,15 +15,18 @@ package storage
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 
 	gstorage "cloud.google.com/go/storage"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/pingcap/errors"
+	"github.com/aws/smithy-go"
+	perrors "github.com/pingcap/errors"
 	bstorage "github.com/pingcap/tidb/br/pkg/storage"
 )
 
@@ -37,7 +40,7 @@ func AdjustPath(rawURL string, uniqueID string) (string, error) {
 	}
 	u, err := bstorage.ParseRawURL(rawURL)
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", perrors.Trace(err)
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
@@ -65,7 +68,7 @@ func TrimPath(rawURL string, uniqueID string) (string, error) {
 	}
 	u, err := bstorage.ParseRawURL(rawURL)
 	if err != nil {
-		return "", errors.Trace(err)
+		return "", perrors.Trace(err)
 	}
 	// not url format, we don't use url library to avoid being escaped or unescaped
 	if u.Scheme == "" {
@@ -142,7 +145,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 
 	err = storage.WalkDir(ctx, &bstorage.WalkOption{}, func(filePath string, size int64) error {
 		err2 := storage.DeleteFile(ctx, filePath)
-		if errors.Cause(err2) == gstorage.ErrObjectNotExist {
+		if perrors.Cause(err2) == gstorage.ErrObjectNotExist {
 			// ignore not exist error when we delete files
 			return nil
 		}
@@ -150,7 +153,7 @@ func RemoveAll(ctx context.Context, dir string, storage bstorage.ExternalStorage
 	})
 	if err == nil {
 		err = storage.DeleteFile(ctx, "")
-		if errors.Cause(err) == gstorage.ErrObjectNotExist {
+		if perrors.Cause(err) == gstorage.ErrObjectNotExist {
 			// ignore not exist error when we delete files
 			return nil
 		}
@@ -184,13 +187,32 @@ func IsNotExistError(err error) bool {
 	if err == nil {
 		return false
 	}
-	err = errors.Cause(err)
+	err = perrors.Cause(err)
 	if os.IsNotExist(err) {
 		return true
 	}
 	if aerr, ok := err.(awserr.Error); ok {
 		switch aerr.Code() {
 		case s3.ErrCodeNoSuchBucket, s3.ErrCodeNoSuchKey, "NotFound":
+			return true
+		}
+	}
+	var noSuchBucket *types.NoSuchBucket
+	if errors.As(err, &noSuchBucket) {
+		return true
+	}
+	var noSuchKey *types.NoSuchKey
+	if errors.As(err, &noSuchKey) {
+		return true
+	}
+	var notFound *types.NotFound
+	if errors.As(err, &notFound) {
+		return true
+	}
+	var apiErr smithy.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.ErrorCode() {
+		case "NoSuchBucket", "NoSuchKey", "NotFound":
 			return true
 		}
 	}
