@@ -232,6 +232,82 @@ func TestLogToFile(t *testing.T) {
 	require.Contains(t, newLog(), `"message":"Welcome to DM"`)
 }
 
+func TestZapRedact(t *testing.T) {
+	original := IsRedactLogEnabled()
+	t.Cleanup(func() { SetRedactLog(original) })
+
+	fields := []zap.Field{
+		zap.String("string", "private-string"),
+		zap.Int("number", 42),
+		zap.Reflect("reflect", map[string]string{"value": "private-reflect"}),
+		zap.Strings("strings", []string{"private-first", "private-second"}),
+		zap.Error(errors.Annotate(errors.New("private-error"), "query failed")),
+		zap.Skip(),
+		zap.Error(nil),
+	}
+	for _, enabled := range []bool{false, true} {
+		SetRedactLog(enabled)
+		redacted := make([]zap.Field, 0, len(fields))
+		for _, field := range fields {
+			actual := ZapRedact(field)
+			if !enabled || field.Type == zapcore.SkipType {
+				require.Equal(t, field, actual)
+			}
+			redacted = append(redacted, actual)
+		}
+
+		logger, buffer := makeTestLogger()
+		logger.Warn("query failed", redacted...)
+		if enabled {
+			require.Equal(t, `{"$lvl":"WARN","$msg":"query failed","string":"?","number":"?","reflect":"?","strings":"?","error":"?"}`, buffer.Stripped())
+		} else {
+			actual := buffer.Stripped()
+			buffer.Reset()
+			logger.Warn("query failed", fields...)
+			require.Equal(t, buffer.Stripped(), actual)
+			require.Contains(t, actual, "private-error")
+			require.Contains(t, actual, "errorVerbose")
+		}
+	}
+}
+
+type testRedactValue struct {
+	calls int
+}
+
+func (v *testRedactValue) String() string {
+	v.calls++
+	return "private-value"
+}
+
+func (v *testRedactValue) Error() string {
+	return v.String()
+}
+
+func TestZapRedactDefersFormatting(t *testing.T) {
+	original := IsRedactLogEnabled()
+	t.Cleanup(func() { SetRedactLog(original) })
+
+	for _, enabled := range []bool{false, true} {
+		SetRedactLog(enabled)
+		value := &testRedactValue{}
+		fields := []zap.Field{
+			ZapRedact(zap.Stringer("stringer", value)),
+			ZapRedact(zap.Error(value)),
+		}
+		require.Zero(t, value.calls)
+		logger, buffer := makeTestLogger()
+		logger.Info("formatting", fields...)
+		if enabled {
+			require.Zero(t, value.calls)
+			require.NotContains(t, buffer.Stripped(), "private-value")
+		} else {
+			require.Equal(t, 2, value.calls)
+			require.Contains(t, buffer.Stripped(), "private-value")
+		}
+	}
+}
+
 func BenchmarkBaseline(b *testing.B) {
 	logger := L().With(zap.String("key1", "value1"))
 	for i := 0; i < b.N; i++ {

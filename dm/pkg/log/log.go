@@ -252,6 +252,17 @@ func RedactString(arg string) string {
 	return arg
 }
 
+// ZapRedact omits a field's value when log redaction is enabled. It preserves
+// skipped fields, including zap.Error(nil), and the original field when disabled.
+// Use it for value fields; structural fields such as zap.Namespace must not be
+// redacted with this helper.
+func ZapRedact(field zap.Field) zap.Field {
+	if !IsRedactLogEnabled() || field.Type == zapcore.SkipType {
+		return field
+	}
+	return zap.String(field.Key, "?")
+}
+
 // ZapRedactString receives string argument and return omitted information in zap.Field if redact log enabled.
 func ZapRedactString(key, arg string) zap.Field {
 	return zap.String(key, RedactString(arg))

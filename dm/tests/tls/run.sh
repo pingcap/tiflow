@@ -46,6 +46,8 @@ EOF
 
 	echo "show databases without TLS"
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 -E -e "SHOW DATABASES;"
+	# Tests assert SQL error messages and values, so disable redaction explicitly.
+	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -e "SET GLOBAL tidb_redact_log = 'OFF'"
 	echo "drop database tls with TLS"
 	# if execute failed, print tidb's log for debug
 	mysql -uroot -h127.0.0.1 -P4400 --default-character-set utf8 --ssl-ca $cur/conf/ca.pem --ssl-cert $cur/conf/dm.pem --ssl-key $cur/conf/dm.key -E -e "drop database if exists tls" || (cat $WORK_DIR/tidb.log && exit 1)

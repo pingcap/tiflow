@@ -35,6 +35,7 @@ import (
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pb"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/pkg/column-mapping"
 	"go.uber.org/zap"
@@ -139,7 +140,7 @@ func getDMTaskCfgWithSecurity(dmAddr, task string, security *Security) ([]*SubTa
 		subTaskCfgs = append(subTaskCfgs, subtaskCfg)
 	}
 
-	log.Info("dm sub task configs", zap.Reflect("cfgs", subTaskCfgs))
+	log.Info("dm sub task configs", dmlog.ZapRedact(zap.Reflect("cfgs", subTaskCfgs)))
 	return subTaskCfgs, nil
 }
 
