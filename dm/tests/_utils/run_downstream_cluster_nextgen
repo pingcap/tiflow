@@ -73,7 +73,7 @@ start_minio() {
 		sleep 2
 	done
 
-	# Create the bucket through S3; modern MinIO does not expose buckets as directories.
+	# Use the S3 API because mkdir does not create buckets in modern MinIO.
 	MC_HOST_dmit="http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@${MINIO_ADDR}" \
 		bin/mc mb --ignore-existing "dmit/$MINIO_BUCKET"
 }

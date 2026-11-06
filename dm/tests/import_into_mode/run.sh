@@ -36,7 +36,7 @@ function start_s3() {
 		fi
 		sleep 2
 	done
-	# Use S3 to create the bucket for both legacy and modern MinIO storage layouts.
+	# Use the S3 API because mkdir does not create buckets in modern MinIO.
 	MC_HOST_dmit="http://${s3_ACCESS_KEY}:${s3_SECRET_KEY}@${S3_ENDPOINT}" \
 		bin/mc mb --ignore-existing "dmit/$s3_bucket"
 }
