@@ -790,6 +790,19 @@ func (df *Diff) compareRows(ctx context.Context, rangeInfo *splitter.RangeInfo, 
 	return equal, nil
 }
 
+// sqlComment formats untrusted text as SQL line comments. Every physical line
+// must be prefixed, including lines introduced by carriage returns in row values.
+func sqlComment(text string) string {
+	text = strings.ReplaceAll(text, "\r", "\n")
+	return "-- " + strings.ReplaceAll(text, "\n", "\n-- ") + "\n"
+}
+
+// fileNameEscaper escapes "/" and "\" so database identifiers cannot introduce
+// directory components. Combined with the fixed chunk suffix, the generated
+// filename is a single path component and cannot be "." or "..".
+// It also escapes "%" to avoid collisions with literal escape sequences.
+var fileNameEscaper = strings.NewReplacer("%", "%25", "/", "%2F", "\\", "%5C")
+
 // WriteSQLs write sqls to file
 func (df *Diff) writeSQLs(ctx context.Context) {
 	log.Info("start writeSQLs goroutine")
@@ -808,7 +821,8 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 			}
 			if len(dml.sqls) > 0 {
 				tableDiff := df.downstream.GetTables()[dml.node.GetTableIndex()]
-				fileName := fmt.Sprintf("%s:%s:%s.sql", tableDiff.Schema, tableDiff.Table, utils.GetSQLFileName(dml.node.GetID()))
+				fileName := fmt.Sprintf("%s:%s:%s.sql", fileNameEscaper.Replace(tableDiff.Schema),
+					fileNameEscaper.Replace(tableDiff.Table), utils.GetSQLFileName(dml.node.GetID()))
 				fixSQLPath := filepath.Join(df.FixSQLDir, fileName)
 				if fileExists(fixSQLPath) {
 					// unreachable
@@ -820,7 +834,8 @@ func (df *Diff) writeSQLs(ctx context.Context) {
 				}
 				// write chunk meta
 				chunkRange := dml.node.ChunkRange
-				fixSQLFile.WriteString(fmt.Sprintf("-- table: %s.%s\n-- %s\n", tableDiff.Schema, tableDiff.Table, chunkRange.ToMeta()))
+				fixSQLFile.WriteString(sqlComment(fmt.Sprintf("table: %s.%s", tableDiff.Schema, tableDiff.Table)))
+				fixSQLFile.WriteString(sqlComment(chunkRange.ToMeta()))
 				if tableDiff.NeedUnifiedTimeZone {
 					fixSQLFile.WriteString(fmt.Sprintf("set @@session.time_zone = \"%s\";\n", config.UnifiedTimeZone))
 				}
