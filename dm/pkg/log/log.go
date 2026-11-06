@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
@@ -193,4 +194,44 @@ func WrapStringerField(message string, object fmt.Stringer) zap.Field {
 // WithCtx adds fields from ctx to the logger.
 func WithCtx(ctx context.Context) Logger {
 	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
+}
+
+var enabledRedactLog atomic.Bool
+
+func init() {
+	SetRedactLog(false)
+}
+
+// IsRedactLogEnabled indicates whether the log desensitization is enabled.
+func IsRedactLogEnabled() bool {
+	return enabledRedactLog.Load()
+}
+
+// SetRedactLog sets enabledRedactLog.
+func SetRedactLog(enabled bool) {
+	enabledRedactLog.Store(enabled)
+}
+
+// RedactString receives string argument and return omitted information if redact log enabled.
+func RedactString(arg string) string {
+	if IsRedactLogEnabled() {
+		return "?"
+	}
+	return arg
+}
+
+// ZapRedact omits a field's value when log redaction is enabled. It preserves
+// skipped fields, including zap.Error(nil), and the original field when disabled.
+// Use it for value fields; structural fields such as zap.Namespace must not be
+// redacted with this helper.
+func ZapRedact(field zap.Field) zap.Field {
+	if !IsRedactLogEnabled() || field.Type == zapcore.SkipType {
+		return field
+	}
+	return zap.String(field.Key, "?")
+}
+
+// ZapRedactString receives string argument and return omitted information in zap.Field if redact log enabled.
+func ZapRedactString(key, arg string) zap.Field {
+	return zap.String(key, RedactString(arg))
 }
