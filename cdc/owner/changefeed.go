@@ -950,7 +950,9 @@ func (c *changefeed) handleBarrier(ctx context.Context,
 			}
 			c.barriers.Update(syncPointBarrier, nextSyncPointTs)
 		case finishBarrier:
-			c.feedStateManager.MarkFinished()
+			if c.ddlSink.getLastWrittenCheckpointTs() >= barrierTs {
+				c.feedStateManager.MarkFinished()
+			}
 		default:
 			log.Error("Unknown barrier type", zap.Int("barrierType", int(barrierTp)))
 			return cerror.ErrUnexpected.FastGenByArgs("Unknown barrier type")

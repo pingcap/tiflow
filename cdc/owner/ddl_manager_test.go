@@ -58,6 +58,19 @@ func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *
 	return res
 }
 
+type schemaStorageWithOldTables struct {
+	entry.SchemaStorage
+	ddlTs  model.Ts
+	tables []*model.TableInfo
+}
+
+func (s *schemaStorageWithOldTables) AllTables(_ context.Context, ts model.Ts) ([]*model.TableInfo, error) {
+	if ts == s.ddlTs-1 {
+		return s.tables, nil
+	}
+	return nil, nil
+}
+
 func newFakeDDLEvent(
 	tableID int64,
 	tableName string,
@@ -94,6 +107,185 @@ func TestGetNextDDL(t *testing.T) {
 	dm.pendingDDLs[ddl2.TableInfo.TableName] = append(dm.
 		pendingDDLs[ddl2.TableInfo.TableName], ddl2)
 	require.Equal(t, ddl1, dm.getNextDDL())
+}
+
+func TestCheckpointWaitsForAllDDLEventsAtSameTs(t *testing.T) {
+	const ddlTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	sink := dm.ddlSink.(*mockDDLSink)
+	ddl1 := newFakeDDLEvent(1, "first", timodel.ActionDropColumn, ddlTs)
+	ddl2 := newFakeDDLEvent(2, "second", timodel.ActionDropColumn, ddlTs)
+	ddl1.Query = "ALTER TABLE first DROP COLUMN c"
+	ddl2.Query = "ALTER TABLE second DROP COLUMN c"
+	dm.pendingDDLs[ddl1.TableInfo.TableName] = []*model.DDLEvent{ddl1}
+	dm.pendingDDLs[ddl2.TableInfo.TableName] = []*model.DDLEvent{ddl2}
+
+	for i := 0; i < 2; i++ {
+		_, _, err := dm.tick(context.Background(), ddlTs)
+		require.NoError(t, err)
+		require.NotNil(t, dm.executingDDL)
+		require.Equal(t, ddlTs, dm.checkpointTs)
+		checkpointTs, _ := sink.getCheckpointTsAndTableNames()
+		require.Less(t, checkpointTs, ddlTs)
+
+		sink.ddlDone = true
+		_, _, err = dm.tick(context.Background(), ddlTs)
+		require.NoError(t, err)
+		require.Nil(t, dm.executingDDL)
+		checkpointTs, _ = sink.getCheckpointTsAndTableNames()
+		require.Less(t, checkpointTs, ddlTs)
+		sink.ddlDone = false
+	}
+
+	_, _, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	checkpointTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Equal(t, ddlTs, checkpointTs)
+}
+
+func TestRenameKeepsBarrierUntilCheckpointWritten(t *testing.T) {
+	const ddlTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	sink := dm.ddlSink.(*mockDDLSink)
+	sink.holdCheckpointAck = true
+	ddl := newFakeDDLEvent(1, "table10", timodel.ActionRenameTable, ddlTs)
+	ddl.Query = "RENAME TABLE test.table1 TO test.table10"
+	ddl.PreTableInfo = newFakeDDLEvent(1, "table1", timodel.ActionRenameTable, ddlTs).TableInfo
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, barrier, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	sink.ddlDone = true
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	require.Nil(t, dm.executingDDL)
+
+	// The owner has offered WM(T), but the Kafka sink has not written it yet.
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	emittedTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Equal(t, ddlTs, emittedTs)
+	require.Less(t, sink.getLastWrittenCheckpointTs(), ddlTs)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+
+	sink.mu.Lock()
+	sink.mu.writtenCheckpointTs = ddlTs
+	sink.mu.Unlock()
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Greater(t, barrier.MinTableBarrierTs, ddlTs)
+}
+
+func TestDropSchemaRetainsOldTopicsUntilCheckpointWritten(t *testing.T) {
+	const ddlTs = model.Ts(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	dm.schema = &schemaStorageWithOldTables{
+		SchemaStorage: dm.schema,
+		ddlTs:         ddlTs,
+		tables: []*model.TableInfo{
+			{TableName: model.TableName{Schema: "dropped", Table: "table1"}},
+			{TableName: model.TableName{Schema: "dropped", Table: "table2"}},
+			{TableName: model.TableName{Schema: "kept", Table: "table3"}},
+		},
+	}
+	sink := dm.ddlSink.(*mockDDLSink)
+	sink.holdCheckpointAck = true
+	ddl := newFakeDDLEvent(0, "", timodel.ActionDropSchema, ddlTs)
+	ddl.TableInfo.TableName.Schema = "dropped"
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, _, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	sink.ddlDone = true
+	_, barrier, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Len(t, sink.mu.retainedTables, 2)
+	require.ElementsMatch(t, []model.TableName{
+		{Schema: "dropped", Table: "table1"},
+		{Schema: "dropped", Table: "table2"},
+	}, []model.TableName{
+		sink.mu.retainedTables[0].TableName,
+		sink.mu.retainedTables[1].TableName,
+	})
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	sink.mu.Lock()
+	sink.mu.writtenCheckpointTs = ddlTs
+	sink.mu.Unlock()
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Greater(t, barrier.MinTableBarrierTs, ddlTs)
+}
+
+func TestCheckpointWaitsForDDLPuller(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	puller := dm.ddlPuller.(*mockDDLPuller)
+	sink := dm.ddlSink.(*mockDDLSink)
+	puller.resolvedTs = checkpointTs - 1
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Less(t, emittedTs, checkpointTs)
+
+	puller.resolvedTs = checkpointTs
+	_, _, err = dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ = sink.getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
+}
+
+type mockDDLPullerWithAheadResolvedTs struct {
+	*mockDDLPuller
+	reportedTs model.Ts
+}
+
+func (m *mockDDLPullerWithAheadResolvedTs) ResolvedTs() model.Ts {
+	return m.reportedTs
+}
+
+func TestCheckpointWaitsForActualPullerResolvedTs(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	puller := dm.ddlPuller.(*mockDDLPuller)
+	puller.resolvedTs = checkpointTs - 1
+	// A DDL at checkpointTs can enter the queue after PopFrontDDL returns nil.
+	// ResolvedTs then reports its FinishedTS ahead of the actual resolved ts.
+	dm.ddlPuller = &mockDDLPullerWithAheadResolvedTs{puller, checkpointTs}
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	require.Equal(t, checkpointTs, dm.ddlResolvedTs)
+	emittedTs, _ := dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Less(t, emittedTs, checkpointTs)
+
+	puller.resolvedTs = checkpointTs
+	_, _, err = dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ = dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
+}
+
+func TestCheckpointAdvancesBeforeFutureDDL(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = checkpointTs + 1
+	ddl := newFakeDDLEvent(1, "future", timodel.ActionDropColumn, checkpointTs+1)
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ := dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
 }
 
 func TestBarriers(t *testing.T) {
