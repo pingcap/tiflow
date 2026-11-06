@@ -1027,3 +1027,16 @@ func TestGetPrimaryKey(t *testing.T) {
 	names = event.TableInfo.GetPrimaryKeyColumnNames()
 	require.Equal(t, names, []string{"a"})
 }
+
+func TestTxnOrderTablesRejectPartitionOnStartup(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("create table test.ordered_t (id int) partition by hash(id) partitions 2")
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	// Even an ineligible partitioned table must produce an explicit error.
+	_, err = schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("ordered"), helper.GetCurrentMeta(), 1, false, f)
+	require.ErrorContains(t, err, "does not support partitioned table")
+}

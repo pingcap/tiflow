@@ -15,6 +15,8 @@ package txn
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -23,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/stretchr/testify/require"
 )
 
@@ -107,4 +110,166 @@ func TestTxnSinkNolocking(t *testing.T) {
 	time.Sleep(time.Second)
 	require.Equal(t, uint32(100), atomic.LoadUint32(&handled))
 	sink.Close()
+}
+
+// commitRecorder keeps transaction boundaries visible while simulating a blocked sink.
+type commitRecorder struct {
+	flushErr error
+	events   []*dmlsink.TxnCallbackableEvent
+	commits  chan []uint64
+	release  <-chan struct{}
+	started  chan struct{}
+	once     *sync.Once
+}
+
+func (b *commitRecorder) OnTxnEvent(e *dmlsink.TxnCallbackableEvent) bool {
+	b.events = append(b.events, e)
+	return false // Keep batching unless the worker enforces a transaction boundary.
+}
+
+func (b *commitRecorder) Flush(ctx context.Context) error {
+	if b.flushErr != nil {
+		return b.flushErr
+	}
+	if len(b.events) == 0 {
+		return nil
+	}
+	if b.started != nil {
+		b.once.Do(func() { close(b.started) })
+	}
+	if b.release != nil {
+		select {
+		case <-b.release:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	ts := make([]uint64, 0, len(b.events))
+	for _, event := range b.events {
+		ts = append(ts, event.Event.CommitTs)
+		event.Callback()
+	}
+	b.events = nil
+	b.commits <- ts
+	return nil
+}
+
+func (b *commitRecorder) MaxFlushInterval() time.Duration { return time.Hour }
+func (b *commitRecorder) Close() error                    { return nil }
+
+func orderedTestEvent(commitTs uint64, tableID int64, tableName string, rowID int) *dmlsink.TxnCallbackableEvent {
+	ti := model.BuildTableInfo("app", tableName, []*model.Column{
+		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag | model.HandleKeyFlag},
+	}, [][]int{{0}})
+	sinkState := state.TableSinkSinking
+	return &dmlsink.TxnCallbackableEvent{
+		Event: &model.SingleTableTxn{
+			PhysicalTableID: tableID, TableInfo: ti, StartTs: commitTs - 1, CommitTs: commitTs,
+			Rows: []*model.RowChangedEvent{{
+				TableInfo: ti, PhysicalTableID: tableID,
+				Columns: []*model.ColumnData{{ColumnID: ti.Columns[0].ID, Value: rowID}},
+			}},
+		},
+		Callback: func() {}, SinkState: &sinkState,
+	}
+}
+
+func TestTxnOrderTablesBacklog(t *testing.T) {
+	for _, workerCount := range []int{1, 4} {
+		t.Run(fmt.Sprintf("workers=%d", workerCount), func(t *testing.T) {
+			const count = 2101 // Exceed the 1024-entry worker cache, as in issue #12936.
+			commits := make(chan []uint64, count)
+			release, started := make(chan struct{}), make(chan struct{})
+			var once sync.Once
+			var releaseOnce sync.Once
+			unblock := func() { releaseOnce.Do(func() { close(release) }) }
+			backends := make([]backend, workerCount)
+			for i := range backends {
+				backends[i] = &commitRecorder{commits: commits, release: release, started: started, once: &once}
+			}
+			errCh := make(chan error, 1)
+			s := newSink(context.Background(), model.DefaultChangeFeedID("ordered"), backends, errCh, DefaultConflictDetectorSlots)
+			defer s.Close()
+			defer unblock() // Release a blocked Flush before closing the sink on test failure.
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.orders"}}
+			var err error
+			s.txnOrderFilter, err = cfg.Sink.GetTxnOrderFilter(false)
+			require.NoError(t, err)
+			first := orderedTestEvent(1, 1, "orders", 1)
+			require.NoError(t, s.WriteEvents(first))
+			select {
+			case <-started:
+			case <-time.After(10 * time.Second):
+				t.Fatal("sink did not start flushing")
+			}
+			for i := 2; i <= count; i++ {
+				rowID := 1
+				if i == count {
+					rowID = 2 // An independent row committed after all hot-row transactions.
+				}
+				require.NoError(t, s.WriteEvents(orderedTestEvent(uint64(i), 1, "orders", rowID)))
+			}
+			unblock()
+			for i := 1; i <= count; i++ {
+				select {
+				case commit := <-commits:
+					require.Equal(t, []uint64{uint64(i)}, commit)
+				case err := <-errCh:
+					t.Fatal(err)
+				case <-time.After(10 * time.Second):
+					t.Fatalf("missing transaction %d", i)
+				}
+			}
+		})
+	}
+}
+
+func TestTxnOrderTablesCommitBoundaries(t *testing.T) {
+	b := &commitRecorder{commits: make(chan []uint64, 4)}
+	w := newWorker(context.Background(), model.DefaultChangeFeedID("boundaries"), 0, b, 1)
+	for i, ordered := range []bool{false, false, true, false} {
+		e := newTxnEvent(orderedTestEvent(uint64(i+1), 1, "other", i))
+		if ordered {
+			e.Event.Rows = append(e.Event.Rows, e.Event.Rows[0], e.Event.Rows[0])
+		}
+		e.tableOrder = ordered
+		e.OnConflictResolved()
+		flush, err := w.onEvent(e, func() {})
+		require.NoError(t, err)
+		require.Equal(t, ordered, flush)
+		if flush {
+			require.Len(t, b.events, 1)
+			require.Len(t, b.events[0].Event.Rows, 3)
+			require.NoError(t, w.doFlush())
+		}
+	}
+	require.NoError(t, w.doFlush())
+	require.Equal(t, []uint64{1, 2}, <-b.commits)
+	require.Equal(t, []uint64{3}, <-b.commits)
+	require.Equal(t, []uint64{4}, <-b.commits)
+	// Ordered keys depend only on the table, while other tables retain row dependencies.
+	e1 := newTxnEvent(orderedTestEvent(1, 1, "orders", 1))
+	e2 := newTxnEvent(orderedTestEvent(2, 1, "orders", 2))
+	require.NotEqual(t, e1.ConflictKeys(), e2.ConflictKeys())
+	e1.tableOrder, e2.tableOrder = true, true
+	require.Equal(t, e1.ConflictKeys(), e2.ConflictKeys())
+	e2.Event.PhysicalTableID = 2
+	require.NotEqual(t, e1.ConflictKeys(), e2.ConflictKeys())
+}
+
+func TestTxnOrderTablesFlushError(t *testing.T) {
+	b := &commitRecorder{commits: make(chan []uint64, 1)}
+	w := newWorker(context.Background(), model.DefaultChangeFeedID("flush-error"), 0, b, 1)
+	first := newTxnEvent(orderedTestEvent(1, 1, "other", 1))
+	first.OnConflictResolved()
+	_, err := w.onEvent(first, func() {})
+	require.NoError(t, err)
+	b.flushErr = fmt.Errorf("flush failed")
+	ordered := newTxnEvent(orderedTestEvent(2, 2, "orders", 1))
+	ordered.tableOrder = true
+	_, err = w.onEvent(ordered, func() { t.Error("failed transaction was acknowledged") })
+	require.ErrorIs(t, err, b.flushErr)
+	require.Len(t, b.events, 1)
+	require.Same(t, first.TxnCallbackableEvent, b.events[0])
 }

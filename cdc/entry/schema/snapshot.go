@@ -179,6 +179,9 @@ func NewSnapshotFromMeta(
 
 		for _, tableInfo := range tableInfos {
 			tableInfo := model.WrapTableInfo(dbinfo.ID, dbinfo.Name.O, currentTs, tableInfo)
+			if err := filter.VerifyTxnOrderTable(tableInfo); err != nil {
+				return nil, err
+			}
 			tableCount++
 			snap.inner.tables.ReplaceOrInsert(versionedID{
 				id:     tableInfo.ID,

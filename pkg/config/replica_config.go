@@ -287,6 +287,19 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 			return err
 		}
 	}
+	if c.Sink != nil {
+		orderFilter, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive)
+		if err != nil {
+			return err
+		}
+		if orderFilter != nil {
+			if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+				return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+					"sink.mysql-config.txn-order-tables is only supported by MySQL sinks")
+			}
+			c.Scheduler.EnableTableAcrossNodes = false
+		}
+	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.EnableTableAcrossNodes = false

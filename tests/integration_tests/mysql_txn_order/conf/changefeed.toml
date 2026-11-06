@@ -1,0 +1,12 @@
+# The ordered table overrides transaction-atomicity=none and table splitting.
+[filter]
+rules = ["mysql_txn_order.*"]
+
+[scheduler]
+enable-table-across-nodes = true
+
+[sink]
+transaction-atomicity = "none"
+
+[sink.mysql-config]
+txn-order-tables = ["mysql_txn_order.t", "mysql_txn_order.ordered_*"]

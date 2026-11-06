@@ -30,6 +30,7 @@ type txnEvent struct {
 	*dmlsink.TxnCallbackableEvent
 	start            time.Time
 	conflictResolved time.Time
+	tableOrder       bool
 }
 
 func newTxnEvent(event *dmlsink.TxnCallbackableEvent) *txnEvent {
@@ -42,6 +43,14 @@ func (e *txnEvent) OnConflictResolved() {
 
 // ConflictKeys implements causality.txnEvent interface.
 func (e *txnEvent) ConflictKeys() []uint64 {
+	if e.tableOrder {
+		// Use the same table key as rows without a primary or unique key.
+		var key [8]byte
+		binary.BigEndian.PutUint64(key[:], uint64(e.Event.PhysicalTableID))
+		hasher := fnv.New32a()
+		_, _ = hasher.Write(key[:])
+		return []uint64{uint64(hasher.Sum32())}
+	}
 	return genTxnKeys(e.TxnCallbackableEvent.Event)
 }
 

@@ -21,11 +21,14 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -62,7 +65,8 @@ type sinkWorker struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkMemQuota  *memquota.MemQuota
 	// splitTxn indicates whether to split the transaction into multiple batches.
-	splitTxn bool
+	splitTxn       bool
+	txnOrderFilter tfilter.Filter
 
 	// Metrics.
 	metricOutputEventCountKV prometheus.Counter
@@ -203,6 +207,16 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// NOTICE: The event can be filtered by the event filter.
 		if e.Row != nil {
+			if w.txnOrderFilter != nil {
+				table := e.Row.TableInfo.TableName
+				ordered := w.txnOrderFilter.MatchTable(table.Schema, table.Table)
+				fullSpan := spanz.TableIDToComparableSpan(task.span.TableID)
+				if ordered && !task.span.Eq(&fullSpan) {
+					return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+						"sink.mysql-config.txn-order-tables does not support split table " + table.String())
+				}
+				advancer.splitTxn = w.splitTxn && !ordered
+			}
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.GetReplicaTs()
 			x, size := handleRowChangedEvents(w.changefeedID, task.span, e)

@@ -116,13 +116,20 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 			// If no more data in txnCh, and also not reach the state that can be flushed,
 			// we will wait for 10ms and then do flush to avoid too much flush with small amount of txns.
 			if txn.TxnEvent != nil {
-				needFlush := w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
+				needFlush, err := w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
+				if err != nil {
+					return err
+				}
 				if !needFlush {
 					delay := time.NewTimer(w.flushInterval)
 					for !needFlush {
 						select {
 						case txn := <-txnCh:
-							needFlush = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
+							needFlush, err = w.onEvent(txn.TxnEvent, txn.PostTxnExecuted)
+							if err != nil {
+								delay.Stop()
+								return err
+							}
 						case <-delay.C:
 							needFlush = true
 						}
@@ -154,8 +161,15 @@ func (w *worker) runLoop(txnCh <-chan causality.TxnWithNotifier[*txnEvent]) erro
 }
 
 // onEvent is called when a new event is received.
-// It returns true if the event is sent to backend.
-func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
+// It returns whether the current event needs to be flushed immediately.
+func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) (bool, error) {
+	// An ordered transaction must not share a downstream commit with any
+	// preceding or following transaction, including transactions of other tables.
+	if txn.tableOrder {
+		if err := w.doFlush(); err != nil {
+			return false, err
+		}
+	}
 	w.hasPending = true
 
 	if txn.GetTableSinkState() != state.TableSinkSinking {
@@ -164,7 +178,7 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 		txn.Callback()
 		// Still necessary to append the callbacks into the pending list.
 		w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
-		return false
+		return false, nil
 	}
 
 	conflictDetectTime := txn.conflictResolved.Sub(txn.start).Seconds()
@@ -187,7 +201,8 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
-	return w.backend.OnTxnEvent(txn.TxnCallbackableEvent)
+	needFlush := w.backend.OnTxnEvent(txn.TxnCallbackableEvent)
+	return needFlush || txn.tableOrder, nil
 }
 
 // doFlush flushes the backend.
