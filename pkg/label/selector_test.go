@@ -140,7 +140,6 @@ func TestSelectorMatches(t *testing.T) {
 	}
 
 	for idx, tc := range cases {
-		tc := tc
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tc.shouldMatch, tc.selector.Matches(tc.labels))
@@ -235,7 +234,6 @@ func TestSelectorValidate(t *testing.T) {
 	}
 
 	for idx, tc := range cases {
-		tc := tc
 		t.Run(strconv.Itoa(idx), func(t *testing.T) {
 			t.Parallel()
 			tc.checkErr(tc.selector.Validate())

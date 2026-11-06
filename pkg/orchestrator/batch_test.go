@@ -26,7 +26,6 @@ func TestGetBatchChangeState(t *testing.T) {
 	patchGroupSize := 1000
 	patchGroup := make([][]DataPatch, patchGroupSize)
 	for i := 0; i < patchGroupSize; i++ {
-		i := i
 		patches := []DataPatch{&SingleDataPatch{
 			Key: util.NewEtcdKey(fmt.Sprintf("/key%d", i)),
 			Func: func(old []byte) (newValue []byte, changed bool, err error) {

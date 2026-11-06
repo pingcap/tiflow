@@ -58,7 +58,7 @@ func TestNewPulsarDMLProducer(t *testing.T) {
 		replicaConfig.Sink = &config.SinkConfig{
 			Protocol: aws.String("canal-json"),
 		}
-		t.Logf(sinkURI.String())
+		t.Logf("%s", sinkURI.String())
 
 		errCh := make(chan error, 1)
 
