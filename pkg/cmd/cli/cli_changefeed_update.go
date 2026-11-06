@@ -170,6 +170,14 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 func (o *updateChangefeedOptions) applyChanges(oldInfo *v2.ChangeFeedInfo,
 	cmd *cobra.Command,
 ) (*v2.ChangeFeedInfo, error) {
+	if cmd.Flags().Changed("config") || cmd.Flags().Changed("schema-registry") {
+		if oldInfo.Config == nil {
+			return nil, errors.New("changefeed configuration is unavailable; use an account allowed to update this changefeed")
+		}
+		if cmd.Flags().Changed("schema-registry") && oldInfo.Config.Sink == nil {
+			return nil, errors.New("changefeed sink configuration is unavailable")
+		}
+	}
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
 		return nil, err

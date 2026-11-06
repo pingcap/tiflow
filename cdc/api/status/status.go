@@ -45,7 +45,7 @@ type statusAPI struct {
 func RegisterStatusAPIRoutes(router *gin.Engine, capture capture.Capture) {
 	statusAPI := statusAPI{capture: capture}
 	router.GET("/status", gin.WrapF(statusAPI.handleStatus))
-	router.GET("/debug/info", middleware.AuthenticateMiddleware(capture), gin.WrapF(statusAPI.handleDebugInfo))
+	router.GET("/debug/info", middleware.AccessMiddleware(capture), gin.WrapF(statusAPI.handleDebugInfo))
 }
 
 func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClient, w io.Writer) {
@@ -56,7 +56,7 @@ func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClient, w
 	}
 
 	for _, kv := range kvs {
-		fmt.Fprintf(w, "%s\n\t%s\n\n", string(kv.Key), string(kv.Value))
+		fmt.Fprintf(w, "%s\n\t%s\n\n", string(kv.Key), api.RedactEtcdValue(kv.Key, kv.Value))
 	}
 }
 

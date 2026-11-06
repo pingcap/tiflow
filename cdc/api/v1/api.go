@@ -23,6 +23,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/api"
+	"github.com/pingcap/tiflow/cdc/api/authorization"
 	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -68,6 +69,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1.Use(middleware.CheckServerReadyMiddleware(api.capture))
 	v1.Use(middleware.LogMiddleware())
 	v1.Use(middleware.ErrorHandleMiddleware())
+	v1.Use(middleware.AccessMiddleware(api.capture))
 
 	// common API
 	v1.GET("/status", api.ServerStatus)
@@ -75,19 +77,18 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	v1.POST("/log", SetLogLevel)
 
 	ownerMiddleware := middleware.ForwardToOwnerMiddleware(api.capture)
-	authenticateMiddleware := middleware.AuthenticateMiddleware(api.capture)
 
 	// changefeed API
 	changefeedGroup := v1.Group("/changefeeds")
 	changefeedGroup.GET("", ownerMiddleware, api.ListChangefeed)
 	changefeedGroup.GET("/:changefeed_id", ownerMiddleware, api.GetChangefeed)
-	changefeedGroup.POST("", ownerMiddleware, authenticateMiddleware, api.CreateChangefeed)
-	changefeedGroup.PUT("/:changefeed_id", ownerMiddleware, authenticateMiddleware, api.UpdateChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", ownerMiddleware, authenticateMiddleware, api.PauseChangefeed)
-	changefeedGroup.POST("/:changefeed_id/resume", ownerMiddleware, authenticateMiddleware, api.ResumeChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", ownerMiddleware, authenticateMiddleware, api.RemoveChangefeed)
-	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", ownerMiddleware, authenticateMiddleware, api.RebalanceTables)
-	changefeedGroup.POST("/:changefeed_id/tables/move_table", ownerMiddleware, authenticateMiddleware, api.MoveTable)
+	changefeedGroup.POST("", ownerMiddleware, api.CreateChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", ownerMiddleware, api.UpdateChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", ownerMiddleware, api.PauseChangefeed)
+	changefeedGroup.POST("/:changefeed_id/resume", ownerMiddleware, api.ResumeChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", ownerMiddleware, api.RemoveChangefeed)
+	changefeedGroup.POST("/:changefeed_id/tables/rebalance_table", ownerMiddleware, api.RebalanceTables)
+	changefeedGroup.POST("/:changefeed_id/tables/move_table", ownerMiddleware, api.MoveTable)
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
@@ -139,6 +140,9 @@ func (h *OpenAPI) ListChangefeed(c *gin.Context) {
 	changefeeds := make([]model.ChangeFeedID, 0)
 
 	for cfID := range infos {
+		if !authorization.Can(ctx, authorization.Read, cfID) {
+			continue
+		}
 		changefeeds = append(changefeeds, cfID)
 	}
 	sort.Slice(changefeeds, func(i, j int) bool {
@@ -220,6 +224,9 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 	if err != nil {
 		log.Error("failed to mask sink URI", zap.Error(err))
 	}
+	if !authorization.Can(ctx, authorization.Write, changefeedID) {
+		sinkURI = util.MaskSensitiveDataInURI(info.SinkURI)
+	}
 
 	changefeedDetail := &model.ChangefeedDetail{
 		UpstreamID:     info.UpstreamID,
@@ -259,6 +266,10 @@ func (h *OpenAPI) CreateChangefeed(c *gin.Context) {
 	var changefeedConfig model.ChangefeedConfig
 	if err := c.BindJSON(&changefeedConfig); err != nil {
 		_ = c.Error(cerror.ErrAPIInvalidParam.Wrap(err))
+		return
+	}
+
+	if !middleware.RequirePermission(c, authorization.Write, model.DefaultChangeFeedID(changefeedConfig.ID)) {
 		return
 	}
 
@@ -777,14 +788,17 @@ func (h *OpenAPI) ListProcessor(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	resps := make([]*model.ProcessorCommonInfo, len(infos))
-	for i, info := range infos {
+	resps := make([]*model.ProcessorCommonInfo, 0, len(infos))
+	for _, info := range infos {
+		if !authorization.Can(ctx, authorization.Read, info.CfID) {
+			continue
+		}
 		resp := &model.ProcessorCommonInfo{
 			Namespace: info.CfID.Namespace,
 			CfID:      info.CfID.ID,
 			CaptureID: info.CaptureID,
 		}
-		resps[i] = resp
+		resps = append(resps, resp)
 	}
 	c.IndentedJSON(http.StatusOK, resps)
 }

@@ -42,24 +42,24 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	v2.Use(middleware.CheckServerReadyMiddleware(api.capture))
 	v2.Use(middleware.LogMiddleware())
 	v2.Use(middleware.ErrorHandleMiddleware())
+	v2.Use(middleware.AccessMiddleware(api.capture))
 
 	v2.GET("health", api.health)
 	v2.GET("status", api.serverStatus)
 	v2.POST("log", api.setLogLevel)
 
 	ownerMiddleware := middleware.ForwardToOwnerMiddleware(api.capture)
-	authenticateMiddleware := middleware.AuthenticateMiddleware(api.capture)
 
 	// changefeed apis
 	changefeedGroup := v2.Group("/changefeeds")
 	changefeedGroup.GET("/:changefeed_id", ownerMiddleware, api.getChangeFeed)
-	changefeedGroup.POST("", ownerMiddleware, authenticateMiddleware, api.createChangefeed)
+	changefeedGroup.POST("", ownerMiddleware, api.createChangefeed)
 	changefeedGroup.GET("", ownerMiddleware, api.listChangeFeeds)
-	changefeedGroup.PUT("/:changefeed_id", ownerMiddleware, authenticateMiddleware, api.updateChangefeed)
-	changefeedGroup.DELETE("/:changefeed_id", ownerMiddleware, authenticateMiddleware, api.deleteChangefeed)
+	changefeedGroup.PUT("/:changefeed_id", ownerMiddleware, api.updateChangefeed)
+	changefeedGroup.DELETE("/:changefeed_id", ownerMiddleware, api.deleteChangefeed)
 	changefeedGroup.GET("/:changefeed_id/meta_info", ownerMiddleware, api.getChangeFeedMetaInfo)
-	changefeedGroup.POST("/:changefeed_id/resume", ownerMiddleware, authenticateMiddleware, api.resumeChangefeed)
-	changefeedGroup.POST("/:changefeed_id/pause", ownerMiddleware, authenticateMiddleware, api.pauseChangefeed)
+	changefeedGroup.POST("/:changefeed_id/resume", ownerMiddleware, api.resumeChangefeed)
+	changefeedGroup.POST("/:changefeed_id/pause", ownerMiddleware, api.pauseChangefeed)
 	changefeedGroup.GET("/:changefeed_id/status", ownerMiddleware, api.status)
 	changefeedGroup.GET("/:changefeed_id/synced", ownerMiddleware, api.synced)
 
@@ -80,9 +80,9 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// unsafe apis
 	unsafeGroup := v2.Group("/unsafe")
 	unsafeGroup.Use(ownerMiddleware)
-	unsafeGroup.GET("/metadata", authenticateMiddleware, api.CDCMetaData)
-	unsafeGroup.POST("/resolve_lock", authenticateMiddleware, api.ResolveLock)
-	unsafeGroup.DELETE("/service_gc_safepoint", authenticateMiddleware, api.DeleteServiceGcSafePoint)
+	unsafeGroup.GET("/metadata", api.CDCMetaData)
+	unsafeGroup.POST("/resolve_lock", api.ResolveLock)
+	unsafeGroup.DELETE("/service_gc_safepoint", api.DeleteServiceGcSafePoint)
 
 	// owner apis
 	ownerGroup := v2.Group("/owner")

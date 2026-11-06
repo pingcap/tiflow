@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/api/owner"
 	"github.com/pingcap/tiflow/cdc/api/status"
 	v1 "github.com/pingcap/tiflow/cdc/api/v1"
@@ -36,6 +37,8 @@ func RegisterRoutes(
 	capture capture.Capture,
 	registry prometheus.Gatherer,
 ) {
+	router.Use(middleware.AccessMiddleware(capture))
+
 	// Open API V1
 	v1.RegisterOpenAPIRoutes(router, v1.NewOpenAPI(capture))
 	// Open API V2

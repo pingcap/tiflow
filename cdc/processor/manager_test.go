@@ -145,17 +145,20 @@ func TestDebugInfo(t *testing.T) {
 	require.Nil(t, err)
 
 	changefeedID := model.DefaultChangeFeedID("test-changefeed")
+	password := "debug-config-secret"
+	replica := config.GetDefaultReplicaConfig()
+	replica.Sink.KafkaConfig = &config.KafkaConfig{SASLPassword: &password}
 	// an active changefeed
 	s.state.Changefeeds[changefeedID] = orchestrator.NewChangefeedReactorState(
 		etcd.DefaultCDCClusterID, changefeedID)
 	s.state.Changefeeds[changefeedID].PatchInfo(
 		func(info *model.ChangeFeedInfo) (*model.ChangeFeedInfo, bool, error) {
 			return &model.ChangeFeedInfo{
-				SinkURI:    "blackhole://",
+				SinkURI:    "blackhole://user:debug-uri-secret@localhost/?token=debug-token-secret",
 				CreateTime: time.Now(),
 				StartTs:    1,
 				TargetTs:   math.MaxUint64,
-				Config:     config.GetDefaultReplicaConfig(),
+				Config:     replica,
 			}, true, nil
 		})
 	s.state.Changefeeds[changefeedID].PatchStatus(
@@ -198,6 +201,11 @@ func TestDebugInfo(t *testing.T) {
 	cancel()
 	<-done
 	s.manager.Close()
+	for _, secret := range []string{"debug-uri-secret", "debug-token-secret", password} {
+		require.NotContains(t, buf.String(), secret)
+	}
+	require.Contains(t, buf.String(), "xxxxx")
+	require.Contains(t, s.state.Changefeeds[changefeedID].Info.SinkURI, "debug-uri-secret")
 }
 
 func TestClose(t *testing.T) {

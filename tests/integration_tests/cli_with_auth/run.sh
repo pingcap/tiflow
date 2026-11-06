@@ -103,7 +103,7 @@ EOF
 
 	# Update changefeed
 	run_cdc_cli changefeed update --pd=$pd_addr --config="$WORK_DIR/changefeed.toml" --no-confirm --changefeed-id $uuid
-	changefeed_info=$(curl -s -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
+	changefeed_info=$(curl --user ticdc:ticdc_secret -s -X GET "http://127.0.0.1:8300/api/v2/changefeeds/$uuid/meta_info" 2>&1)
 	if [[ ! $changefeed_info == *"\"case_sensitive\":true"* ]]; then
 		echo "[$(date)] <<<<< changefeed info is not updated as expected ${changefeed_info} >>>>>"
 		exit 1
@@ -147,17 +147,22 @@ EOF
 	fi
 
 	# Smoke test unsafe commands
-	echo "y" | run_cdc_cli unsafe delete-service-gc-safepoint
+	if run_cdc_cli unsafe delete-service-gc-safepoint --no-confirm >"$WORK_DIR/delete_gc.log" 2>&1; then
+		echo "deleting GC protection with unfinished changefeeds should fail"
+		exit 1
+	fi
+	grep -q "unfinished changefeeds" "$WORK_DIR/delete_gc.log"
 	run_cdc_cli unsafe reset --no-confirm --pd=$pd_addr
 	REGION_ID=$(pd-ctl -u=$pd_addr region | jq '.regions[0].id')
 	TS=$(cdc cli tso query --pd=$pd_addr)
 	# wait for owner online
 	sleep 3
+	run_cdc_cli unsafe delete-service-gc-safepoint --no-confirm
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID
 	run_cdc_cli unsafe resolve-lock --region=$REGION_ID --ts=$TS
 
 	# Smoke test change log level
-	curl -X POST -d '"warn"' http://127.0.0.1:8300/api/v1/log
+	curl --user ticdc:ticdc_secret -X POST -d '"warn"' http://127.0.0.1:8300/api/v1/log
 	sleep 3
 	# make sure TiCDC does not panic
 	curl http://127.0.0.1:8300/status

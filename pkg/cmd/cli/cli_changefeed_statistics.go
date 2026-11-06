@@ -23,6 +23,7 @@ import (
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/tikv/client-go/v2/oracle"
 )
@@ -97,11 +98,17 @@ func (o *statisticsChangefeedOptions) runCliWithAPIClient(ctx context.Context, c
 // run the `cli changefeed statistics` command.
 func (o *statisticsChangefeedOptions) run(cmd *cobra.Command) error {
 	ctx := cmdcontext.GetDefaultContext()
+	if o.interval == 0 {
+		return errors.New("statistics interval must be greater than zero")
+	}
 
 	tick := time.NewTicker(time.Duration(o.interval) * time.Second)
+	defer tick.Stop()
 	var lastTime time.Time
 	var lastCount uint64
-	_ = o.runCliWithAPIClient(ctx, cmd, &lastCount, &lastTime)
+	if err := o.runCliWithAPIClient(ctx, cmd, &lastCount, &lastTime); err != nil {
+		return err
+	}
 	for {
 		select {
 		case <-ctx.Done():
@@ -109,7 +116,9 @@ func (o *statisticsChangefeedOptions) run(cmd *cobra.Command) error {
 				return err
 			}
 		case <-tick.C:
-			_ = o.runCliWithAPIClient(ctx, cmd, &lastCount, &lastTime)
+			if err := o.runCliWithAPIClient(ctx, cmd, &lastCount, &lastTime); err != nil {
+				return err
+			}
 		}
 	}
 }
