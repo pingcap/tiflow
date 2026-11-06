@@ -25,6 +25,7 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/pingcap/tidb/pkg/parser"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -214,6 +215,10 @@ func TestCalculateTotal(t *testing.T) {
 }
 
 func TestPrint(t *testing.T) {
+	redactLog := dmlog.IsRedactLogEnabled()
+	t.Cleanup(func() { dmlog.SetRedactLog(redactLog) })
+	dmlog.SetRedactLog(false)
+
 	report := NewReport(task)
 	createTableSQL := "create table `test`.`tbl`(`a` int, `b` varchar(10), `c` float, `d` datetime, primary key(`a`, `b`))"
 	tableInfo, err := utils.GetTableInfoBySQL(createTableSQL, parser.New())
