@@ -25,6 +25,20 @@ Console and report errors retain native connection and filesystem diagnostics, i
 
 Configuration parsing errors are also redacted by default. Use `--redact-info-log=false` on the command line to show their details. Settings in a TOML file cannot be loaded if the file has a syntax error.
 
+## Connecting to DM with TLS
+
+Use an `https://` address in `--dm-addr` to connect to a TLS-enabled DM-master.
+HTTPS verifies the server certificate and hostname against system roots by default.
+For a private CA or mutual TLS, configure `[dm-security]` with `ca-path`,
+`cert-path`, and `key-path` in the configuration file. See
+[config_dm.toml](./config/config_dm.toml) for an example.
+HTTPS alone does not restrict API access; configure `ssl-ca`, `ssl-cert`, `ssl-key`,
+and `cert-allowed-cn` on DM-master to require and verify client certificates.
+
+Configuring `[dm-security]` requires an HTTPS endpoint. HTTPS redirects are rejected.
+Existing HTTP endpoints remain supported when no DM TLS configuration is supplied;
+use HTTPS to protect database credentials and configuration in transit.
+
 ## Documents
 - `zh`: [Overview in Chinese](https://docs.pingcap.com/zh/tidb/stable/sync-diff-inspector-overview)
 - `en`: [Overview in English](https://docs.pingcap.com/tidb/stable/sync-diff-inspector-overview)
