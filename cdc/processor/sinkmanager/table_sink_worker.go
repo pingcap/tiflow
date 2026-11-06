@@ -181,6 +181,11 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 	}()
 
+	fullSpan := task.span
+	if w.txnOrderFilter != nil {
+		fullSpan = spanz.TableIDToComparableSpan(task.span.TableID)
+	}
+
 	// 1. We have enough memory to collect events.
 	// 2. The task is not canceled.
 	for advancer.hasEnoughMem() && !task.isCanceled() {
@@ -210,7 +215,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			if w.txnOrderFilter != nil {
 				table := e.Row.TableInfo.TableName
 				ordered := w.txnOrderFilter.MatchTable(table.Schema, table.Table)
-				fullSpan := spanz.TableIDToComparableSpan(task.span.TableID)
 				if ordered && !task.span.Eq(&fullSpan) {
 					return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
 						"sink.mysql-config.txn-order-tables does not support split table " + table.String())
