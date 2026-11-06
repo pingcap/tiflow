@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/pingcap/errors"
 	pclog "github.com/pingcap/log"
@@ -194,8 +195,6 @@ func WrapStringerField(message string, object fmt.Stringer) zap.Field {
 func WithCtx(ctx context.Context) Logger {
 	return Logger{appLogger.With(getZapFieldsFromCtx(ctx)...)}
 }
-<<<<<<< HEAD
-=======
 
 var enabledRedactLog atomic.Bool
 
@@ -236,4 +235,3 @@ func ZapRedact(field zap.Field) zap.Field {
 func ZapRedactString(key, arg string) zap.Field {
 	return zap.String(key, RedactString(arg))
 }
->>>>>>> 62d77a3452 (worker(dm): enable log redaction by default (#12940))
