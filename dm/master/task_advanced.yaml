@@ -86,6 +86,9 @@ routes:                      # schema/table route mapping
     target-schema: "test"
     target-table: "t"           # downstream table name
 
+# Within each source's filter-rules, schema-pattern/table-pattern pairs must be unique
+# (ignoring case when case-sensitive is false). Different patterns may overlap.
+# To ignore several events for one pattern, use one rule, e.g. events: ["delete", "update"].
 filters:                     # filter rules, mysql instance can ref rules in it
   user-filter-1:
     schema-pattern: "test_*"    # pattern of the upstream schema name, wildcard characters (*?) are supported

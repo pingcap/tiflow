@@ -15,10 +15,21 @@ mysql-instances:
   - source-id: "mysql-replica-01"
     black-white-list:  "instance"
     route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+    filter-rules: ["legacy-invalid-event"]
 
   - source-id: "mariadb-replica-02"
     black-white-list:  "instance"
     route-rules: ["sharding-route-rules-table", "sharding-route-rules-schema"]
+    filter-rules: ["legacy-invalid-event"]
+
+# Old tasks can contain invalid event names (see #10282). Loading and resuming
+# them after upgrading must remain possible despite stricter new-task checks.
+filters:
+  legacy-invalid-event:
+    schema-pattern: "legacy_filter"
+    table-pattern: "t"
+    events: ["truncate"]
+    action: Ignore
 
 black-white-list:
   instance:
