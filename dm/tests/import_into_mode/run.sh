@@ -36,8 +36,9 @@ function start_s3() {
 		fi
 		sleep 2
 	done
-	# create bucket dbpath
-	mkdir -p "${s3_DBPATH}/${s3_bucket}"
+	# Use S3 to create the bucket for both legacy and modern MinIO storage layouts.
+	MC_HOST_dmit="http://${s3_ACCESS_KEY}:${s3_SECRET_KEY}@${S3_ENDPOINT}" \
+		bin/mc mb --ignore-existing "dmit/$s3_bucket"
 }
 
 # clean s3 server
