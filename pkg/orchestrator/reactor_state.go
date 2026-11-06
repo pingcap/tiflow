@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"go.uber.org/zap"
 )
@@ -156,7 +157,7 @@ func (s *GlobalReactorState) Update(key util.EtcdKey, value []byte, _ bool) erro
 	case etcd.CDCKeyTypeMetaVersion:
 	default:
 		log.Warn("receive an unexpected etcd event", zap.String("key", key.String()),
-			zap.ByteString("value", value), zap.String("role", s.Role))
+			logutil.ZapRedactString("value", string(value)), zap.String("role", s.Role))
 	}
 	return nil
 }
@@ -428,7 +429,7 @@ func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) 
 		return errors.Trace(err)
 	}
 	if err := s.UpdateCDCKey(k, value); err != nil {
-		log.Error("failed to update status", zap.String("key", key.String()), zap.ByteString("value", value))
+		log.Error("failed to update status", zap.String("key", key.String()), logutil.ZapRedactString("value", string(value)))
 		return errors.Trace(err)
 	}
 	return nil

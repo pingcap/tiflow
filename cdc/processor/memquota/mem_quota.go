@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -254,7 +255,7 @@ func (m *MemQuota) clear(span tablepb.Span) uint64 {
 		log.Warn("Table consumed memory records not found",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return 0
 	}
 

@@ -14,18 +14,120 @@
 package replication
 
 import (
+	"bytes"
 	"container/heap"
+	"encoding/hex"
 	"encoding/json"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
+	perrors "github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
+
+func TestNewReplicationSetLogRedaction(t *testing.T) {
+	span := tablepb.Span{
+		TableID: 42, StartKey: []byte("replication-start-secret"), EndKey: []byte("replication-end-secret"),
+	}
+	testcases := []struct {
+		name          string
+		state         tablepb.TableState
+		message       string
+		expectedState ReplicationSetState
+		multiple      bool
+	}{
+		{"stopping", tablepb.TableStateStopping, "schedulerv3: found a stopping capture during initializing", ReplicationSetStateRemoving, false},
+		{"unknown", tablepb.TableState(99), "schedulerv3: unknown table state", ReplicationSetStateAbsent, false},
+		{"multiple primary", tablepb.TableStateReplicating, "schedulerv3: multiple primary", ReplicationSetStateUnknown, true},
+	}
+	for _, mode := range []redact.RedactionMode{redact.RedactionModeOff, redact.RedactionModeOn, redact.RedactionModeMarker} {
+		for _, tc := range testcases {
+			t.Run(mode.String()+"/"+tc.name, func(t *testing.T) {
+				originalMode := perrors.RedactLogEnabled.Load()
+				redact.SetRedactionMode(mode)
+				t.Cleanup(func() { perrors.RedactLogEnabled.Store(originalMode) })
+				var output bytes.Buffer
+				core := zapcore.NewCore(zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()), zapcore.AddSync(&output), zap.DebugLevel)
+				t.Cleanup(log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevelAt(zap.DebugLevel)}))
+
+				statuses := map[model.CaptureID]*tablepb.TableStatus{
+					"capture-1": {Span: span, State: tc.state, Checkpoint: tablepb.Checkpoint{CheckpointTs: 10, ResolvedTs: 10}},
+				}
+				if tc.multiple {
+					statuses["capture-2"] = &tablepb.TableStatus{
+						Span: span, State: tc.state, Checkpoint: tablepb.Checkpoint{CheckpointTs: 10, ResolvedTs: 10},
+					}
+				}
+				set, err := NewReplicationSet(span, 10, statuses, model.DefaultChangeFeedID("redact-set"))
+				if tc.multiple {
+					require.Nil(t, set)
+					require.True(t, errors.ErrReplicationSetMultiplePrimaryError.Equal(err))
+					require.Contains(t, err.Error(), "tableID 42, schedulerv3: multiple primary")
+					// Propagated errors retain table IDs, without embedding either span key.
+					for _, key := range []tablepb.Key{span.StartKey, span.EndKey} {
+						require.NotContains(t, err.Error(), string(key))
+						require.NotContains(t, err.Error(), hex.EncodeToString(key))
+					}
+				} else {
+					require.NoError(t, err)
+					require.Equal(t, tc.expectedState, set.State)
+					require.Equal(t, span, set.Span)
+					if tc.state == tablepb.TableStateStopping {
+						require.Equal(t, Role(RoleUndetermined), set.Captures["capture-1"])
+					} else {
+						require.Empty(t, set.Captures)
+					}
+				}
+				for _, status := range statuses {
+					require.Equal(t, span, status.Span)
+					require.Equal(t, tc.state, status.State)
+				}
+
+				var entry map[string]interface{}
+				for _, line := range bytes.Split(bytes.TrimSpace(output.Bytes()), []byte("\n")) {
+					var candidate map[string]interface{}
+					require.NoError(t, json.Unmarshal(line, &candidate))
+					if candidate["msg"] == tc.message {
+						entry = candidate
+					}
+				}
+				require.NotNil(t, entry, "expected the real initialization diagnostic")
+				require.Equal(t, "redact-set", entry["changefeed"])
+				switch mode {
+				case redact.RedactionModeOff:
+					loggedStatuses := entry["status"].(map[string]interface{})
+					require.Len(t, loggedStatuses, len(statuses))
+					loggedSpan := loggedStatuses["capture-1"].(map[string]interface{})["span"]
+					require.Equal(t, span.String(), loggedSpan)
+				case redact.RedactionModeOn:
+					require.Equal(t, "?", entry["status"])
+					require.Equal(t, "?", entry["replicationSet"])
+					for _, key := range []tablepb.Key{span.StartKey, span.EndKey} {
+						require.NotContains(t, output.String(), string(key))
+						require.NotContains(t, output.String(), hex.EncodeToString(key))
+					}
+				case redact.RedactionModeMarker:
+					value := entry["status"].(string)
+					require.True(t, strings.HasPrefix(value, "‹") && strings.HasSuffix(value, "›"))
+					for _, key := range []tablepb.Key{span.StartKey, span.EndKey} {
+						require.Contains(t, value, hex.EncodeToString(key))
+					}
+				}
+			})
+		}
+	}
+}
 
 // See https://stackoverflow.com/a/30230552/3920448 for details.
 func nextPerm(p []int) {

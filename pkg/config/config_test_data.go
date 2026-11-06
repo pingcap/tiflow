@@ -143,7 +143,8 @@ const (
     "cert-allowed-cn": null,
     "mtls": false,
     "client-user-required": false,
-    "client-allowed-user": null
+    "client-allowed-user": null,
+    "redact-info-log": false
   },
   "kv-client": {
     "enable-multiplexing": true,

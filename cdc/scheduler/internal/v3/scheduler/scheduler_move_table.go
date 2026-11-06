@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
@@ -101,7 +102,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Warn("schedulerv3: move table ignored, since the table cannot found",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("span", span.String()),
+				logutil.ZapRedactString("span", span.String()),
 				zap.String("captureID", task.MoveTable.DestCapture))
 			toBeDeleted = append(toBeDeleted, span)
 			return true
@@ -113,7 +114,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Info("schedulerv3: move table ignored, since the target capture cannot found",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("span", span.String()),
+				logutil.ZapRedactString("span", span.String()),
 				zap.String("captureID", task.MoveTable.DestCapture))
 			toBeDeleted = append(toBeDeleted, span)
 			return true
@@ -122,7 +123,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Warn("schedulerv3: move table ignored, target capture is not initialized",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("span", span.String()),
+				logutil.ZapRedactString("span", span.String()),
 				zap.String("captureID", task.MoveTable.DestCapture),
 				zap.Any("state", status.State))
 			toBeDeleted = append(toBeDeleted, span)
@@ -134,7 +135,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Warn("schedulerv3: move table ignored, table not found in the replication set",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("span", span.String()),
+				logutil.ZapRedactString("span", span.String()),
 				zap.String("captureID", task.MoveTable.DestCapture))
 			toBeDeleted = append(toBeDeleted, span)
 			return true
@@ -144,7 +145,7 @@ func (m *moveTableScheduler) Schedule(
 			log.Info("schedulerv3: move table ignored, since the table is not replicating now",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("span", span.String()),
+				logutil.ZapRedactString("span", span.String()),
 				zap.String("captureID", task.MoveTable.DestCapture),
 				zap.Any("replicationState", rep.State))
 			toBeDeleted = append(toBeDeleted, span)
