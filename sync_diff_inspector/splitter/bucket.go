@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	tiflowdbutil "github.com/pingcap/tiflow/pkg/dbutil"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/progress"
@@ -138,7 +139,7 @@ func (s *BucketIterator) Next() (*chunk.Range, error) {
 			lowerBounds[i] = bound.Lower
 			upperBounds[i] = bound.Upper
 		}
-		log.Info("failpoint print-chunk-info injected (bucket splitter)", zap.Strings("lowerBounds", lowerBounds), zap.Strings("upperBounds", upperBounds), zap.String("indexCode", c.Index.ToString()))
+		log.Info("failpoint print-chunk-info injected (bucket splitter)", dmlog.ZapRedact(zap.Strings("lowerBounds", lowerBounds)), dmlog.ZapRedact(zap.Strings("upperBounds", upperBounds)), zap.String("indexCode", c.Index.ToString()))
 	})
 	return c, nil
 }
@@ -201,7 +202,7 @@ NEXTINDEX:
 			// the random splitter.
 			return errors.NotFoundf("index %s in buckets info", index.Name.O)
 		}
-		log.Debug("buckets for index", zap.String("index", index.Name.O), zap.Reflect("buckets", buckets))
+		log.Debug("buckets for index", zap.String("index", index.Name.O), dmlog.ZapRedact(zap.Reflect("buckets", buckets)))
 
 		s.buckets = bucket
 		s.indexColumns = indexColumns
@@ -284,7 +285,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 			return
 		}
 		latestCount = s.buckets[c.Index.BucketIndexRight].Count
-		nextUpperValues, err := dbutil.AnalyzeValuesFromBuckets(s.buckets[c.Index.BucketIndexRight].UpperBound, s.indexColumns)
+		nextUpperValues, err := utils.AnalyzeValuesFromBuckets(s.buckets[c.Index.BucketIndexRight].UpperBound, s.indexColumns)
 		if err != nil {
 			select {
 			case <-ctx.Done():
@@ -321,7 +322,7 @@ func (s *BucketIterator) produceChunks(ctx context.Context, startRange *RangeInf
 			continue
 		}
 
-		upperValues, err = dbutil.AnalyzeValuesFromBuckets(s.buckets[i].UpperBound, s.indexColumns)
+		upperValues, err = utils.AnalyzeValuesFromBuckets(s.buckets[i].UpperBound, s.indexColumns)
 		if err != nil {
 			select {
 			case <-ctx.Done():

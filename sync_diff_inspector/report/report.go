@@ -30,6 +30,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/chunk"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
@@ -163,7 +164,7 @@ func (r *Report) CalculateTotalSize(ctx context.Context, db *sql.DB) {
 		for table := range tableMap {
 			size, err := utils.GetTableSize(ctx, db, schema, table)
 			if size == 0 || err != nil {
-				log.Warn("fail to get the correct size of table, if you want to get the correct size, please analyze the corresponding tables", zap.String("table", dbutil.TableName(schema, table)), zap.Error(err))
+				log.Warn("fail to get the correct size of table, if you want to get the correct size, please analyze the corresponding tables", zap.String("table", dbutil.TableName(schema, table)), dmlog.ZapRedact(zap.Error(err)))
 			} else {
 				r.TotalSize += size
 			}
@@ -275,7 +276,7 @@ func (r *Report) Print(w io.Writer) error {
 		for schema, tableMap := range r.TableResults {
 			for table, result := range tableMap {
 				if result.MeetError != nil {
-					summary.WriteString(fmt.Sprintf("%s error occurred in %s\n", result.MeetError.Error(), dbutil.TableName(schema, table)))
+					summary.WriteString(fmt.Sprintf("%s error occurred in %s\n", utils.DiagnosticError(result.MeetError), dbutil.TableName(schema, table)))
 				}
 			}
 		}
