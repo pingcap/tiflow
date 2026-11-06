@@ -3,6 +3,8 @@
 #log configuration
 log-level = "info"
 log-file = "dm-worker.log"
+# replace sensitive information in logs with "?"
+redact-info-log = false
 
 #dm-worker listen address
 worker-addr = ":8262"
