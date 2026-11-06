@@ -218,9 +218,13 @@ func (s *SinkConfig) MaskSensitiveData() {
 	}
 }
 
-func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) {
+func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) error {
 	if s.SchemaRegistry != nil && old.SchemaRegistry != nil {
-		*s.SchemaRegistry = restoreMaskedURI(*s.SchemaRegistry, *old.SchemaRegistry)
+		var err error
+		*s.SchemaRegistry, err = restoreMaskedURI(*s.SchemaRegistry, *old.SchemaRegistry)
+		if err != nil {
+			return err
+		}
 	}
 	if s.KafkaConfig != nil && old.KafkaConfig != nil {
 		current, previous := s.KafkaConfig, old.KafkaConfig
@@ -229,11 +233,19 @@ func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) {
 		restoreMaskedString(&current.SASLOAuthClientSecret, previous.SASLOAuthClientSecret)
 		restoreMaskedString(&current.Key, previous.Key)
 		if current.SASLOAuthTokenURL != nil && previous.SASLOAuthTokenURL != nil {
-			*current.SASLOAuthTokenURL = restoreMaskedURI(*current.SASLOAuthTokenURL, *previous.SASLOAuthTokenURL)
+			var err error
+			*current.SASLOAuthTokenURL, err = restoreMaskedURI(*current.SASLOAuthTokenURL, *previous.SASLOAuthTokenURL)
+			if err != nil {
+				return err
+			}
 		}
 		if current.LargeMessageHandle != nil && previous.LargeMessageHandle != nil {
-			current.LargeMessageHandle.ClaimCheckStorageURI = restoreMaskedURI(
+			var err error
+			current.LargeMessageHandle.ClaimCheckStorageURI, err = restoreMaskedURI(
 				current.LargeMessageHandle.ClaimCheckStorageURI, previous.LargeMessageHandle.ClaimCheckStorageURI)
+			if err != nil {
+				return err
+			}
 		}
 		if current.GlueSchemaRegistryConfig != nil && previous.GlueSchemaRegistryConfig != nil {
 			currentGlue, oldGlue := current.GlueSchemaRegistryConfig, previous.GlueSchemaRegistryConfig
@@ -250,6 +262,7 @@ func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) {
 			restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
 		}
 	}
+	return nil
 }
 
 func restoreMaskedString(current **string, previous *string) {
@@ -259,16 +272,23 @@ func restoreMaskedString(current **string, previous *string) {
 }
 
 func restoreMaskedValue(current *string, previous string) {
-	if *current == "******" && previous != "" {
+	if *current == "******" {
 		*current = previous
 	}
 }
 
-func restoreMaskedURI(current, previous string) string {
-	if masked := util.MaskSensitiveDataInURI(previous); masked != previous && current == masked {
-		return previous
+func restoreMaskedURI(current, previous string) (string, error) {
+	if current == previous {
+		return current, nil
 	}
-	return current
+	if masked := util.MaskSensitiveDataInURI(previous); masked != previous && current == masked {
+		return previous, nil
+	}
+	if util.HasMaskedSensitiveDataInURI(current) {
+		return "", cerror.ErrInvalidReplicaConfig.GenWithStack(
+			"updated URI contains a masked credential; provide the full URI")
+	}
+	return current, nil
 }
 
 // ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
@@ -517,16 +537,16 @@ func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
-	if k.SASLPassword != nil {
+	if k.SASLPassword != nil && *k.SASLPassword != "" {
 		k.SASLPassword = aws.String("******")
 	}
-	if k.SASLGssAPIPassword != nil {
+	if k.SASLGssAPIPassword != nil && *k.SASLGssAPIPassword != "" {
 		k.SASLGssAPIPassword = aws.String("******")
 	}
-	if k.SASLOAuthClientSecret != nil {
+	if k.SASLOAuthClientSecret != nil && *k.SASLOAuthClientSecret != "" {
 		k.SASLOAuthClientSecret = aws.String("******")
 	}
-	if k.Key != nil {
+	if k.Key != nil && *k.Key != "" {
 		k.Key = aws.String("******")
 	}
 	if k.GlueSchemaRegistryConfig != nil {
@@ -705,10 +725,10 @@ func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
 
 // MaskSensitiveData masks sensitive data in PulsarConfig
 func (c *PulsarConfig) MaskSensitiveData() {
-	if c.AuthenticationToken != nil {
+	if c.AuthenticationToken != nil && *c.AuthenticationToken != "" {
 		c.AuthenticationToken = aws.String("******")
 	}
-	if c.BasicPassword != nil {
+	if c.BasicPassword != nil && *c.BasicPassword != "" {
 		c.BasicPassword = aws.String("******")
 	}
 	if c.OAuth2 != nil {

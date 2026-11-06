@@ -320,10 +320,16 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	if cfg.ReplicaConfig != nil {
 		configUpdated = true
 		newInfo.Config = cfg.ReplicaConfig.ToInternalReplicaConfig()
-		newInfo.Config.RestoreMaskedSensitiveData(oldInfo.Config)
+		if err := newInfo.Config.RestoreMaskedSensitiveData(oldInfo.Config); err != nil {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
 	}
 	// If the sinkURI is empty, we keep the old sinkURI.
-	if cfg.SinkURI != "" {
+	if cfg.SinkURI != "" && cfg.SinkURI != util.MaskSensitiveDataInURIForError(oldInfo.SinkURI) {
+		if util.HasMaskedSensitiveDataInURI(cfg.SinkURI) {
+			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStack(
+				"updated sink URI contains a masked credential; provide the full URI")
+		}
 		sinkURIUpdated = true
 		newInfo.SinkURI = cfg.SinkURI
 	}

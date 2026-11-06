@@ -77,7 +77,7 @@ func TestChangefeedResponseMasksCredentialsAndPreservesUpdate(t *testing.T) {
 
 	// The CLI sends the config returned by GET back in an update request.
 	updated := response.Config.ToInternalReplicaConfig()
-	updated.RestoreMaskedSensitiveData(info.Config)
+	require.NoError(t, updated.RestoreMaskedSensitiveData(info.Config))
 	require.Equal(t, "kafka-secret", *updated.Sink.KafkaConfig.SASLPassword)
 	require.Equal(t, info.Config.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI,
 		updated.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI)
