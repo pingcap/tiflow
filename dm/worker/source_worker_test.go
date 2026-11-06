@@ -36,6 +36,7 @@ import (
 	"github.com/pingcap/tiflow/dm/relay"
 	"github.com/pingcap/tiflow/dm/syncer"
 	"github.com/pingcap/tiflow/dm/unit"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/stretchr/testify/require"
 	"github.com/tikv/pd/pkg/utils/tempurl"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -896,4 +897,68 @@ func TestQueryStatusSourceStatusTimeout(t *testing.T) {
 	require.Len(t, status, 1)
 	require.Equal(t, subtaskCfg.Name, status[0].Name)
 	require.NotNil(t, w.getSourceStatusErr())
+}
+
+func ignoreAddColumnRule(schemaPattern, tablePattern, column string) *bf.BinlogEventRule {
+	return &bf.BinlogEventRule{
+		SchemaPattern: schemaPattern,
+		TablePattern:  tablePattern,
+		SQLPattern:    []string{"ADD COLUMN " + column},
+		Action:        bf.Ignore,
+	}
+}
+
+func addColumnActionFor(t *testing.T, cfg *config.SubTaskConfig, schema, table, column string) bf.ActionType {
+	t.Helper()
+	filter, err := bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
+	require.NoError(t, err)
+	action, err := filter.Filter(schema, table, bf.NullEvent, "alter table "+table+" add column "+column+" int")
+	require.NoError(t, err)
+	return action
+}
+
+func TestCopyConfigMerge(t *testing.T) {
+	taskRule := ignoreAddColumnRule("db1", "", "a_col")
+	collided := ignoreAddColumnRule("db1", "", "s1_col")
+	freeA := ignoreAddColumnRule("db2", "", "s2_col")
+	freeB := ignoreAddColumnRule("db2", "", "s3_col")
+	sourceCfg := &config.SourceConfig{Filters: []*bf.BinlogEventRule{collided, freeA, freeB}}
+	subTaskCfg := &config.SubTaskConfig{FilterRules: []*bf.BinlogEventRule{taskRule}}
+
+	require.NoError(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+	require.Equal(t, []*bf.BinlogEventRule{taskRule, freeA, freeB}, subTaskCfg.FilterRules)
+	require.Equal(t, bf.Do, addColumnActionFor(t, subTaskCfg, "db1", "t", "s1_col"))
+	require.Equal(t, bf.Ignore, addColumnActionFor(t, subTaskCfg, "db2", "t", "s2_col"))
+	require.Equal(t, bf.Ignore, addColumnActionFor(t, subTaskCfg, "db2", "t", "s3_col"))
+}
+
+func TestCopyConfigCaseSensitive(t *testing.T) {
+	sourceCfg := &config.SourceConfig{
+		CaseSensitive: true,
+		Filters:       []*bf.BinlogEventRule{ignoreAddColumnRule("DB", "", "s_col")},
+	}
+	subTaskCfg := &config.SubTaskConfig{}
+
+	require.NoError(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+	require.True(t, subTaskCfg.CaseSensitive)
+	require.Equal(t, bf.Ignore, addColumnActionFor(t, subTaskCfg, "DB", "t", "s_col"))
+	require.Equal(t, bf.Do, addColumnActionFor(t, subTaskCfg, "db", "t", "s_col"))
+}
+
+func TestCopyConfigUnusableRule(t *testing.T) {
+	usable := ignoreAddColumnRule("db9", "", "a_col")
+	unusable := &bf.BinlogEventRule{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: "Nonsense"}
+	sourceCfg := &config.SourceConfig{Filters: []*bf.BinlogEventRule{usable, unusable}}
+	subTaskCfg := &config.SubTaskConfig{}
+
+	require.NoError(t, copyConfigFromSource(subTaskCfg, sourceCfg, false))
+	require.Equal(t, []*bf.BinlogEventRule{usable}, subTaskCfg.FilterRules)
+}
+
+func TestCopyConfigEmptyFilters(t *testing.T) {
+	taskRule := ignoreAddColumnRule("*", "", "a_col")
+	subTaskCfg := &config.SubTaskConfig{FilterRules: []*bf.BinlogEventRule{taskRule}}
+
+	require.NoError(t, copyConfigFromSource(subTaskCfg, &config.SourceConfig{}, false))
+	require.Equal(t, []*bf.BinlogEventRule{taskRule}, subTaskCfg.FilterRules)
 }
