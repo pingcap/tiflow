@@ -362,7 +362,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	compareEvents(t, events[0], &model.DDLEvent{
 		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
-		Query:    "RENAME TABLE `test1`.`t1` TO `test1`.`t10`",
+		Query:    "RENAME TABLE `test1`.`oldt10` TO `test1`.`t10`",
 		Type:     timodel.ActionRenameTable,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
@@ -379,7 +379,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema:  "test1",
-				Table:   "t1",
+				Table:   "oldt10",
 				TableID: t1TableID,
 			},
 			TableInfo: &timodel.TableInfo{
@@ -392,7 +392,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	compareEvents(t, events[1], &model.DDLEvent{
 		StartTs:  job.StartTS,
 		CommitTs: job.BinlogInfo.FinishedTS,
-		Query:    "RENAME TABLE `test1`.`t2` TO `test1`.`t20`",
+		Query:    "RENAME TABLE `test1`.`oldt20` TO `test1`.`t20`",
 		Type:     timodel.ActionRenameTable,
 		TableInfo: &model.TableInfo{
 			TableName: model.TableName{
@@ -409,7 +409,7 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 		PreTableInfo: &model.TableInfo{
 			TableName: model.TableName{
 				Schema:  "test1",
-				Table:   "t2",
+				Table:   "oldt20",
 				TableID: t2TableID,
 			},
 			TableInfo: &timodel.TableInfo{
