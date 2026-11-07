@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -518,6 +519,32 @@ func (s *schemaStorage) buildRenameEvents(
 
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
+
+		// For cyclic renames, given two tables a(10) and b(11) and
+		// `RENAME TABLE a TO tmp, b TO a, tmp TO b`,
+		//
+		// for `a TO tmp`:
+		//   tableInfo.TableName.Table = "b" / info.NewTableName = "tmp"
+		//   tableInfo.TableInfo.Name = "b" / info.NewTableName = "tmp"
+		//
+		// for `tmp TO b`:
+		//
+		//   preTableInfo.TableInfo.Name = "a" / info.OldTableName = "tmp"
+		//   preTableInfo.TableName.Table = "a" / info.OldTableName = "tmp"
+		//
+		// Fix them so FromJobWithArgs can generate the correct DDLEvent.
+		if info.NewTableName.O != "" && tableInfo.Name.O != info.NewTableName.O {
+			tableInfo = tableInfo.Clone()
+			tableInfo.TableName.Table = info.NewTableName.O
+			tableInfo.TableInfo.Name = ast.NewCIStr(info.NewTableName.O)
+		}
+
+		if info.OldTableName.O != "" && info.OldSchemaName.O != "" && preTableInfo.Name.O != info.OldTableName.O {
+			preTableInfo = preTableInfo.Clone()
+			preTableInfo.TableName.Schema = info.OldSchemaName.O
+			preTableInfo.TableName.Table = info.OldTableName.O
+			preTableInfo.TableInfo.Name = ast.NewCIStr(info.OldTableName.O)
+		}
 		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
 		event.Seq = uint64(i)
 		ddlEvents = append(ddlEvents, event)

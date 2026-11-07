@@ -852,12 +852,28 @@ func TestHandleExchangeTableName(t *testing.T) {
 	require.False(t, skip)
 
 	ddl = helper.DDL2Job("rename table a to c, b to a, c to b")
-	_, err = ddlJobPullerImpl.handleJob(ddl)
-	// Should return an error
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "ignore-txn-start-ts")
+	preSnap := ddlJobPullerImpl.schemaStorage.GetLastSnapshot()
+	preAID, ok := preSnap.TableIDByName("test1", "a")
+	require.True(t, ok)
+	preBID, ok := preSnap.TableIDByName("test1", "b")
+	require.True(t, ok)
 
-	// Add ddl.StartTs to ignore-txn-start-ts, expect no error.
+	// Cyclic renames works now.
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	// The names are swapped but the physical table IDs stay the same.
+	snap := ddlJobPullerImpl.schemaStorage.GetLastSnapshot()
+	aID, ok := snap.TableIDByName("test1", "a")
+	require.True(t, ok)
+	bID, ok := snap.TableIDByName("test1", "b")
+	require.True(t, ok)
+	require.Equal(t, preBID, aID)
+	require.Equal(t, preAID, bID)
+
+	// The skip scenario.
+	ddl = helper.DDL2Job("rename table a to d")
 	cfg.Filter.IgnoreTxnStartTs = []uint64{ddl.StartTS}
 	adjustFilter, err := filter.NewFilter(cfg, "")
 	require.NoError(t, err)
@@ -866,4 +882,12 @@ func TestHandleExchangeTableName(t *testing.T) {
 	skip, err = ddlJobPullerImpl.handleJob(ddl)
 	require.NoError(t, err)
 	require.True(t, skip)
+
+	// Verify table a did not renamed to d.
+	snap = ddlJobPullerImpl.schemaStorage.GetLastSnapshot()
+	_, ok = snap.TableByName("test1", "d")
+	require.False(t, ok)
+	aId2, ok := snap.TableIDByName("test1", "a")
+	require.True(t, ok)
+	require.Equal(t, aID, aId2)
 }

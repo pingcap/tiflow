@@ -454,32 +454,30 @@ func TestHandleRenameTables(t *testing.T) {
 	}
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
-			ID:    13,
+			ID:    11,
 			Name:  pmodel.NewCIStr("x"),
 			State: timodel.StatePublic,
 		})
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
-			ID:    14,
+			ID:    12,
 			Name:  pmodel.NewCIStr("y"),
 			State: timodel.StatePublic,
 		})
 	testDoDDLAndCheck(t, snap, job, false)
 
 	var ok bool
-	_, ok = snap.PhysicalTableByID(13)
-	require.True(t, ok)
-	_, ok = snap.PhysicalTableByID(14)
-	require.True(t, ok)
+	// Real TiDB keeps the physical table ID across renames, so the
+	// renamed tables are still found by their original IDs.
 	_, ok = snap.PhysicalTableByID(11)
-	require.False(t, ok)
+	require.True(t, ok)
 	_, ok = snap.PhysicalTableByID(12)
-	require.False(t, ok)
+	require.True(t, ok)
 
 	n1, _ := snap.TableIDByName("db_2", "x")
-	require.Equal(t, n1, int64(13))
+	require.Equal(t, n1, int64(11))
 	n2, _ := snap.TableIDByName("db_1", "y")
-	require.Equal(t, n2, int64(14))
+	require.Equal(t, n2, int64(12))
 	require.Equal(t, uint64(11112222), snap.CurrentTs())
 }
 

@@ -1089,14 +1089,26 @@ func (s *snapshot) renameTables(job *timodel.Job, currentTs uint64) error {
 	if len(job.BinlogInfo.MultipleTableInfos) < len(args.RenameTableInfos) {
 		return cerror.ErrInvalidDDLJob.GenWithStackByArgs(job.ID)
 	}
-	// NOTE: should handle failures in halfway better.
+	// For cyclic renames (e.g. a -> tmp, b -> a, tmp -> b), same table ID can
+	// duplicate in args.RenameTableInfos, consider both a and tmp have same
+	// table ID. Deduplicate, otherwise dropTable/createTable will error.
+	droppedTables := make(map[int64]struct{}, len(args.RenameTableInfos))
 	for _, info := range args.RenameTableInfos {
+		if _, ok := droppedTables[info.TableID]; ok {
+			continue
+		}
+		droppedTables[info.TableID] = struct{}{}
 		if err := s.dropTable(info.TableID, currentTs); err != nil {
 			return errors.Trace(err)
 		}
 	}
+	createdTables := make(map[int64]struct{}, len(args.RenameTableInfos))
 	for i, tableInfo := range job.BinlogInfo.MultipleTableInfos {
 		info := args.RenameTableInfos[i]
+		if _, ok := createdTables[tableInfo.ID]; ok {
+			continue
+		}
+		createdTables[tableInfo.ID] = struct{}{}
 		newSchema, ok := s.schemaByID(info.NewSchemaID)
 		if !ok {
 			return cerror.ErrSnapshotSchemaNotFound.GenWithStackByArgs(info.NewSchemaID)
