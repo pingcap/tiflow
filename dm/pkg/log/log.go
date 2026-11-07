@@ -199,7 +199,7 @@ func WithCtx(ctx context.Context) Logger {
 var enabledRedactLog atomic.Bool
 
 func init() {
-	SetRedactLog(false)
+	SetRedactLog(true)
 }
 
 // IsRedactLogEnabled indicates whether the log desensitization is enabled.
