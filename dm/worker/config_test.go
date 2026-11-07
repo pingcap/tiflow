@@ -55,12 +55,16 @@ func TestParseRedactInfoLog(t *testing.T) {
 		{name: "flag overrides disabled config", withConfig: true, redactConfig: "redact-info-log = false", flags: []string{"--redact-info-log=true"}, want: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			args := []string{"--worker-addr=127.0.0.1:8262", "--name=worker1"}
+			var args []string
 			if testCase.withConfig {
 				configPath := filepath.Join(t.TempDir(), "dm-worker.toml")
 				content := "worker-addr = \"127.0.0.1:8262\"\nname = \"worker1\"\n" + testCase.redactConfig + "\n"
 				require.NoError(t, os.WriteFile(configPath, []byte(content), 0o600))
-				args = []string{"--config=" + configPath}
+				args = make([]string, 0, 1+len(testCase.flags))
+				args = append(args, "--config="+configPath)
+			} else {
+				args = make([]string, 0, 2+len(testCase.flags))
+				args = append(args, "--worker-addr=127.0.0.1:8262", "--name=worker1")
 			}
 			args = append(args, testCase.flags...)
 			cfg := NewConfig()
