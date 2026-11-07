@@ -23,6 +23,7 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/parser"
 	pmodel "github.com/pingcap/tidb/pkg/parser/model"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
@@ -1109,4 +1110,51 @@ func createFakeResultForBucketIterator(mock sqlmock.Sqlmock, indexCount int) {
 	for range indexCount {
 		mock.ExpectQuery("SELECT COUNT\\(DISTINCT *").WillReturnRows(sqlmock.NewRows([]string{"SEL"}).AddRow("5"))
 	}
+}
+
+func TestGetRowCount(t *testing.T) {
+	for _, tc := range []struct {
+		name, where string
+		args        []driver.Value
+	}{
+		{name: "all rows"},
+		{name: "configured range", where: "`id` > 'range-value'"},
+		{name: "checkpoint bound", where: "`id` > ?", args: []driver.Value{"bound-value"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New(sqlmock.QueryMatcherOption(sqlmock.QueryMatcherEqual))
+			require.NoError(t, err)
+			defer db.Close()
+			query := "SELECT COUNT(1) cnt FROM `test`.`test`"
+			if tc.where != "" {
+				query += " WHERE " + tc.where
+			}
+			mock.ExpectQuery(query).WithArgs(tc.args...).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(17))
+			args := make([]any, len(tc.args))
+			for i, arg := range tc.args {
+				args[i] = arg
+			}
+			count, err := getRowCount(context.Background(), db, "test", "test", tc.where, args)
+			require.NoError(t, err)
+			require.Equal(t, int64(17), count)
+			require.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestGetRowCountErrors(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	queryErr := errors.New("query failed")
+	mock.ExpectQuery("SELECT COUNT").WillReturnError(queryErr)
+	count, err := getRowCount(context.Background(), db, "test", "test", "", nil)
+	require.Zero(t, count)
+	require.Equal(t, queryErr, errors.Cause(err))
+
+	mock.ExpectQuery("SELECT COUNT").WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(nil))
+	count, err = getRowCount(context.Background(), db, "test", "test", "", nil)
+	require.Zero(t, count)
+	require.EqualError(t, err, "table `test`.`test` not found")
+	require.NoError(t, mock.ExpectationsWereMet())
 }
