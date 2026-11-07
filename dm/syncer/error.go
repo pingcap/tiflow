@@ -30,6 +30,7 @@ import (
 	tmysql "github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/util/dbterror"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
+	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -64,9 +65,218 @@ func isDropColumnWithIndexError(err error) bool {
 			strings.Contains(mysqlErr.Message, "with tidb_enable_change_multi_schema is disable"))
 }
 
+func cloneStrings(values []string) []string {
+	cloned := make([]string, len(values))
+	copy(cloned, values)
+	return cloned
+}
+
+func (s *Syncer) setAsyncDDLReconcileInfo(
+	ddls []string,
+	index int,
+	createTime int64,
+	startLocation binlog.Location,
+	currentLocation binlog.Location,
+) *asyncDDLReconcileInfo {
+	info := &asyncDDLReconcileInfo{
+		ddls:            cloneStrings(ddls),
+		index:           index,
+		createTime:      createTime,
+		startLocation:   startLocation.Clone(),
+		currentLocation: currentLocation.Clone(),
+	}
+	s.asyncDDLReconcileMu.Lock()
+	s.asyncDDLReconcile = info
+	s.asyncDDLReconcileMu.Unlock()
+	return info
+}
+
+func (s *Syncer) getAsyncDDLReconcileInfo() *asyncDDLReconcileInfo {
+	s.asyncDDLReconcileMu.Lock()
+	defer s.asyncDDLReconcileMu.Unlock()
+	return s.asyncDDLReconcile
+}
+
+func (s *Syncer) clearAsyncDDLReconcileInfo(info *asyncDDLReconcileInfo) {
+	s.asyncDDLReconcileMu.Lock()
+	if s.asyncDDLReconcile == info {
+		s.asyncDDLReconcile = nil
+	}
+	s.asyncDDLReconcileMu.Unlock()
+}
+
+func (s *Syncer) asyncDDLResolved(info *asyncDDLReconcileInfo) bool {
+	s.asyncDDLReconcileMu.Lock()
+	defer s.asyncDDLReconcileMu.Unlock()
+	return s.asyncDDLReconcile == info && info.resolved
+}
+
+func (s *Syncer) markAsyncDDLResolved(info *asyncDDLReconcileInfo) {
+	s.asyncDDLReconcileMu.Lock()
+	if s.asyncDDLReconcile == info {
+		info.resolved = true
+	}
+	s.asyncDDLReconcileMu.Unlock()
+}
+
+// clearResolvedAsyncDDL is called only after all post-DDL bookkeeping and the
+// DDL checkpoint flush succeed. Keeping a resolved descriptor until this point
+// prevents Resume from submitting the DDL again if bookkeeping fails after the
+// TiDB job itself has completed.
+func (s *Syncer) clearResolvedAsyncDDL(
+	ddls []string,
+	startLocation binlog.Location,
+	currentLocation binlog.Location,
+) {
+	info := s.getAsyncDDLReconcileInfo()
+	if info == nil || !s.asyncDDLResolved(info) ||
+		!info.matches(ddls, startLocation, currentLocation, s.cfg.EnableGTID) {
+		return
+	}
+	s.clearAsyncDDLReconcileInfo(info)
+}
+
+func (info *asyncDDLReconcileInfo) matches(
+	ddls []string,
+	startLocation binlog.Location,
+	currentLocation binlog.Location,
+	enableGTID bool,
+) bool {
+	if info == nil || len(info.ddls) != len(ddls) || info.index < 0 || info.index >= len(info.ddls) {
+		return false
+	}
+	for i := range ddls {
+		if info.ddls[i] != ddls[i] {
+			return false
+		}
+	}
+	return binlog.CompareLocation(info.startLocation, startLocation, enableGTID) == 0 &&
+		binlog.CompareLocation(info.currentLocation, currentLocation, enableGTID) == 0
+}
+
+// asyncDDLPollContext returns the graceful-run context when Syncer.Run has
+// initialized it. DDL execution continues to use syncCtx during the grace
+// period; only polling an already-submitted asynchronous DDL is interrupted by
+// the graceful deadline. The fallback keeps direct unit tests usable.
+func (s *Syncer) asyncDDLPollContext(fallback *tcontext.Context) *tcontext.Context {
+	if s.runCtx != nil {
+		return s.runCtx
+	}
+	return fallback
+}
+
+// pollAsyncDDL waits for the TiDB DDL identified by its SQL and creation time.
+// Canceling tctx only stops DM's polling query; it never sends a cancellation
+// request for the TiDB DDL job itself.
+func (s *Syncer) pollAsyncDDL(
+	tctx *tcontext.Context,
+	originErr error,
+	ddl string,
+	conn *dbconn.DBConn,
+	createTime int64,
+) error {
+	duration := 30
+	failpoint.Inject("ChangeDuration", func() {
+		duration = 1
+	})
+	ticker := time.NewTicker(time.Duration(duration) * time.Second)
+	defer ticker.Stop()
+
+	for {
+		if ctxErr := tctx.Ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		status, err := getDDLStatusFromTiDB(tctx, conn, ddl, createTime)
+		if err != nil {
+			if ctxErr := tctx.Ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
+			s.tctx.L().Warn("error when getting DDL status from TiDB", zap.Error(err))
+		}
+		failpoint.Inject("TestStatus", func(val failpoint.Value) {
+			status = val.(string)
+			s.tctx.L().Info("injected test status:", zap.String("TestStatus", status))
+		})
+		// Cancellation wins even when the status query itself completed. Without
+		// this check, an empty or unexpected status racing with the graceful
+		// deadline could be reported as the original invalid-connection error.
+		if ctxErr := tctx.Ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
+		switch status {
+		case model.JobStateDone.String(), model.JobStateSynced.String():
+			return nil
+		case model.JobStateCancelled.String(), model.JobStateRollingback.String(), model.JobStateRollbackDone.String(), model.JobStateCancelling.String():
+			return terror.ErrSyncerCancelledDDL.Generate(ddl)
+		case model.JobStateRunning.String(), model.JobStateQueueing.String(), model.JobStateNone.String():
+		default:
+			tctx.L().Warn("Unexpected DDL status", zap.String("DDL status", status))
+			return originErr
+		}
+		select {
+		case <-tctx.Ctx.Done():
+			// Return the context error instead of the original invalid-connection
+			// error so intentional Pause/Stop is classified as cancellation.
+			return tctx.Ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+// reconcileAsyncDDL resolves an asynchronous DDL left by a previous paused
+// run. The bool result reports whether a pending DDL matched the current job,
+// in which case the caller must not submit the DDL again.
+func (s *Syncer) reconcileAsyncDDL(
+	tctx *tcontext.Context,
+	ddls []string,
+	startLocation binlog.Location,
+	currentLocation binlog.Location,
+	conn *dbconn.DBConn,
+) (bool, error) {
+	info := s.getAsyncDDLReconcileInfo()
+	if info == nil {
+		return false, nil
+	}
+	if !info.matches(ddls, startLocation, currentLocation, s.cfg.EnableGTID) {
+		s.tctx.L().Error("pending asynchronous DDL does not match the current DDL",
+			zap.Strings("pending DDLs", info.ddls),
+			zap.Strings("current DDLs", ddls),
+			zap.Stringer("pending start location", info.startLocation),
+			zap.Stringer("current start location", startLocation),
+			zap.Stringer("pending end location", info.currentLocation),
+			zap.Stringer("current end location", currentLocation))
+		// Do not execute a later DDL past an unresolved DDL barrier.
+		return true, terror.ErrDBUnExpect.Generate("pending asynchronous DDL does not match the current DDL")
+	}
+	if s.asyncDDLResolved(info) {
+		return true, nil
+	}
+
+	err := s.pollAsyncDDL(s.asyncDDLPollContext(tctx), mysql.ErrInvalidConn, info.ddls[info.index], conn, info.createTime)
+	if err == nil {
+		s.markAsyncDDLResolved(info)
+	} else if terror.ErrSyncerCancelledDDL.Equal(err) {
+		// TiDB has reached a terminal non-success state, so no unknown
+		// downstream outcome remains to reconcile. Clear the descriptor after
+		// surfacing the error and preserve the existing explicit-Resume retry
+		// behavior.
+		s.clearAsyncDDLReconcileInfo(info)
+	}
+	return true, err
+}
+
 // handleSpecialDDLError handles special errors for DDL execution
 // if createTime equals to -1, skip the handle procedure for waitAsyncDDL.
-func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
+func (s *Syncer) handleSpecialDDLError(
+	tctx *tcontext.Context,
+	err error,
+	ddls []string,
+	index int,
+	conn *dbconn.DBConn,
+	createTime int64,
+	startLocation binlog.Location,
+	currentLocation binlog.Location,
+) error {
 	// We use default parser because ddls are came from *Syncer.genDDLInfo, which is StringSingleQuotes, KeyWordUppercase and NameBackQuotes
 	parser2 := parser.New()
 
@@ -217,42 +427,21 @@ func (s *Syncer) handleSpecialDDLError(tctx *tcontext.Context, err error, ddls [
 
 	// it handles the operations for DDL when encountering `invalid connection` by waiting the asynchronous ddl to synchronize
 	waitAsyncDDL := func(tctx *tcontext.Context, err error, ddls []string, index int, conn *dbconn.DBConn, createTime int64) error {
-		if len(ddls) == 0 || index > len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn || createTime == -1 {
+		if len(ddls) == 0 || index < 0 || index > len(ddls)-1 || errors.Cause(err) != mysql.ErrInvalidConn || createTime == -1 {
 			return err // return the original error
 		}
 
-		duration := 30
-		failpoint.Inject("ChangeDuration", func() {
-			duration = 1
-		})
-		ticker := time.NewTicker(time.Duration(duration) * time.Second)
-		defer ticker.Stop()
-
-		for {
-			status, err2 := getDDLStatusFromTiDB(tctx, conn, ddls[index], createTime)
-			if err2 != nil {
-				s.tctx.L().Warn("error when getting DDL status from TiDB", zap.Error(err2))
-			}
-			failpoint.Inject("TestStatus", func(val failpoint.Value) {
-				status = val.(string)
-				s.tctx.L().Info("injected test status:", zap.String("TestStatus", status))
-			})
-			switch status {
-			case model.JobStateDone.String(), model.JobStateSynced.String():
-				return nil
-			case model.JobStateCancelled.String(), model.JobStateRollingback.String(), model.JobStateRollbackDone.String(), model.JobStateCancelling.String():
-				return terror.ErrSyncerCancelledDDL.Generate(ddls[index])
-			case model.JobStateRunning.String(), model.JobStateQueueing.String(), model.JobStateNone.String():
-			default:
-				tctx.L().Warn("Unexpected DDL status", zap.String("DDL status", status))
-				return err
-			}
-			select {
-			case <-tctx.Ctx.Done():
-				return err
-			case <-ticker.C:
-			}
+		info := s.setAsyncDDLReconcileInfo(ddls, index, createTime, startLocation, currentLocation)
+		retErr := s.pollAsyncDDL(s.asyncDDLPollContext(tctx), err, info.ddls[info.index], conn, info.createTime)
+		if retErr == nil {
+			s.markAsyncDDLResolved(info)
+		} else if terror.ErrSyncerCancelledDDL.Equal(retErr) {
+			// A terminal cancelled/rollback state is a known failure rather than
+			// an unknown async result. Surface it now and allow an explicit Resume
+			// to use the syncer's normal retry/recovery path.
+			s.clearAsyncDDLReconcileInfo(info)
 		}
+		return retErr
 	}
 
 	retErr := err
