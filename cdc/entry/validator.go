@@ -30,7 +30,8 @@ func VerifyTables(
 	startTs uint64) (
 	tableInfos []*model.TableInfo,
 	ineligibleTables,
-	eligibleTables []model.TableName,
+	eligibleTables,
+	allTables []model.TableName,
 	err error,
 ) {
 	meta := kv.GetSnapshotMeta(storage, startTs)
@@ -38,10 +39,11 @@ func VerifyTables(
 		model.GenerateChangeFeedID("api", "verifyTable"),
 		meta, startTs, false /* explicitTables */, f)
 	if err != nil {
-		return nil, nil, nil, errors.Trace(err)
+		return nil, nil, nil, nil, errors.Trace(err)
 	}
 
 	snap.IterTables(true, func(tableInfo *model.TableInfo) {
+		allTables = append(allTables, tableInfo.TableName)
 		if f.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
 			return
 		}
