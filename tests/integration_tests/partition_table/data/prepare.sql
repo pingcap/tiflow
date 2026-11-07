@@ -54,4 +54,13 @@ alter table t1 partition by key(a) partitions 7;
 insert into t1 values (-2001),(2001),(2002),(-2002),(-2003),(2003),(-2004),(2004),(-2005),(2005),(2006),(-2006),(2007),(-2007);
 ALTER TABLE t1 partition by range(a) (partition p0 values less than (5), PARTITION p2 VALUES LESS THAN (20), PARTITION p3 VALUES LESS THAN (26), PARTITION p4 VALUES LESS THAN (35), PARTITION pMax VALUES LESS THAN (MAXVALUE));
 
+/* Cyclically rename two partitioned tables. */
+create table pt1 (a int primary key, b int) partition by range(a) (partition p0 values less than (10), partition p1 values less than (100));
+create table pt2 (a int primary key, b int) partition by range(a) (partition p0 values less than (10), partition p1 values less than (100));
+insert into pt1 values (1, 11);
+insert into pt2 values (2, 22);
+rename table pt1 to tmp, pt2 to pt1, tmp to pt2;
+insert into pt1 values (3, 33);
+insert into pt2 values (4, 44);
+
 create table finish_mark (a int primary key);

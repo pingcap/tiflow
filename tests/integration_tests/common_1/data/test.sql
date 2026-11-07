@@ -205,3 +205,12 @@ RENAME TABLE
 INSERT INTO `rename_t4` VALUES (2, 4);
 INSERT INTO `rename_t1` VALUES (2, 1);
 INSERT INTO `rename_t2` VALUES (2, 2);
+
+-- swap table names with tmp
+RENAME TABLE
+    `rename_t1` TO `tmp`,
+    `rename_t2` TO `rename_t1`,
+    `tmp` TO `rename_t2`;
+
+INSERT INTO `rename_t1` VALUES (3, 1);
+INSERT INTO `rename_t2` VALUES (3, 2);

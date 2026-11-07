@@ -394,7 +394,7 @@ func TestHandleDDL(t *testing.T) {
 	}
 }
 
-func TestHandleRenameTables(t *testing.T) {
+func newCrossSchemaTablesSnapshot(t *testing.T) *schema.Snapshot {
 	// Initial schema: db_1.table_1 and db_2.table_2.
 	snap := schema.NewEmptySnapshot(true)
 	var i int64
@@ -433,6 +433,11 @@ func TestHandleRenameTables(t *testing.T) {
 		err := snap.HandleDDL(job)
 		require.Nil(t, err)
 	}
+	return snap
+}
+
+func TestHandleRenameTables(t *testing.T) {
+	snap := newCrossSchemaTablesSnapshot(t)
 
 	// rename table db1.table_1 to db2.x, db2.table_2 to db1.y
 	oldSchemaIDs := []int64{1, 2}
@@ -454,33 +459,191 @@ func TestHandleRenameTables(t *testing.T) {
 	}
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
-			ID:    13,
+			ID:    11,
 			Name:  pmodel.NewCIStr("x"),
 			State: timodel.StatePublic,
 		})
 	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
 		&timodel.TableInfo{
-			ID:    14,
+			ID:    12,
 			Name:  pmodel.NewCIStr("y"),
 			State: timodel.StatePublic,
 		})
 	testDoDDLAndCheck(t, snap, job, false)
 
 	var ok bool
-	_, ok = snap.PhysicalTableByID(13)
-	require.True(t, ok)
-	_, ok = snap.PhysicalTableByID(14)
-	require.True(t, ok)
+	// Real TiDB keeps the physical table ID across renames, so the
+	// renamed tables are still found by their original IDs.
 	_, ok = snap.PhysicalTableByID(11)
-	require.False(t, ok)
+	require.True(t, ok)
 	_, ok = snap.PhysicalTableByID(12)
-	require.False(t, ok)
+	require.True(t, ok)
 
 	n1, _ := snap.TableIDByName("db_2", "x")
-	require.Equal(t, n1, int64(13))
+	require.Equal(t, n1, int64(11))
 	n2, _ := snap.TableIDByName("db_1", "y")
-	require.Equal(t, n2, int64(14))
+	require.Equal(t, n2, int64(12))
 	require.Equal(t, uint64(11112222), snap.CurrentTs())
+}
+
+func TestHandleCrossSchemaCyclicRenameTables(t *testing.T) {
+	snap := newCrossSchemaTablesSnapshot(t)
+
+	// Cross schema cyclic renames:
+	// db_1.x -> db_1.tmp,
+	// db_2.y -> db_1.x,
+	// db_1.tmp -> db_2.y.
+	oldSchemaIDs := []int64{1, 2, 1}
+	newSchemaIDs := []int64{1, 1, 2}
+	oldTableIDs := []int64{11, 12, 11}
+	newTableNames := []pmodel.CIStr{
+		pmodel.NewCIStr("tmp"),
+		pmodel.NewCIStr("x"),
+		pmodel.NewCIStr("y"),
+	}
+	oldTableNames := []pmodel.CIStr{
+		pmodel.NewCIStr("x"),
+		pmodel.NewCIStr("y"),
+		pmodel.NewCIStr("tmp"),
+	}
+	oldSchemaNames := []pmodel.CIStr{
+		pmodel.NewCIStr("db_1"),
+		pmodel.NewCIStr("db_2"),
+		pmodel.NewCIStr("db_1"),
+	}
+	args := []interface{}{
+		oldSchemaIDs, newSchemaIDs, newTableNames, oldTableIDs, oldSchemaNames, oldTableNames,
+	}
+	rawArgs, err := json.Marshal(args)
+	require.Nil(t, err)
+	job := &timodel.Job{
+		Version: timodel.JobVersion1,
+		Type:    timodel.ActionRenameTables,
+		RawArgs: rawArgs,
+		BinlogInfo: &timodel.HistoryInfo{
+			FinishedTS: 11112223,
+		},
+	}
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    11,
+			Name:  pmodel.NewCIStr("tmp"),
+			State: timodel.StatePublic,
+		})
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    12,
+			Name:  pmodel.NewCIStr("x"),
+			State: timodel.StatePublic,
+		})
+	job.BinlogInfo.MultipleTableInfos = append(job.BinlogInfo.MultipleTableInfos,
+		&timodel.TableInfo{
+			ID:    11,
+			Name:  pmodel.NewCIStr("y"),
+			State: timodel.StatePublic,
+		})
+	testDoDDLAndCheck(t, snap, job, false)
+
+	n1, ok := snap.TableIDByName("db_1", "x")
+	require.True(t, ok)
+	require.Equal(t, n1, int64(12))
+	n2, ok := snap.TableIDByName("db_2", "y")
+	require.True(t, ok)
+	require.Equal(t, n2, int64(11))
+	_, ok = snap.TableByName("db_1", "y")
+	require.False(t, ok)
+	_, ok = snap.TableByName("db_1", "tmp")
+	require.False(t, ok)
+	_, ok = snap.TableByName("db_2", "x")
+	require.False(t, ok)
+	require.Equal(t, uint64(11112223), snap.CurrentTs())
+}
+
+func TestPartitionTableCyclicRename(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	schemaStorage := helper.SchemaStorage()
+
+	createPartitionTable := func(name string) (*timodel.TableInfo, []int64) {
+		createJob := helper.DDL2Job(fmt.Sprintf(`create table test.%s (
+			id int primary key,
+			val int
+		) partition by range(id) (
+			partition p0 values less than (10),
+			partition p1 values less than (100)
+		)`, name))
+		err := schemaStorage.HandleDDLJob(createJob)
+		require.NoError(t, err)
+		info := createJob.BinlogInfo.TableInfo
+		pi := info.GetPartitionInfo()
+		require.NotNil(t, pi)
+		partitionIDs := make([]int64, 0, 2)
+		for _, def := range pi.Definitions {
+			partitionIDs = append(partitionIDs, def.ID)
+		}
+		return info, partitionIDs
+	}
+
+	pt1, prePT1PartitionIDs := createPartitionTable("pt1")
+	pt2, prePT2PartitionIDs := createPartitionTable("pt2")
+	prePT1ID, prePT2ID := pt1.ID, pt2.ID
+
+	job := helper.DDL2Job("rename table test.pt1 to test.tmp, test.pt2 to test.pt1, test.tmp to test.pt2")
+	oldSchemaIDs := []int64{job.SchemaID, job.SchemaID, job.SchemaID}
+	newSchemaIDs := []int64{job.SchemaID, job.SchemaID, job.SchemaID}
+	newTableNames := []pmodel.CIStr{
+		pmodel.NewCIStr("tmp"), pmodel.NewCIStr("pt1"), pmodel.NewCIStr("pt2"),
+	}
+	tableIDs := []int64{prePT1ID, prePT2ID, prePT1ID}
+	oldSchemaNames := []pmodel.CIStr{
+		pmodel.NewCIStr("test"), pmodel.NewCIStr("test"), pmodel.NewCIStr("test"),
+	}
+	rawArgs, err := json.Marshal([]interface{}{
+		oldSchemaIDs, newSchemaIDs, newTableNames, tableIDs, oldSchemaNames,
+	})
+	require.NoError(t, err)
+	job.Version = timodel.JobVersion1
+	job.RawArgs = rawArgs
+
+	ctx := context.Background()
+
+	schemaStorage.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schemaStorage.BuildDDLEvents(ctx, job)
+	require.NoError(t, err)
+	err = schemaStorage.HandleDDLJob(job)
+	require.NoError(t, err)
+	schemaStorage.AdvanceResolvedTs(job.BinlogInfo.FinishedTS)
+	require.Len(t, events, 3)
+
+	require.Equal(t, "RENAME TABLE `test`.`pt1` TO `test`.`tmp`", events[0].Query)
+	require.Equal(t, "RENAME TABLE `test`.`pt2` TO `test`.`pt1`", events[1].Query)
+	require.Equal(t, "RENAME TABLE `test`.`tmp` TO `test`.`pt2`", events[2].Query)
+
+	snap := schemaStorage.GetLastSnapshot()
+	finalPT1, ok := snap.TableByName("test", "pt1")
+	require.True(t, ok)
+	finalPT2, ok := snap.TableByName("test", "pt2")
+	require.True(t, ok)
+	require.Equal(t, prePT2ID, finalPT1.ID)
+	require.Equal(t, prePT1ID, finalPT2.ID)
+	_, ok = snap.TableByName("test", "tmp")
+	require.False(t, ok)
+
+	for _, partitionID := range prePT1PartitionIDs {
+		info, ok := snap.PhysicalTableByID(partitionID)
+		require.True(t, ok)
+		require.Equal(t, "test", info.GetSchemaName())
+		require.Equal(t, "pt2", info.GetTableName())
+		require.Equal(t, prePT1ID, info.ID)
+	}
+	for _, partitionID := range prePT2PartitionIDs {
+		info, ok := snap.PhysicalTableByID(partitionID)
+		require.True(t, ok)
+		require.Equal(t, "test", info.GetSchemaName())
+		require.Equal(t, "pt1", info.GetTableName())
+		require.Equal(t, prePT2ID, info.ID)
+	}
 }
 
 func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, isErr bool) {

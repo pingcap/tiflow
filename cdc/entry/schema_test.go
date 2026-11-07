@@ -15,6 +15,7 @@ package entry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"testing"
@@ -419,6 +420,83 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 			},
 		},
 	})
+}
+
+func TestBuildDDLEventsFromRenameTablesMissingOldNames(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+
+	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.NoError(t, err)
+	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
+		false, dummyChangeFeedID, util.RoleTester, f)
+	require.NoError(t, err)
+	ctx := context.Background()
+
+	job := helper.DDL2Job("create database d1")
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	_, err = schema.BuildDDLEvents(ctx, job)
+	require.NoError(t, err)
+	require.NoError(t, schema.HandleDDLJob(job))
+	schemaID := job.SchemaID
+
+	job = helper.DDL2Job("create table d1.t1(id int primary key)")
+	t1TableID := job.TableID
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	_, err = schema.BuildDDLEvents(ctx, job)
+	require.NoError(t, err)
+	require.NoError(t, schema.HandleDDLJob(job))
+
+	job = helper.DDL2Job("create table d1.t2(id int primary key)")
+	t2TableID := job.TableID
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	_, err = schema.BuildDDLEvents(ctx, job)
+	require.NoError(t, err)
+	require.NoError(t, schema.HandleDDLJob(job))
+
+	job = helper.DDL2Job(
+		"RENAME TABLE d1.t1 TO d1.tmp, d1.t2 TO d1.t1, d1.tmp TO d1.t2")
+
+	// Jobs run by older TiDB may lose the last v1 argument oldTableNames.
+	// Keep only new table names here to simulate such jobs.
+	oldSchemaIDs := []int64{schemaID, schemaID, schemaID}
+	newSchemaIDs := []int64{schemaID, schemaID, schemaID}
+	newTableNames := []pmodel.CIStr{
+		pmodel.NewCIStr("tmp"),
+		pmodel.NewCIStr("t1"),
+		pmodel.NewCIStr("t2"),
+	}
+	tableIDs := []int64{t1TableID, t2TableID, t1TableID}
+	oldSchemaNames := []pmodel.CIStr{
+		pmodel.NewCIStr("d1"),
+		pmodel.NewCIStr("d1"),
+		pmodel.NewCIStr("d1"),
+	}
+	rawArgs, err := json.Marshal([]interface{}{
+		oldSchemaIDs,
+		newSchemaIDs,
+		newTableNames,
+		tableIDs,
+		oldSchemaNames,
+	})
+	require.NoError(t, err)
+	job.Version = timodel.JobVersion1
+	job.RawArgs = rawArgs
+
+	schema.AdvanceResolvedTs(job.BinlogInfo.FinishedTS - 1)
+	events, err := schema.BuildDDLEvents(ctx, job)
+	require.NoError(t, err)
+	require.Len(t, events, 3)
+	require.Equal(t,
+		"RENAME TABLE `d1`.`t1` TO `d1`.`tmp`", events[0].Query)
+	require.Equal(t,
+		"RENAME TABLE `d1`.`t2` TO `d1`.`t1`", events[1].Query)
+	// The third old name is the intermediate name created by the first
+	// entry, not the original name stored in the pre-statement snapshot.
+	require.Equal(t,
+		"RENAME TABLE `d1`.`tmp` TO `d1`.`t2`", events[2].Query)
 }
 
 func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {

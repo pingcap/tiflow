@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/log"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tiflow/cdc/entry/schema"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
@@ -500,6 +501,14 @@ func (s *schemaStorage) buildRenameEvents(
 		return nil, errors.Trace(err)
 	}
 
+	// Trace the current names by table ID, so that a later rename entry of
+	// the same table gets the intermediate name, even when the old table
+	// name in DDL job args is empty (TiDB <= 8.1).
+	type tableNameState struct {
+		schema string
+		table  string
+	}
+	states := make(map[int64]tableNameState, len(multiTableInfos))
 	for i, tableInfo := range multiTableInfos {
 		info := args.RenameTableInfos[i]
 		newSchema, ok := preSnap.SchemaByID(info.NewSchemaID)
@@ -508,16 +517,49 @@ func (s *schemaStorage) buildRenameEvents(
 				info.NewSchemaID)
 		}
 		newSchemaName := newSchema.Name.O
-		oldSchemaName := info.OldSchemaName.O
 		event := new(model.DDLEvent)
 		preTableInfo, ok := preSnap.PhysicalTableByID(tableInfo.ID)
 		if !ok {
 			return nil, cerror.ErrSchemaStorageTableMiss.GenWithStackByArgs(
 				job.TableID)
 		}
+		// Initialize old names from the pre-statement snapshot.
+		state, ok := states[tableInfo.ID]
+		if !ok {
+			state = tableNameState{
+				schema: preTableInfo.TableName.Schema,
+				table:  preTableInfo.Name.O,
+			}
+		}
+		oldSchemaName := state.schema
+		oldTableName := state.table
 
 		tableInfo := model.WrapTableInfo(info.NewSchemaID, newSchemaName,
 			job.BinlogInfo.FinishedTS, tableInfo)
+
+		// For `a TO tmp`, use intermediate name "tmp" as new name.
+		if info.NewTableName.O != "" && tableInfo.Name.O != info.NewTableName.O {
+			tableInfo = tableInfo.Clone()
+			// table.TableName.Schema already set correctly in WrapTableInfo
+			tableInfo.TableName.Table = info.NewTableName.O
+			tableInfo.TableInfo.Name = ast.NewCIStr(info.NewTableName.O)
+		}
+
+		// For `tmp TO b`, use intermediate name "tmp" as old name.
+		if oldTableName != "" &&
+			(preTableInfo.TableName.Schema != oldSchemaName ||
+				preTableInfo.Name.O != oldTableName) {
+			preTableInfo = preTableInfo.Clone()
+			preTableInfo.TableName.Schema = oldSchemaName
+			preTableInfo.TableName.Table = oldTableName
+			preTableInfo.TableInfo.Name = ast.NewCIStr(oldTableName)
+		}
+		// Record the new names, which become the old names for the next
+		// entry of the same table.
+		states[tableInfo.ID] = tableNameState{
+			schema: newSchemaName,
+			table:  tableInfo.Name.O,
+		}
 		event.FromJobWithArgs(job, preTableInfo, tableInfo, oldSchemaName, newSchemaName)
 		event.Seq = uint64(i)
 		ddlEvents = append(ddlEvents, event)
