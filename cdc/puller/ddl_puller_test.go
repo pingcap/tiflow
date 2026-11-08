@@ -891,3 +891,41 @@ func TestHandleExchangeTableName(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, aID, aId2)
 }
+
+func TestHandleRenameTablesWithFilter(t *testing.T) {
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	defer helper.Close()
+
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(uint64(10))
+
+	// d1.a and d1.b are tracked, but the intermediate name d1.tmp is not.
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"d1.a", "d1.b"}
+	f, err := filter.NewFilter(cfg, "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
+
+	ddl := helper.DDL2Job("CREATE DATABASE d1;")
+	skip, err := ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	ddl = helper.DDL2Job("CREATE TABLE d1.a (id INT PRIMARY KEY);")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	// The rename chain passes through d1.tmp, which is not covered by the
+	// filter rules. The chain must still be retained: the intermediate name
+	// never blocks it, otherwise a healthy chain would be wrongly rejected
+	// with ErrSyncRenameTableFailed.
+	ddl = helper.DDL2Job("rename table d1.a to d1.tmp, d1.tmp to d1.b")
+	skip, err = ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	// Both entries must be retained: the chain starts at d1.a and ends at
+	// d1.b, both covered by the rules.
+	require.Len(t, ddl.BinlogInfo.MultipleTableInfos, 2)
+}

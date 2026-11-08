@@ -561,15 +561,26 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 	remainTables := make([]*timodel.TableInfo, 0, len(multiTableInfos))
 	snap := p.schemaStorage.GetLastSnapshot()
 
+	// The `discarded` carries discard flag from previous rounds, for example:
+	// 	a -> tmp -> b
+	// With a & b both match the rule, but tmp missed, `ShouldDiscardDDL(tmp)`
+	// return true, but we should replicate it, actually. So here we
+	// pass previous value of the same table to `shouldDiscardOldTable` to
+	// allow the chain replicated.
+	discarded := make(map[int64]bool, len(multiTableInfos))
 	argsForRemaining := &timodel.RenameTablesArgs{}
 	for i, tableInfo := range multiTableInfos {
 		info := args.RenameTableInfos[i]
 		var shouldDiscardOldTable, shouldDiscardNewTable bool
-		oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
-		if !ok {
-			shouldDiscardOldTable = true
+		if previous, tracked := discarded[tableInfo.ID]; tracked {
+			shouldDiscardOldTable = previous
 		} else {
-			shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, info.OldSchemaName.O, oldTable.Name.O, job.StartTS)
+			oldTable, ok := snap.PhysicalTableByID(tableInfo.ID)
+			if !ok {
+				shouldDiscardOldTable = true
+			} else {
+				shouldDiscardOldTable = p.filter.ShouldDiscardDDL(job.Type, info.OldSchemaName.O, oldTable.Name.O, job.StartTS)
+			}
 		}
 
 		newSchemaName, ok := snap.SchemaByID(info.NewSchemaID)
@@ -586,13 +597,16 @@ func (p *ddlJobPullerImpl) handleRenameTables(job *timodel.Job) (skip bool, err 
 				zap.Int64("tableID", tableInfo.ID),
 				zap.String("schema", info.OldSchemaName.O),
 				zap.String("query", job.Query))
+			// Pass true to shouldDiscardOldTable in following rounds.
+			discarded[tableInfo.ID] = true
 			continue
 		}
 		if shouldDiscardOldTable && !shouldDiscardNewTable {
 			// if old table is not in filter rule and its new name is in filter rule, return error.
 			return true, cerror.ErrSyncRenameTableFailed.GenWithStackByArgs(tableInfo.ID, job.Query)
 		}
-		// old table name matches the filter rule, remain it.
+		// Pass false to shouldDiscardOldTable in following round.
+		discarded[tableInfo.ID] = false
 		argsForRemaining.RenameTableInfos = append(argsForRemaining.RenameTableInfos, &timodel.RenameTableArgs{
 			OldSchemaID:   info.OldSchemaID,
 			NewSchemaID:   info.NewSchemaID,
