@@ -100,8 +100,8 @@ func TestMustRegister(t *testing.T) {
 	require.Len(t, reg.collectorByWorker["worker4"], 2)
 }
 
-// prometheus metric name and label name only support [a-z][A-Z][0-9][_][:]
-// label name can't have prefix '__'
+// Prometheus metric names must be valid UTF-8, and label names can't have the
+// reserved prefix "__".
 func TestMustRegisterNotValidName(t *testing.T) {
 	t.Parallel()
 
@@ -116,7 +116,7 @@ func TestMustRegisterNotValidName(t *testing.T) {
 
 	// not a valid metric name
 	reg.MustRegister("worker", prometheus.NewCounter(prometheus.CounterOpts{
-		Name: "counter-5",
+		Name: "counter-\xff",
 	}))
 }
 
