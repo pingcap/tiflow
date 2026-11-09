@@ -1,56 +1,59 @@
-# See the OWNERS docs at https://go.k8s.io/owners
+# See the OWNERS docs at https://www.kubernetes.dev/docs/guide/owners/#owners
+# The members of 'sig-community-*' are synced from memberships defined in repository: https://github.com/pingcap/community.
 approvers:
+  - 0xPoe
   - 3AceShowHand
   - 3pointer
   - 5kbpers
+  - Benjamin2037
+  - CharlesCheung96
+  - D3Hunter
+  - Ehco1996
+  - GMHDBJD
+  - IANTHEREAL
+  - Leavrth
+  - Little-Wallace
+  - OliverS929
+  - Tammyxia
+  - WangXiangUSTC
+  - WizardXiao
+  - YuJuncen
   - amyangfei
   - asddongmen
-  - Benjamin2037
   - buchuitoudegou
-  - CharlesCheung96
   - csuzhangxc
-  - D3Hunter
   - dsdashun
-  - Ehco1996
   - glorv
-  - GMHDBJD
   - gozssky
   - hicqu
   - holys
   - hongyunyan
-  - IANTHEREAL
   - july2993
   - kennytm
   - lance6716
-  - Leavrth
   - leoppro
   - lichunzhu
   - lidezhu
-  - Little-Wallace
   - liuzix
   - lonng
   - maxshuang
   - niubell
   - okJiang
   - overvenus
-  - Rustin170506
   - sdojjy
   - suzaku
-  - Tammyxia
-  - WangXiangUSTC
-  - WizardXiao
   - wk989898
   - wlwilliamx
-  - YuJuncen
   - zhangjinpeng87
   - zhaoxinyu
   - zwj-coder
 reviewers:
+  - MoCuishle28
   - ben1009
   - charleszheng44
   - fengou1
   - iamxy
   - joccau
-  - MoCuishle28
+  - joechenrh
   - nongfushanquan
   - tiancaiamao
