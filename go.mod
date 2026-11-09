@@ -444,6 +444,9 @@ replace github.com/benbjohnson/clock v1.3.5 => github.com/benbjohnson/clock v1.1
 // copy from TiDB
 replace go.opencensus.io => go.opencensus.io v0.23.1-0.20220331163232-052120675fac
 
+// etcd 3.5 uses interceptors removed in otelgrpc v0.60.0.
+replace go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc => go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.59.0
+
 // copy from TiDB
 replace github.com/apache/arrow-go/v18 => github.com/joechenrh/arrow-go/v18 v18.0.0-20250911101656-62c34c9a3b82
 
