@@ -401,11 +401,10 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
-func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, orderFilter tfilter.Filter) {
+func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, txnOrderFilter tfilter.Filter) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,
-			m.sinkMemQuota, splitTxn)
-		w.txnOrderFilter = orderFilter
+			m.sinkMemQuota, splitTxn, txnOrderFilter)
 		m.sinkWorkers = append(m.sinkWorkers, w)
 		eg.Go(func() error { return w.handleTasks(ctx, m.sinkTaskChan) })
 	}

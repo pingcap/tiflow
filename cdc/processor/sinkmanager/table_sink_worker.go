@@ -76,12 +76,14 @@ func newSinkWorker(
 	sourceManager *sourcemanager.SourceManager,
 	sinkQuota *memquota.MemQuota,
 	splitTxn bool,
+	txnOrderFilter tfilter.Filter,
 ) *sinkWorker {
 	return &sinkWorker{
-		changefeedID:  changefeedID,
-		sourceManager: sourceManager,
-		sinkMemQuota:  sinkQuota,
-		splitTxn:      splitTxn,
+		changefeedID:   changefeedID,
+		sourceManager:  sourceManager,
+		sinkMemQuota:   sinkQuota,
+		splitTxn:       splitTxn,
+		txnOrderFilter: txnOrderFilter,
 
 		metricOutputEventCountKV: outputEventCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv"),
 	}
@@ -205,7 +207,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// NOTICE: The event can be filtered by the event filter.
 		if e.Row != nil {
-			if w.txnOrderFilter != nil {
+			if w.splitTxn && w.txnOrderFilter != nil {
 				table := e.Row.TableInfo.TableName
 				ordered := w.txnOrderFilter.MatchTable(table.Schema, table.Table)
 				// Matched tables use transaction-atomicity=table.

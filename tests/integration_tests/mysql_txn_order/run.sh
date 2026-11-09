@@ -40,6 +40,7 @@ INSERT INTO mysql_txn_order.t VALUES (1,0),(2,0);' 127.0.0.1 "$port"
 	# Keep multiple workers and normal batching settings: the ordered table must
 	# automatically get full single-table transactions committed in order.
 	SINK_URI="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?worker-count=4&max-txn-row=256&safe-mode=false&batch-dml-enable=false"
+	bash "$CUR/api.sh" "$SINK_URI"
 	run_cdc_cli changefeed create --changefeed-id=ordered --start-ts="$start_ts" --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
 
 	"$WORK_DIR/check_order" --upstream "root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/mysql_txn_order" \
