@@ -29,6 +29,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -155,7 +156,7 @@ func verifyCreateChangefeedConfig(
 		CreatorVersion: version.ReleaseVersion,
 		Epoch:          owner.GenerateChangefeedEpoch(ctx, up.PDClient),
 	}
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.NewFilter(replicaConfig, "", sink.IsMySQLCompatibleScheme(sinkURIParsed.Scheme))
 	if err != nil {
 		return nil, err
 	}
@@ -251,12 +252,11 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 				cerror.WrapError(cerror.ErrSinkURIInvalid,
 					util.MaskSensitiveDataInURLError(err), util.MaskSensitiveDataInURIForError(newInfo.SinkURI)))
 		}
-		if err := newInfo.Config.ValidateAndAdjust(sinkURI); err != nil {
-			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-		}
-
-		if len(mysqlCfg.TxnOrderTables) != 0 {
-			f, err := filter.NewFilter(newInfo.Config, "")
+		if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+			if err := newInfo.Config.ValidateAndAdjust(sinkURI); err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			f, err := filter.NewFilter(newInfo.Config, "", true)
 			if err != nil {
 				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 			}

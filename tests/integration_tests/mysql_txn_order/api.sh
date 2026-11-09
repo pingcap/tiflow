@@ -112,8 +112,23 @@ for version in v1 v2; do
 	# Non-MySQL sinks ignore the ordering rules, including matches on partitions.
 	payload=$(ordering_update "$filters" "$filters" | jq -c '.sink_uri = "blackhole://"')
 	api_request "$success" PUT "$version/changefeeds/$id" "$payload"
-	save_api_config '[]' blackhole
-	jq -e '(.sink_uri | startswith("blackhole:")) and (.config.sink.mysql_config.txn_order_tables // []) == []' "$WORK_DIR/api-before.json"
+	save_api_config "$filters" blackhole
+	jq -e --argjson rules "$filters" \
+		'(.sink_uri | startswith("blackhole:")) and .config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
+
+	# Invalid rules are retained without being parsed or enabled on non-MySQL sinks.
+	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update '["invalid"]' "$filters")"
+	save_api_config '["invalid"]' blackhole
+	api_request "$success" POST "$version/changefeeds/$id/resume" '{}'
+	ensure 10 check_api_state "$id" normal
+	checkpoint=$(run_cdc_cli_tso_query "$UP_PD_HOST_1" "$UP_PD_PORT_1")
+	ensure 10 check_api_checkpoint "$id" "$checkpoint"
+	api_request "$success" POST "$version/changefeeds/$id/pause"
+	ensure 10 check_api_state "$id" stopped
+	save_api_config '["invalid"]' blackhole
+	payload=$(jq -cn --arg uri "$SINK_URI" '{sink_uri: $uri}')
+	reject_api_update "$payload" 'invalid sink.mysql-config.txn-order-tables'
+
 	payload=$(ordering_update "$regular" "$filters" | jq -c --arg uri "$SINK_URI" '.sink_uri = $uri')
 	api_request "$success" PUT "$version/changefeeds/$id" "$payload"
 	save_api_config "$regular" mysql

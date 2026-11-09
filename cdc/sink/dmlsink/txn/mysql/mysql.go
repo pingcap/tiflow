@@ -205,7 +205,7 @@ func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent, tableOrde
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
 	maxTxnRow := s.cfg.MaxTxnRow
-	if maxTxnRow != 1 && tableOrder {
+	if tableOrder {
 		// Flush before accepting another ordered transaction. Preceding ordinary
 		// transactions can share this commit without affecting per-table order.
 		maxTxnRow = 1

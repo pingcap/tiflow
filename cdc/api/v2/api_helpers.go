@@ -552,7 +552,7 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 	storage tidbkv.Storage, startTs uint64,
 	scheme string, topic string, protocol config.Protocol,
 ) ([]model.TableName, []model.TableName, error) {
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.NewFilter(replicaConfig, "", sink.IsMySQLCompatibleScheme(scheme))
 	if err != nil {
 		return nil, nil, err
 	}

@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 )
 
@@ -436,7 +437,7 @@ func TestTxnOrderPartitionTables(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"app.*", "!app.excluded"}
 	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered*", "app.excluded"}}
-	f, err := NewFilter(cfg, "")
+	f, err := NewFilter(cfg, "", true)
 	require.NoError(t, err)
 	ti := model.BuildTableInfo("app", "ordered", nil, nil)
 	require.NoError(t, f.Verify([]*model.TableInfo{ti}))
@@ -448,7 +449,7 @@ func TestTxnOrderPartitionTables(t *testing.T) {
 	require.ErrorContains(t, err, "partitioned table")
 	// A rename into the ordered set must be rejected even when the DDL is ignored.
 	cfg.Filter.EventFilters = []*config.EventFilterRule{{Matcher: []string{"app.*"}, IgnoreEvent: []bf.EventType{bf.RenameTable}}}
-	f, err = NewFilter(cfg, "")
+	f, err = NewFilter(cfg, "", true)
 	require.NoError(t, err)
 	_, err = f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionRenameTable, TableInfo: ti})
 	require.ErrorContains(t, err, "partitioned table")
@@ -459,9 +460,21 @@ func TestTxnOrderPartitionTables(t *testing.T) {
 	ti.TableName.Table = "ORDERED"
 	require.ErrorContains(t, f.Verify([]*model.TableInfo{ti}), "partitioned table")
 	cfg.CaseSensitive = true
-	f, err = NewFilter(cfg, "")
+	f, err = NewFilter(cfg, "", true)
 	require.NoError(t, err)
 	require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+}
+
+func TestTxnOrderInvalidRules(t *testing.T) {
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"invalid"}}
+	_, err := NewFilter(cfg, "", true)
+	require.ErrorContains(t, err, "txn-order-tables")
+	_, err = NewFilter(cfg, "", false)
+	require.NoError(t, err)
+	_, err = NewFilter(cfg, "")
+	require.NoError(t, err)
+	require.Equal(t, []string{"invalid"}, cfg.Sink.MySQLConfig.TxnOrderTables)
 }
 
 func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
@@ -474,7 +487,7 @@ func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
 		uri, err := url.Parse(sinkURI)
 		require.NoError(t, err)
 		require.NoError(t, cfg.ValidateAndAdjust(uri))
-		f, err := NewFilter(cfg, "")
+		f, err := NewFilter(cfg, "", sink.IsMySQLCompatibleScheme(uri.Scheme))
 		require.NoError(t, err)
 		require.NoError(t, f.Verify([]*model.TableInfo{ti}))
 		ignored, err := f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionCreateTable, TableInfo: ti})

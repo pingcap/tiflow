@@ -1034,7 +1034,7 @@ func TestTxnOrderTablesRejectPartitionOnStartup(t *testing.T) {
 	helper.Tk().MustExec("create table test.ordered_t (id int) partition by hash(id) partitions 2")
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", true)
 	require.NoError(t, err)
 	// Even an ineligible partitioned table must produce an explicit error.
 	_, err = schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("ordered"), helper.GetCurrentMeta(), 1, false, f)

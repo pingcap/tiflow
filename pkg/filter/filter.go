@@ -133,10 +133,15 @@ type filter struct {
 }
 
 // NewFilter creates a filter.
-func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
-	orderFilter, err := cfg.Sink.GetTxnOrderFilter(cfg.CaseSensitive)
-	if err != nil {
-		return nil, err
+// Transaction ordering checks are disabled unless explicitly enabled for a MySQL sink.
+func NewFilter(cfg *config.ReplicaConfig, tz string, enableTxnOrderValidation ...bool) (Filter, error) {
+	var orderFilter tfilter.Filter
+	if len(enableTxnOrderValidation) != 0 && enableTxnOrderValidation[0] {
+		var err error
+		orderFilter, err = cfg.Sink.GetTxnOrderFilter(cfg.CaseSensitive)
+		if err != nil {
+			return nil, err
+		}
 	}
 	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {

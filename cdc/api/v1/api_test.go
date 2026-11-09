@@ -1113,6 +1113,15 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			initialOrder: []string{"test.regular"},
 		},
 		{
+			name: "ignore invalid ordering rules for a non-MySQL sink",
+			update: model.ChangefeedConfig{
+				SinkURI: "blackhole://",
+				SinkConfig: &config.SinkConfig{
+					MySQLConfig: &config.MySQLConfig{TxnOrderTables: []string{"invalid"}},
+				},
+			},
+		},
+		{
 			name:         "expand the table filter of an ordered feed",
 			update:       model.ChangefeedConfig{FilterRules: []string{"test.*"}},
 			initialRules: []string{"test.regular"},
@@ -1146,7 +1155,11 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 				owner.EXPECT().UpdateChangefeed(gomock.Any(), gomock.Any()).
 					DoAndReturn(func(_ context.Context, info *model.ChangeFeedInfo) error {
 						require.Equal(t, "blackhole://", info.SinkURI)
-						require.Empty(t, info.Config.Sink.MySQLConfig.TxnOrderTables)
+						wantRules := tc.initialOrder
+						if tc.update.SinkConfig != nil {
+							wantRules = tc.update.SinkConfig.MySQLConfig.TxnOrderTables
+						}
+						require.Equal(t, wantRules, info.Config.Sink.MySQLConfig.TxnOrderTables)
 						return nil
 					})
 			}

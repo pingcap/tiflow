@@ -503,11 +503,8 @@ func TestTxnOrderTablesIgnoredByNonMySQLSinks(t *testing.T) {
 			uri, err := url.Parse(sinkURI)
 			require.NoError(t, err)
 			require.NoError(t, cfg.ValidateAndAdjust(uri))
-			require.Empty(t, cfg.Sink.MySQLConfig.TxnOrderTables)
+			require.Equal(t, []string{rule}, cfg.Sink.MySQLConfig.TxnOrderTables)
 			require.Equal(t, 4, *cfg.Sink.MySQLConfig.WorkerCount)
-			f, err := cfg.Sink.GetTxnOrderFilter(false)
-			require.NoError(t, err)
-			require.Nil(t, f)
 		}
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ import (
 	pfilter "github.com/pingcap/tiflow/pkg/filter"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	redoCfg "github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/observer"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -646,7 +648,12 @@ LOOP2:
 	}
 	c.barriers.Update(finishBarrier, cfInfo.GetTargetTs())
 
-	filter, err := pfilter.NewFilter(cfInfo.Config, "")
+	sinkURI, err := url.Parse(cfInfo.SinkURI)
+	if err != nil {
+		return cerror.WrapError(cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err), util.MaskSensitiveDataInURIForError(cfInfo.SinkURI))
+	}
+	filter, err := pfilter.NewFilter(cfInfo.Config, "", sink.IsMySQLCompatibleScheme(sink.GetScheme(sinkURI)))
 	if err != nil {
 		return errors.Trace(err)
 	}

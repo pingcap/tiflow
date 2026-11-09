@@ -287,11 +287,8 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 			return err
 		}
 	}
-	if c.Sink != nil && c.Sink.MySQLConfig != nil {
-		if !sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
-			// Ignore MySQL-only ordering rules before shared filters are created.
-			c.Sink.MySQLConfig.TxnOrderTables = nil
-		} else if _, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive); err != nil {
+	if c.Sink != nil && sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		if _, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive); err != nil {
 			return err
 		}
 	}

@@ -209,9 +209,12 @@ func (m *SinkManager) Run(ctx context.Context, warnings ...chan<- error) (err er
 	}()
 
 	splitTxn := util.GetOrZero(m.config.Sink.TxnAtomicity).ShouldSplitTxn()
-	orderFilter, err := m.config.Sink.GetTxnOrderFilter(m.config.CaseSensitive)
-	if err != nil {
-		return err
+	var orderFilter tfilter.Filter
+	if m.isMysqlBackend {
+		orderFilter, err = m.config.Sink.GetTxnOrderFilter(m.config.CaseSensitive)
+		if err != nil {
+			return err
+		}
 	}
 
 	gcErrors := make(chan error, 16)
