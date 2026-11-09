@@ -34,7 +34,7 @@ type blackhole struct {
 	panicOnFlush  int32
 }
 
-func (b *blackhole) OnTxnEvent(e *dmlsink.TxnCallbackableEvent) bool {
+func (b *blackhole) OnTxnEvent(e *dmlsink.TxnCallbackableEvent, _ bool) bool {
 	for {
 		if atomic.LoadInt32(&b.blockOnEvents) > 0 {
 			time.Sleep(time.Millisecond * time.Duration(100))
@@ -119,11 +119,16 @@ type commitRecorder struct {
 	release <-chan struct{}
 	started chan struct{}
 	once    *sync.Once
+
+	tableOrders chan bool
 }
 
-func (b *commitRecorder) OnTxnEvent(e *dmlsink.TxnCallbackableEvent) bool {
+func (b *commitRecorder) OnTxnEvent(e *dmlsink.TxnCallbackableEvent, tableOrder bool) bool {
+	if b.tableOrders != nil {
+		b.tableOrders <- tableOrder
+	}
 	b.events = append(b.events, e)
-	return true // Model a backend configured with max-txn-row=1.
+	return tableOrder
 }
 
 func (b *commitRecorder) Flush(ctx context.Context) error {
@@ -150,7 +155,7 @@ func (b *commitRecorder) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (b *commitRecorder) MaxFlushInterval() time.Duration { return time.Hour }
+func (b *commitRecorder) MaxFlushInterval() time.Duration { return 10 * time.Millisecond }
 func (b *commitRecorder) Close() error                    { return nil }
 
 func orderedTestEvent(commitTs uint64, tableID int64, tableName string, rowID int) *dmlsink.TxnCallbackableEvent {
@@ -167,6 +172,36 @@ func orderedTestEvent(commitTs uint64, tableID int64, tableName string, rowID in
 			}},
 		},
 		Callback: func() {}, SinkState: &sinkState,
+	}
+}
+
+func TestTxnOrderTableFlag(t *testing.T) {
+	tableOrders := make(chan bool, 3)
+	errCh := make(chan error, 1)
+	recorder := &commitRecorder{commits: make(chan []uint64, 3), tableOrders: tableOrders}
+	s := newSink(context.Background(), model.DefaultChangeFeedID(t.Name()), []backend{recorder}, errCh, DefaultConflictDetectorSlots)
+	defer s.Close()
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.orders"}}
+	var err error
+	s.txnOrderFilter, err = cfg.Sink.GetTxnOrderFilter(false)
+	require.NoError(t, err)
+	withoutTableInfo := orderedTestEvent(3, 1, "orders", 3)
+	withoutTableInfo.Event.TableInfo = nil
+	require.NoError(t, s.WriteEvents(
+		orderedTestEvent(1, 2, "other", 1),
+		orderedTestEvent(2, 1, "orders", 2),
+		withoutTableInfo,
+	))
+	for _, want := range []bool{false, true, false} {
+		select {
+		case got := <-tableOrders:
+			require.Equal(t, want, got)
+		case err := <-errCh:
+			t.Fatal(err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("backend did not receive the ordering flag")
+		}
 	}
 }
 

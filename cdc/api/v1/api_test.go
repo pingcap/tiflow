@@ -1108,10 +1108,9 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			wantError: "txn-order-tables does not support partitioned table",
 		},
 		{
-			name:         "change an ordered feed to a non-MySQL sink",
+			name:         "ignore ordering when switching to a non-MySQL sink",
 			update:       model.ChangefeedConfig{SinkURI: "blackhole://"},
-			initialOrder: []string{"test.partitioned"},
-			wantError:    "txn-order-tables is only supported by MySQL sinks",
+			initialOrder: []string{"test.regular"},
 		},
 		{
 			name:         "expand the table filter of an ordered feed",
@@ -1141,7 +1140,16 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			cp := mock_capture.NewMockCapture(ctrl)
 			cp.EXPECT().IsReady().Return(true).AnyTimes()
 			cp.EXPECT().IsOwner().Return(true).AnyTimes()
-			cp.EXPECT().GetOwner().Return(mock_owner.NewMockOwner(ctrl), nil).AnyTimes()
+			owner := mock_owner.NewMockOwner(ctrl)
+			cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+			if tc.wantError == "" {
+				owner.EXPECT().UpdateChangefeed(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, info *model.ChangeFeedInfo) error {
+						require.Equal(t, "blackhole://", info.SinkURI)
+						require.Empty(t, info.Config.Sink.MySQLConfig.TxnOrderTables)
+						return nil
+					})
+			}
 			provider := mock_owner.NewMockStatusProvider(ctrl)
 			cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 			provider.EXPECT().GetChangeFeedInfo(gomock.Any(), changeFeedID).Return(oldInfo, nil)
@@ -1151,6 +1159,10 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			up, err := manager.GetDefaultUpstream()
 			require.NoError(t, err)
 			up.KVStorage = helper.Storage()
+			if tc.wantError == "" {
+				// Ignored ordering rules must not trigger snapshot validation.
+				up.KVStorage = nil
+			}
 			cp.EXPECT().GetUpstreamManager().Return(manager, nil).AnyTimes()
 			body, err := json.Marshal(tc.update)
 			require.NoError(t, err)
@@ -1158,6 +1170,11 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			newRouterWithoutStatusProvider(cp).ServeHTTP(response, req)
+			if tc.wantError == "" {
+				require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+				require.Equal(t, original.Config, oldInfo.Config)
+				return
+			}
 			require.Equal(t, http.StatusBadRequest, response.Code)
 			var responseError model.HTTPError
 			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &responseError))

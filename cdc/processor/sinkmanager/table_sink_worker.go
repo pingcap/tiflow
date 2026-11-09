@@ -211,7 +211,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 				table := e.Row.TableInfo.TableName
 				ordered := w.txnOrderFilter.MatchTable(table.Schema, table.Table)
 				// Matched tables use transaction-atomicity=table.
-				advancer.splitTxn = w.splitTxn && !ordered
+				advancer.splitTxn = !ordered
 			}
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.GetReplicaTs()

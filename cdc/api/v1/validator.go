@@ -255,18 +255,20 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		f, err := filter.NewFilter(newInfo.Config, "")
-		if err != nil {
-			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-		}
-		// Validate the tables at the paused checkpoint, including tables that
-		// did not exist at the changefeed's start timestamp.
-		tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
-		if err != nil {
-			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-		}
-		if err := f.Verify(tableInfos); err != nil {
-			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		if len(mysqlCfg.TxnOrderTables) != 0 {
+			f, err := filter.NewFilter(newInfo.Config, "")
+			if err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			// Validate the tables at the paused checkpoint, including tables that
+			// did not exist at the changefeed's start timestamp.
+			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
+			if err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			if err := f.Verify(tableInfos); err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
 		}
 	}
 

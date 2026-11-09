@@ -406,7 +406,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 				}
 			}
 		},
-	})
+	}, false)
 
 	err = sink.Flush(context.Background())
 	require.Nil(t, err)
@@ -474,7 +474,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errDatabaseNotExists, errors.Cause(err))
 
@@ -541,7 +541,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errTableNotExists, errors.Cause(err))
 
@@ -611,7 +611,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errLockDeadlock, errors.Cause(err))
 
@@ -669,7 +669,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	sink.setDMLMaxRetry(1)
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errDup, errors.Cause(err))
 
@@ -849,7 +849,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
 	require.Nil(t, sink.Close())
@@ -1757,7 +1757,6 @@ func TestTxnOrderTablesFlush(t *testing.T) {
 				return db, nil
 			})
 			cfg := config.GetDefaultReplicaConfig()
-			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.orders"}}
 			uri, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&max-txn-row=256&cache-prep-stmts=false&multi-stmt-enable=false")
 			require.NoError(t, err)
 			backend, err := newMySQLBackend(context.Background(), model.DefaultChangeFeedID(t.Name()), uri, cfg, factory)
@@ -1784,9 +1783,9 @@ func TestTxnOrderTablesFlush(t *testing.T) {
 			first := makeEvent("other", 1, 1)
 			second := makeEvent("other", 2, 2)
 			ordered := makeEvent("orders", 3, 31, 32)
-			require.False(t, backend.OnTxnEvent(first))
-			require.False(t, backend.OnTxnEvent(second))
-			require.True(t, backend.OnTxnEvent(ordered))
+			require.False(t, backend.OnTxnEvent(first, false))
+			require.False(t, backend.OnTxnEvent(second, false))
+			require.True(t, backend.OnTxnEvent(ordered, true))
 			originalCfg := backend.cfg
 
 			if failStage != 0 {
@@ -1830,14 +1829,14 @@ func TestTxnOrderTablesFlush(t *testing.T) {
 
 			// The next ordered transaction starts a new commit. Ordinary tables
 			// continue to use the configured max-txn-row after that commit.
-			require.True(t, backend.OnTxnEvent(makeEvent("orders", 4, 4)))
+			require.True(t, backend.OnTxnEvent(makeEvent("orders", 4, 4), true))
 			dbMock.ExpectBegin()
 			dbMock.ExpectExec("INSERT INTO `app`.`orders` (`id`) VALUES (?)").WithArgs(4).
 				WillReturnResult(sqlmock.NewResult(0, 1))
 			dbMock.ExpectCommit()
 			require.NoError(t, backend.Flush(context.Background()))
-			require.False(t, backend.OnTxnEvent(makeEvent("other", 5, 5)))
-			require.False(t, backend.OnTxnEvent(makeEvent("other", 6, 6)))
+			require.False(t, backend.OnTxnEvent(makeEvent("other", 5, 5), false))
+			require.False(t, backend.OnTxnEvent(makeEvent("other", 6, 6), false))
 			dbMock.ExpectBegin()
 			for _, value := range []int{5, 6} {
 				dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).

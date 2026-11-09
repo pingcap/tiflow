@@ -489,14 +489,27 @@ func TestTxnOrderTables(t *testing.T) {
 	uri, err := url.Parse("mysql://127.0.0.1/")
 	require.NoError(t, err)
 	require.ErrorContains(t, cfg.ValidateAndAdjust(uri), "txn-order-tables")
-	cfg.Sink.MySQLConfig.TxnOrderTables = []string{"app.orders"}
-	uri, err = url.Parse("kafka://127.0.0.1/topic?protocol=open-protocol")
-	require.NoError(t, err)
-	require.ErrorContains(t, cfg.ValidateAndAdjust(uri), "only supported by MySQL sinks")
 	cfg.Sink.MySQLConfig.TxnOrderTables = nil
 	f, err := cfg.Sink.GetTxnOrderFilter(false)
 	require.NoError(t, err)
 	require.Nil(t, f)
+}
+
+func TestTxnOrderTablesIgnoredByNonMySQLSinks(t *testing.T) {
+	for _, sinkURI := range []string{"kafka://127.0.0.1/topic?protocol=open-protocol", "blackhole://", "s3://bucket/prefix?protocol=csv"} {
+		for _, rule := range []string{"app.orders", "invalid"} {
+			cfg := GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{rule}, WorkerCount: util.AddressOf(4)}
+			uri, err := url.Parse(sinkURI)
+			require.NoError(t, err)
+			require.NoError(t, cfg.ValidateAndAdjust(uri))
+			require.Empty(t, cfg.Sink.MySQLConfig.TxnOrderTables)
+			require.Equal(t, 4, *cfg.Sink.MySQLConfig.WorkerCount)
+			f, err := cfg.Sink.GetTxnOrderFilter(false)
+			require.NoError(t, err)
+			require.Nil(t, f)
+		}
+	}
 }
 
 func TestTxnOrderTablesTOML(t *testing.T) {

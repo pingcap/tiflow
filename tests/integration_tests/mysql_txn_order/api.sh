@@ -33,10 +33,19 @@ function check_api_row() {
 	[ "$(mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -Nse "SELECT COUNT(*) FROM $1.regular WHERE id=1")" = 1 ]
 }
 
-export -f check_api_state check_api_checkpoint check_api_row
+function check_api_config() {
+	curl -fsS --max-time 30 "http://127.0.0.1:8300/api/v2/changefeeds/$1" |
+		jq -e --argjson rules "$API_EXPECTED_RULES" --arg scheme "$API_EXPECTED_SCHEME" \
+			'(.config.sink.mysql_config.txn_order_tables // []) == $rules and ($scheme == "" or (.sink_uri | startswith($scheme + ":")))'
+}
+
+export -f check_api_state check_api_checkpoint check_api_row check_api_config
 export DOWN_TIDB_HOST DOWN_TIDB_PORT
 
 function save_api_config() {
+	if [ "$#" -gt 0 ]; then
+		API_EXPECTED_RULES="$1" API_EXPECTED_SCHEME="${2:-}" ensure 10 check_api_config "$id"
+	fi
 	api_request 200 GET "v2/changefeeds/$id"
 	jq -S '{sink_uri, config}' "$WORK_DIR/api-response.json" >"$WORK_DIR/api-before.json"
 }
@@ -81,7 +90,7 @@ for version in v1 v2; do
 	fi
 	api_request "$success" POST "$version/changefeeds" "$payload"
 	ensure 10 check_api_state "$id" normal
-	save_api_config
+	save_api_config "$future" mysql
 	jq -e --argjson rules "$future" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
 
 	# Create the partitioned table after start-ts and wait for its DDL to finish,
@@ -97,13 +106,22 @@ for version in v1 v2; do
 
 	# Enable ordering for the regular table, and verify the stored API config.
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update "$regular" "$filters")"
-	save_api_config
+	save_api_config "$regular" mysql
 	jq -e --argjson rules "$regular" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
-	reject_api_update '{"sink_uri":"blackhole://"}' 'txn-order-tables is only supported by MySQL sinks'
+
+	# Non-MySQL sinks ignore the ordering rules, including matches on partitions.
+	payload=$(ordering_update "$filters" "$filters" | jq -c '.sink_uri = "blackhole://"')
+	api_request "$success" PUT "$version/changefeeds/$id" "$payload"
+	save_api_config '[]' blackhole
+	jq -e '(.sink_uri | startswith("blackhole:")) and (.config.sink.mysql_config.txn_order_tables // []) == []' "$WORK_DIR/api-before.json"
+	payload=$(ordering_update "$regular" "$filters" | jq -c --arg uri "$SINK_URI" '.sink_uri = $uri')
+	api_request "$success" PUT "$version/changefeeds/$id" "$payload"
+	save_api_config "$regular" mysql
+	jq -e --argjson rules "$regular" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
 
 	# A broad ordering rule is valid if the table filter excludes partitions.
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update "$filters" "$regular")"
-	save_api_config
+	save_api_config "$filters" mysql
 	jq -e --argjson rules "$filters" --argjson filters "$regular" \
 		'.config.sink.mysql_config.txn_order_tables == $rules and .config.filter.rules == $filters' "$WORK_DIR/api-before.json"
 	if [ "$version" = v1 ]; then
@@ -124,7 +142,7 @@ for version in v1 v2; do
 
 	# Clearing the option permits including partitioned tables again.
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update '[]' "$filters")"
-	save_api_config
+	save_api_config '[]' mysql
 	jq -e --argjson filters "$filters" \
 		'(.config.sink.mysql_config.txn_order_tables // []) == [] and .config.filter.rules == $filters' "$WORK_DIR/api-before.json"
 	api_request "$success" DELETE "$version/changefeeds/$id"

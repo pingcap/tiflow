@@ -14,6 +14,7 @@
 package filter
 
 import (
+	"net/url"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -461,4 +462,26 @@ func TestTxnOrderPartitionTables(t *testing.T) {
 	f, err = NewFilter(cfg, "")
 	require.NoError(t, err)
 	require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+}
+
+func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
+	ti := model.BuildTableInfo("app", "ordered", nil, nil)
+	ti.Partition = &timodel.PartitionInfo{Enable: true, Definitions: []timodel.PartitionDefinition{{ID: 101}}}
+	for _, sinkURI := range []string{"kafka://127.0.0.1/topic?protocol=open-protocol", "blackhole://", "s3://bucket/prefix?protocol=csv"} {
+		cfg := config.GetDefaultReplicaConfig()
+		cfg.Filter.Rules = []string{"app.*"}
+		cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered"}}
+		uri, err := url.Parse(sinkURI)
+		require.NoError(t, err)
+		require.NoError(t, cfg.ValidateAndAdjust(uri))
+		f, err := NewFilter(cfg, "")
+		require.NoError(t, err)
+		require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+		ignored, err := f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionCreateTable, TableInfo: ti})
+		require.NoError(t, err)
+		require.False(t, ignored)
+		ignored, err = f.ShouldIgnoreDMLEvent(&model.RowChangedEvent{TableInfo: ti}, model.RowChangedDatums{}, ti)
+		require.NoError(t, err)
+		require.False(t, ignored)
+	}
 }
