@@ -71,11 +71,11 @@ require (
 	github.com/pingcap/check v0.0.0-20211026125417-57bd13f7b5f0
 	github.com/pingcap/errors v0.11.5-0.20250523034308-74f78ae071ee
 	github.com/pingcap/failpoint v0.0.0-20240528011301-b51a646c7c86
-	github.com/pingcap/kvproto v0.0.0-20260608025309-50b863799195
+	github.com/pingcap/kvproto v0.0.0-20261103073823-fa5338a76645
 	github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9
-	github.com/pingcap/tidb v1.1.0-beta.0.20260730162841-dc0024f088cb
+	github.com/pingcap/tidb v1.1.0-beta.0.20261109113620-c2a0ced06b42
 	github.com/pingcap/tidb-dashboard v0.0.0-20260603054940-9e92195886c3
-	github.com/pingcap/tidb/pkg/parser v0.0.0-20260730162841-dc0024f088cb
+	github.com/pingcap/tidb/pkg/parser v0.0.0-20261109113620-c2a0ced06b42
 	github.com/prometheus/client_golang v1.23.0
 	github.com/prometheus/client_model v0.6.2
 	github.com/r3labs/diff v1.1.0
@@ -93,9 +93,9 @@ require (
 	github.com/swaggo/swag v1.16.3
 	github.com/syndtr/goleveldb v1.0.1-0.20210305035536-64b5b1c73954
 	github.com/thanhpk/randstr v1.0.6
-	github.com/tikv/client-go/v2 v2.0.8-0.20260615130046-a2b634d170d9
-	github.com/tikv/pd v1.1.0-beta.0.20260611085009-4ae8cc5777be
-	github.com/tikv/pd/client v0.0.0-20260611085009-4ae8cc5777be
+	github.com/tikv/client-go/v2 v2.0.8-0.20261105030141-19ea779ec6a9
+	github.com/tikv/pd v1.1.0-beta.0.20261104080702-f2e5cd84949f
+	github.com/tikv/pd/client v0.0.0-20261104080702-f2e5cd84949f
 	github.com/tinylib/msgp v1.1.6
 	github.com/uber-go/atomic v1.4.0
 	github.com/vmihailenco/msgpack/v5 v5.3.5
@@ -371,7 +371,7 @@ require (
 	github.com/pingcap/fn v1.0.0 // indirect
 	github.com/pingcap/goleveldb v0.0.0-20191226122134-f82aafb29989 // indirect
 	github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5
-	github.com/pingcap/tipb v0.0.0-20260605083900-f9f651ef5fbc // indirect
+	github.com/pingcap/tipb v0.0.0-20260730025657-3ab8dc22d495 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
