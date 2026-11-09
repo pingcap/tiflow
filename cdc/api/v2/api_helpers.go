@@ -327,16 +327,13 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
-<<<<<<< HEAD
-	if cfg.SinkURI != "" {
-=======
-	// If the sinkURI is empty, we keep the old sinkURI.
-	if cfg.SinkURI != "" && cfg.SinkURI != util.MaskSensitiveDataInURIForError(oldInfo.SinkURI) {
+	// An empty or unchanged sink URI retains the stored credentials.
+	if cfg.SinkURI != "" && cfg.SinkURI != oldInfo.SinkURI &&
+		cfg.SinkURI != util.MaskSensitiveDataInURIForError(oldInfo.SinkURI) {
 		if util.HasMaskedSensitiveDataInURI(cfg.SinkURI) {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStack(
 				"updated sink URI contains a masked credential; provide the full URI")
 		}
->>>>>>> ecf4a3b8a6 (api(ticdc): redact changefeed response credentials (#12934))
 		sinkURIUpdated = true
 		newInfo.SinkURI = cfg.SinkURI
 	}

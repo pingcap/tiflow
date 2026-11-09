@@ -214,4 +214,11 @@ func TestVerifyUpdateMaskedSinkURI(t *testing.T) {
 	_, _, err = h.verifyUpdateChangefeedConfig(context.Background(), cfg,
 		oldInfo, &model.UpstreamInfo{}, nil, 0)
 	require.ErrorContains(t, err, "masked credential")
+
+	oldInfo.SinkURI = "s3://bucket/path?access-key=xxxxx&token=stored-secret"
+	cfg.SinkURI = oldInfo.SinkURI
+	newInfo, _, err = h.verifyUpdateChangefeedConfig(context.Background(), cfg,
+		oldInfo, &model.UpstreamInfo{}, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, oldInfo.SinkURI, newInfo.SinkURI)
 }

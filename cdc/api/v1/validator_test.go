@@ -53,3 +53,28 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.NotNil(t, newInfo)
 	require.NotEqual(t, 0, newInfo.Epoch)
 }
+
+func TestVerifyUpdateMaskedSinkURI(t *testing.T) {
+	storedURI := "kafka://broker/topic?sasl-gssapi-password=stored-secret"
+	oldInfo := &model.ChangeFeedInfo{
+		SinkURI: storedURI,
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	cfg := model.ChangefeedConfig{
+		SinkURI:          util.MaskSensitiveDataInURIForError(storedURI),
+		MounterWorkerNum: 32,
+	}
+	newInfo, err := VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo)
+	require.NoError(t, err)
+	require.Equal(t, storedURI, newInfo.SinkURI)
+
+	cfg.SinkURI = "kafka://other-broker/topic?sasl-gssapi-password=xxxxx"
+	_, err = VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo)
+	require.ErrorContains(t, err, "masked credential")
+
+	oldInfo.SinkURI = "kafka://broker/topic?sasl-gssapi-password=xxxxx&token=stored-secret"
+	cfg.SinkURI = oldInfo.SinkURI
+	newInfo, err = VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo)
+	require.NoError(t, err)
+	require.Equal(t, oldInfo.SinkURI, newInfo.SinkURI)
+}
