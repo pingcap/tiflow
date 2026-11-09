@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	tidbdbutil "github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
@@ -118,7 +119,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			lowerBoundStr, decodeErr = decodeIndexBound(lowerBoundBytes, idxColumnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode lower_bound for index",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
 			}
@@ -126,7 +127,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			upperBoundStr, decodeErr = decodeIndexBound(upperBoundBytes, idxColumnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode upper_bound for index",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
 			}
@@ -146,7 +147,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			lowerBoundStr, decodeErr = decodeColumnBound(lowerBoundBytes, columnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode lower_bound for column",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
 			}
@@ -154,7 +155,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			upperBoundStr, decodeErr = decodeColumnBound(upperBoundBytes, columnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode upper_bound for column",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
 			}

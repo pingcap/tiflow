@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tableFilter "github.com/pingcap/tidb/pkg/util/table-filter"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/sync_diff_inspector/config"
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
 	"github.com/pingcap/tiflow/sync_diff_inspector/splitter"
@@ -57,7 +58,7 @@ func (a *TiDBTableAnalyzer) AnalyzeSplitter(ctx context.Context, table *common.T
 	if err == nil {
 		return bucketIter, nil
 	}
-	log.Info("failed to build bucket iterator, fall back to use random iterator", zap.Error(err))
+	log.Info("failed to build bucket iterator, fall back to use random iterator", dmlog.ZapRedact(zap.Error(err)))
 	// fall back to random splitter
 
 	// use random splitter if we cannot use bucket splitter, then we can simply choose target table to generate chunks.
@@ -236,7 +237,7 @@ func (s *TiDBSource) GetRowsIterator(ctx context.Context, tableRange *splitter.R
 	rowsQuery, _ := utils.GetTableRowsQueryFormat(sourceSchema, sourceTable, table.Info, table.Collation)
 	query := fmt.Sprintf(rowsQuery, chunk.Where)
 
-	log.Debug("select data", zap.String("sql", query), zap.Reflect("args", chunk.Args))
+	log.Debug("select data", dmlog.ZapRedact(zap.String("sql", query)), dmlog.ZapRedact(zap.Reflect("args", chunk.Args)))
 	rows, err := s.dbConn.QueryContext(ctx, query, chunk.Args...)
 	defer func() {
 		if rows != nil {
