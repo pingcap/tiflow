@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/vardef"
 	"github.com/pingcap/tidb/pkg/types"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/metrics"
@@ -66,6 +67,8 @@ type mysqlBackend struct {
 	cfg         *pmysql.Config
 	dmlMaxRetry uint64
 
+	txnOrderFilter tfilter.Filter
+
 	events []*dmlsink.TxnCallbackableEvent
 	rows   int
 
@@ -94,6 +97,11 @@ func NewMySQLBackends(
 
 	cfg := pmysql.NewConfig()
 	err := cfg.Apply(config.GetGlobalServerConfig().TZ, changefeedID, sinkURI, replicaConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	orderFilter, err := replicaConfig.Sink.GetTxnOrderFilter(replicaConfig.CaseSensitive)
 	if err != nil {
 		return nil, err
 	}
@@ -183,6 +191,7 @@ func NewMySQLBackends(
 			dmlMaxRetry: defaultDMLMaxRetry,
 			statistics:  statistics,
 
+			txnOrderFilter:                  orderFilter,
 			metricTxnSinkDMLBatchCommit:     txn.SinkDMLBatchCommit.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnSinkDMLBatchCallback:   txn.SinkDMLBatchCallback.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
 			metricTxnPrepareStatementErrors: txn.PrepareStatementErrors.WithLabelValues(changefeedID.Namespace, changefeedID.ID),
@@ -204,7 +213,21 @@ func NewMySQLBackends(
 func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent) (needFlush bool) {
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
-	return s.rows >= s.cfg.MaxTxnRow
+	maxTxnRow := s.cfg.MaxTxnRow
+	if s.isTxnOrderTable(event) {
+		// Flush before accepting another ordered transaction. Preceding ordinary
+		// transactions can share this commit without affecting per-table order.
+		maxTxnRow = 1
+	}
+	return s.rows >= maxTxnRow
+}
+
+func (s *mysqlBackend) isTxnOrderTable(event *dmlsink.TxnCallbackableEvent) bool {
+	if s.txnOrderFilter == nil || event.Event.TableInfo == nil {
+		return false
+	}
+	table := event.Event.TableInfo.TableName
+	return s.txnOrderFilter.MatchTable(table.Schema, table.Table)
 }
 
 // Flush implements interface backend.

@@ -469,11 +469,9 @@ func TestTxnOrderTables(t *testing.T) {
 	for _, scheme := range []string{"mysql", "mysql+ssl", "tidb", "tidb+ssl"} {
 		cfg := GetDefaultReplicaConfig()
 		cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{"APP.orders", "app.ledger_*", "!app.ledger_skip"}}
-		cfg.Scheduler.EnableTableAcrossNodes = true
 		uri, err := url.Parse(scheme + "://127.0.0.1/")
 		require.NoError(t, err)
 		require.NoError(t, cfg.ValidateAndAdjust(uri))
-		require.False(t, cfg.Scheduler.EnableTableAcrossNodes)
 		f, err := cfg.Sink.GetTxnOrderFilter(false)
 		require.NoError(t, err)
 		require.True(t, f.MatchTable("app", "orders"))

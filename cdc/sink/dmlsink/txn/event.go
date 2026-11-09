@@ -44,12 +44,9 @@ func (e *txnEvent) OnConflictResolved() {
 // ConflictKeys implements causality.txnEvent interface.
 func (e *txnEvent) ConflictKeys() []uint64 {
 	if e.tableOrder {
-		// Use the same table key as rows without a primary or unique key.
-		var key [8]byte
-		binary.BigEndian.PutUint64(key[:], uint64(e.Event.PhysicalTableID))
-		hasher := fnv.New32a()
-		_, _ = hasher.Write(key[:])
-		return []uint64{uint64(hasher.Sum32())}
+		// Physical table IDs are unique within the upstream cluster. Reserve the
+		// high bit for table keys, separate from the existing 32-bit row hashes.
+		return []uint64{uint64(e.Event.PhysicalTableID) | (1 << 63)}
 	}
 	return genTxnKeys(e.TxnCallbackableEvent.Event)
 }

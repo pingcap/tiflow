@@ -114,23 +114,19 @@ func TestTxnSinkNolocking(t *testing.T) {
 
 // commitRecorder keeps transaction boundaries visible while simulating a blocked sink.
 type commitRecorder struct {
-	flushErr error
-	events   []*dmlsink.TxnCallbackableEvent
-	commits  chan []uint64
-	release  <-chan struct{}
-	started  chan struct{}
-	once     *sync.Once
+	events  []*dmlsink.TxnCallbackableEvent
+	commits chan []uint64
+	release <-chan struct{}
+	started chan struct{}
+	once    *sync.Once
 }
 
 func (b *commitRecorder) OnTxnEvent(e *dmlsink.TxnCallbackableEvent) bool {
 	b.events = append(b.events, e)
-	return false // Keep batching unless the worker enforces a transaction boundary.
+	return true // Model a backend configured with max-txn-row=1.
 }
 
 func (b *commitRecorder) Flush(ctx context.Context) error {
-	if b.flushErr != nil {
-		return b.flushErr
-	}
 	if len(b.events) == 0 {
 		return nil
 	}
@@ -223,53 +219,4 @@ func TestTxnOrderTablesBacklog(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestTxnOrderTablesCommitBoundaries(t *testing.T) {
-	b := &commitRecorder{commits: make(chan []uint64, 4)}
-	w := newWorker(context.Background(), model.DefaultChangeFeedID("boundaries"), 0, b, 1)
-	for i, ordered := range []bool{false, false, true, false} {
-		e := newTxnEvent(orderedTestEvent(uint64(i+1), 1, "other", i))
-		if ordered {
-			e.Event.Rows = append(e.Event.Rows, e.Event.Rows[0], e.Event.Rows[0])
-		}
-		e.tableOrder = ordered
-		e.OnConflictResolved()
-		flush, err := w.onEvent(e, func() {})
-		require.NoError(t, err)
-		require.Equal(t, ordered, flush)
-		if flush {
-			require.Len(t, b.events, 1)
-			require.Len(t, b.events[0].Event.Rows, 3)
-			require.NoError(t, w.doFlush())
-		}
-	}
-	require.NoError(t, w.doFlush())
-	require.Equal(t, []uint64{1, 2}, <-b.commits)
-	require.Equal(t, []uint64{3}, <-b.commits)
-	require.Equal(t, []uint64{4}, <-b.commits)
-	// Ordered keys depend only on the table, while other tables retain row dependencies.
-	e1 := newTxnEvent(orderedTestEvent(1, 1, "orders", 1))
-	e2 := newTxnEvent(orderedTestEvent(2, 1, "orders", 2))
-	require.NotEqual(t, e1.ConflictKeys(), e2.ConflictKeys())
-	e1.tableOrder, e2.tableOrder = true, true
-	require.Equal(t, e1.ConflictKeys(), e2.ConflictKeys())
-	e2.Event.PhysicalTableID = 2
-	require.NotEqual(t, e1.ConflictKeys(), e2.ConflictKeys())
-}
-
-func TestTxnOrderTablesFlushError(t *testing.T) {
-	b := &commitRecorder{commits: make(chan []uint64, 1)}
-	w := newWorker(context.Background(), model.DefaultChangeFeedID("flush-error"), 0, b, 1)
-	first := newTxnEvent(orderedTestEvent(1, 1, "other", 1))
-	first.OnConflictResolved()
-	_, err := w.onEvent(first, func() {})
-	require.NoError(t, err)
-	b.flushErr = fmt.Errorf("flush failed")
-	ordered := newTxnEvent(orderedTestEvent(2, 2, "orders", 1))
-	ordered.tableOrder = true
-	_, err = w.onEvent(ordered, func() { t.Error("failed transaction was acknowledged") })
-	require.ErrorIs(t, err, b.flushErr)
-	require.Len(t, b.events, 1)
-	require.Same(t, first.TxnCallbackableEvent, b.events[0])
 }

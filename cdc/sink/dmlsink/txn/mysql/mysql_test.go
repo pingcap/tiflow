@@ -1745,3 +1745,110 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 		require.Equal(t, tc.expectedValues, values)
 	}
 }
+
+func TestTxnOrderTablesFlush(t *testing.T) {
+	for _, failStage := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("fail-stage=%d", failStage), func(t *testing.T) {
+			factory := pmysql.NewDBConnectionFactoryForTest()
+			var dbMock sqlmock.Sqlmock
+			factory.SetStandardConnectionFactory(func(ctx context.Context, dsn string) (*sql.DB, error) {
+				db, mock := newTestMockDB(t)
+				dbMock = mock
+				return db, nil
+			})
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.orders"}}
+			uri, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&max-txn-row=256&cache-prep-stmts=false&multi-stmt-enable=false")
+			require.NoError(t, err)
+			backend, err := newMySQLBackend(context.Background(), model.DefaultChangeFeedID(t.Name()), uri, cfg, factory)
+			require.NoError(t, err)
+			defer backend.Close()
+			backend.setDMLMaxRetry(1)
+			var callbacks []int
+			makeEvent := func(table string, seq int, values ...int) *dmlsink.TxnCallbackableEvent {
+				info := model.BuildTableInfo("app", table, []*model.Column{
+					{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag | model.HandleKeyFlag},
+				}, [][]int{{0}})
+				event := &dmlsink.TxnCallbackableEvent{
+					Event:    &model.SingleTableTxn{TableInfo: info},
+					Callback: func() { callbacks = append(callbacks, seq) },
+				}
+				for _, value := range values {
+					event.Event.Rows = append(event.Event.Rows, &model.RowChangedEvent{
+						StartTs: uint64(seq), CommitTs: uint64(seq + 10), TableInfo: info,
+						Columns: []*model.ColumnData{{ColumnID: info.Columns[0].ID, Value: value}},
+					})
+				}
+				return event
+			}
+			first := makeEvent("other", 1, 1)
+			second := makeEvent("other", 2, 2)
+			ordered := makeEvent("orders", 3, 31, 32)
+			require.False(t, backend.OnTxnEvent(first))
+			require.False(t, backend.OnTxnEvent(second))
+			require.True(t, backend.OnTxnEvent(ordered))
+			originalCfg := backend.cfg
+
+			if failStage != 0 {
+				dbMock.ExpectBegin()
+				if failStage == 2 {
+					for _, value := range []int{1, 2} {
+						dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).
+							WillReturnResult(sqlmock.NewResult(0, 1))
+					}
+				}
+				failedSQL := "INSERT INTO `app`.`other` (`id`) VALUES (?)"
+				failedArgs := []driver.Value{1}
+				if failStage == 2 {
+					failedSQL = "INSERT INTO `app`.`orders` (`id`) VALUES (?),(?)"
+					failedArgs = []driver.Value{31, 32}
+				}
+				dbMock.ExpectExec(failedSQL).WithArgs(failedArgs...).
+					WillReturnError(&dmysql.MySQLError{Number: 1064, Message: "syntax error"})
+				dbMock.ExpectRollback()
+				require.Error(t, backend.Flush(context.Background()))
+				require.Equal(t, []*dmlsink.TxnCallbackableEvent{first, second, ordered}, backend.events)
+				require.Equal(t, 4, backend.rows)
+				require.Empty(t, callbacks)
+				require.Same(t, originalCfg, backend.cfg)
+			}
+
+			// The ordered transaction triggers a flush of the whole batch. Its rows
+			// stay in one transaction and retain the configured SQL batch size.
+			dbMock.ExpectBegin()
+			for _, value := range []int{1, 2} {
+				dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			}
+			dbMock.ExpectExec("INSERT INTO `app`.`orders` (`id`) VALUES (?),(?)").WithArgs(31, 32).
+				WillReturnResult(sqlmock.NewResult(0, 2))
+			dbMock.ExpectCommit()
+			require.NoError(t, backend.Flush(context.Background()))
+			require.Equal(t, []int{1, 2, 3}, callbacks)
+			require.Same(t, originalCfg, backend.cfg)
+			require.Equal(t, 256, backend.cfg.MaxTxnRow)
+
+			// The next ordered transaction starts a new commit. Ordinary tables
+			// continue to use the configured max-txn-row after that commit.
+			require.True(t, backend.OnTxnEvent(makeEvent("orders", 4, 4)))
+			dbMock.ExpectBegin()
+			dbMock.ExpectExec("INSERT INTO `app`.`orders` (`id`) VALUES (?)").WithArgs(4).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			dbMock.ExpectCommit()
+			require.NoError(t, backend.Flush(context.Background()))
+			require.False(t, backend.OnTxnEvent(makeEvent("other", 5, 5)))
+			require.False(t, backend.OnTxnEvent(makeEvent("other", 6, 6)))
+			dbMock.ExpectBegin()
+			for _, value := range []int{5, 6} {
+				dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			}
+			dbMock.ExpectCommit()
+			require.NoError(t, backend.Flush(context.Background()))
+			require.Equal(t, []int{1, 2, 3, 4, 5, 6}, callbacks)
+			dbMock.ExpectClose()
+			require.NoError(t, backend.Close())
+			require.NoError(t, dbMock.ExpectationsWereMet())
+		})
+	}
+}

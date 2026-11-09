@@ -232,7 +232,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		newInfo.SinkURI = changefeedConfig.SinkURI
 	}
 
-	if sinkConfigUpdated || sinkURIUpdated || len(changefeedConfig.FilterRules) != 0 {
+	if sinkConfigUpdated || sinkURIUpdated {
 		// check sink config is compatible with sinkURI
 		newCfg := newInfo.Config.Sink
 		oldCfg := oldInfo.Config.Sink
@@ -240,6 +240,11 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		if err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
+	}
+
+	mysqlCfg := newInfo.Config.Sink.MySQLConfig
+	if mysqlCfg != nil && len(mysqlCfg.TxnOrderTables) != 0 &&
+		(sinkConfigUpdated || sinkURIUpdated || len(changefeedConfig.FilterRules) != 0) {
 		sinkURI, err := url.Parse(newInfo.SinkURI)
 		if err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(
@@ -250,21 +255,18 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 
-		mysqlCfg := newInfo.Config.Sink.MySQLConfig
-		if mysqlCfg != nil && len(mysqlCfg.TxnOrderTables) != 0 {
-			f, err := filter.NewFilter(newInfo.Config, "")
-			if err != nil {
-				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-			}
-			// Validate the tables at the paused checkpoint, including tables that
-			// did not exist at the changefeed's start timestamp.
-			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
-			if err != nil {
-				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-			}
-			if err := f.Verify(tableInfos); err != nil {
-				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
-			}
+		f, err := filter.NewFilter(newInfo.Config, "")
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+		// Validate the tables at the paused checkpoint, including tables that
+		// did not exist at the changefeed's start timestamp.
+		tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+		}
+		if err := f.Verify(tableInfos); err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
 	}
 

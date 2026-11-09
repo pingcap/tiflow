@@ -27,8 +27,6 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
-	cerror "github.com/pingcap/tiflow/pkg/errors"
-	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -181,11 +179,6 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 		}
 	}()
 
-	fullSpan := task.span
-	if w.txnOrderFilter != nil {
-		fullSpan = spanz.TableIDToComparableSpan(task.span.TableID)
-	}
-
 	// 1. We have enough memory to collect events.
 	// 2. The task is not canceled.
 	for advancer.hasEnoughMem() && !task.isCanceled() {
@@ -215,10 +208,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			if w.txnOrderFilter != nil {
 				table := e.Row.TableInfo.TableName
 				ordered := w.txnOrderFilter.MatchTable(table.Schema, table.Table)
-				if ordered && !task.span.Eq(&fullSpan) {
-					return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
-						"sink.mysql-config.txn-order-tables does not support split table " + table.String())
-				}
+				// Matched tables use transaction-atomicity=table.
 				advancer.splitTxn = w.splitTxn && !ordered
 			}
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.

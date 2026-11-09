@@ -199,3 +199,24 @@ func TestGenKeys(t *testing.T) {
 		require.Equal(t, tc.expected, keys)
 	}
 }
+
+func TestTxnOrderTableKeys(t *testing.T) {
+	first := newTxnEvent(orderedTestEvent(1, 1, "orders", 1))
+	second := newTxnEvent(orderedTestEvent(2, 1, "orders", 2))
+	require.NotEqual(t, first.ConflictKeys(), second.ConflictKeys())
+	first.tableOrder, second.tableOrder = true, true
+	require.Equal(t, first.ConflictKeys(), second.ConflictKeys())
+
+	// Preserve all table ID bits and keep table keys outside the row-hash range.
+	for _, tableID := range []int64{1, 2, 1 + (1 << 32), 1 + (1 << 48)} {
+		second.Event.PhysicalTableID = tableID
+		require.Equal(t, []uint64{uint64(tableID) | (1 << 63)}, second.ConflictKeys())
+		if tableID != 1 {
+			require.NotEqual(t, first.ConflictKeys(), second.ConflictKeys())
+		}
+	}
+	second.tableOrder = false
+	for _, key := range second.ConflictKeys() {
+		require.Less(t, key, uint64(1)<<32)
+	}
+}

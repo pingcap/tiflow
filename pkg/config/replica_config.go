@@ -297,7 +297,6 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 				return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
 					"sink.mysql-config.txn-order-tables is only supported by MySQL sinks")
 			}
-			c.Scheduler.EnableTableAcrossNodes = false
 		}
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.

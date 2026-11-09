@@ -38,11 +38,9 @@ INSERT INTO mysql_txn_order.t VALUES (1,0),(2,0);' 127.0.0.1 "$port"
 	start_ts=$(run_cdc_cli_tso_query "$UP_PD_HOST_1" "$UP_PD_PORT_1")
 	run_cdc_server --workdir "$WORK_DIR" --binary "$CDC_BINARY" --addr "127.0.0.1:8300"
 	# Keep multiple workers and normal batching settings: the ordered table must
-	# automatically get full single-table transactions and independent commits.
+	# automatically get full single-table transactions committed in order.
 	SINK_URI="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?worker-count=4&max-txn-row=256&safe-mode=false&batch-dml-enable=false"
 	run_cdc_cli changefeed create --changefeed-id=ordered --start-ts="$start_ts" --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
-	run_cdc_cli changefeed query --changefeed-id=ordered >"$WORK_DIR/config.json"
-	jq -e '.config.scheduler.enable_table_across_nodes == false' "$WORK_DIR/config.json"
 
 	"$WORK_DIR/check_order" --upstream "root@tcp(${UP_TIDB_HOST}:${UP_TIDB_PORT})/mysql_txn_order" \
 		--downstream "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/mysql_txn_order"
