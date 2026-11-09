@@ -24,10 +24,14 @@ import (
 
 // VerifyTables catalog tables specified by ReplicaConfig into
 // eligible (has an unique index or primary key) and ineligible tables.
+// forceReplicate controls transaction ordering validation without changing
+// the eligible/ineligible classification.
 func VerifyTables(
 	f filter.Filter,
 	storage tidbkv.Storage,
-	startTs uint64) (
+	startTs uint64,
+	forceReplicate bool,
+) (
 	tableInfos []*model.TableInfo,
 	ineligibleTables,
 	eligibleTables []model.TableName,
@@ -36,7 +40,7 @@ func VerifyTables(
 	meta := kv.GetSnapshotMeta(storage, startTs)
 	snap, err := schema.NewSnapshotFromMeta(
 		model.GenerateChangeFeedID("api", "verifyTable"),
-		meta, startTs, false /* explicitTables */, f)
+		meta, startTs, forceReplicate, f)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}

@@ -161,7 +161,7 @@ func verifyCreateChangefeedConfig(
 		return nil, err
 	}
 	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f,
-		up.KVStorage, changefeedConfig.StartTS)
+		up.KVStorage, changefeedConfig.StartTS, replicaConfig.ForceReplicate)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +262,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 			}
 			// Validate the tables at the paused checkpoint, including tables that
 			// did not exist at the changefeed's start timestamp.
-			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs)
+			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs, newInfo.Config.ForceReplicate)
 			if err != nil {
 				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 			}

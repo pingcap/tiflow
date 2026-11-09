@@ -557,7 +557,7 @@ func (h APIV2HelpersImpl) getVerifiedTables(
 		return nil, nil, err
 	}
 	tableInfos, ineligibleTables, eligibleTables, err := entry.
-		VerifyTables(f, storage, startTs)
+		VerifyTables(f, storage, startTs, replicaConfig.ForceReplicate)
 	if err != nil {
 		return nil, nil, err
 	}

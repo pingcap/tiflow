@@ -78,6 +78,62 @@ func newFakeDDLEvent(
 	}
 }
 
+func TestTxnOrderTablesBatchCreateEligibility(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	createPartition := helper.DDL2Job("create table app.ordered_p (id int) partition by hash(id) partitions 2")
+	createRegular := helper.DDL2Job("create table app.regular (id int primary key)")
+	dropPartition := helper.DDL2Job("drop table app.ordered_p")
+
+	for _, forceReplicate := range []bool{false, true} {
+		cfg := config.GetDefaultReplicaConfig()
+		cfg.ForceReplicate = forceReplicate
+		cfg.Filter.Rules = []string{"app.*"}
+		cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+		f, err := filter.NewFilter(cfg, "", true)
+		require.NoError(t, err)
+		dm := createDDLManagerForTest(t, false)
+		dm.filter = f
+		dm.schema, err = entry.NewSchemaStorage(nil, 0, forceReplicate, dm.changfeedID, util.RoleTester, f)
+		require.NoError(t, err)
+
+		// Build one batch containing an ineligible ordered partition and an
+		// eligible regular table, so both reach the owner's per-table checks.
+		batch := *createRegular
+		batch.Type = timodel.ActionCreateTables
+		batch.Query = createPartition.Query + ";" + createRegular.Query
+		history := *createRegular.BinlogInfo
+		history.MultipleTableInfos = []*timodel.TableInfo{
+			createPartition.BinlogInfo.TableInfo, createRegular.BinlogInfo.TableInfo,
+		}
+		batch.BinlogInfo = &history
+		ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+		ddlPuller.schemaStorage = dm.schema
+		ddlPuller.ddlQueue = []*timodel.Job{createSchema, &batch}
+		ddlPuller.resolvedTs = history.FinishedTS
+
+		_, _, err = dm.tick(context.Background(), 1)
+		if forceReplicate {
+			require.ErrorContains(t, err, "does not support partitioned table")
+			continue
+		}
+		require.NoError(t, err)
+		var tables []string
+		for table := range dm.pendingDDLs {
+			tables = append(tables, table.Table)
+		}
+		// The database DDL and regular table remain queued; the partition is skipped.
+		require.ElementsMatch(t, []string{"", "regular"}, tables)
+
+		// A drop can reach the owner after the table's eligibility metadata is gone.
+		ddlPuller.ddlQueue = []*timodel.Job{dropPartition}
+		ddlPuller.resolvedTs = dropPartition.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+	}
+}
+
 func TestGetNextDDL(t *testing.T) {
 	dm := createDDLManagerForTest(t, false)
 	dm.executingDDL = newFakeDDLEvent(1,

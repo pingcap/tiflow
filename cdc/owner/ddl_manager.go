@@ -309,9 +309,6 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
-			if err := m.filter.VerifyTxnOrderTable(event.TableInfo); err != nil {
-				return nil, nil, err
-			}
 			snap := m.schema.GetLastSnapshot()
 			if event.Type == timodel.ActionCreateTable ||
 				event.Type == timodel.ActionCreateTables {
@@ -322,6 +319,22 @@ func (m *ddlManager) tick(
 						zap.String("query", job.Query),
 						zap.Any("table", event.TableInfo))
 					continue
+				}
+			}
+			if tableInfo := event.TableInfo; tableInfo != nil && tableInfo.TableInfo != nil {
+				// Check eligibility at this DDL, since the puller may have applied later DDLs.
+				ts := event.CommitTs
+				if event.Type == timodel.ActionDropTable || event.Type == timodel.ActionDropView {
+					ts--
+				}
+				ineligible, err := m.schema.IsIneligibleTable(ctx, tableInfo.ID, ts)
+				if err != nil {
+					return nil, nil, err
+				}
+				if !ineligible {
+					if err := m.filter.VerifyTxnOrderTable(tableInfo); err != nil {
+						return nil, nil, err
+					}
 				}
 			}
 			tableName := event.TableInfo.TableName

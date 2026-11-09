@@ -74,25 +74,55 @@ function reject_api_update() {
 for version in v1 v2; do
 	id="api-order-$version"
 	schema="mysql_txn_order_api_$version"
-	filters=$(jq -cn --arg schema "$schema" '[$schema + ".*"]')
+	filters=$(jq -cn --arg schema "$schema" '[$schema + ".*", "!" + $schema + ".future_excluded"]')
 	regular=$(jq -cn --arg schema "$schema" '[$schema + ".regular"]')
-	future=$(jq -cn --arg schema "$schema" '[$schema + ".future"]')
-	run_sql "CREATE DATABASE $schema; CREATE TABLE $schema.regular (id INT PRIMARY KEY);" "$UP_TIDB_HOST" "$UP_TIDB_PORT"
+	future=$(jq -cn --arg schema "$schema" '[$schema + ".future*"]')
+	run_sql "CREATE DATABASE $schema;
+CREATE TABLE $schema.regular (id INT PRIMARY KEY);
+CREATE TABLE $schema.future_no_key (id INT) PARTITION BY HASH(id) PARTITIONS 2;
+CREATE TABLE $schema.future_excluded (id INT PRIMARY KEY) PARTITION BY HASH(id) PARTITIONS 2;" "$UP_TIDB_HOST" "$UP_TIDB_PORT"
 	run_sql "CREATE DATABASE $schema; CREATE TABLE $schema.regular (id INT PRIMARY KEY);" "$DOWN_TIDB_HOST" "$DOWN_TIDB_PORT"
 	if [ "$version" = v1 ]; then
 		success=202
 		payload=$(jq -cn --arg id "$id" --arg uri "$SINK_URI" --argjson filters "$filters" --argjson rules "$future" \
-			'{changefeed_id: $id, sink_uri: $uri, filter_rules: $filters, sink_config: {"transaction-atomicity": "none", "mysql-config": {"txn-order-tables": $rules}}}')
+			'{changefeed_id: $id, sink_uri: $uri, ignore_ineligible_table: true, filter_rules: $filters, sink_config: {"transaction-atomicity": "none", "mysql-config": {"txn-order-tables": $rules}}}')
 	else
 		success=200
 		payload=$(jq -cn --arg id "$id" --arg uri "$SINK_URI" --argjson filters "$filters" --argjson rules "$future" \
-			'{changefeed_id: $id, sink_uri: $uri, replica_config: {filter: {rules: $filters}, sink: {transaction_atomicity: "none", mysql_config: {txn_order_tables: $rules}}, scheduler: {enable_table_across_nodes: true, region_threshold: 1}}}')
+			'{changefeed_id: $id, sink_uri: $uri, replica_config: {ignore_ineligible_table: true, filter: {rules: $filters}, sink: {transaction_atomicity: "none", mysql_config: {txn_order_tables: $rules}}, scheduler: {enable_table_across_nodes: true, region_threshold: 1}}}')
 	fi
+	# Without force-replicate, matching ineligible partitions are skipped. With
+	# force-replicate they would be copied, so ordering must reject them.
+	force_payload=$(echo "$payload" | jq -c --arg version "$version" \
+		'.changefeed_id += "-force" | if $version == "v1" then .force_replicate = true else .replica_config.force_replicate = true end')
+	api_request 500 POST "$version/changefeeds" "$force_payload"
+	jq -e '.error_code == "CDC:ErrInvalidReplicaConfig" and (.error_msg | contains("txn-order-tables does not support partitioned table"))' "$WORK_DIR/api-response.json"
 	api_request "$success" POST "$version/changefeeds" "$payload"
 	ensure 10 check_api_state "$id" normal
 	save_api_config "$future" mysql
 	jq -e --argjson rules "$future" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
 	jq -e '.config.scheduler.enable_table_across_nodes == false' "$WORK_DIR/api-before.json"
+
+	# Exercise the puller's ineligible-table DDL path, then recreate the owner and
+	# processor snapshots from a checkpoint that already contains the skipped table.
+	run_sql "CREATE TABLE $schema.future_runtime (id INT) PARTITION BY HASH(id) PARTITIONS 2;" "$UP_TIDB_HOST" "$UP_TIDB_PORT"
+	checkpoint=$(run_cdc_cli_tso_query "$UP_PD_HOST_1" "$UP_PD_PORT_1")
+	ensure 10 check_api_checkpoint "$id" "$checkpoint"
+	api_request "$success" POST "$version/changefeeds/$id/pause"
+	ensure 10 check_api_state "$id" stopped
+	save_api_config
+	rules=$(jq -cn --argjson future "$future" --argjson regular "$regular" '$future + $regular')
+	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update "$rules" "$filters")"
+	save_api_config "$rules" mysql
+	api_request "$success" POST "$version/changefeeds/$id/resume" '{}'
+	ensure 10 check_api_state "$id" normal
+	checkpoint=$(run_cdc_cli_tso_query "$UP_PD_HOST_1" "$UP_PD_PORT_1")
+	ensure 10 check_api_checkpoint "$id" "$checkpoint"
+	[ "$(mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='$schema' AND table_name LIKE 'future%'")" = 0 ]
+	# Dropping a skipped partition must not fail ordering validation, either.
+	run_sql "DROP TABLE $schema.future_runtime;" "$UP_TIDB_HOST" "$UP_TIDB_PORT"
+	checkpoint=$(run_cdc_cli_tso_query "$UP_PD_HOST_1" "$UP_PD_PORT_1")
+	ensure 10 check_api_checkpoint "$id" "$checkpoint"
 
 	# Create the partitioned table after start-ts and wait for its DDL to finish,
 	# so an update must use the checkpoint snapshot rather than the start snapshot.

@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
@@ -439,30 +440,31 @@ func TestTxnOrderPartitionTables(t *testing.T) {
 	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered*", "app.excluded"}}
 	f, err := NewFilter(cfg, "", true)
 	require.NoError(t, err)
-	ti := model.BuildTableInfo("app", "ordered", nil, nil)
-	require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+	ti := model.BuildTableInfoWithPKNames4Test("app", "ordered",
+		[]*model.Column{{Name: "id", Type: mysql.TypeLong}}, map[string]struct{}{"id": {}})
+	require.NoError(t, f.VerifyTxnOrderTable(ti))
 	ti.Partition = &timodel.PartitionInfo{Enable: true, Definitions: []timodel.PartitionDefinition{{ID: 101}}}
-	require.ErrorContains(t, f.Verify([]*model.TableInfo{ti}), "does not support partitioned table")
-	_, err = f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionCreateTable, TableInfo: ti})
-	require.ErrorContains(t, err, "partitioned table")
+	require.ErrorContains(t, f.VerifyTxnOrderTable(ti), "does not support partitioned table")
 	_, err = f.ShouldIgnoreDMLEvent(&model.RowChangedEvent{TableInfo: ti}, model.RowChangedDatums{}, ti)
 	require.ErrorContains(t, err, "partitioned table")
-	// A rename into the ordered set must be rejected even when the DDL is ignored.
+	// The caller validates ordering separately from DDL event filtering.
 	cfg.Filter.EventFilters = []*config.EventFilterRule{{Matcher: []string{"app.*"}, IgnoreEvent: []bf.EventType{bf.RenameTable}}}
 	f, err = NewFilter(cfg, "", true)
 	require.NoError(t, err)
-	_, err = f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionRenameTable, TableInfo: ti})
-	require.ErrorContains(t, err, "partitioned table")
+	require.ErrorContains(t, f.VerifyTxnOrderTable(ti), "partitioned table")
+	ignored, err := f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionRenameTable, TableInfo: ti, PreTableInfo: ti})
+	require.NoError(t, err)
+	require.True(t, ignored)
 	for _, name := range []string{"unordered", "excluded"} {
 		ti.TableName.Table = name
-		require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+		require.NoError(t, f.VerifyTxnOrderTable(ti))
 	}
 	ti.TableName.Table = "ORDERED"
-	require.ErrorContains(t, f.Verify([]*model.TableInfo{ti}), "partitioned table")
+	require.ErrorContains(t, f.VerifyTxnOrderTable(ti), "partitioned table")
 	cfg.CaseSensitive = true
 	f, err = NewFilter(cfg, "", true)
 	require.NoError(t, err)
-	require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+	require.NoError(t, f.VerifyTxnOrderTable(ti))
 }
 
 func TestTxnOrderInvalidRules(t *testing.T) {
@@ -476,7 +478,8 @@ func TestTxnOrderInvalidRules(t *testing.T) {
 }
 
 func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
-	ti := model.BuildTableInfo("app", "ordered", nil, nil)
+	ti := model.BuildTableInfoWithPKNames4Test("app", "ordered",
+		[]*model.Column{{Name: "id", Type: mysql.TypeLong}}, map[string]struct{}{"id": {}})
 	ti.Partition = &timodel.PartitionInfo{Enable: true, Definitions: []timodel.PartitionDefinition{{ID: 101}}}
 	for _, sinkURI := range []string{"kafka://127.0.0.1/topic?protocol=open-protocol", "blackhole://", "s3://bucket/prefix?protocol=csv"} {
 		cfg := config.GetDefaultReplicaConfig()
@@ -487,7 +490,7 @@ func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
 		require.NoError(t, cfg.ValidateAndAdjust(uri))
 		f, err := NewFilter(cfg, "", sink.IsMySQLCompatibleScheme(uri.Scheme))
 		require.NoError(t, err)
-		require.NoError(t, f.Verify([]*model.TableInfo{ti}))
+		require.NoError(t, f.VerifyTxnOrderTable(ti))
 		ignored, err := f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionCreateTable, TableInfo: ti})
 		require.NoError(t, err)
 		require.False(t, ignored)

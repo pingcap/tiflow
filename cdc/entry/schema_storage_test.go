@@ -1028,15 +1028,75 @@ func TestGetPrimaryKey(t *testing.T) {
 	require.Equal(t, names, []string{"a"})
 }
 
-func TestTxnOrderTablesRejectPartitionOnStartup(t *testing.T) {
+func TestTxnOrderTablesPartitionOnStartup(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-	helper.Tk().MustExec("create table test.ordered_t (id int) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_no_key (id int) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_nullable_uk (id int unique) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_pk (id int primary key) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_uk (id int not null unique) partition by hash(id) partitions 2")
+	for _, tc := range []struct {
+		name           string
+		table          string
+		forceReplicate bool
+		excluded       bool
+		wantErr        bool
+	}{
+		{name: "no key", table: "ordered_no_key"},
+		{name: "nullable unique key", table: "ordered_nullable_uk"},
+		{name: "primary key", table: "ordered_pk", wantErr: true},
+		{name: "unique key", table: "ordered_uk", wantErr: true},
+		{name: "force replicate no key", table: "ordered_no_key", forceReplicate: true, wantErr: true},
+		{name: "force replicate nullable unique key", table: "ordered_nullable_uk", forceReplicate: true, wantErr: true},
+		{name: "excluded primary key", table: "ordered_pk", excluded: true},
+		{name: "excluded force replicate", table: "ordered_no_key", forceReplicate: true, excluded: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.ForceReplicate = tc.forceReplicate
+			cfg.Filter.Rules = []string{"test." + tc.table}
+			if tc.excluded {
+				cfg.Filter.Rules = append(cfg.Filter.Rules, "!test."+tc.table)
+			}
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
+			f, err := filter.NewFilter(cfg, "", true)
+			require.NoError(t, err)
+			snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("ordered"), helper.GetCurrentMeta(), 1, tc.forceReplicate, f)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "does not support partitioned table")
+				return
+			}
+			require.NoError(t, err)
+			ti, ok := snap.TableByName("test", tc.table)
+			require.Equal(t, !tc.excluded, ok)
+			if ok {
+				require.True(t, snap.IsIneligibleTableID(ti.ID))
+				for _, partition := range ti.GetPartitionInfo().Definitions {
+					require.True(t, snap.IsIneligibleTableID(partition.ID))
+				}
+			}
+		})
+	}
+}
+
+func TestTxnOrderTablesVerifyTablesClassification(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("create table test.ordered_no_key (id int) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.regular (id int primary key)")
+	version, err := helper.Storage().CurrentVersion(tidbkv.GlobalTxnScope)
+	require.NoError(t, err)
 	cfg := config.GetDefaultReplicaConfig()
-	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
+	cfg.Filter.Rules = []string{"test.*"}
 	f, err := filter.NewFilter(cfg, "", true)
 	require.NoError(t, err)
-	// Even an ineligible partitioned table must produce an explicit error.
-	_, err = schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("ordered"), helper.GetCurrentMeta(), 1, false, f)
-	require.ErrorContains(t, err, "does not support partitioned table")
+	for _, forceReplicate := range []bool{false, true} {
+		tableInfos, ineligible, eligible, err := VerifyTables(f, helper.Storage(), version.Ver, forceReplicate)
+		require.NoError(t, err)
+		require.Len(t, tableInfos, 2)
+		require.Len(t, ineligible, 1)
+		require.Equal(t, "ordered_no_key", ineligible[0].Table)
+		require.Len(t, eligible, 1)
+		require.Equal(t, "regular", eligible[0].Table)
+	}
 }

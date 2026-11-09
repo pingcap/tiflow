@@ -113,9 +113,10 @@ type Filter interface {
 	ShouldIgnoreTable(schema, table string) bool
 	// ShouldIgnoreSchema returns true if the schema should be ignored.
 	ShouldIgnoreSchema(schema string) bool
-	// Verify validates table constraints and the expression filter config.
+	// Verify validates the expression filter config.
 	Verify(tableInfos []*model.TableInfo) error
 	// VerifyTxnOrderTable rejects tables that cannot provide transaction ordering.
+	// The caller must ensure that the table is eligible for replication.
 	VerifyTxnOrderTable(tableInfo *model.TableInfo) error
 }
 
@@ -237,9 +238,6 @@ func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table stri
 //  1. `CREATE TABLE test.worker` will be ignored, but the table will be replicated by changefeed-test.
 //  2. `CREATE TABLE other.worker` will be discarded, and the table will not be replicated by changefeed-test.
 func (f *filter) ShouldIgnoreDDLEvent(ddl *model.DDLEvent) (bool, error) {
-	if err := f.VerifyTxnOrderTable(ddl.TableInfo); err != nil {
-		return false, err
-	}
 	if f.shouldIgnoreStartTs(ddl.StartTs) {
 		return true, nil
 	}
@@ -261,11 +259,6 @@ func (f *filter) ShouldIgnoreSchema(schema string) bool {
 }
 
 func (f *filter) Verify(tableInfos []*model.TableInfo) error {
-	for _, ti := range tableInfos {
-		if err := f.VerifyTxnOrderTable(ti); err != nil {
-			return err
-		}
-	}
 	return f.dmlExprFilter.verify(tableInfos)
 }
 
