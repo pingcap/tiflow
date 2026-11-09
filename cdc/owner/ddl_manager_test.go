@@ -85,6 +85,11 @@ func TestTxnOrderTablesBatchCreateEligibility(t *testing.T) {
 	createPartition := helper.DDL2Job("create table app.ordered_p (id int) partition by hash(id) partitions 2")
 	createRegular := helper.DDL2Job("create table app.regular (id int primary key)")
 	dropPartition := helper.DDL2Job("drop table app.ordered_p")
+	createPartitionAgain := helper.DDL2Job("create table app.ordered_p (id int not null) partition by hash(id) partitions 2")
+	addUniqueKey := helper.DDL2Job("alter table app.ordered_p add unique key (id)")
+	require.Equal(t, timodel.ActionAddIndex, addUniqueKey.Type)
+	addColumn := helper.DDL2Job("alter table app.ordered_p add column v int")
+	require.Equal(t, timodel.ActionAddColumn, addColumn.Type)
 
 	for _, forceReplicate := range []bool{false, true} {
 		cfg := config.GetDefaultReplicaConfig()
@@ -129,6 +134,17 @@ func TestTxnOrderTablesBatchCreateEligibility(t *testing.T) {
 		// A drop can reach the owner after the table's eligibility metadata is gone.
 		ddlPuller.ddlQueue = []*timodel.Job{dropPartition}
 		ddlPuller.resolvedTs = dropPartition.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+
+		// Index and column changes do not introduce partitioning and are not
+		// subject to the owner's transaction ordering check.
+		ddlPuller.ddlQueue = []*timodel.Job{createPartitionAgain, addUniqueKey}
+		ddlPuller.resolvedTs = addUniqueKey.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+		ddlPuller.ddlQueue = []*timodel.Job{addColumn}
+		ddlPuller.resolvedTs = addColumn.BinlogInfo.FinishedTS
 		_, _, err = dm.tick(context.Background(), 1)
 		require.NoError(t, err)
 	}

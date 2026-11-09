@@ -1099,4 +1099,12 @@ func TestTxnOrderTablesVerifyTablesClassification(t *testing.T) {
 		require.Len(t, eligible, 1)
 		require.Equal(t, "regular", eligible[0].Table)
 	}
+
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
+	f, err = filter.NewFilter(cfg, "", true)
+	require.NoError(t, err)
+	_, _, _, err = VerifyTables(f, helper.Storage(), version.Ver, false)
+	require.NoError(t, err)
+	_, _, _, err = VerifyTables(f, helper.Storage(), version.Ver, true)
+	require.ErrorContains(t, err, "does not support partitioned table")
 }

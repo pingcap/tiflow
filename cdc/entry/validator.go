@@ -40,7 +40,7 @@ func VerifyTables(
 	meta := kv.GetSnapshotMeta(storage, startTs)
 	snap, err := schema.NewSnapshotFromMeta(
 		model.GenerateChangeFeedID("api", "verifyTable"),
-		meta, startTs, forceReplicate, f)
+		meta, startTs, false /* forceReplicate */, f)
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
@@ -61,5 +61,17 @@ func VerifyTables(
 			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
 	})
+	// The snapshot validates eligible tables. Also validate the ineligible
+	// tables that force-replicate enables, without changing their classification.
+	if forceReplicate {
+		for _, tableInfo := range tableInfos {
+			if tableInfo.IsEligible(false) {
+				continue
+			}
+			if err := f.VerifyTxnOrderTable(tableInfo); err != nil {
+				return nil, nil, nil, errors.Trace(err)
+			}
+		}
+	}
 	return
 }

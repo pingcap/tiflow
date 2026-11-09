@@ -321,18 +321,18 @@ func (m *ddlManager) tick(
 					continue
 				}
 			}
-			if tableInfo := event.TableInfo; tableInfo != nil && tableInfo.TableInfo != nil {
+			// Check DDLs that can introduce a partitioned table into the ordered set.
+			switch event.Type {
+			case timodel.ActionCreateTable, timodel.ActionCreateTables,
+				timodel.ActionRenameTable, timodel.ActionRenameTables,
+				timodel.ActionRecoverTable, timodel.ActionAlterTablePartitioning:
 				// Check eligibility at this DDL, since the puller may have applied later DDLs.
-				ts := event.CommitTs
-				if event.Type == timodel.ActionDropTable || event.Type == timodel.ActionDropView {
-					ts--
-				}
-				ineligible, err := m.schema.IsIneligibleTable(ctx, tableInfo.ID, ts)
+				ineligible, err := m.schema.IsIneligibleTable(ctx, event.TableInfo.ID, event.CommitTs)
 				if err != nil {
 					return nil, nil, err
 				}
 				if !ineligible {
-					if err := m.filter.VerifyTxnOrderTable(tableInfo); err != nil {
+					if err := m.filter.VerifyTxnOrderTable(event.TableInfo); err != nil {
 						return nil, nil, err
 					}
 				}
