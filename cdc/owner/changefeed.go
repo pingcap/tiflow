@@ -536,6 +536,7 @@ func (c *changefeed) tick(ctx context.Context,
 	return watermark.CheckpointTs, barrier.MinTableBarrierTs, nil
 }
 
+// initialize prepares upstream metadata and changefeed replication components.
 func (c *changefeed) initialize(ctx context.Context,
 	cfInfo *model.ChangeFeedInfo,
 	cfStatus *model.ChangeFeedStatus,

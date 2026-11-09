@@ -257,6 +257,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}
 }
 
+// testMounterDisableOldValue checks row decoding when old values are disabled.
 func testMounterDisableOldValue(t *testing.T, tc struct {
 	tableName           string
 	createTableDDL      string
@@ -1237,6 +1238,7 @@ func TestVerifyChecksumTime(t *testing.T) {
 	require.NotNil(t, event)
 }
 
+// TestDecodeRow checks row decoding against the schema at the event timestamp.
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()

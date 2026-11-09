@@ -23,6 +23,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestVerifyUpdateChangefeedConfig checks validation of v1 changefeed updates.
 func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()

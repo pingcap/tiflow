@@ -200,6 +200,7 @@ func TestGenKeys(t *testing.T) {
 	}
 }
 
+// TestTxnOrderTableKeys checks table-wide conflict keys for ordered transactions.
 func TestTxnOrderTableKeys(t *testing.T) {
 	first := newTxnEvent(orderedTestEvent(1, 1, "orders", 1))
 	second := newTxnEvent(orderedTestEvent(2, 1, "orders", 2))

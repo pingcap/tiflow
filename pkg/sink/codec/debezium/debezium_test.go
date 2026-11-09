@@ -43,6 +43,7 @@ type SQLTestHelper struct {
 	tableID int64
 }
 
+// NewSQLTestHelper creates a TiDB-backed helper for Debezium codec tests.
 func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQLTestHelper {
 	helper := entry.NewSchemaTestHelper(t)
 	helper.Tk().MustExec("set @@tidb_enable_clustered_index=1;")

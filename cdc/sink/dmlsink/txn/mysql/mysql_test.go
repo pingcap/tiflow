@@ -415,6 +415,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	require.Nil(t, sink.Close())
 }
 
+// TestExecDMLRollbackErrDatabaseNotExists checks rollback handling for a missing database.
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{
@@ -481,6 +482,7 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	require.Nil(t, sink.Close())
 }
 
+// TestExecDMLRollbackErrTableNotExists checks rollback handling for a missing table.
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{
@@ -548,6 +550,7 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	require.Nil(t, sink.Close())
 }
 
+// TestExecDMLRollbackErrRetryable checks retries after retryable rollback errors.
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{
@@ -618,6 +621,7 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	require.Nil(t, sink.Close())
 }
 
+// TestMysqlSinkNotRetryErrDupEntry checks that duplicate-key errors are not retried.
 func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	errDup := mysql.NewErr(mysql.ErrDupEntry)
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
@@ -779,6 +783,7 @@ func TestHolderString(t *testing.T) {
 	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
 }
 
+// TestMySQLSinkExecDMLError checks propagation of errors during DML execution.
 func TestMySQLSinkExecDMLError(t *testing.T) {
 	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -1746,6 +1751,7 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 	}
 }
 
+// TestTxnOrderTablesFlush checks ordered flush boundaries and retries.
 func TestTxnOrderTablesFlush(t *testing.T) {
 	for _, failStage := range []int{0, 1, 2} {
 		t.Run(fmt.Sprintf("fail-stage=%d", failStage), func(t *testing.T) {

@@ -8,21 +8,25 @@ WORK_DIR=$OUT_DIR/$TEST_NAME
 CDC_BINARY=cdc.test
 SINK_TYPE=$1
 
+# check_partition_error checks that a feed reports the ordered-partition restriction.
 function check_partition_error() {
 	local id=${1:-ordered}
 	run_cdc_cli changefeed query --changefeed-id="$id" --server="127.0.0.1:8300" >"$WORK_DIR/$id-status.json"
 	grep -q 'txn-order-tables does not support partitioned table' "$WORK_DIR/$id-status.json"
 }
 
+# check_update_stopped checks that the feed is paused before updating its config.
 function check_update_stopped() {
 	run_cdc_cli changefeed query --changefeed-id=update-order | jq -e '.state == "stopped"'
 }
 
+# check_mysql_scheduler verifies that MySQL sinks disable replication across nodes.
 function check_mysql_scheduler() {
 	run_cdc_cli changefeed query --changefeed-id=ordered |
 		jq -e '.config.scheduler.enable_table_across_nodes == false'
 }
 
+# check_table_row_count compares a downstream table's size with the expected count.
 function check_table_row_count() {
 	[ "$(mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -Nse "SELECT COUNT(*) FROM $1")" = "$2" ]
 }
@@ -33,6 +37,7 @@ export -f check_mysql_scheduler check_table_row_count
 export WORK_DIR
 export DOWN_TIDB_HOST DOWN_TIDB_PORT
 
+# check_partition_ddl rejects partition creation, conversion, and index-enabled replication.
 function check_partition_ddl() {
 	for port in "$UP_TIDB_PORT" "$DOWN_TIDB_PORT"; do
 		run_sql 'CREATE DATABASE mysql_txn_order_ddl;' 127.0.0.1 "$port"
@@ -58,9 +63,21 @@ function check_partition_ddl() {
 	ensure 30 check_partition_error partition-ddl-alter
 	[ "$(mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -Nse "SELECT COUNT(*) FROM information_schema.partitions WHERE table_schema='mysql_txn_order_ddl' AND table_name='ordered_t' AND partition_name IS NOT NULL")" = 0 ]
 	run_cdc_cli changefeed remove --changefeed-id=partition-ddl-alter
-	echo 'partition CREATE and ALTER DDL checks passed'
+	run_sql 'DROP TABLE mysql_txn_order_ddl.ordered_t;' "$UP_TIDB_HOST" "$UP_TIDB_PORT"
+
+	# A usable unique index starts replication of an otherwise skipped partition.
+	run_cdc_cli changefeed create --changefeed-id=partition-ddl-unique --sink-uri="$SINK_URI" --config="$WORK_DIR/partition-ddl.toml"
+	run_sql 'CREATE TABLE mysql_txn_order_ddl.ordered_no_key (id INT NOT NULL) PARTITION BY HASH(id) PARTITIONS 2;
+CREATE TABLE mysql_txn_order_ddl.marker (id INT PRIMARY KEY);' "$UP_TIDB_HOST" "$UP_TIDB_PORT"
+	check_table_exists mysql_txn_order_ddl.marker "$DOWN_TIDB_HOST" "$DOWN_TIDB_PORT"
+	run_sql 'ALTER TABLE mysql_txn_order_ddl.ordered_no_key ADD UNIQUE KEY (id);' "$UP_TIDB_HOST" "$UP_TIDB_PORT"
+	ensure 30 check_partition_error partition-ddl-unique
+	[ "$(mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -Nse "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='mysql_txn_order_ddl' AND table_name='ordered_no_key'")" = 0 ]
+	run_cdc_cli changefeed remove --changefeed-id=partition-ddl-unique
+	echo 'partition CREATE, ALTER, and unique-index DDL checks passed'
 }
 
+# run exercises API validation and transaction ordering against a MySQL-compatible sink.
 function run() {
 	if [ "$SINK_TYPE" != "mysql" ]; then
 		return

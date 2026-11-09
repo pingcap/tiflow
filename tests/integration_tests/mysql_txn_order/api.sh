@@ -7,6 +7,7 @@ source $CUR/../_utils/test_prepare
 WORK_DIR=$OUT_DIR/$TEST_NAME
 SINK_URI=$1
 
+# api_request sends a request and checks its HTTP status, retaining the response body.
 function api_request() {
 	local expected=$1 method=$2 path=$3 body=${4:-} status
 	status=$(curl -sS --max-time 30 -X "$method" "http://127.0.0.1:8300/api/$path" \
@@ -19,20 +20,24 @@ function api_request() {
 	fi
 }
 
+# check_api_state checks the current changefeed lifecycle state.
 function check_api_state() {
 	curl -fsS --max-time 30 "http://127.0.0.1:8300/api/v2/changefeeds/$1" |
 		jq -e --arg state "$2" '.state == $state'
 }
 
+# check_api_checkpoint checks that replication has reached the requested timestamp.
 function check_api_checkpoint() {
 	curl -fsS --max-time 30 "http://127.0.0.1:8300/api/v2/changefeeds/$1" |
 		jq -e --argjson ts "$2" '.checkpoint_ts >= $ts'
 }
 
+# check_api_row verifies that the regular table's test row reached downstream.
 function check_api_row() {
 	[ "$(mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -Nse "SELECT COUNT(*) FROM $1.regular WHERE id=1")" = 1 ]
 }
 
+# check_api_config checks ordering-rule persistence and the configured sink scheme.
 function check_api_config() {
 	curl -fsS --max-time 30 "http://127.0.0.1:8300/api/v2/changefeeds/$1" |
 		jq -e --argjson rules "$API_EXPECTED_RULES" --arg scheme "$API_EXPECTED_SCHEME" \
@@ -42,6 +47,7 @@ function check_api_config() {
 export -f check_api_state check_api_checkpoint check_api_row check_api_config
 export DOWN_TIDB_HOST DOWN_TIDB_PORT
 
+# save_api_config waits for expected settings and saves a normalized config snapshot.
 function save_api_config() {
 	if [ "$#" -gt 0 ]; then
 		API_EXPECTED_RULES="$1" API_EXPECTED_SCHEME="${2:-}" ensure 10 check_api_config "$id"
@@ -50,6 +56,7 @@ function save_api_config() {
 	jq -S '{sink_uri, config}' "$WORK_DIR/api-response.json" >"$WORK_DIR/api-before.json"
 }
 
+# ordering_update builds a version-specific payload for ordering and table-filter changes.
 function ordering_update() {
 	local rules=$1 filters=$2
 	if [ "$version" = v1 ]; then
@@ -62,6 +69,7 @@ function ordering_update() {
 	fi
 }
 
+# reject_api_update verifies the refusal reason and that the stored config stayed unchanged.
 function reject_api_update() {
 	api_request 400 PUT "$version/changefeeds/$id" "$1"
 	jq -e --arg message "$2" \

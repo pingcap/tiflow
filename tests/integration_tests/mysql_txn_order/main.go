@@ -26,6 +26,7 @@ import (
 
 const hotUpdates = 2100
 
+// main parses connection options and reports transaction order verification.
 func main() {
 	upstream := flag.String("upstream", "root@tcp(127.0.0.1:4000)/mysql_txn_order", "upstream DSN")
 	downstream := flag.String("downstream", "root@tcp(127.0.0.1:3306)/mysql_txn_order", "downstream DSN")
@@ -38,6 +39,7 @@ func main() {
 	fmt.Printf("verified %d transactions in upstream commit order\n", hotUpdates+1)
 }
 
+// run checks downstream commit order while concurrent table transactions accumulate.
 func run(ctx context.Context, upDSN, downDSN string) error {
 	up, err := sql.Open("mysql", upDSN)
 	if err != nil {

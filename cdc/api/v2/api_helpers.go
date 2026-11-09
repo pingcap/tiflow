@@ -546,6 +546,7 @@ func (h APIV2HelpersImpl) createTiStore(
 	return res, nil
 }
 
+// getVerifiedTables validates table settings and returns eligibility categories.
 func (h APIV2HelpersImpl) getVerifiedTables(
 	ctx context.Context,
 	replicaConfig *config.ReplicaConfig,

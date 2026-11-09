@@ -107,6 +107,7 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 	}
 }
 
+// handleTask sends table events to a sink within task bounds and memory limits.
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	// We need to use a new batch ID for each task.
 	batchID.Add(1)
@@ -144,7 +145,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
-			zap.Bool("splitTxn", w.splitTxn),
+			zap.Bool("splitTxn", advancer.splitTxn),
 			zap.Int("receivedEvents", allEventCount),
 			zap.Any("lastPos", advancer.lastPos),
 			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
@@ -207,11 +208,12 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// NOTICE: The event can be filtered by the event filter.
 		if e.Row != nil {
-			if w.splitTxn && w.txnOrderFilter != nil {
+			if advancer.splitTxn && w.txnOrderFilter != nil {
 				table := e.Row.TableInfo.TableName
-				ordered := w.txnOrderFilter.MatchTable(table.Schema, table.Table)
-				// Matched tables use transaction-atomicity=table.
-				advancer.splitTxn = !ordered
+				if w.txnOrderFilter.MatchTable(table.Schema, table.Table) {
+					// Keep complete transactions even when they exceed the memory quota.
+					advancer.splitTxn = false
+				}
 			}
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.GetReplicaTs()

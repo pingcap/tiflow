@@ -256,6 +256,7 @@ func TestMarshalChangefeedCommonInfo(t *testing.T) {
 	require.True(t, strings.Contains(string(cfInfoJSON), "normal"))
 }
 
+// TestTxnOrderTablesConfigRoundTrip preserves ordering rules through API config conversion.
 func TestTxnOrderTablesConfigRoundTrip(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.orders", "app.ledger_*"}}

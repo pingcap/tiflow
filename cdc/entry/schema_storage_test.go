@@ -488,6 +488,7 @@ func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, is
 	require.Equal(t, err != nil, isErr)
 }
 
+// TestMultiVersionStorage checks schema snapshots and garbage collection across versions.
 func TestMultiVersionStorage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dbName := pmodel.NewCIStr("Test")
@@ -673,6 +674,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.Equal(t, errors.Cause(err), context.Canceled)
 }
 
+// TestCreateSnapFromMeta checks initialization of schema snapshots from TiDB metadata.
 func TestCreateSnapFromMeta(t *testing.T) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -708,6 +710,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Equal(t, dbInfo.Name.O, "test2")
 }
 
+// TestExplicitTables checks force-replication eligibility for tables without usable keys.
 func TestExplicitTables(t *testing.T) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -1028,6 +1031,7 @@ func TestGetPrimaryKey(t *testing.T) {
 	require.Equal(t, names, []string{"a"})
 }
 
+// TestTxnOrderTablesPartitionOnStartup checks ordering constraints only for replicated tables.
 func TestTxnOrderTablesPartitionOnStartup(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1079,6 +1083,7 @@ func TestTxnOrderTablesPartitionOnStartup(t *testing.T) {
 	}
 }
 
+// TestTxnOrderTablesVerifyTablesClassification keeps table classification independent of force-replicate.
 func TestTxnOrderTablesVerifyTablesClassification(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()

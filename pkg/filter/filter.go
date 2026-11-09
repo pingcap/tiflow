@@ -262,6 +262,7 @@ func (f *filter) Verify(tableInfos []*model.TableInfo) error {
 	return f.dmlExprFilter.verify(tableInfos)
 }
 
+// VerifyTxnOrderTable rejects partitioned tables selected for ordered replication.
 func (f *filter) VerifyTxnOrderTable(ti *model.TableInfo) error {
 	if f.txnOrderFilter == nil || ti == nil || ti.TableInfo == nil {
 		return nil

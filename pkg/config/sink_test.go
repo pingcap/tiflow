@@ -465,6 +465,7 @@ func TestShouldSendAllBootstrapAtStart(t *testing.T) {
 	require.True(t, sinkConfig.ShouldSendAllBootstrapAtStart())
 }
 
+// TestTxnOrderTables checks ordering rule parsing and table matching.
 func TestTxnOrderTables(t *testing.T) {
 	for _, scheme := range []string{"mysql", "mysql+ssl", "tidb", "tidb+ssl"} {
 		cfg := GetDefaultReplicaConfig()
@@ -495,6 +496,7 @@ func TestTxnOrderTables(t *testing.T) {
 	require.Nil(t, f)
 }
 
+// TestTxnOrderTablesIgnoredByNonMySQLSinks preserves unused rules without validating them.
 func TestTxnOrderTablesIgnoredByNonMySQLSinks(t *testing.T) {
 	for _, sinkURI := range []string{"kafka://127.0.0.1/topic?protocol=open-protocol", "blackhole://", "s3://bucket/prefix?protocol=csv"} {
 		for _, rule := range []string{"app.orders", "invalid"} {
@@ -509,6 +511,7 @@ func TestTxnOrderTablesIgnoredByNonMySQLSinks(t *testing.T) {
 	}
 }
 
+// TestTxnOrderTablesTOML checks decoding of ordering rules from changefeed TOML.
 func TestTxnOrderTablesTOML(t *testing.T) {
 	cfg := GetDefaultReplicaConfig()
 	_, err := toml.Decode(`[sink.mysql-config]

@@ -34,6 +34,7 @@ type blackhole struct {
 	panicOnFlush  int32
 }
 
+// OnTxnEvent waits until released and acknowledges the received transaction.
 func (b *blackhole) OnTxnEvent(e *dmlsink.TxnCallbackableEvent, _ bool) bool {
 	for {
 		if atomic.LoadInt32(&b.blockOnEvents) > 0 {
@@ -123,6 +124,7 @@ type commitRecorder struct {
 	tableOrders chan bool
 }
 
+// OnTxnEvent records the event and requests an immediate flush for ordered tables.
 func (b *commitRecorder) OnTxnEvent(e *dmlsink.TxnCallbackableEvent, tableOrder bool) bool {
 	if b.tableOrders != nil {
 		b.tableOrders <- tableOrder
@@ -131,6 +133,7 @@ func (b *commitRecorder) OnTxnEvent(e *dmlsink.TxnCallbackableEvent, tableOrder 
 	return tableOrder
 }
 
+// Flush waits for release, records commit timestamps, and acknowledges buffered events.
 func (b *commitRecorder) Flush(ctx context.Context) error {
 	if len(b.events) == 0 {
 		return nil
@@ -155,9 +158,13 @@ func (b *commitRecorder) Flush(ctx context.Context) error {
 	return nil
 }
 
+// MaxFlushInterval bounds the recorder's batching delay.
 func (b *commitRecorder) MaxFlushInterval() time.Duration { return 10 * time.Millisecond }
-func (b *commitRecorder) Close() error                    { return nil }
 
+// Close releases no resources because the recorder owns no background workers.
+func (b *commitRecorder) Close() error { return nil }
+
+// orderedTestEvent builds a single-row transaction for ordering tests.
 func orderedTestEvent(commitTs uint64, tableID int64, tableName string, rowID int) *dmlsink.TxnCallbackableEvent {
 	ti := model.BuildTableInfo("app", tableName, []*model.Column{
 		{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag | model.HandleKeyFlag},
@@ -175,6 +182,7 @@ func orderedTestEvent(commitTs uint64, tableID int64, tableName string, rowID in
 	}
 }
 
+// TestTxnOrderTableFlag checks forwarding of matched ordering rules to the backend.
 func TestTxnOrderTableFlag(t *testing.T) {
 	tableOrders := make(chan bool, 3)
 	errCh := make(chan error, 1)
@@ -205,6 +213,7 @@ func TestTxnOrderTableFlag(t *testing.T) {
 	}
 }
 
+// TestTxnOrderTablesBacklog checks commit order after a blocked flush accumulates transactions.
 func TestTxnOrderTablesBacklog(t *testing.T) {
 	for _, workerCount := range []int{1, 4} {
 		t.Run(fmt.Sprintf("workers=%d", workerCount), func(t *testing.T) {

@@ -309,6 +309,23 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
+			// Validate before the latest snapshot can cause a CREATE to be skipped.
+			switch event.Type {
+			case timodel.ActionCreateTable, timodel.ActionCreateTables,
+				timodel.ActionRenameTable, timodel.ActionRenameTables,
+				timodel.ActionRecoverTable, timodel.ActionAlterTablePartitioning,
+				timodel.ActionAddIndex:
+				// Check eligibility at this DDL, since the puller may have applied later DDLs.
+				ineligible, err := m.schema.IsIneligibleTable(ctx, event.TableInfo.ID, event.CommitTs)
+				if err != nil {
+					return nil, nil, err
+				}
+				if !ineligible {
+					if err := m.filter.VerifyTxnOrderTable(event.TableInfo); err != nil {
+						return nil, nil, err
+					}
+				}
+			}
 			snap := m.schema.GetLastSnapshot()
 			if event.Type == timodel.ActionCreateTable ||
 				event.Type == timodel.ActionCreateTables {
@@ -319,22 +336,6 @@ func (m *ddlManager) tick(
 						zap.String("query", job.Query),
 						zap.Any("table", event.TableInfo))
 					continue
-				}
-			}
-			// Check DDLs that can introduce a partitioned table into the ordered set.
-			switch event.Type {
-			case timodel.ActionCreateTable, timodel.ActionCreateTables,
-				timodel.ActionRenameTable, timodel.ActionRenameTables,
-				timodel.ActionRecoverTable, timodel.ActionAlterTablePartitioning:
-				// Check eligibility at this DDL, since the puller may have applied later DDLs.
-				ineligible, err := m.schema.IsIneligibleTable(ctx, event.TableInfo.ID, event.CommitTs)
-				if err != nil {
-					return nil, nil, err
-				}
-				if !ineligible {
-					if err := m.filter.VerifyTxnOrderTable(event.TableInfo); err != nil {
-						return nil, nil, err
-					}
 				}
 			}
 			tableName := event.TableInfo.TableName

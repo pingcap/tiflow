@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestShouldUseDefaultRules checks default exclusions and ordinary table matches.
 func TestShouldUseDefaultRules(t *testing.T) {
 	t.Parallel()
 
@@ -41,6 +42,7 @@ func TestShouldUseDefaultRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("lightning_task_info", "conflict_records"))
 }
 
+// TestShouldUseCustomRules checks configured table inclusions and exclusions.
 func TestShouldUseCustomRules(t *testing.T) {
 	t.Parallel()
 
@@ -89,6 +91,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 	require.Nil(t, err)
 }
 
+// TestShouldIgnoreDMLEvent checks DML filtering by transaction and table rules.
 func TestShouldIgnoreDMLEvent(t *testing.T) {
 	t.Parallel()
 
@@ -162,6 +165,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 	}
 }
 
+// TestShouldIgnoreDDL checks DDL filtering by transaction and event rules.
 func TestShouldIgnoreDDL(t *testing.T) {
 	t.Parallel()
 
@@ -287,6 +291,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 	}
 }
 
+// TestShouldDiscardDDL checks DDL allow-list, transaction, and table filtering.
 func TestShouldDiscardDDL(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -434,6 +439,7 @@ func TestIsSchemaDDL(t *testing.T) {
 	}
 }
 
+// TestTxnOrderPartitionTables checks partition rejection against table and ordering rules.
 func TestTxnOrderPartitionTables(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"app.*", "!app.excluded"}
@@ -467,6 +473,7 @@ func TestTxnOrderPartitionTables(t *testing.T) {
 	require.NoError(t, f.VerifyTxnOrderTable(ti))
 }
 
+// TestTxnOrderInvalidRules validates ordering syntax only when ordering checks are enabled.
 func TestTxnOrderInvalidRules(t *testing.T) {
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"invalid"}}
@@ -477,6 +484,7 @@ func TestTxnOrderInvalidRules(t *testing.T) {
 	require.Equal(t, []string{"invalid"}, cfg.Sink.MySQLConfig.TxnOrderTables)
 }
 
+// TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks keeps partitioned tables usable for other sinks.
 func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
 	ti := model.BuildTableInfoWithPKNames4Test("app", "ordered",
 		[]*model.Column{{Name: "id", Type: mysql.TypeLong}}, map[string]struct{}{"id": {}})

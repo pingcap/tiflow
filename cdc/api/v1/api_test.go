@@ -1083,6 +1083,7 @@ func TestHealth(t *testing.T) {
 func TestCreateChangefeed(t *testing.T) {}
 func TestUpdateChangefeed(t *testing.T) {}
 
+// TestUpdateChangefeedTxnOrderTables checks v1 ordering updates against the checkpoint schema.
 func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()

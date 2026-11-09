@@ -126,6 +126,7 @@ func (suite *tableSinkWorkerSuite) TearDownSuite() {
 	maxUpdateIntervalSize = defaultMaxUpdateIntervalSize
 }
 
+// createWorker builds a sink worker with a test sort engine and memory quota.
 func (suite *tableSinkWorkerSuite) createWorker(
 	ctx context.Context, memQuota uint64, splitTxn bool,
 ) (*sinkWorker, sorter.SortEngine) {
@@ -714,6 +715,7 @@ func (suite *tableSinkWorkerSuite) TestHandleTaskWithoutMemory() {
 	wg.Wait()
 }
 
+// TestTxnOrderTablesPreserveTransaction keeps ordered transactions intact across memory limits.
 func (suite *tableSinkWorkerSuite) TestTxnOrderTablesPreserveTransaction() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -726,7 +728,8 @@ func (suite *tableSinkWorkerSuite) TestTxnOrderTablesPreserveTransaction() {
 		genPolymorphicEvent(3, 4, suite.testSpan),
 		genPolymorphicResolvedEvent(5),
 	}
-	w, engine := suite.createWorker(ctx, uint64(testEventSize*3), true)
+	quota := uint64(testEventSize * 3)
+	w, engine := suite.createWorker(ctx, quota, true)
 	defer w.sinkMemQuota.Close()
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"table.table"}}
@@ -743,4 +746,6 @@ func (suite *tableSinkWorkerSuite) TestTxnOrderTablesPreserveTransaction() {
 	}
 	require.NoError(suite.T(), w.handleTask(ctx, task))
 	require.Len(suite.T(), sink.GetEvents(), 5, "the complete transaction must survive memory pressure")
+	require.Equal(suite.T(), 1, sink.GetWriteTimes(), "memory pressure must not split the ordered transaction")
+	require.Greater(suite.T(), w.sinkMemQuota.GetUsedBytes(), quota, "ordered transactions must be allowed to exceed the quota")
 }

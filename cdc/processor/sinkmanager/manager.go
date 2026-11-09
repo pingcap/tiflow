@@ -404,6 +404,7 @@ func (m *SinkManager) clearSinkFactory() {
 	}
 }
 
+// startSinkWorkers creates sink workers and starts their task loops.
 func (m *SinkManager) startSinkWorkers(ctx context.Context, eg *errgroup.Group, splitTxn bool, txnOrderFilter tfilter.Filter) {
 	for i := 0; i < sinkWorkerNum; i++ {
 		w := newSinkWorker(m.changefeedID, m.sourceManager,

@@ -83,6 +83,7 @@ func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 	require.Nil(t, err)
 }
 
+// newMockDDLJobPuller builds a puller and schema helper for DDL tests.
 func newMockDDLJobPuller(
 	t *testing.T,
 	needSchemaStorage bool,
@@ -114,6 +115,7 @@ func newMockDDLJobPuller(
 	return res, helper
 }
 
+// TestHandleRenameTable checks rename handling across table-filter boundaries.
 func TestHandleRenameTable(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -339,6 +341,7 @@ func TestHandleRenameTable(t *testing.T) {
 	}
 }
 
+// TestHandleJob checks filtering and schema updates for DDL jobs.
 func TestHandleJob(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -537,6 +540,7 @@ func TestHandleJob(t *testing.T) {
 	}
 }
 
+// TestDDLPuller checks DDL delivery and resolved timestamp advancement.
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 
@@ -659,6 +663,7 @@ func TestDDLPuller(t *testing.T) {
 	require.Nil(t, ddl)
 }
 
+// TestResolvedTsStuck checks warning logs when the DDL resolved timestamp stalls.
 func TestResolvedTsStuck(t *testing.T) {
 	// For observing the logs
 	zapcore, logs := observer.New(zap.WarnLevel)
@@ -728,6 +733,7 @@ func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	require.Nil(t, err)
 }
 
+// TestCheckIneligibleTableDDL checks DDL handling across eligibility transitions.
 func TestCheckIneligibleTableDDL(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -821,6 +827,7 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	require.False(t, skip)
 }
 
+// TestHandleExchangeTableName checks table names used when exchanging partitions.
 func TestHandleExchangeTableName(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
