@@ -134,11 +134,13 @@ type filter struct {
 
 // NewFilter creates a filter.
 // Transaction ordering checks are disabled unless explicitly enabled for a MySQL sink.
-func NewFilter(cfg *config.ReplicaConfig, tz string, enableTxnOrderValidation ...bool) (Filter, error) {
-	var orderFilter tfilter.Filter
-	if len(enableTxnOrderValidation) != 0 && enableTxnOrderValidation[0] {
-		var err error
-		orderFilter, err = cfg.Sink.GetTxnOrderFilter(cfg.CaseSensitive)
+func NewFilter(cfg *config.ReplicaConfig, tz string, enableTxnOrderValidation bool) (Filter, error) {
+	var (
+		txnOrderFilter tfilter.Filter
+		err            error
+	)
+	if enableTxnOrderValidation {
+		txnOrderFilter, err = cfg.Sink.GetTxnOrderFilter(cfg.CaseSensitive)
 		if err != nil {
 			return nil, err
 		}
@@ -162,7 +164,7 @@ func NewFilter(cfg *config.ReplicaConfig, tz string, enableTxnOrderValidation ..
 	}
 	return &filter{
 		tableFilter:      f,
-		txnOrderFilter:   orderFilter,
+		txnOrderFilter:   txnOrderFilter,
 		dmlExprFilter:    dmlExprFilter,
 		sqlEventFilter:   sqlEventFilter,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,

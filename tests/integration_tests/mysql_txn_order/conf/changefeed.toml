@@ -7,3 +7,8 @@ transaction-atomicity = "none"
 
 [sink.mysql-config]
 txn-order-tables = ["mysql_txn_order.t", "mysql_txn_order.ordered_*"]
+
+# MySQL sinks must disable span replication even when it is requested.
+[scheduler]
+enable-table-across-nodes = true
+region-threshold = 1

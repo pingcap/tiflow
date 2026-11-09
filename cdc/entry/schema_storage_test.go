@@ -549,7 +549,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
 	require.Nil(t, err)
@@ -694,7 +694,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	meta := kv.GetSnapshotMeta(store, ver.Ver)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
 	require.Nil(t, err)
@@ -731,7 +731,7 @@ func TestExplicitTables(t *testing.T) {
 	ver2, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	meta1 := kv.GetSnapshotMeta(store, ver1.Ver)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	snap1, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta1, ver1.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
@@ -876,7 +876,7 @@ func TestSchemaStorage(t *testing.T) {
 			tk.MustExec(ddlSQL)
 		}
 
-		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 		require.Nil(t, err)
 
 		jobs, err := getAllHistoryDDLJob(store, f)
@@ -970,7 +970,7 @@ func TestHandleKey(t *testing.T) {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	meta := kv.GetSnapshotMeta(store, ver.Ver)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
 	require.Nil(t, err)

@@ -55,7 +55,7 @@ func NewSQLTestHelper(t *testing.T, tableName, initialCreateTableDDL string) *SQ
 
 	cfg := config.GetDefaultReplicaConfig()
 
-	filter, err := filter.NewFilter(cfg, "")
+	filter, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 
 	schemaStorage, err := entry.NewSchemaStorage(helper.Storage(),

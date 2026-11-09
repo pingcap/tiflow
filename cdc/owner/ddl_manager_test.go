@@ -37,7 +37,7 @@ func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
 	cfg := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.Nil(t, err)
 	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
 	require.Equal(t, nil, err)

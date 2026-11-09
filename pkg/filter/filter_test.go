@@ -28,7 +28,7 @@ import (
 func TestShouldUseDefaultRules(t *testing.T) {
 	t.Parallel()
 
-	filter, err := NewFilter(config.GetDefaultReplicaConfig(), "")
+	filter, err := NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", "statistics"))
@@ -47,7 +47,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-	}, "")
+	}, "", false)
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("other", ""))
 	require.True(t, filter.ShouldIgnoreTable("other", "what"))
@@ -66,7 +66,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 			// 4. do not match table school.teacher
 			Rules: []string{"*.*", "!test.season", "school.*", "!school.teacher"},
 		},
-	}, "")
+	}, "", false)
 	require.True(t, filter.ShouldIgnoreTable("test", "season"))
 	require.False(t, filter.ShouldIgnoreTable("other", ""))
 	require.False(t, filter.ShouldIgnoreTable("school", "student"))
@@ -81,7 +81,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 			// 4. do not match table school.teacher
 			Rules: []string{"*.*", "!test.t1", "!test.t2"},
 		},
-	}, "")
+	}, "", false)
 	require.False(t, filter.ShouldIgnoreTable("test", "season"))
 	require.True(t, filter.ShouldIgnoreTable("test", "t1"))
 	require.True(t, filter.ShouldIgnoreTable("test", "t2"))
@@ -142,7 +142,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 				IgnoreTxnStartTs: ftc.ignoreTxnStartTs,
 				Rules:            ftc.rules,
 			},
-		}, "")
+		}, "", false)
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			dml := &model.RowChangedEvent{
@@ -265,7 +265,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 				EventFilters:     ftc.eventFilters,
 				IgnoreTxnStartTs: ftc.ignoredTs,
 			},
-		}, "")
+		}, "", false)
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			ddl := &model.DDLEvent{
@@ -388,7 +388,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 				EventFilters:     ftc.eventFilters,
 				IgnoreTxnStartTs: ftc.ignoredTs,
 			},
-		}, "")
+		}, "", false)
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			ignore := filter.ShouldDiscardDDL(tc.ddlType, tc.schema, tc.table, tc.startTs)
@@ -471,8 +471,6 @@ func TestTxnOrderInvalidRules(t *testing.T) {
 	_, err := NewFilter(cfg, "", true)
 	require.ErrorContains(t, err, "txn-order-tables")
 	_, err = NewFilter(cfg, "", false)
-	require.NoError(t, err)
-	_, err = NewFilter(cfg, "")
 	require.NoError(t, err)
 	require.Equal(t, []string{"invalid"}, cfg.Sink.MySQLConfig.TxnOrderTables)
 }

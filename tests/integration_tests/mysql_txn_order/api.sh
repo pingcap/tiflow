@@ -57,7 +57,7 @@ function ordering_update() {
 			'{sink_config: {"transaction-atomicity": "none", "mysql-config": {"txn-order-tables": $rules}}, filter_rules: $filters}'
 	else
 		jq -c --argjson rules "$rules" --argjson filters "$filters" \
-			'{replica_config: .config} | .replica_config.sink.mysql_config.txn_order_tables = $rules | .replica_config.filter.rules = $filters' \
+			'{replica_config: .config} | .replica_config.sink.mysql_config.txn_order_tables = $rules | .replica_config.filter.rules = $filters | .replica_config.scheduler.enable_table_across_nodes = true' \
 			"$WORK_DIR/api-before.json"
 	fi
 }
@@ -86,12 +86,13 @@ for version in v1 v2; do
 	else
 		success=200
 		payload=$(jq -cn --arg id "$id" --arg uri "$SINK_URI" --argjson filters "$filters" --argjson rules "$future" \
-			'{changefeed_id: $id, sink_uri: $uri, replica_config: {filter: {rules: $filters}, sink: {transaction_atomicity: "none", mysql_config: {txn_order_tables: $rules}}}}')
+			'{changefeed_id: $id, sink_uri: $uri, replica_config: {filter: {rules: $filters}, sink: {transaction_atomicity: "none", mysql_config: {txn_order_tables: $rules}}, scheduler: {enable_table_across_nodes: true, region_threshold: 1}}}')
 	fi
 	api_request "$success" POST "$version/changefeeds" "$payload"
 	ensure 10 check_api_state "$id" normal
 	save_api_config "$future" mysql
 	jq -e --argjson rules "$future" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
+	jq -e '.config.scheduler.enable_table_across_nodes == false' "$WORK_DIR/api-before.json"
 
 	# Create the partitioned table after start-ts and wait for its DDL to finish,
 	# so an update must use the checkpoint snapshot rather than the start snapshot.
@@ -108,6 +109,7 @@ for version in v1 v2; do
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update "$regular" "$filters")"
 	save_api_config "$regular" mysql
 	jq -e --argjson rules "$regular" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
+	jq -e '.config.scheduler.enable_table_across_nodes == false' "$WORK_DIR/api-before.json"
 
 	# Non-MySQL sinks ignore the ordering rules, including matches on partitions.
 	payload=$(ordering_update "$filters" "$filters" | jq -c '.sink_uri = "blackhole://"')
@@ -115,6 +117,9 @@ for version in v1 v2; do
 	save_api_config "$filters" blackhole
 	jq -e --argjson rules "$filters" \
 		'(.sink_uri | startswith("blackhole:")) and .config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
+	if [ "$version" = v2 ]; then
+		jq -e '.config.scheduler.enable_table_across_nodes == true' "$WORK_DIR/api-before.json"
+	fi
 
 	# Invalid rules are retained without being parsed or enabled on non-MySQL sinks.
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update '["invalid"]' "$filters")"
@@ -133,6 +138,7 @@ for version in v1 v2; do
 	api_request "$success" PUT "$version/changefeeds/$id" "$payload"
 	save_api_config "$regular" mysql
 	jq -e --argjson rules "$regular" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
+	jq -e '.config.scheduler.enable_table_across_nodes == false' "$WORK_DIR/api-before.json"
 
 	# A broad ordering rule is valid if the table filter excludes partitions.
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update "$filters" "$regular")"
