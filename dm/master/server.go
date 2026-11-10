@@ -2524,6 +2524,9 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		// For the get-config command, we want to filter out fields that are not easily readable by humans,
 		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
+		// ClearSSLBytesData mutates the receiver, and TargetDB aliases the
+		// subtask config's Security, so redact a deep copy only.
+		taskCfg.TargetDB = taskCfg.TargetDB.Clone()
 		taskCfg.TargetDB.Password = config.ObfuscatedPasswordForFeedback
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
@@ -2628,6 +2631,10 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 
 			return resp2, nil
 		}
+		// ClearSSLBytesData mutates the receiver, and GetSourceCfgByID returns a
+		// shallow copy that shares Security with the live config, so redact a
+		// deep copy only.
+		sourceCfg.From = *sourceCfg.From.Clone()
 		sourceCfg.From.Password = config.ObfuscatedPasswordForFeedback
 		if sourceCfg.From.Security != nil {
 			sourceCfg.From.Security.ClearSSLBytesData()
