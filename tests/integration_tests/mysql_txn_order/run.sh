@@ -17,13 +17,16 @@ function check_partition_error() {
 
 # check_update_stopped checks that the feed is paused before updating its config.
 function check_update_stopped() {
-	run_cdc_cli changefeed query --changefeed-id=update-order | jq -e '.state == "stopped"'
+	local info
+	info=$(curl -fsS --max-time 30 'http://127.0.0.1:8300/api/v2/changefeeds/update-order') || return 1
+	jq -e '.state == "stopped"' <<<"$info"
 }
 
 # check_mysql_scheduler verifies that MySQL sinks disable replication across nodes.
 function check_mysql_scheduler() {
-	run_cdc_cli changefeed query --changefeed-id=ordered |
-		jq -e '.config.scheduler.enable_table_across_nodes == false'
+	local info
+	info=$(curl -fsS --max-time 30 'http://127.0.0.1:8300/api/v2/changefeeds/ordered') || return 1
+	jq -e '.config.scheduler.enable_table_across_nodes == false' <<<"$info"
 }
 
 # check_table_row_count compares a downstream table's size with the expected count.
