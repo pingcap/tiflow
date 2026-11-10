@@ -314,7 +314,8 @@ func (m *ddlManager) tick(
 			case timodel.ActionCreateTable, timodel.ActionCreateTables,
 				timodel.ActionRenameTable, timodel.ActionRenameTables,
 				timodel.ActionRecoverTable, timodel.ActionAlterTablePartitioning,
-				timodel.ActionAddIndex:
+				timodel.ActionAddIndex, timodel.ActionAddPrimaryKey,
+				timodel.ActionModifyColumn, timodel.ActionMultiSchemaChange:
 				// Check eligibility at this DDL, since the puller may have applied later DDLs.
 				ineligible, err := m.schema.IsIneligibleTable(ctx, event.TableInfo.ID, event.CommitTs)
 				if err != nil {

@@ -51,7 +51,11 @@ func run(ctx context.Context, upDSN, downDSN string) error {
 		return err
 	}
 	defer down.Close()
+	return verifyOrder(ctx, up, down)
+}
 
+// verifyOrder checks transaction visibility and commit order using connected databases.
+func verifyOrder(ctx context.Context, up, down *sql.DB) error {
 	// Wait for the table to start replicating before generating updates. This
 	// also keeps the workload past the initial replay/safe-mode interval.
 	if _, err := up.ExecContext(ctx, "INSERT INTO t VALUES (3,0)"); err != nil {
@@ -111,11 +115,27 @@ func run(ctx context.Context, upDSN, downDSN string) error {
 	if _, err := up.ExecContext(ctx, "UPDATE t SET v=1 WHERE id=2"); err != nil {
 		return err
 	}
-	// Allow the final independent transaction to reach the blocked sink.
-	select {
-	case <-time.After(5 * time.Second):
-	case <-ctx.Done():
-		return ctx.Err()
+	// Observe TiDB while the hot row is locked, before a completed backlog
+	// could hide an independent transaction that committed too early.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if isTiDB {
+			var hot, cold int
+			if err := down.QueryRowContext(ctx, "SELECT MAX(IF(id=1,v,0)),MAX(IF(id=2,v,0)) FROM t").Scan(&hot, &cold); err != nil {
+				return err
+			}
+			if cold != 0 {
+				return fmt.Errorf("independent transaction overtook hot row at v=%d while the hot row is locked", hot)
+			}
+		}
+		if !time.Now().Before(deadline) {
+			break
+		}
+		select {
+		case <-time.After(100 * time.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 	if err := lock.Commit(); err != nil {
 		return err

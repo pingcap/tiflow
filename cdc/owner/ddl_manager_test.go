@@ -153,6 +153,42 @@ func TestTxnOrderTablesBatchCreateEligibility(t *testing.T) {
 	}
 }
 
+// TestTxnOrderTablesEligibilityChangingDDL rejects partitions newly enabled for replication.
+func TestTxnOrderTablesEligibilityChangingDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	for _, tc := range []struct {
+		name   string
+		column string
+		alter  string
+		action timodel.ActionType
+	}{
+		{"primary_key", "p int not null, id int not null", "add primary key (p,id)", timodel.ActionAddPrimaryKey},
+		{"not_null", "p int not null, id int, unique key (p,id)", "modify column id int not null", timodel.ActionModifyColumn},
+		{"multi", "p int not null, id int not null", "add unique key (p,id), add column v int", timodel.ActionMultiSchemaChange},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			table := "app.ordered_" + tc.name
+			create := helper.DDL2Job("create table " + table + " (" + tc.column + ") partition by hash(p) partitions 2")
+			alter := helper.DDL2Job("alter table " + table + " " + tc.alter)
+			require.Equal(t, tc.action, alter.Type)
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+			f, err := filter.NewFilter(cfg, "", true)
+			require.NoError(t, err)
+			dm := createDDLManagerForTest(t, false)
+			dm.filter = f
+			ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+			ddlPuller.schemaStorage = dm.schema
+			ddlPuller.ddlQueue = []*timodel.Job{createSchema, create, alter}
+			ddlPuller.resolvedTs = alter.BinlogInfo.FinishedTS
+			_, _, err = dm.tick(context.Background(), 1)
+			require.ErrorContains(t, err, "does not support partitioned table")
+		})
+	}
+}
+
 // TestTxnOrderTablesCreateValidationUsesDDLSnapshot prevents later DDLs from masking CREATE errors.
 func TestTxnOrderTablesCreateValidationUsesDDLSnapshot(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)

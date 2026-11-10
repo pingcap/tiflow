@@ -25,6 +25,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
 	"github.com/pingcap/tiflow/cdc/entry"
@@ -1083,7 +1084,18 @@ func TestHealth(t *testing.T) {
 func TestCreateChangefeed(t *testing.T) {}
 func TestUpdateChangefeed(t *testing.T) {}
 
-// TestUpdateChangefeedTxnOrderTables checks v1 ordering updates against the checkpoint schema.
+type snapshotRecordingStorage struct {
+	tidbkv.Storage
+	snapshotTs uint64
+}
+
+// GetSnapshot records the timestamp used to validate a changefeed update.
+func (s *snapshotRecordingStorage) GetSnapshot(version tidbkv.Version) tidbkv.Snapshot {
+	s.snapshotTs = version.Ver
+	return s.Storage.GetSnapshot(version)
+}
+
+// TestUpdateChangefeedTxnOrderTables checks v1 ordering updates against the restart schema.
 func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 	helper := entry.NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1102,6 +1114,7 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 		initialRules []string
 		initialOrder []string
 		wantError    string
+		ddlBarrier   bool
 	}{
 		{
 			name:      "enable ordering on an existing partitioned table",
@@ -1128,6 +1141,14 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			initialRules: []string{"test.regular"},
 			initialOrder: []string{"test.partitioned"},
 			wantError:    "txn-order-tables does not support partitioned table",
+		},
+		{
+			name:         "ordering update at a DDL barrier",
+			update:       model.ChangefeedConfig{FilterRules: []string{"test.*"}},
+			initialRules: []string{"test.regular"},
+			initialOrder: []string{"test.partitioned"},
+			wantError:    "txn-order-tables does not support partitioned table",
+			ddlBarrier:   true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1167,12 +1188,16 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			provider := mock_owner.NewMockStatusProvider(ctrl)
 			cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
 			provider.EXPECT().GetChangeFeedInfo(gomock.Any(), changeFeedID).Return(oldInfo, nil)
-			provider.EXPECT().GetChangeFeedStatus(gomock.Any(), changeFeedID).
-				Return(&model.ChangeFeedStatusForAPI{CheckpointTs: checkpointVersion.Ver}, nil).AnyTimes()
+			status := &model.ChangeFeedStatusForAPI{CheckpointTs: checkpointVersion.Ver}
+			if tc.ddlBarrier {
+				status.MinTableBarrierTs = status.CheckpointTs
+			}
+			provider.EXPECT().GetChangeFeedStatus(gomock.Any(), changeFeedID).Return(status, nil).AnyTimes()
 			manager := upstream.NewManager4Test(&gc.MockPDClient{})
 			up, err := manager.GetDefaultUpstream()
 			require.NoError(t, err)
-			up.KVStorage = helper.Storage()
+			storage := &snapshotRecordingStorage{Storage: helper.Storage()}
+			up.KVStorage = storage
 			if tc.wantError == "" {
 				// Ignored ordering rules must not trigger snapshot validation.
 				up.KVStorage = nil
@@ -1184,6 +1209,9 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			newRouterWithoutStatusProvider(cp).ServeHTTP(response, req)
+			if tc.ddlBarrier {
+				require.Equal(t, status.CheckpointTs-1, storage.snapshotTs)
+			}
 			if tc.wantError == "" {
 				require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
 				require.Equal(t, original.Config, oldInfo.Config)

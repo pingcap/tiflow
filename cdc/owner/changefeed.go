@@ -573,8 +573,6 @@ LOOP2:
 	checkpointTs := cfStatus.CheckpointTs
 	c.resolvedTs.CompareAndSwap(0, checkpointTs)
 
-	minTableBarrierTs := cfStatus.MinTableBarrierTs
-
 	failpoint.Inject("NewChangefeedNoRetryError", func() {
 		failpoint.Return(cerror.ErrStartTsBeforeGC.GenWithStackByArgs(checkpointTs-300, checkpointTs))
 	})
@@ -620,7 +618,6 @@ LOOP2:
 		}
 	}
 
-	var ddlStartTs model.Ts
 	// This means there was a ddl job when the changefeed was paused.
 	// We don't know whether the ddl job is finished or not, so we need to
 	// start the ddl puller from the `checkpointTs-1` to execute the ddl job
@@ -629,11 +626,7 @@ LOOP2:
 	// For example, if the ddl job is `add index`, TiCDC will execute the ddl
 	// job again and cause the index to be added twice. We need to fix this
 	// problem in the future. See:https://github.com/pingcap/tiflow/issues/2543
-	if checkpointTs == minTableBarrierTs {
-		ddlStartTs = checkpointTs - 1
-	} else {
-		ddlStartTs = checkpointTs
-	}
+	ddlStartTs := model.GetDDLStartTs(checkpointTs, cfStatus.MinTableBarrierTs)
 
 	c.barriers = newBarriers()
 	if util.GetOrZero(cfInfo.Config.EnableSyncPoint) {
