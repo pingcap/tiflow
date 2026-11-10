@@ -855,7 +855,7 @@ func (s *Server) DMAPICreateTaskTemplate(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusCreated, task)
+	c.IndentedJSON(http.StatusCreated, redactTaskForResponse(*task))
 }
 
 // DMAPIGetTaskTemplateList get task_config_template list url is: (GET /api/v1/tasks/templates).
@@ -867,7 +867,7 @@ func (s *Server) DMAPIGetTaskTemplateList(c *gin.Context) {
 	}
 	taskList := make([]openapi.Task, len(TaskConfigList))
 	for i, TaskConfig := range TaskConfigList {
-		taskList[i] = *TaskConfig
+		taskList[i] = redactTaskForResponse(*TaskConfig)
 	}
 	resp := openapi.GetTaskListResponse{Total: len(TaskConfigList), Data: taskList}
 	c.IndentedJSON(http.StatusOK, resp)
@@ -893,7 +893,7 @@ func (s *Server) DMAPIGetTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(terror.ErrOpenAPITaskConfigNotExist.Generate(taskName))
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, redactTaskForResponse(*task))
 }
 
 // DMAPUpdateTaskTemplate update task_config_template url is: (PUT /api/v1/tasks/templates/{task-name}).
@@ -903,7 +903,19 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	if err := task.Adjust(); err != nil {
+	storedTask, err := ha.GetOpenAPITaskTemplate(s.etcdClient, taskName)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if storedTask != nil {
+		if err = validateTaskCredentialReuse(*task, *storedTask); err != nil {
+			_ = c.Error(err)
+			return
+		}
+		*task = restoreTaskCredentials(*task, *storedTask)
+	}
+	if err = task.Adjust(); err != nil {
 		_ = c.Error(err)
 		return
 	}
@@ -917,7 +929,7 @@ func (s *Server) DMAPUpdateTaskTemplate(c *gin.Context, taskName string) {
 		_ = c.Error(err)
 		return
 	}
-	c.IndentedJSON(http.StatusOK, task)
+	c.IndentedJSON(http.StatusOK, redactTaskForResponse(*task))
 }
 
 func terrorHTTPErrorHandler() gin.HandlerFunc {
