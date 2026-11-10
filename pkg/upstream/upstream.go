@@ -39,7 +39,6 @@ import (
 	tikvconfig "github.com/tikv/client-go/v2/config"
 	"github.com/tikv/client-go/v2/tikv"
 	pd "github.com/tikv/pd/client"
-	"github.com/tikv/pd/client/opt"
 	uatomic "github.com/uber-go/atomic"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -140,8 +139,8 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 			ctx, up.PdEndpoints, up.SecurityConfig.PDSecurityOption(),
 			// the default `timeout` is 3s, maybe too small if the pd is busy,
 			// set to 10s to avoid frequent timeout.
-			opt.WithCustomTimeoutOption(10*time.Second),
-			opt.WithGRPCDialOptions(
+			pd.WithCustomTimeoutOption(10*time.Second),
+			pd.WithGRPCDialOptions(
 				grpcTLSOption,
 				grpc.WithBlock(),
 				grpc.WithConnectParams(grpc.ConnectParams{
@@ -154,7 +153,7 @@ func initUpstream(ctx context.Context, up *Upstream, cfg CaptureTopologyCfg) err
 					MinConnectTimeout: 3 * time.Second,
 				}),
 			),
-			opt.WithForwardingOption(config.EnablePDForwarding))
+			pd.WithForwardingOption(config.EnablePDForwarding))
 		if err != nil {
 			up.err.Store(err)
 			return errors.Trace(err)

@@ -20,14 +20,13 @@ import (
 	"github.com/pingcap/kvproto/pkg/metapb"
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
-	"github.com/tikv/pd/client/opt"
 )
 
 // MockPDClient mocks pd.Client to facilitate unit testing.
 type MockPDClient struct {
 	pd.Client
 	ClusterID        uint64
-	GetAllStoresFunc func(ctx context.Context, opts ...opt.GetStoreOption) ([]*metapb.Store, error)
+	GetAllStoresFunc func(ctx context.Context, opts ...pd.GetStoreOption) ([]*metapb.Store, error)
 
 	UpdateServiceGCSafePointFunc func(ctx context.Context, serviceID string, ttl int64, safePoint uint64) (uint64, error)
 }
@@ -53,7 +52,7 @@ func (m *MockPDClient) GetClusterID(ctx context.Context) uint64 {
 
 // GetAllStores gets all stores from PD.
 func (m *MockPDClient) GetAllStores(
-	ctx context.Context, opts ...opt.GetStoreOption,
+	ctx context.Context, opts ...pd.GetStoreOption,
 ) ([]*metapb.Store, error) {
 	return m.GetAllStoresFunc(ctx, opts...)
 }
