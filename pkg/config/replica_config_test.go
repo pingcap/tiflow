@@ -420,3 +420,57 @@ func TestMaskSensitiveData(t *testing.T) {
 	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token)
 	require.Equal(t, "******", config.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey)
 }
+
+func TestRestoreMaskedSensitiveData(t *testing.T) {
+	emptyKafka := &KafkaConfig{}
+	emptyKafka.MaskSensitiveData()
+	require.Nil(t, emptyKafka.SASLPassword)
+	require.Nil(t, emptyKafka.SASLGssAPIPassword)
+	require.Nil(t, emptyKafka.SASLOAuthClientSecret)
+	require.Nil(t, emptyKafka.Key)
+	emptyKafka.SASLPassword = aws.String("")
+	emptyKafka.MaskSensitiveData()
+	require.Equal(t, "", *emptyKafka.SASLPassword)
+
+	original := GetDefaultReplicaConfig()
+	original.Sink.SchemaRegistry = aws.String("https://user:registry-pass@registry.test/path?token=registry-token")
+	original.Sink.KafkaConfig = &KafkaConfig{
+		SASLPassword:          aws.String("kafka-password"),
+		SASLGssAPIPassword:    aws.String("gssapi-password"),
+		SASLOAuthClientSecret: aws.String("oauth-secret"),
+		SASLOAuthTokenURL:     aws.String("https://oauth.test/token?secret=token-secret"),
+		Key:                   aws.String("/path/to/key"),
+		LargeMessageHandle: &LargeMessageHandleConfig{
+			ClaimCheckStorageURI: "s3://bucket/path?access-key=claim-access&secret-access-key=claim-secret",
+		},
+		GlueSchemaRegistryConfig: &GlueSchemaRegistryConfig{
+			AccessKey: "glue-access", SecretAccessKey: "glue-secret", Token: "glue-token",
+		},
+	}
+	original.Sink.PulsarConfig = &PulsarConfig{
+		AuthenticationToken: aws.String("pulsar-token"),
+		BasicPassword:       aws.String("pulsar-password"),
+		OAuth2:              &OAuth2{OAuth2PrivateKey: "pulsar-private-key"},
+	}
+	original.Consistent = &ConsistentConfig{Storage: "s3://bucket/redo?access-key=redo-access&secret-access-key=redo-secret"}
+
+	masked := original.Clone()
+	masked.MaskSensitiveData()
+	require.NotContains(t, masked.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI, "claim-secret")
+	require.Equal(t, "kafka-password", *original.Sink.KafkaConfig.SASLPassword)
+	require.NoError(t, masked.RestoreMaskedSensitiveData(original))
+	require.Equal(t, original, masked)
+
+	masked = original.Clone()
+	masked.MaskSensitiveData()
+	masked.Sink.KafkaConfig.SASLPassword = aws.String("new-password")
+	masked.Sink.PulsarConfig.BasicPassword = nil
+	masked.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI = "s3://new-bucket/path?token=new-token"
+	require.NoError(t, masked.RestoreMaskedSensitiveData(original))
+	require.Equal(t, "new-password", *masked.Sink.KafkaConfig.SASLPassword)
+	require.Nil(t, masked.Sink.PulsarConfig.BasicPassword)
+	require.Equal(t, "s3://new-bucket/path?token=new-token", masked.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI)
+
+	masked.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI = "s3://new-bucket/path?access-key=xxxxx"
+	require.ErrorContains(t, masked.RestoreMaskedSensitiveData(original), "masked credential")
+}
