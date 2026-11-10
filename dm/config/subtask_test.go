@@ -586,4 +586,32 @@ func TestSubTaskConfigRedacted(t *testing.T) {
 	require.Contains(t, output, "bucket/path")
 	require.Equal(t, before, cfg.String())
 	require.Equal(t, raw, cfg.LoaderConfig.Dir)
+
+	// database passwords and inline TLS contents are not exposed by Redacted
+	cfg.From.Password = "upstream-secret"
+	cfg.To.Password = "downstream-secret"
+	cfg.To.Security = &security.Security{
+		SSLCABytes:    []byte("ca"),
+		SSLCertBytes:  []byte("cert"),
+		SSLKeyBytes:   []byte("key"),
+		SSLKeyBase64:  "key-base64",
+		CertAllowedCN: []string{"cn"},
+	}
+	cfg.LoaderConfig.Security = &security.Security{
+		SSLCABytes:  []byte("loader-ca"),
+		SSLKeyBytes: []byte("loader-key"),
+	}
+	redacted := cfg.Redacted()
+	require.Equal(t, ObfuscatedPasswordForFeedback, redacted.From.Password)
+	require.Equal(t, ObfuscatedPasswordForFeedback, redacted.To.Password)
+	require.Empty(t, redacted.To.Security.SSLCABytes)
+	require.Empty(t, redacted.To.Security.SSLCertBytes)
+	require.Empty(t, redacted.To.Security.SSLKeyBytes)
+	require.Empty(t, redacted.To.Security.SSLKeyBase64)
+	require.Equal(t, []string{"cn"}, []string(redacted.To.Security.CertAllowedCN))
+	require.Empty(t, redacted.LoaderConfig.Security.SSLCABytes)
+	require.Empty(t, redacted.LoaderConfig.Security.SSLKeyBytes)
+	// the original config must not be modified
+	require.Equal(t, "downstream-secret", cfg.To.Password)
+	require.Equal(t, []byte("key"), cfg.To.Security.SSLKeyBytes)
 }

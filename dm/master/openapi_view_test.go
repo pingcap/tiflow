@@ -1059,6 +1059,13 @@ func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	var readTask openapi.Task
 	s.NoError(result.UnmarshalBodyToObject(&readTask))
 	s.Equal(dataDir, *readTask.SourceConfig.FullMigrateConf.DataDir)
+	// credentials are not returned by read APIs
+	s.Equal(config.ObfuscatedPasswordForFeedback, readTask.TargetConfig.Password)
+	s.Require().NotNil(readTask.TargetConfig.Security)
+	s.Empty(readTask.TargetConfig.Security.SslCaContent)
+	s.Empty(readTask.TargetConfig.Security.SslCertContent)
+	s.Empty(readTask.TargetConfig.Security.SslKeyContent)
+	s.Empty(readTask.SourceConfig.FullMigrateConf.Security.SslKeyContent)
 
 	batch := 1000
 	readTask.SourceConfig.IncrMigrateConf.ReplBatch = &batch
@@ -1083,6 +1090,13 @@ func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	storedSubTaskCfg := s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name]
 	s.Equal(oldSubTaskCfg.LoaderConfig.Dir, storedSubTaskCfg.LoaderConfig.Dir)
 	s.Equal(batch, storedSubTaskCfg.SyncerConfig.Batch)
+	// the read-modify-write cycle must not overwrite the stored credentials
+	s.Equal(dbCfg.Password, storedSubTaskCfg.To.Password)
+	s.Equal([]byte("ca2"), storedSubTaskCfg.To.Security.SSLCABytes)
+	s.Equal([]byte("cert2"), storedSubTaskCfg.To.Security.SSLCertBytes)
+	s.Equal([]byte("key2"), storedSubTaskCfg.To.Security.SSLKeyBytes)
+	s.Equal([]byte("ca1"), storedSubTaskCfg.LoaderConfig.Security.SSLCABytes)
+	s.Equal([]byte("key1"), storedSubTaskCfg.LoaderConfig.Security.SSLKeyBytes)
 
 	// Replace the task as dmctl stop-task and start-task <config> do.
 	deleteCtx, cancelDelete := context.WithCancel(ctx)
@@ -1095,6 +1109,15 @@ func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	)
 	s.NoError(s1.deleteTask(deleteCtx, task.Name, true, true))
 	s.Nil(s1.scheduler.GetSubTaskCfgsByTask(task.Name))
+	// the task is gone, so credentials cannot be restored from it and the
+	// caller has to supply them again, like dmctl config task does.
+	readTask.TargetConfig.Password = dbCfg.Password
+	readTask.TargetConfig.Security.SslCaContent = task.TargetConfig.Security.SslCaContent
+	readTask.TargetConfig.Security.SslCertContent = task.TargetConfig.Security.SslCertContent
+	readTask.TargetConfig.Security.SslKeyContent = task.TargetConfig.Security.SslKeyContent
+	readTask.SourceConfig.FullMigrateConf.Security.SslCaContent = task.SourceConfig.FullMigrateConf.Security.SslCaContent
+	readTask.SourceConfig.FullMigrateConf.Security.SslCertContent = task.SourceConfig.FullMigrateConf.Security.SslCertContent
+	readTask.SourceConfig.FullMigrateConf.Security.SslKeyContent = task.SourceConfig.FullMigrateConf.Security.SslKeyContent
 	result = testutil.NewRequest().Post(taskURL).WithJsonBody(openapi.CreateTaskRequest{Task: readTask}).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Require().Equal(http.StatusCreated, result.Code(), result.Recorder.Body.String())
 	s.Equal(oldSubTaskCfg.LoaderConfig.Dir, s1.scheduler.GetSubTaskCfgsByTask(task.Name)[source1Name].LoaderConfig.Dir)
@@ -1107,6 +1130,7 @@ func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	var readTemplate openapi.Task
 	s.NoError(result.UnmarshalBodyToObject(&readTemplate))
 	s.Equal(dataDir, *readTemplate.SourceConfig.FullMigrateConf.DataDir)
+	s.Equal(config.ObfuscatedPasswordForFeedback, readTemplate.TargetConfig.Password)
 	readTemplate.SourceConfig.IncrMigrateConf.ReplBatch = &batch
 	result = testutil.NewRequest().Put(templateURL+"/"+task.Name).WithJsonBody(readTemplate).GoWithHTTPHandler(s.T(), s1.openapiHandles)
 	s.Equal(http.StatusOK, result.Code(), result.Recorder.Body.String())
@@ -1114,6 +1138,8 @@ func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	s.NoError(err)
 	s.Equal(dataDir, *storedTemplate.SourceConfig.FullMigrateConf.DataDir)
 	s.Equal(batch, *storedTemplate.SourceConfig.IncrMigrateConf.ReplBatch)
+	s.Equal(dbCfg.Password, storedTemplate.TargetConfig.Password)
+	s.Equal(task.TargetConfig.Security.SslCaContent, storedTemplate.TargetConfig.Security.SslCaContent)
 }
 
 func (s *OpenAPIViewSuite) TestTaskAPI() {
