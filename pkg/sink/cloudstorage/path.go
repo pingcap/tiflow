@@ -216,7 +216,7 @@ func (f *FilePathGenerator) CheckOrWriteSchema(
 	checksumSuffix := fmt.Sprintf("%010d.json", checksum)
 	err = f.storage.WalkDir(ctx, &storage.WalkOption{
 		SubDir:    subDir, /* use subDir to prevent walk the whole storage */
-		ObjPrefix: "schema_",
+		ObjPrefix: subDir + "schema_",
 	}, func(path string, _ int64) error {
 		schemaFileCnt++
 		if !strings.HasSuffix(path, checksumSuffix) {

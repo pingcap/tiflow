@@ -291,7 +291,12 @@ func (r *RowChange) fillVirtualGeneratedValues(values []any) ([]any, bool) {
 		fullDatums[col.Offset] = datums[i]
 	}
 
-	mutRow := chunk.MutRowFromDatums(fullDatums)
+	fieldTypes := make([]*types.FieldType, len(cols))
+	for i, col := range cols {
+		fieldTypes[i] = &col.FieldType
+	}
+	mutRow := chunk.MutRowFromTypes(fieldTypes)
+	mutRow.SetDatums(fullDatums...)
 	for _, col := range r.whereHandle.hiddenGeneratedColumnExprCache.columns {
 		expr, ok := exprs[col.Offset]
 		if !ok {
