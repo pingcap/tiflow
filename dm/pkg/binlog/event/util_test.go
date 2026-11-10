@@ -148,6 +148,15 @@ func TestStatusVarsToKV(t *testing.T) {
 	}
 }
 
+func TestGetTimezoneByStatusVarsRejectsInjection(t *testing.T) {
+	t.Parallel()
+	tz := "x'; DROP TABLE t; --"
+	statusVars := append([]byte{byte(QTimeZoneCode), byte(len(tz))}, []byte(tz)...)
+	out, err := GetTimezoneByStatusVars(statusVars, "+0:00")
+	require.Error(t, err)
+	require.Empty(t, out)
+}
+
 func TestGetTimezoneByStatusVars(t *testing.T) {
 	t.Parallel()
 	testCases := []testCaseTimezone{
