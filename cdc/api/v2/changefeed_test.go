@@ -406,6 +406,7 @@ func TestGetChangeFeed(t *testing.T) {
 	statusProvider.taskStatusErr = nil
 }
 
+// TestUpdateChangefeed checks update validation and restart snapshot selection.
 func TestUpdateChangefeed(t *testing.T) {
 	t.Parallel()
 	update := testCase{url: "/api/v2/changefeeds/%s", method: "PUT"}
@@ -536,12 +537,13 @@ func TestUpdateChangefeed(t *testing.T) {
 		AnyTimes()
 	mockCapture.EXPECT().GetUpstreamManager().Return(nil, nil).AnyTimes()
 	helpers.EXPECT().
-		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		verifyUpdateChangefeedConfig(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), uint64(0)).
 		Return(&model.ChangeFeedInfo{}, &model.UpstreamInfo{}, cerrors.ErrChangefeedUpdateRefused).
 		Times(1)
 
 	statusProvider.changefeedStatus = &model.ChangeFeedStatusForAPI{
-		CheckpointTs: 1,
+		CheckpointTs:      1,
+		MinTableBarrierTs: 1,
 	}
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), update.method,

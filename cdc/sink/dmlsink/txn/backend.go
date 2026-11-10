@@ -23,7 +23,8 @@ import (
 // backend indicates a transaction backend like MySQL, TiDB, ...
 type backend interface {
 	// OnTxnEvent handles one TxnCallbackableEvent.
-	OnTxnEvent(e *dmlsink.TxnCallbackableEvent) (needFlush bool)
+	// tableOrder is the table-ordering rule match result computed by the sink.
+	OnTxnEvent(e *dmlsink.TxnCallbackableEvent, tableOrder bool) (needFlush bool)
 
 	// Flush pending events in the backend.
 	Flush(ctx context.Context) error

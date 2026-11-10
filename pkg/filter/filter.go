@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
+	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
 const (
@@ -112,15 +113,18 @@ type Filter interface {
 	ShouldIgnoreTable(schema, table string) bool
 	// ShouldIgnoreSchema returns true if the schema should be ignored.
 	ShouldIgnoreSchema(schema string) bool
-	// Verify should only be called by create changefeed OpenAPI.
-	// Its purpose is to verify the expression filter config.
+	// Verify validates the expression filter config.
 	Verify(tableInfos []*model.TableInfo) error
+	// VerifyTxnOrderTable rejects tables that cannot provide transaction ordering.
+	// The caller must ensure that the table is eligible for replication.
+	VerifyTxnOrderTable(tableInfo *model.TableInfo) error
 }
 
 // filter implements Filter.
 type filter struct {
 	// tableFilter is used to filter in dml/ddl event by table name.
-	tableFilter tfilter.Filter
+	tableFilter    tfilter.Filter
+	txnOrderFilter tfilter.Filter
 	// dmlExprFilter is used to filter out dml event by its columns value.
 	dmlExprFilter *dmlExprFilter
 	// sqlEventFilter is used to filter out dml/ddl event by its type or query.
@@ -130,7 +134,18 @@ type filter struct {
 }
 
 // NewFilter creates a filter.
-func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
+// Transaction ordering checks are disabled unless explicitly enabled for a MySQL sink.
+func NewFilter(cfg *config.ReplicaConfig, tz string, enableTxnOrderValidation bool) (Filter, error) {
+	var (
+		txnOrderFilter tfilter.Filter
+		err            error
+	)
+	if enableTxnOrderValidation {
+		txnOrderFilter, err = cfg.Sink.GetTxnOrderFilter(cfg.CaseSensitive)
+		if err != nil {
+			return nil, err
+		}
+	}
 	f, err := VerifyTableRules(cfg.Filter)
 	if err != nil {
 		return nil, err
@@ -150,6 +165,7 @@ func NewFilter(cfg *config.ReplicaConfig, tz string) (Filter, error) {
 	}
 	return &filter{
 		tableFilter:      f,
+		txnOrderFilter:   txnOrderFilter,
 		dmlExprFilter:    dmlExprFilter,
 		sqlEventFilter:   sqlEventFilter,
 		ignoreTxnStartTs: cfg.Filter.IgnoreTxnStartTs,
@@ -172,6 +188,9 @@ func (f *filter) ShouldIgnoreDMLEvent(
 
 	if f.ShouldIgnoreTable(dml.TableInfo.GetSchemaName(), dml.TableInfo.GetTableName()) {
 		return true, nil
+	}
+	if err := f.VerifyTxnOrderTable(ti); err != nil {
+		return false, err
 	}
 
 	ignoreByEventType, err := f.sqlEventFilter.shouldSkipDML(dml)
@@ -241,6 +260,20 @@ func (f *filter) ShouldIgnoreSchema(schema string) bool {
 
 func (f *filter) Verify(tableInfos []*model.TableInfo) error {
 	return f.dmlExprFilter.verify(tableInfos)
+}
+
+// VerifyTxnOrderTable rejects partitioned tables selected for ordered replication.
+func (f *filter) VerifyTxnOrderTable(ti *model.TableInfo) error {
+	if f.txnOrderFilter == nil || ti == nil || ti.TableInfo == nil {
+		return nil
+	}
+	table := ti.TableName
+	if !f.ShouldIgnoreTable(table.Schema, table.Table) &&
+		f.txnOrderFilter.MatchTable(table.Schema, table.Table) && (ti.IsPartitionTable() || ti.GetPartitionInfo() != nil) {
+		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+			"sink.mysql-config.txn-order-tables does not support partitioned table " + table.String())
+	}
+	return nil
 }
 
 func (f *filter) shouldIgnoreStartTs(ts uint64) bool {

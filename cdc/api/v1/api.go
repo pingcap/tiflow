@@ -481,18 +481,23 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	upManager, err := h.capture.GetUpstreamManager()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	schemaTs := model.GetDDLStartTs(status.CheckpointTs, status.MinTableBarrierTs)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info, up.KVStorage, schemaTs)
 	if err != nil {
 		_ = c.Error(err)
 		return

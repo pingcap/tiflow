@@ -406,7 +406,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 				}
 			}
 		},
-	})
+	}, false)
 
 	err = sink.Flush(context.Background())
 	require.Nil(t, err)
@@ -415,6 +415,7 @@ func TestNewMySQLBackendExecDML(t *testing.T) {
 	require.Nil(t, sink.Close())
 }
 
+// TestExecDMLRollbackErrDatabaseNotExists checks rollback handling for a missing database.
 func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{
@@ -474,13 +475,14 @@ func TestExecDMLRollbackErrDatabaseNotExists(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errDatabaseNotExists, errors.Cause(err))
 
 	require.Nil(t, sink.Close())
 }
 
+// TestExecDMLRollbackErrTableNotExists checks rollback handling for a missing table.
 func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{
@@ -541,13 +543,14 @@ func TestExecDMLRollbackErrTableNotExists(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errTableNotExists, errors.Cause(err))
 
 	require.Nil(t, sink.Close())
 }
 
+// TestExecDMLRollbackErrRetryable checks retries after retryable rollback errors.
 func TestExecDMLRollbackErrRetryable(t *testing.T) {
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
 		{
@@ -611,13 +614,14 @@ func TestExecDMLRollbackErrRetryable(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errLockDeadlock, errors.Cause(err))
 
 	require.Nil(t, sink.Close())
 }
 
+// TestMysqlSinkNotRetryErrDupEntry checks that duplicate-key errors are not retried.
 func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	errDup := mysql.NewErr(mysql.ErrDupEntry)
 	tableInfo := model.BuildTableInfo("s1", "t1", []*model.Column{
@@ -669,7 +673,7 @@ func TestMysqlSinkNotRetryErrDupEntry(t *testing.T) {
 	sink.setDMLMaxRetry(1)
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Equal(t, errDup, errors.Cause(err))
 
@@ -779,6 +783,7 @@ func TestHolderString(t *testing.T) {
 	require.Panics(t, func() { placeHolder(-1) }, "strings.Builder.Grow: negative count")
 }
 
+// TestMySQLSinkExecDMLError checks propagation of errors during DML execution.
 func TestMySQLSinkExecDMLError(t *testing.T) {
 	dbConnFactory := pmysql.NewDBConnectionFactoryForTest()
 	dbConnFactory.SetStandardConnectionFactory(func(ctx context.Context, dsnStr string) (*sql.DB, error) {
@@ -849,7 +854,7 @@ func TestMySQLSinkExecDMLError(t *testing.T) {
 
 	_ = sink.OnTxnEvent(&dmlsink.TxnCallbackableEvent{
 		Event: &model.SingleTableTxn{Rows: rows},
-	})
+	}, false)
 	err = sink.Flush(context.Background())
 	require.Regexp(t, ".*ErrMySQLTxnError.*", err)
 	require.Nil(t, sink.Close())
@@ -1743,5 +1748,112 @@ func TestBackendGenUpdateSQL(t *testing.T) {
 		sqls, values := ms.genUpdateSQL(tc.rows...)
 		require.Equal(t, tc.expectedSQLs, sqls)
 		require.Equal(t, tc.expectedValues, values)
+	}
+}
+
+// TestTxnOrderTablesFlush checks ordered flush boundaries and retries.
+func TestTxnOrderTablesFlush(t *testing.T) {
+	for _, failStage := range []int{0, 1, 2} {
+		t.Run(fmt.Sprintf("fail-stage=%d", failStage), func(t *testing.T) {
+			factory := pmysql.NewDBConnectionFactoryForTest()
+			var dbMock sqlmock.Sqlmock
+			factory.SetStandardConnectionFactory(func(ctx context.Context, dsn string) (*sql.DB, error) {
+				db, mock := newTestMockDB(t)
+				dbMock = mock
+				return db, nil
+			})
+			cfg := config.GetDefaultReplicaConfig()
+			uri, err := url.Parse("mysql://127.0.0.1:4000/?time-zone=UTC&worker-count=1&max-txn-row=256&cache-prep-stmts=false&multi-stmt-enable=false")
+			require.NoError(t, err)
+			backend, err := newMySQLBackend(context.Background(), model.DefaultChangeFeedID(t.Name()), uri, cfg, factory)
+			require.NoError(t, err)
+			defer backend.Close()
+			backend.setDMLMaxRetry(1)
+			var callbacks []int
+			makeEvent := func(table string, seq int, values ...int) *dmlsink.TxnCallbackableEvent {
+				info := model.BuildTableInfo("app", table, []*model.Column{
+					{Name: "id", Type: mysql.TypeLong, Flag: model.PrimaryKeyFlag | model.HandleKeyFlag},
+				}, [][]int{{0}})
+				event := &dmlsink.TxnCallbackableEvent{
+					Event:    &model.SingleTableTxn{TableInfo: info},
+					Callback: func() { callbacks = append(callbacks, seq) },
+				}
+				for _, value := range values {
+					event.Event.Rows = append(event.Event.Rows, &model.RowChangedEvent{
+						StartTs: uint64(seq), CommitTs: uint64(seq + 10), TableInfo: info,
+						Columns: []*model.ColumnData{{ColumnID: info.Columns[0].ID, Value: value}},
+					})
+				}
+				return event
+			}
+			first := makeEvent("other", 1, 1)
+			second := makeEvent("other", 2, 2)
+			ordered := makeEvent("orders", 3, 31, 32)
+			require.False(t, backend.OnTxnEvent(first, false))
+			require.False(t, backend.OnTxnEvent(second, false))
+			require.True(t, backend.OnTxnEvent(ordered, true))
+			originalCfg := backend.cfg
+
+			if failStage != 0 {
+				dbMock.ExpectBegin()
+				if failStage == 2 {
+					for _, value := range []int{1, 2} {
+						dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).
+							WillReturnResult(sqlmock.NewResult(0, 1))
+					}
+				}
+				failedSQL := "INSERT INTO `app`.`other` (`id`) VALUES (?)"
+				failedArgs := []driver.Value{1}
+				if failStage == 2 {
+					failedSQL = "INSERT INTO `app`.`orders` (`id`) VALUES (?),(?)"
+					failedArgs = []driver.Value{31, 32}
+				}
+				dbMock.ExpectExec(failedSQL).WithArgs(failedArgs...).
+					WillReturnError(&dmysql.MySQLError{Number: 1064, Message: "syntax error"})
+				dbMock.ExpectRollback()
+				require.Error(t, backend.Flush(context.Background()))
+				require.Equal(t, []*dmlsink.TxnCallbackableEvent{first, second, ordered}, backend.events)
+				require.Equal(t, 4, backend.rows)
+				require.Empty(t, callbacks)
+				require.Same(t, originalCfg, backend.cfg)
+			}
+
+			// The ordered transaction triggers a flush of the whole batch. Its rows
+			// stay in one transaction and retain the configured SQL batch size.
+			dbMock.ExpectBegin()
+			for _, value := range []int{1, 2} {
+				dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			}
+			dbMock.ExpectExec("INSERT INTO `app`.`orders` (`id`) VALUES (?),(?)").WithArgs(31, 32).
+				WillReturnResult(sqlmock.NewResult(0, 2))
+			dbMock.ExpectCommit()
+			require.NoError(t, backend.Flush(context.Background()))
+			require.Equal(t, []int{1, 2, 3}, callbacks)
+			require.Same(t, originalCfg, backend.cfg)
+			require.Equal(t, 256, backend.cfg.MaxTxnRow)
+
+			// The next ordered transaction starts a new commit. Ordinary tables
+			// continue to use the configured max-txn-row after that commit.
+			require.True(t, backend.OnTxnEvent(makeEvent("orders", 4, 4), true))
+			dbMock.ExpectBegin()
+			dbMock.ExpectExec("INSERT INTO `app`.`orders` (`id`) VALUES (?)").WithArgs(4).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			dbMock.ExpectCommit()
+			require.NoError(t, backend.Flush(context.Background()))
+			require.False(t, backend.OnTxnEvent(makeEvent("other", 5, 5), false))
+			require.False(t, backend.OnTxnEvent(makeEvent("other", 6, 6), false))
+			dbMock.ExpectBegin()
+			for _, value := range []int{5, 6} {
+				dbMock.ExpectExec("INSERT INTO `app`.`other` (`id`) VALUES (?)").WithArgs(value).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+			}
+			dbMock.ExpectCommit()
+			require.NoError(t, backend.Flush(context.Background()))
+			require.Equal(t, []int{1, 2, 3, 4, 5, 6}, callbacks)
+			dbMock.ExpectClose()
+			require.NoError(t, backend.Close())
+			require.NoError(t, dbMock.ExpectationsWereMet())
+		})
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"sync"
 
 	"github.com/pingcap/errors"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink/txn/mysql"
@@ -55,7 +56,8 @@ type dmlSink struct {
 
 	statistics *metrics.Statistics
 
-	scheme string
+	scheme         string
+	txnOrderFilter tfilter.Filter
 }
 
 // GetDBConnImpl is the implementation of pmysql.IDBConnectionFactory.
@@ -71,6 +73,10 @@ func NewMySQLSink(
 	errCh chan<- error,
 	conflictDetectorSlots uint64,
 ) (*dmlSink, error) {
+	orderFilter, err := replicaConfig.Sink.GetTxnOrderFilter(replicaConfig.CaseSensitive)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	statistics := metrics.NewStatistics(changefeedID, sink.TxnSink)
 
@@ -89,6 +95,7 @@ func NewMySQLSink(
 	s.statistics = statistics
 	s.cancel = cancel
 	s.scheme = sink.GetScheme(sinkURI)
+	s.txnOrderFilter = orderFilter
 
 	return s, nil
 }
@@ -156,7 +163,12 @@ func (s *dmlSink) WriteEvents(txnEvents ...*dmlsink.TxnCallbackableEvent) error 
 			txn.Callback()
 			continue
 		}
-		s.alive.conflictDetector.Add(newTxnEvent(txn))
+		event := newTxnEvent(txn)
+		if s.txnOrderFilter != nil && txn.Event.TableInfo != nil {
+			table := txn.Event.TableInfo.TableName
+			event.tableOrder = s.txnOrderFilter.MatchTable(table.Schema, table.Table)
+		}
+		s.alive.conflictDetector.Add(event)
 	}
 	return nil
 }

@@ -518,8 +518,9 @@ func (h *OpenAPIV2) updateChangefeed(c *gin.Context) {
 		pdClient = up.PDClient
 	}
 
+	schemaTs := model.GetDDLStartTs(cfStatus.CheckpointTs, cfStatus.MinTableBarrierTs)
 	newCfInfo, newUpInfo, err := h.helpers.verifyUpdateChangefeedConfig(ctx,
-		updateCfConfig, oldCfInfo, OldUpInfo, storage, cfStatus.CheckpointTs)
+		updateCfConfig, oldCfInfo, OldUpInfo, storage, schemaTs)
 	if err != nil {
 		_ = c.Error(errors.Trace(err))
 		return
