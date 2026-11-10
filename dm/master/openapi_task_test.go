@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/openapi/fixtures"
 	"github.com/pingcap/tiflow/dm/pbmock"
+	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/stretchr/testify/require"
 )
 
@@ -225,4 +226,37 @@ func (s *OpenAPIViewSuite) TestTaskCredentialRedaction() {
 	require.Equal(t, task.TargetConfig.Password, internal.TargetConfig.Password)
 	require.Equal(t, task.TargetConfig.Security, internal.TargetConfig.Security)
 	require.Equal(t, task.SourceConfig.FullMigrateConf.Security, internal.SourceConfig.FullMigrateConf.Security)
+
+	// Task templates follow the same rule: reads are redacted, a redacted
+	// template can be submitted back without overwriting the stored secrets.
+	body = request(http.MethodPost, "/api/v1/tasks/templates", task, http.StatusCreated)
+	var createdTemplate openapi.Task
+	require.NoError(t, json.Unmarshal(body, &createdTemplate))
+	assertRedacted(createdTemplate)
+	body = request(http.MethodGet, "/api/v1/tasks/templates/"+task.Name, nil, http.StatusOK)
+	var readTemplate openapi.Task
+	require.NoError(t, json.Unmarshal(body, &readTemplate))
+	assertRedacted(readTemplate)
+	body = request(http.MethodGet, "/api/v1/tasks/templates", nil, http.StatusOK)
+	var templateList openapi.GetTaskListResponse
+	require.NoError(t, json.Unmarshal(body, &templateList))
+	require.Equal(t, 1, templateList.Total)
+	assertRedacted(templateList.Data[0])
+
+	readTemplate.SourceConfig.IncrMigrateConf.ReplBatch = &batch
+	body = request(http.MethodPut, "/api/v1/tasks/templates/"+task.Name, readTemplate, http.StatusOK)
+	var updatedTemplate openapi.Task
+	require.NoError(t, json.Unmarshal(body, &updatedTemplate))
+	assertRedacted(updatedTemplate)
+	storedTemplate, err := ha.GetOpenAPITaskTemplate(server.etcdClient, task.Name)
+	require.NoError(t, err)
+	require.Equal(t, batch, *storedTemplate.SourceConfig.IncrMigrateConf.ReplBatch)
+	require.Equal(t, task.TargetConfig.Password, storedTemplate.TargetConfig.Password)
+	require.Equal(t, task.TargetConfig.Security.SslKeyContent, storedTemplate.TargetConfig.Security.SslKeyContent)
+	require.Equal(t, task.SourceConfig.FullMigrateConf.Security.SslKeyContent, storedTemplate.SourceConfig.FullMigrateConf.Security.SslKeyContent)
+
+	// Reusing the template placeholder on another endpoint is rejected too.
+	redirectedTemplate := readTemplate
+	redirectedTemplate.TargetConfig.User = "other-user"
+	request(http.MethodPut, "/api/v1/tasks/templates/"+task.Name, redirectedTemplate, http.StatusBadRequest)
 }

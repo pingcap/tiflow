@@ -36,6 +36,7 @@ import (
 	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	router "github.com/pingcap/tidb/pkg/util/table-router"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
@@ -238,11 +239,42 @@ func (c *SubTaskConfig) String() string {
 	return string(cfg)
 }
 
-// Redacted returns a shallow copy for diagnostics with storage credentials hidden.
+// Redacted returns a copy for diagnostics with credentials hidden: storage
+// URLs are masked, database passwords are obfuscated and inline TLS contents
+// are removed.
 func (c *SubTaskConfig) Redacted() *SubTaskConfig {
 	result := *c
 	result.LoaderConfig.Dir = objstore.RedactURL(c.LoaderConfig.Dir)
+	result.LoaderConfig.Security = redactedSecurityConfig(c.LoaderConfig.Security)
+	result.From = *redactedDBConfig(&c.From)
+	result.To = *redactedDBConfig(&c.To)
 	return &result
+}
+
+func redactedDBConfig(cfg *dbconfig.DBConfig) *dbconfig.DBConfig {
+	if cfg == nil {
+		return nil
+	}
+	clone := cfg.Clone()
+	if clone.Password != "" {
+		clone.Password = ObfuscatedPasswordForFeedback
+	}
+	clone.Security = redactedSecurityConfig(clone.Security)
+	return clone
+}
+
+func redactedSecurityConfig(sec *security.Security) *security.Security {
+	if sec == nil {
+		return nil
+	}
+	clone := sec.Clone()
+	clone.SSLCABytes = nil
+	clone.SSLCertBytes = nil
+	clone.SSLKeyBytes = nil
+	clone.SSLCABase64 = ""
+	clone.SSLCertBase64 = ""
+	clone.SSLKeyBase64 = ""
+	return clone
 }
 
 // RedactedSubTaskConfigs returns Redacted copies of cfgs for diagnostics.
