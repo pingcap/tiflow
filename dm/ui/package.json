@@ -10,6 +10,10 @@
     "lint": "eslint --ext .tsx,.ts src/",
     "prepare": "is-ci || cd ../../ && husky install dm/ui/.husky"
   },
+  "resolutions": {
+    "lodash": "4.18.1",
+    "lodash-es": "4.18.1"
+  },
   "dependencies": {
     "@ant-design/icons": "^4.7.0",
     "@reduxjs/toolkit": "^1.7.2",
@@ -20,7 +24,7 @@
     "fuse.js": "^6.5.3",
     "i18next": "^23.7.0",
     "i18next-browser-languagedetector": "^7.1.0",
-    "lodash-es": "^4.17.21",
+    "lodash-es": "^4.18.1",
     "rc-queue-anim": "^2.0.0",
     "react": "^17.0.2",
     "react-ace": "^9.5.0",
