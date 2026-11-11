@@ -28,7 +28,7 @@ function start_s3() {
 	s3_MINIO_PID=$!
 
 	i=0
-	while ! curl -o /dev/null -v -s "http://$S3_ENDPOINT/"; do
+	while ! curl --connect-timeout 2 --max-time 2 -fsS -o /dev/null "http://$S3_ENDPOINT/minio/health/ready"; do
 		i=$(($i + 1))
 		if [ $i -gt 7 ]; then
 			echo 'Failed to start minio'
@@ -36,8 +36,9 @@ function start_s3() {
 		fi
 		sleep 2
 	done
-	# create bucket dbpath
-	mkdir -p "${s3_DBPATH}/${s3_bucket}"
+	# Use the S3 API because mkdir does not create buckets in modern MinIO.
+	MC_HOST_dmit="http://${s3_ACCESS_KEY}:${s3_SECRET_KEY}@${S3_ENDPOINT}" \
+		bin/mc mb --ignore-existing "dmit/$s3_bucket"
 }
 
 # clean s3 server
