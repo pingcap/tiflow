@@ -1,136 +1,99 @@
+version: "2"
+run:
+  go: 1.27.3
 linters:
-  disable-all: true
-  # temp disable errcheck because of panic of lint check with go 1.23.
+  default: none
   enable:
     - asciicheck
     - bodyclose
+    - copyloopvar
     - depguard
     - dogsled
     - dupl
-    #- errcheck
-    - copyloopvar
+    - durationcheck
     - gocritic
     - godot
+    - goheader
+    - gomodguard_v2
     - goprintffuncname
-    - gosimple
     - govet
+    - importas
     - ineffassign
+    - makezero
     - misspell
     - nakedret
+    - nilerr
     - noctx
     - prealloc
+    - predeclared
     - revive
     - rowserrcheck
+    - sqlclosecheck
     - staticcheck
-    - stylecheck
-    - typecheck
+    - thelper
+    - tparallel
     - unconvert
     - unparam
     - unused
-    - whitespace
-    - durationcheck
-    - gofumpt
-    - goheader
-    - gomodguard
-    - importas
-    - makezero
-    - nilerr
-    - predeclared
-    - sqlclosecheck
-    - thelper
-    - tparallel
     - wastedassign
-
-  # don't enable:
-  # - testpackage
-  # - lll
-  # - wsl
-  # - gochecknoglobals
-  # - godox
-  # - gomnd
-  # - goerr113
-  # - exhaustive
-  # - wrapcheck
-  # - nlreturn
-  # - exhaustivestruct
-  # - errorlint
-  # - forcetypeassert
-  # - paralleltest
-  # - forbidigo
-  # - gosec
-  # - goconst
-  # - interfacer
-  # - scopelint
-
-  # already cover:
-  # - gci
-  # - goimports
-  # - gofmt
-
-  # better to fix them
-  # - funlen
-  # - gocognit
-  # - nestif
-  # - gocyclo
-  # - cyclop
-  # - gomoddirectives
-  # - gochecknoinits
-  # - maligned
-
-linters-settings:
-  dupl:
-    # tokens count to trigger issue, 150 by default
-    threshold: 200
-  govet:
-    # report about shadowed variables
-    check-shadowing: true
-  depguard:
+    - whitespace
+  settings:
+    depguard:
+      rules:
+        main:
+          files:
+            - $all
+          deny:
+            - pkg: github.com/juju/errors
+              desc: error handling is allowed only by pingcap/errors
+    dupl:
+      threshold: 200
+    govet:
+      enable:
+        - shadow
+    revive:
+      confidence: 0.8
+      severity: error
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: error-naming
+        - name: exported
+        - name: if-return
+        - name: var-naming
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: modifies-parameter
+        - name: unreachable-code
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
     rules:
-      main:
-        files:
-          - $all
-        deny:
-          - pkg: "github.com/juju/errors"
-            desc: error handling is allowed only by pingcap/errors
-  revive:
-    ignoreGeneratedHeader: false
-    severity: "error"
-    confidence: 0.8
-    errorCode: -1
-    warningCode: -1
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: var-naming
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: indent-error-flow
-      - name: superfluous-else
-      - name: modifies-parameter
-      - name: unreachable-code
-
+      - linters:
+          - staticcheck
+        text: 'SA1019:'
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
 issues:
-  include:
-    - EXC0003
-
-  exclude-rules:
-    # TODO Remove it.
-    # Exclude some staticcheck messages
-    - linters:
-        - staticcheck
-      text: "SA1019:"
-
-  # Fix found issues (if it's supported by the linter)
   fix: false
-
-run:
-  go: "1.26.9"
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  timeout: 5m
+formatters:
+  enable:
+    - gofumpt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

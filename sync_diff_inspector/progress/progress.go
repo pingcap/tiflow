@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pingcap/tiflow/sync_diff_inspector/source/common"
+	"github.com/pingcap/tiflow/sync_diff_inspector/utils"
 )
 
 type atomicWriter struct {
@@ -223,14 +224,14 @@ func (tpp *tableProgressPrinter) PrintSummary() {
 			if tp.state&(tableStateResultFailStructureDone|tableStateResultFailStructureContinue) != 0 {
 				fixStr = fmt.Sprintf("%sThe structure of %s is not equal.\n", fixStr, tp.name)
 			}
-			if tp.state&(tableStateResultDifferent) != 0 {
+			if tp.state&tableStateResultDifferent != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s is not equal.\n", fixStr, tp.name)
 			}
-			if tp.state&(tableStateNotExistDownstream) != 0 {
+			if tp.state&tableStateNotExistDownstream != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s does not exist in downstream database.\n", fixStr, tp.name)
 				SkippedNum++
 			}
-			if tp.state&(tableStateNotExistUpstream) != 0 {
+			if tp.state&tableStateNotExistUpstream != 0 {
 				fixStr = fmt.Sprintf("%sThe data of %s does not exist in upstream database.\n", fixStr, tp.name)
 				SkippedNum++
 			}
@@ -251,7 +252,7 @@ func (tpp *tableProgressPrinter) Error(err error) {
 	<-tpp.finishCh
 	var cleanStr, fixStr string
 	cleanStr = "\x1b[1A\x1b[J"
-	fixStr = fmt.Sprintf("\nError in comparison process:\n%v\n\nYou can view the comparison details through './output_dir/sync_diff_inspector.log'\n", err)
+	fixStr = fmt.Sprintf("\nError in comparison process:\n%s\n\nYou can view the comparison details through './output_dir/sync_diff_inspector.log'\n", utils.DiagnosticError(err))
 	tpp.output.Write("%s%s", cleanStr, fixStr)
 }
 

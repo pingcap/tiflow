@@ -192,7 +192,7 @@ func decodeNullableStringChunk(bits []byte, size int, allocator *SliceAllocator)
 	return newBits, data, nil
 }
 
-//nolint:unused,deadcode
+//nolint:unused
 func decodeBytesChunk(bits []byte, size int, allocator *SliceAllocator) ([]byte, [][]byte, error) {
 	return doDecodeBytesChunk(bits, size, decodeUvarintLength, allocator)
 }

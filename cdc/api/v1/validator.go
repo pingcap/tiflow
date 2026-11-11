@@ -112,7 +112,10 @@ func verifyCreateChangefeedConfig(
 	// verify replicaConfig
 	sinkURIParsed, err := url.Parse(changefeedConfig.SinkURI)
 	if err != nil {
-		return nil, cerror.WrapError(cerror.ErrSinkURIInvalid, err)
+		return nil, cerror.WrapError(
+			cerror.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err),
+			util.MaskSensitiveDataInURIForError(changefeedConfig.SinkURI))
 	}
 	err = replicaConfig.ValidateAndAdjust(sinkURIParsed)
 	if err != nil {
@@ -221,7 +224,12 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		sinkConfigUpdated = true
 		newInfo.Config.Sink = changefeedConfig.SinkConfig
 	}
-	if changefeedConfig.SinkURI != "" {
+	if changefeedConfig.SinkURI != "" && changefeedConfig.SinkURI != oldInfo.SinkURI &&
+		changefeedConfig.SinkURI != util.MaskSensitiveDataInURIForError(oldInfo.SinkURI) {
+		if util.HasMaskedSensitiveDataInURI(changefeedConfig.SinkURI) {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStack(
+				"updated sink URI contains a masked credential; provide the full URI")
+		}
 		sinkURIUpdated = true
 		newInfo.SinkURI = changefeedConfig.SinkURI
 	}

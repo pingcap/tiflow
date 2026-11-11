@@ -262,6 +262,7 @@ func TestGetChangefeed(t *testing.T) {
 	statusProvider.EXPECT().GetChangeFeedInfo(gomock.Any(), gomock.Any()).Return(&model.ChangeFeedInfo{
 		State:          model.StateNormal,
 		CreatorVersion: "v6.5.1",
+		SinkURI:        "mysql://root:mysql-secret@127.0.0.1:3306/?token=uri-secret&time-zone=UTC",
 	}, nil)
 	statusProvider.EXPECT().GetChangeFeedStatus(gomock.Any(), gomock.Any()).
 		Return(&model.ChangeFeedStatusForAPI{CheckpointTs: 1}, nil)
@@ -278,6 +279,9 @@ func TestGetChangefeed(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, model.StateNormal, resp.FeedState)
 	require.Equal(t, "v6.5.1", resp.CreatorVersion)
+	require.NotContains(t, resp.SinkURI, "mysql-secret")
+	require.NotContains(t, resp.SinkURI, "uri-secret")
+	require.Contains(t, resp.SinkURI, "time-zone=UTC")
 
 	statusProvider.EXPECT().GetChangeFeedInfo(gomock.Any(), gomock.Any()).Return(&model.ChangeFeedInfo{
 		State:          model.StateNormal,

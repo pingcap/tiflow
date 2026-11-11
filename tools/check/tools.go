@@ -27,7 +27,7 @@ import (
 	_ "github.com/deepmap/oapi-codegen/cmd/oapi-codegen"
 	_ "github.com/gogo/protobuf/protoc-gen-gogofaster"
 	_ "github.com/golang/mock/mockgen"
-	_ "github.com/golangci/golangci-lint/cmd/golangci-lint"
+	_ "github.com/golangci/golangci-lint/v2/cmd/golangci-lint"
 	_ "github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway"
 	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2"

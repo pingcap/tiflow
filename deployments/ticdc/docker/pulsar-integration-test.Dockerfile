@@ -1,6 +1,6 @@
 FROM openjdk:17 as jdk_container
 
-FROM golang:1.26.9 as go_toolchain
+FROM golang:1.27.3 as go_toolchain
 
 FROM ghcr.io/pingcap-qe/ci/base:v2025.11.9-1-ga8991fa-go1.25
 RUN curl https://archive.apache.org/dist/pulsar/pulsar-3.2.0/apache-pulsar-3.2.0-bin.tar.gz -o pulsar.tar.gz && \
