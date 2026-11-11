@@ -51,17 +51,18 @@ func (s *testSyncerSuite) TestDetectConflict(c *check.C) {
 		}
 	}
 
-	c.Assert(ca.detectConflict(caseData), check.IsFalse)
-	ca.add(caseData)
+	_, conflicted := ca.relation.assign(caseData)
+	c.Assert(conflicted, check.IsFalse)
 	assertRelationsEq(excepted)
-	c.Assert(ca.detectConflict([]string{"test_4"}), check.IsFalse)
-	ca.add([]string{"test_4"})
+	_, conflicted = ca.relation.assign([]string{"test_4"})
+	c.Assert(conflicted, check.IsFalse)
 	excepted["test_4"] = "test_4"
 	assertRelationsEq(excepted)
 	conflictData := []string{"test_4", "test_3"}
-	c.Assert(ca.detectConflict(conflictData), check.IsTrue)
-	ca.relation.clear()
-	c.Assert(ca.relation.len(), check.Equals, 0)
+	key, conflicted := ca.relation.assign(conflictData)
+	c.Assert(conflicted, check.IsTrue)
+	c.Assert(key, check.Equals, "test_4")
+	assertRelationsEq(map[string]string{"test_4": "test_4", "test_3": "test_4"})
 }
 
 func TestCausality(t *testing.T) {
@@ -71,6 +72,7 @@ func TestCausality(t *testing.T) {
 	ti := mockTableInfo(t, schemaStr)
 
 	jobCh := make(chan *job, 10)
+	defer close(jobCh)
 	syncer := &Syncer{
 		cfg: &config.SubTaskConfig{
 			SyncerConfig: config.SyncerConfig{
