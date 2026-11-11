@@ -80,6 +80,17 @@ CREATE TABLE mysql_txn_order_ddl.marker (id INT PRIMARY KEY);' "$UP_TIDB_HOST" "
 	echo 'partition CREATE, ALTER, and unique-index DDL checks passed'
 }
 
+# check_redo_order exercises the redo apply command with ordered transaction settings.
+function check_redo_order() {
+	mysql -h "$DOWN_TIDB_HOST" -P "$DOWN_TIDB_PORT" -uroot -e '
+CREATE DATABASE mysql_txn_order_redo;
+CREATE TABLE mysql_txn_order_redo.t (id INT PRIMARY KEY, v INT NOT NULL);
+INSERT INTO mysql_txn_order_redo.t VALUES (1,0),(2,0);'
+	"$WORK_DIR/check_redo" --downstream "root@tcp(${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT})/mysql_txn_order_redo" \
+		--sink-uri "mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/" \
+		--work-dir "$WORK_DIR/redo" --config "$CUR/conf/redo.toml" --cdc-binary "$CDC_BINARY"
+}
+
 # run exercises API validation and transaction ordering against a MySQL-compatible sink.
 function run() {
 	if [ "$SINK_TYPE" != "mysql" ]; then
@@ -88,6 +99,7 @@ function run() {
 	rm -rf "$WORK_DIR" && mkdir -p "$WORK_DIR"
 	start_tidb_cluster --workdir "$WORK_DIR"
 	go build -o "$WORK_DIR/check_order" "$CUR/main.go"
+	go build -o "$WORK_DIR/check_redo" "$CUR/redo"
 	cd "$WORK_DIR"
 
 	for port in "$UP_TIDB_PORT" "$DOWN_TIDB_PORT"; do
@@ -137,6 +149,7 @@ INSERT INTO mysql_txn_order.t VALUES (1,0),(2,0);' 127.0.0.1 "$port"
 	fi
 	grep -q 'txn-order-tables does not support partitioned table' "$WORK_DIR/partition-update.log"
 	check_partition_ddl
+	check_redo_order
 	cleanup_process "$CDC_BINARY"
 }
 

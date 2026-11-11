@@ -22,6 +22,7 @@ import (
 
 	"github.com/pingcap/log"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/model/codec"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
@@ -34,8 +35,10 @@ import (
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/redo"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/sink/mysql"
 	"github.com/pingcap/tiflow/pkg/spanz"
+	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -58,9 +61,11 @@ var (
 
 // RedoApplierConfig is the configuration used by a redo log applier
 type RedoApplierConfig struct {
-	SinkURI string
-	Storage string
-	Dir     string
+	SinkURI       string
+	Storage       string
+	Dir           string
+	SinkConfig    *config.SinkConfig
+	CaseSensitive bool
 }
 
 // RedoApplier implements a redo log applier
@@ -74,6 +79,10 @@ type RedoApplier struct {
 
 	memQuota     *memquota.MemQuota
 	pendingQuota uint64
+
+	txnOrderFilter    tfilter.Filter
+	splitTxn          bool
+	tableTxnAtomicity map[model.TableID]bool
 
 	// sinkFactory is used to create table sinks.
 	sinkFactory *dmlfactory.SinkFactory
@@ -127,8 +136,25 @@ func (ra *RedoApplier) catchError(ctx context.Context) error {
 	}
 }
 
+// initSink creates the DML and DDL sinks with the supplied sink settings.
 func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 	replicaConfig := config.GetDefaultReplicaConfig()
+	if ra.cfg.SinkConfig != nil {
+		replicaConfig.Sink = ra.cfg.SinkConfig
+		replicaConfig.CaseSensitive = ra.cfg.CaseSensitive
+	}
+	ra.splitTxn = util.GetOrZero(replicaConfig.Sink.TxnAtomicity).ShouldSplitTxn()
+	sinkURI, err := url.Parse(ra.cfg.SinkURI)
+	if err != nil {
+		return errors.WrapError(errors.ErrSinkURIInvalid,
+			util.MaskSensitiveDataInURLError(err), util.MaskSensitiveDataInURIForError(ra.cfg.SinkURI))
+	}
+	if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		ra.txnOrderFilter, err = replicaConfig.Sink.GetTxnOrderFilter(replicaConfig.CaseSensitive)
+		if err != nil {
+			return err
+		}
+	}
 	ra.sinkFactory, err = dmlfactory.New(ctx, ra.changefeedID, ra.cfg.SinkURI, replicaConfig, ra.errCh, nil)
 	if err != nil {
 		return err
@@ -140,6 +166,7 @@ func (ra *RedoApplier) initSink(ctx context.Context) (err error) {
 
 	ra.tableSinks = make(map[model.TableID]tablesink.TableSink)
 	ra.tableResolvedTsMap = make(map[model.TableID]*memquota.MemConsumeRecord)
+	ra.tableTxnAtomicity = make(map[model.TableID]bool)
 	return nil
 }
 
@@ -227,15 +254,22 @@ func (ra *RedoApplier) consumeLogs(ctx context.Context) error {
 	return errApplyFinished
 }
 
-func (ra *RedoApplier) resetQuota(rowSize uint64) error {
-	if rowSize >= config.DefaultChangefeedMemoryQuota || rowSize < ra.pendingQuota {
+// resetQuota flushes buffered rows, retaining unfinished atomic transactions.
+func (ra *RedoApplier) resetQuota(row *model.RowChangedEvent) error {
+	rowSize := uint64(row.ApproximateBytes())
+	if (rowSize >= config.DefaultChangefeedMemoryQuota && !ra.tableTxnAtomicity[row.GetTableID()]) || rowSize < ra.pendingQuota {
 		log.Panic("row size exceeds memory quota",
 			zap.Uint64("rowSize", rowSize),
 			zap.Uint64("memoryQuota", config.DefaultChangefeedMemoryQuota))
 	}
 
-	// flush all tables before acquire new quota
+	// Flush completed atomic transactions and normal batches before acquiring quota.
+	unfinishedAtomicTxn := false
 	for tableID, tableRecord := range ra.tableResolvedTsMap {
+		if ra.tableTxnAtomicity[tableID] && tableRecord.Size > 0 && tableRecord.ResolvedTs.Ts >= row.CommitTs {
+			unfinishedAtomicTxn = true
+			continue
+		}
 		if !tableRecord.ResolvedTs.IsBatchMode() {
 			log.Panic("table resolved ts should always be in batch mode when apply redo log")
 		}
@@ -260,9 +294,32 @@ func (ra *RedoApplier) resetQuota(rowSize uint64) error {
 	} else if ra.pendingQuota < 64*1024 {
 		ra.pendingQuota = 64 * 1024
 	}
+	if ra.pendingQuota < rowSize {
+		ra.pendingQuota = rowSize
+	}
+	if unfinishedAtomicTxn || rowSize >= config.DefaultChangefeedMemoryQuota {
+		// Complete the transaction even if it exceeds the memory quota.
+		ra.memQuota.ForceAcquire(ra.pendingQuota - oldQuota)
+		return nil
+	}
 	return ra.memQuota.BlockAcquire(ra.pendingQuota - oldQuota)
 }
 
+// isTxnOrderTable checks whether a replayed table requires transaction ordering.
+func (ra *RedoApplier) isTxnOrderTable(tableInfo *model.TableInfo) (bool, error) {
+	if ra.txnOrderFilter == nil || tableInfo == nil {
+		return false, nil
+	}
+	table := tableInfo.TableName
+	ordered := ra.txnOrderFilter.MatchTable(table.Schema, table.Table)
+	if ordered && (tableInfo.IsPartitionTable() || tableInfo.TableInfo != nil && tableInfo.GetPartitionInfo() != nil) {
+		return false, errors.ErrInvalidReplicaConfig.GenWithStackByArgs(
+			"sink.mysql-config.txn-order-tables does not support partitioned table " + table.String())
+	}
+	return ordered, nil
+}
+
+// applyDDL flushes earlier rows before replaying the DDL.
 func (ra *RedoApplier) applyDDL(
 	ctx context.Context, ddl *model.DDLEvent, checkpointTs uint64,
 ) error {
@@ -284,6 +341,16 @@ func (ra *RedoApplier) applyDDL(
 	if shouldSkip() {
 		return nil
 	}
+	switch ddl.Type {
+	case timodel.ActionCreateTable, timodel.ActionCreateTables,
+		timodel.ActionRenameTable, timodel.ActionRenameTables,
+		timodel.ActionRecoverTable, timodel.ActionAlterTablePartitioning,
+		timodel.ActionAddIndex, timodel.ActionAddPrimaryKey,
+		timodel.ActionModifyColumn, timodel.ActionMultiSchemaChange:
+		if _, err := ra.isTxnOrderTable(ddl.TableInfo); err != nil {
+			return err
+		}
+	}
 	log.Warn("apply DDL", zap.Any("ddl", ddl))
 	// Wait all tables to flush data before applying DDL.
 	// TODO: only block tables that are affected by this DDL.
@@ -299,18 +366,27 @@ func (ra *RedoApplier) applyDDL(
 	return nil
 }
 
+// applyRow buffers a redo row while preserving ordered transaction boundaries.
 func (ra *RedoApplier) applyRow(
 	row *model.RowChangedEvent, checkpointTs model.Ts,
 ) error {
+	tableID := row.GetTableID()
+	if record := ra.tableResolvedTsMap[tableID]; (!ra.splitTxn || ra.txnOrderFilter != nil) &&
+		(record == nil || record.ResolvedTs.Ts != row.CommitTs) {
+		ordered, err := ra.isTxnOrderTable(row.TableInfo)
+		if err != nil {
+			return err
+		}
+		ra.tableTxnAtomicity[tableID] = ordered || !ra.splitTxn
+	}
 	rowSize := uint64(row.ApproximateBytes())
 	if rowSize > ra.pendingQuota {
-		if err := ra.resetQuota(uint64(row.ApproximateBytes())); err != nil {
+		if err := ra.resetQuota(row); err != nil {
 			return err
 		}
 	}
 	ra.pendingQuota -= rowSize
 
-	tableID := row.GetTableID()
 	if _, ok := ra.tableSinks[tableID]; !ok {
 		tableSink := ra.sinkFactory.CreateTableSink(
 			model.DefaultChangeFeedID(applierChangefeed),
