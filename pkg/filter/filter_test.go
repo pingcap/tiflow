@@ -407,9 +407,44 @@ func TestIsAllowedDDL(t *testing.T) {
 	testCases = append(testCases, testCase{timodel.ActionCreateSequence, false})
 	testCases = append(testCases, testCase{timodel.ActionAlterSequence, false})
 	testCases = append(testCases, testCase{timodel.ActionDropSequence, false})
+	// Materialized-view DDLs are intentionally not replicated downstream.
+	for _, ddlType := range []timodel.ActionType{
+		timodel.ActionCreateMaterializedViewLog,
+		timodel.ActionCreateMaterializedView,
+		timodel.ActionDropMaterializedViewLog,
+		timodel.ActionDropMaterializedView,
+		timodel.ActionAlterMaterializedViewRefresh,
+		timodel.ActionAlterMaterializedViewLogPurge,
+		timodel.ActionAlterMaterializedViewAttributes,
+		timodel.ActionMViewRefreshOutOfPlaceCutover,
+		timodel.ActionCreateMaterializedViewShadow,
+		timodel.ActionDropMaterializedViewShadow,
+	} {
+		testCases = append(testCases, testCase{ddlType, false})
+	}
 	for _, tc := range testCases {
 		require.Equal(t, tc.allowed, isAllowedDDL(tc.ActionType), "%#v", tc)
 	}
+}
+
+func TestShouldDiscardMaterializedViewDDL(t *testing.T) {
+	f := &filter{}
+	for _, ddlType := range []timodel.ActionType{
+		timodel.ActionCreateMaterializedViewLog,
+		timodel.ActionCreateMaterializedView,
+		timodel.ActionDropMaterializedViewLog,
+		timodel.ActionDropMaterializedView,
+		timodel.ActionAlterMaterializedViewRefresh,
+		timodel.ActionAlterMaterializedViewLogPurge,
+		timodel.ActionAlterMaterializedViewAttributes,
+		timodel.ActionMViewRefreshOutOfPlaceCutover,
+		timodel.ActionCreateMaterializedViewShadow,
+		timodel.ActionDropMaterializedViewShadow,
+	} {
+		require.True(t, isMaterializedViewDDL(ddlType))
+		require.True(t, f.ShouldDiscardDDL(ddlType, "test", "t", 0))
+	}
+	require.False(t, isMaterializedViewDDL(timodel.ActionCreateTable))
 }
 
 func TestIsSchemaDDL(t *testing.T) {

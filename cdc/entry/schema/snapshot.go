@@ -882,10 +882,11 @@ func (s *snapshot) doCreateTable(tbInfo *model.TableInfo, currentTs uint64) {
 
 	ineligible := !tbInfo.IsEligible(s.forceReplicate)
 	if ineligible {
-		// Sequence is not supported yet, and always ineligible.
+		// Sequence and materialized-view internal tables are not supported, and
+		// always ineligible.
 		// Skip Warn to avoid confusion.
 		// See https://github.com/pingcap/tiflow/issues/4559
-		if !tbInfo.IsSequence() {
+		if !tbInfo.IsSequence() && !tbInfo.IsMaterializedViewRelated() {
 			log.Warn("this table is ineligible to replicate",
 				zap.String("tableName", tbInfo.Name.O), zap.Int64("tableID", tbInfo.ID))
 		}
