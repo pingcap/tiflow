@@ -20,6 +20,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestGetDDLStartTs checks restart timestamps at and away from a pending DDL barrier.
+func TestGetDDLStartTs(t *testing.T) {
+	for _, tc := range []struct {
+		checkpoint, barrier, expected uint64
+	}{
+		{100, 100, 99},
+		{100, 101, 100},
+		{100, 0, 100},
+		{0, 0, 0},
+	} {
+		require.Equal(t, tc.expected, GetDDLStartTs(tc.checkpoint, tc.barrier))
+	}
+}
+
 func TestAdminJobType(t *testing.T) {
 	t.Parallel()
 

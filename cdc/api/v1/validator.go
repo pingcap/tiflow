@@ -20,6 +20,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
@@ -28,6 +29,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/txnutil/gc"
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -154,12 +156,12 @@ func verifyCreateChangefeedConfig(
 		CreatorVersion: version.ReleaseVersion,
 		Epoch:          owner.GenerateChangefeedEpoch(ctx, up.PDClient),
 	}
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.NewFilter(replicaConfig, "", sink.IsMySQLCompatibleScheme(sinkURIParsed.Scheme))
 	if err != nil {
 		return nil, err
 	}
 	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f,
-		up.KVStorage, changefeedConfig.StartTS)
+		up.KVStorage, changefeedConfig.StartTS, replicaConfig.ForceReplicate)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +193,8 @@ func verifyCreateChangefeedConfig(
 func VerifyUpdateChangefeedConfig(ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	oldInfo *model.ChangeFeedInfo,
+	kvStorage tidbkv.Storage,
+	schemaTs uint64,
 ) (*model.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
@@ -237,7 +241,37 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 		if err != nil {
 			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
+	}
 
+	mysqlCfg := newInfo.Config.Sink.MySQLConfig
+	if mysqlCfg != nil && len(mysqlCfg.TxnOrderTables) != 0 &&
+		(sinkConfigUpdated || sinkURIUpdated || len(changefeedConfig.FilterRules) != 0) {
+		sinkURI, err := url.Parse(newInfo.SinkURI)
+		if err != nil {
+			return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(
+				cerror.WrapError(cerror.ErrSinkURIInvalid,
+					util.MaskSensitiveDataInURLError(err), util.MaskSensitiveDataInURIForError(newInfo.SinkURI)))
+		}
+		if sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+			if err := newInfo.Config.ValidateAndAdjust(sinkURI); err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			f, err := filter.NewFilter(newInfo.Config, "", true)
+			if err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			// Validate the same schema snapshot that the owner will use on restart.
+			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, schemaTs, newInfo.Config.ForceReplicate)
+			if err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+			if err := f.Verify(tableInfos); err != nil {
+				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
+			}
+		}
+	}
+
+	if sinkConfigUpdated || sinkURIUpdated {
 		if err := validator.Validate(ctx,
 			model.ChangeFeedID{Namespace: changefeedConfig.Namespace, ID: changefeedConfig.ID},
 			newInfo.SinkURI, newInfo.Config, nil); err != nil {

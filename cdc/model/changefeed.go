@@ -577,8 +577,9 @@ func (info *ChangeFeedInfo) fixScheduler(inheritV66 bool) {
 
 // ChangeFeedStatusForAPI uses to transfer the status of changefeed for API.
 type ChangeFeedStatusForAPI struct {
-	ResolvedTs   uint64 `json:"resolved-ts"`
-	CheckpointTs uint64 `json:"checkpoint-ts"`
+	ResolvedTs        uint64 `json:"resolved-ts"`
+	CheckpointTs      uint64 `json:"checkpoint-ts"`
+	MinTableBarrierTs uint64 `json:"-"`
 }
 
 // ChangeFeedSyncedStatusForAPI uses to transfer the synced status of changefeed for API.

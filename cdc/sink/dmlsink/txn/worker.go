@@ -187,7 +187,7 @@ func (w *worker) onEvent(txn *txnEvent, postTxnExecuted func()) bool {
 
 	w.metricTxnWorkerHandledRows.Add(float64(len(txn.Event.Rows)))
 	w.postTxnExecutedCallbacks = append(w.postTxnExecutedCallbacks, postTxnExecuted)
-	return w.backend.OnTxnEvent(txn.TxnCallbackableEvent)
+	return w.backend.OnTxnEvent(txn.TxnCallbackableEvent, txn.tableOrder)
 }
 
 // doFlush flushes the backend.
