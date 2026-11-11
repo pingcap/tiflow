@@ -34,6 +34,8 @@ max-days = 0
 max-backups = 0
 
 [security]
+# Hide sensitive log fields with true, or mark them with "MARKER".
+# redact-info-log = false
 # ca-path = ""
 # cert-path = ""
 # key-path = ""

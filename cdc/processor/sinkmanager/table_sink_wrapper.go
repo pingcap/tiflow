@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/tikv/client-go/v2/oracle"
@@ -147,7 +148,7 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 		log.Panic("The table sink has already started",
 			zap.String("namespace", t.changefeed.Namespace),
 			zap.String("changefeed", t.changefeed.ID),
-			zap.Stringer("span", &t.span),
+			logutil.ZapRedactStringer("span", &t.span),
 			zap.Uint64("startTs", startTs),
 			zap.Uint64("oldReplicateTs", t.replicateTs.Load()),
 		)
@@ -163,7 +164,7 @@ func (t *tableSinkWrapper) start(ctx context.Context, startTs model.Ts) (err err
 	log.Info("Sink is started",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Stringer("span", &t.span),
+		logutil.ZapRedactStringer("span", &t.span),
 		zap.Uint64("startTs", startTs),
 		zap.Uint64("replicateTs", ts),
 	)
@@ -279,7 +280,7 @@ func (t *tableSinkWrapper) markAsClosing() {
 			log.Info("Sink is closing",
 				zap.String("namespace", t.changefeed.Namespace),
 				zap.String("changefeed", t.changefeed.ID),
-				zap.Stringer("span", &t.span))
+				logutil.ZapRedactStringer("span", &t.span))
 			break
 		}
 	}
@@ -295,7 +296,7 @@ func (t *tableSinkWrapper) markAsClosed() {
 			log.Info("Sink is closed",
 				zap.String("namespace", t.changefeed.Namespace),
 				zap.String("changefeed", t.changefeed.ID),
-				zap.Stringer("span", &t.span))
+				logutil.ZapRedactStringer("span", &t.span))
 			return
 		}
 	}
@@ -396,7 +397,7 @@ func (t *tableSinkWrapper) restart(ctx context.Context) (err error) {
 	log.Info("Sink is restarted",
 		zap.String("namespace", t.changefeed.Namespace),
 		zap.String("changefeed", t.changefeed.ID),
-		zap.Stringer("span", &t.span),
+		logutil.ZapRedactStringer("span", &t.span),
 		zap.Uint64("replicateTs", ts))
 	return nil
 }
@@ -464,8 +465,8 @@ func handleRowChangedEvents(
 			log.Warn("skip emit nil event",
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Stringer("span", &span),
-				zap.Any("event", e))
+				logutil.ZapRedactStringer("span", &span),
+				logutil.ZapRedactAny("event", e))
 			continue
 		}
 
@@ -475,10 +476,10 @@ func handleRowChangedEvents(
 		// Just ignore these row changed events.
 		if len(rowEvent.Columns) == 0 && len(rowEvent.PreColumns) == 0 {
 			log.Warn("skip emit empty row event",
-				zap.Stringer("span", &span),
+				logutil.ZapRedactStringer("span", &span),
 				zap.String("namespace", changefeed.Namespace),
 				zap.String("changefeed", changefeed.ID),
-				zap.Any("event", e))
+				logutil.ZapRedactAny("event", e))
 			continue
 		}
 

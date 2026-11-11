@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"go.uber.org/zap"
 )
@@ -183,7 +184,7 @@ func GenUpdateSQL(changes ...*RowChange) (string, []any) {
 			log.Panic("len(whereValues) != len(whereColumns)",
 				zap.Int("len(whereValues)", len(whereValues)),
 				zap.Int("len(whereColumns)", len(whereColumns)),
-				zap.Any("whereValues", whereValues),
+				logutil.ZapRedactAny("whereValues", whereValues),
 				zap.Stringer("sourceTable", change.sourceTable))
 		}
 

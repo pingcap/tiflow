@@ -23,8 +23,8 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
-	"go.uber.org/zap"
 )
 
 var (
@@ -61,14 +61,14 @@ func (s *EventSorter) IsTableBased() bool {
 func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 	resolvedTs := startTs
 	if _, exists := s.tables.LoadOrStore(span, &tableSorter{resolvedTs: &resolvedTs}); exists {
-		log.Panic("add an exist table", zap.Stringer("span", &span))
+		log.Panic("add an exist table", logutil.ZapRedactStringer("span", &span))
 	}
 }
 
 // RemoveTable implements sorter.SortEngine.
 func (s *EventSorter) RemoveTable(span tablepb.Span) {
 	if _, exists := s.tables.LoadAndDelete(span); !exists {
-		log.Panic("remove an unexist table", zap.Stringer("span", &span))
+		log.Panic("remove an unexist table", logutil.ZapRedactStringer("span", &span))
 	}
 }
 
@@ -76,7 +76,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) {
 	value, exists := s.tables.Load(span)
 	if !exists {
-		log.Panic("add events into an unexist table", zap.Stringer("span", &span))
+		log.Panic("add events into an unexist table", logutil.ZapRedactStringer("span", &span))
 	}
 
 	resolvedTs, hasNewResolved := value.(*tableSorter).add(events...)
@@ -100,7 +100,7 @@ func (s *EventSorter) OnResolve(action func(tablepb.Span, model.Ts)) {
 func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sorter.Position) sorter.EventIterator {
 	value, exists := s.tables.Load(span)
 	if !exists {
-		log.Panic("fetch events from an unexist table", zap.Stringer("span", &span))
+		log.Panic("fetch events from an unexist table", logutil.ZapRedactStringer("span", &span))
 	}
 
 	return value.(*tableSorter).fetch(span, lowerBound, upperBound)
@@ -116,7 +116,7 @@ func (s *EventSorter) FetchAllTables(lowerBound sorter.Position) sorter.EventIte
 func (s *EventSorter) CleanByTable(span tablepb.Span, upperBound sorter.Position) error {
 	value, exists := s.tables.Load(span)
 	if !exists {
-		log.Panic("clean an unexist table", zap.Stringer("span", &span))
+		log.Panic("clean an unexist table", logutil.ZapRedactStringer("span", &span))
 	}
 
 	value.(*tableSorter).clean(span, upperBound)
@@ -221,7 +221,7 @@ func (s *tableSorter) fetch(
 
 	iter := &EventIter{}
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
-		log.Panic("fetch unresolved events", zap.Stringer("span", &span))
+		log.Panic("fetch unresolved events", logutil.ZapRedactStringer("span", &span))
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {
@@ -242,7 +242,7 @@ func (s *tableSorter) clean(span tablepb.Span, upperBound sorter.Position) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.resolvedTs == nil || upperBound.CommitTs > *s.resolvedTs {
-		log.Panic("clean unresolved events", zap.Stringer("span", &span))
+		log.Panic("clean unresolved events", logutil.ZapRedactStringer("span", &span))
 	}
 
 	startIdx := sort.Search(len(s.resolved), func(idx int) bool {

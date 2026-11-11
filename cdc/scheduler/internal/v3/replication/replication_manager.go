@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/redo"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
@@ -262,7 +263,7 @@ func (r *Manager) HandleMessage(
 			log.Warn("schedulerv3: ignore message",
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
-				zap.Stringer("type", msg.MsgType), zap.Any("message", msg))
+				zap.Stringer("type", msg.MsgType), logutil.ZapRedactAny("message", msg))
 		}
 	}
 	return sentMsgs, nil
@@ -279,7 +280,7 @@ func (r *Manager) handleMessageHeartbeatResponse(
 				zap.String("namespace", r.changefeedID.Namespace),
 				zap.String("changefeed", r.changefeedID.ID),
 				zap.Any("from", from),
-				zap.Any("message", status))
+				logutil.ZapRedactAny("message", status))
 			continue
 		}
 		msgs, err := table.handleTableStatus(from, &status)
@@ -312,7 +313,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Warn("schedulerv3: ignore unknown dispatch table response",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Any("message", msg))
+			logutil.ZapRedactAny("message", msg))
 		return nil, nil
 	}
 
@@ -321,7 +322,7 @@ func (r *Manager) handleMessageDispatchTableResponse(
 		log.Info("schedulerv3: ignore table status no table found",
 			zap.String("namespace", r.changefeedID.Namespace),
 			zap.String("changefeed", r.changefeedID.ID),
-			zap.Any("message", status))
+			logutil.ZapRedactAny("message", status))
 		return nil, nil
 	}
 	msgs, err := table.handleTableStatus(from, status)
@@ -613,8 +614,8 @@ func (r *Manager) AdvanceCheckpoint(
 					log.Warn("schedulerv3: span hole detected, skip advance checkpoint",
 						zap.String("namespace", r.changefeedID.Namespace),
 						zap.String("changefeed", r.changefeedID.ID),
-						zap.String("lastSpan", lastSpan.String()),
-						zap.String("span", span.String()))
+						logutil.ZapRedactString("lastSpan", lastSpan.String()),
+						logutil.ZapRedactString("span", span.String()))
 					tableHasHole = true
 					return false
 				}

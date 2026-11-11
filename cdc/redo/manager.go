@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chann"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/redo"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -367,7 +368,7 @@ func (m *logManager) AddTable(span tablepb.Span, startTs uint64) {
 		log.Warn("add duplicated table in redo log manager",
 			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return
 	}
 }
@@ -378,7 +379,7 @@ func (m *logManager) RemoveTable(span tablepb.Span) {
 		log.Warn("remove a table not maintained in redo log manager",
 			zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 			zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return
 	}
 }
@@ -406,7 +407,7 @@ func (m *logManager) postFlush(tableRtsMap *spanz.HashMap[model.Ts]) {
 				log.Debug("flush redo with regressed resolved ts",
 					zap.String("namespace", m.cfg.ChangeFeedID.Namespace),
 					zap.String("changefeed", m.cfg.ChangeFeedID.ID),
-					zap.Stringer("span", &span),
+					logutil.ZapRedactStringer("span", &span),
 					zap.Uint64("flushed", flushed),
 					zap.Uint64("current", value.(*statefulRts).getFlushed()))
 			}
