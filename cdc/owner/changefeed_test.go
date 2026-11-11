@@ -98,11 +98,14 @@ type mockDDLSink struct {
 	ddlHistory []*model.DDLEvent
 	mu         struct {
 		sync.Mutex
-		checkpointTs  model.Ts
-		currentTables []*model.TableInfo
+		checkpointTs        model.Ts
+		writtenCheckpointTs model.Ts
+		currentTables       []*model.TableInfo
+		retainedTables      []*model.TableInfo
 	}
-	syncPoint    model.Ts
-	syncPointHis []model.Ts
+	holdCheckpointAck bool
+	syncPoint         model.Ts
+	syncPointHis      []model.Ts
 
 	bootstrapError bool
 
@@ -146,6 +149,21 @@ func (m *mockDDLSink) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	defer m.mu.Unlock()
 	m.mu.checkpointTs = ts
 	m.mu.currentTables = tables
+	if !m.holdCheckpointAck {
+		m.mu.writtenCheckpointTs = ts
+	}
+}
+
+func (m *mockDDLSink) getLastWrittenCheckpointTs() model.Ts {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.mu.writtenCheckpointTs
+}
+
+func (m *mockDDLSink) retainTablesForCheckpoint(_ model.Ts, tables []*model.TableInfo) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.mu.retainedTables = append(m.mu.retainedTables, tables...)
 }
 
 func (m *mockDDLSink) getCheckpointTsAndTableNames() (uint64, []*model.TableInfo) {
@@ -490,6 +508,9 @@ func TestEmitCheckpointTs(t *testing.T) {
 	tester.MustApplyPatches()
 	tickThreeTime()
 	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
+	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
+	mockDDLPuller.resolvedTs = startTs
+	tickThreeTime()
 
 	tables, err := cf.ddlManager.allTables(ctx)
 	require.Nil(t, err)
@@ -501,7 +522,6 @@ func TestEmitCheckpointTs(t *testing.T) {
 
 	job = helper.DDL2Job("drop table test0.table0")
 	// ddl puller resolved ts grow up
-	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
 	mockDDLPuller.resolvedTs = startTs + 1000
 	cf.ddlManager.schema.AdvanceResolvedTs(mockDDLPuller.resolvedTs)
 	state.Status.CheckpointTs = mockDDLPuller.resolvedTs
@@ -516,7 +536,8 @@ func TestEmitCheckpointTs(t *testing.T) {
 	require.Len(t, tables, 1)
 	// We can't use the new schema because the ddl hasn't been executed yet.
 	ts, names = mockDDLSink.getCheckpointTsAndTableNames()
-	require.Equal(t, ts, mockDDLPuller.resolvedTs)
+	require.Equal(t, startTs, ts)
+	require.Equal(t, mockDDLPuller.resolvedTs, cf.ddlManager.checkpointTs)
 	require.Len(t, names, 1)
 
 	// executing the ddl finished
@@ -582,9 +603,22 @@ func TestFinished(t *testing.T) {
 	tester.MustApplyPatches()
 
 	mockDDLPuller := cf.ddlManager.ddlPuller.(*mockDDLPuller)
+	mockDDLSink := cf.ddlManager.ddlSink.(*mockDDLSink)
+	mockDDLSink.holdCheckpointAck = true
 	mockDDLPuller.resolvedTs += 2000
-	// tick many times to make sure the change feed is stopped
+	// Reaching the target internally must not finish before its WM is written.
 	for i := 0; i <= 10; i++ {
+		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
+		updateStatus(state, checkpointTs, minTableBarrierTs)
+		tester.MustApplyPatches()
+	}
+	checkpointTs, _ := mockDDLSink.getCheckpointTsAndTableNames()
+	require.Equal(t, state.Info.TargetTs, checkpointTs)
+	require.Equal(t, model.StateNormal, state.Info.State)
+	mockDDLSink.mu.Lock()
+	mockDDLSink.mu.writtenCheckpointTs = state.Info.TargetTs
+	mockDDLSink.mu.Unlock()
+	for i := 0; i <= 2; i++ {
 		checkpointTs, minTableBarrierTs := cf.Tick(ctx, state.Info, state.Status, captures)
 		updateStatus(state, checkpointTs, minTableBarrierTs)
 		tester.MustApplyPatches()

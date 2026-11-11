@@ -123,6 +123,9 @@ type ddlManager struct {
 	// justSentDDL is the ddl that just be sent to the downstream in the current tick.
 	// we need it to prevent the checkpointTs from advancing in the same tick.
 	justSentDDL *model.DDLEvent
+	// Keep the persisted barrier at a table name change until its old topic
+	// receives a covering checkpoint. A new owner can then replay the DDL.
+	checkpointPendingDDL model.Ts
 	// tableInfoCache is the tables that the changefeed is watching.
 	// And it contains only the tables of the ddl that have been processed.
 	// The ones that have not been executed yet do not have.
@@ -272,20 +275,18 @@ func (m *ddlManager) tick(
 		return nil, nil, nil
 	}
 
-	if m.executingDDL == nil {
-		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
-	}
-
 	tableIDs, err := m.allPhysicalTables(ctx)
 	if err != nil {
 		return nil, nil, errors.Trace(err)
 	}
 
 	// drain all ddl jobs from ddlPuller
+	var ddlPullerResolvedTs uint64
 	for {
-		_, job := m.ddlPuller.PopFrontDDL()
+		resolvedTs, job := m.ddlPuller.PopFrontDDL()
 		// no more ddl jobs
 		if job == nil {
+			ddlPullerResolvedTs = resolvedTs
 			break
 		}
 
@@ -360,6 +361,15 @@ func (m *ddlManager) tick(
 	}
 
 	nextDDL := m.getNextDDL()
+	// The internal checkpoint must reach a DDL's commit ts before it can be
+	// executed. Do not emit that ts to the downstream until all DDLs at the
+	// same ts have finished. ResolvedTs may reflect a queued job's FinishedTS,
+	// so use the puller's actual resolved ts from the empty PopFrontDDL call.
+	if m.executingDDL == nil && ddlPullerResolvedTs >= m.checkpointTs &&
+		m.ddlResolvedTs >= m.checkpointTs &&
+		(nextDDL == nil || nextDDL.CommitTs > m.checkpointTs) {
+		m.ddlSink.emitCheckpointTs(m.checkpointTs, currentTables)
+	}
 	if nextDDL != nil {
 		if m.checkpointTs > nextDDL.CommitTs {
 			log.Panic("checkpointTs is greater than next ddl commitTs",
@@ -468,6 +478,25 @@ func (m *ddlManager) executeDDL(ctx context.Context) error {
 		return errors.Trace(err)
 	}
 	if done {
+		switch m.executingDDL.Type {
+		case timodel.ActionDropSchema:
+			// The schema DDL goes to the default topic, but tables in the
+			// dropped schema still need a final checkpoint on their own topics.
+			tables, err := m.schema.AllTables(ctx, m.executingDDL.CommitTs-1)
+			if err != nil {
+				return errors.Trace(err)
+			}
+			var droppedTables []*model.TableInfo
+			for _, table := range tables {
+				if table.TableName.Schema == m.executingDDL.TableInfo.TableName.Schema {
+					droppedTables = append(droppedTables, table)
+				}
+			}
+			m.ddlSink.retainTablesForCheckpoint(m.executingDDL.CommitTs, droppedTables)
+			m.checkpointPendingDDL = m.executingDDL.CommitTs
+		case timodel.ActionRenameTable, timodel.ActionDropTable, timodel.ActionDropView:
+			m.checkpointPendingDDL = m.executingDDL.CommitTs
+		}
 		m.cleanCache("execute a ddl event successfully")
 	}
 	return nil
@@ -551,6 +580,13 @@ func (m *ddlManager) barrier() *schedulepb.BarrierWithMinTs {
 					tableBarrierMap[id] = ddl.CommitTs
 				}
 			}
+		}
+	}
+	if m.checkpointPendingDDL != 0 {
+		if m.ddlSink.getLastWrittenCheckpointTs() >= m.checkpointPendingDDL {
+			m.checkpointPendingDDL = 0
+		} else if m.checkpointPendingDDL < barrier.MinTableBarrierTs {
+			barrier.MinTableBarrierTs = m.checkpointPendingDDL
 		}
 	}
 
