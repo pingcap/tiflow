@@ -83,6 +83,7 @@ func waitResolvedTs(t *testing.T, p DDLJobPuller, targetTs model.Ts) {
 	require.Nil(t, err)
 }
 
+// newMockDDLJobPuller builds a puller and schema helper for DDL tests.
 func newMockDDLJobPuller(
 	t *testing.T,
 	needSchemaStorage bool,
@@ -98,7 +99,7 @@ func newMockDDLJobPuller(
 	if needSchemaStorage {
 		helper = entry.NewSchemaTestHelper(t)
 		kvStorage := helper.Storage()
-		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 		require.Nil(t, err)
 		schemaStorage, err := entry.NewSchemaStorage(
 			kvStorage,
@@ -114,6 +115,7 @@ func newMockDDLJobPuller(
 	return res, helper
 }
 
+// TestHandleRenameTable checks rename handling across table-filter boundaries.
 func TestHandleRenameTable(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -139,7 +141,7 @@ func TestHandleRenameTable(t *testing.T) {
 		"Test3.t1",
 		"Test3.t2",
 	}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 
@@ -339,6 +341,7 @@ func TestHandleRenameTable(t *testing.T) {
 	}
 }
 
+// TestHandleJob checks filtering and schema updates for DDL jobs.
 func TestHandleJob(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -361,7 +364,7 @@ func TestHandleJob(t *testing.T) {
 		},
 	}
 
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 
@@ -537,13 +540,14 @@ func TestHandleJob(t *testing.T) {
 	}
 }
 
+// TestDDLPuller checks DDL delivery and resolved timestamp advancement.
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 
 	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
-	f, err := filter.NewFilter(changefeedInfo.Config, "")
+	f, err := filter.NewFilter(changefeedInfo.Config, "", false)
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
@@ -659,6 +663,7 @@ func TestDDLPuller(t *testing.T) {
 	require.Nil(t, ddl)
 }
 
+// TestResolvedTsStuck checks warning logs when the DDL resolved timestamp stalls.
 func TestResolvedTsStuck(t *testing.T) {
 	// For observing the logs
 	zapcore, logs := observer.New(zap.WarnLevel)
@@ -673,7 +678,7 @@ func TestResolvedTsStuck(t *testing.T) {
 	_, changefeedInfo := vars.NewGlobalVarsAndChangefeedInfo4Test()
 	ctx := context.Background()
 	up := upstream.NewUpstream4Test(nil)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schemaStorage, err := entry.NewSchemaStorage(nil,
 		startTs,
@@ -728,6 +733,7 @@ func waitResolvedTsGrowing(t *testing.T, p DDLPuller, targetTs model.Ts) {
 	require.Nil(t, err)
 }
 
+// TestCheckIneligibleTableDDL checks DDL handling across eligibility transitions.
 func TestCheckIneligibleTableDDL(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -737,7 +743,7 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 
@@ -821,6 +827,7 @@ func TestCheckIneligibleTableDDL(t *testing.T) {
 	require.False(t, skip)
 }
 
+// TestHandleExchangeTableName checks table names used when exchanging partitions.
 func TestHandleExchangeTableName(t *testing.T) {
 	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
 	defer helper.Close()
@@ -830,7 +837,7 @@ func TestHandleExchangeTableName(t *testing.T) {
 	ddlJobPullerImpl.setResolvedTs(startTs)
 
 	cfg := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = f
 
@@ -859,7 +866,7 @@ func TestHandleExchangeTableName(t *testing.T) {
 
 	// Add ddl.StartTs to ignore-txn-start-ts, expect no error.
 	cfg.Filter.IgnoreTxnStartTs = []uint64{ddl.StartTS}
-	adjustFilter, err := filter.NewFilter(cfg, "")
+	adjustFilter, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 	ddlJobPullerImpl.filter = adjustFilter
 

@@ -45,6 +45,7 @@ func main() {
 	}
 }
 
+// runFilter evaluates configured table or DDL filters against the requested input.
 func runFilter(cmd *cobra.Command, args []string) {
 	// fmt.Printf("Filter Rules: %v\n", filterRules)
 	// fmt.Printf("Schema Name: %s\n", schemaName)
@@ -55,7 +56,7 @@ func runFilter(cmd *cobra.Command, args []string) {
 		fmt.Printf("decode config file error: %v\n", err)
 		return
 	}
-	ft, err := filter.NewFilter(cfg, "")
+	ft, err := filter.NewFilter(cfg, "", false)
 	if err != nil {
 		fmt.Printf("filter create error: %v\n", err)
 		return

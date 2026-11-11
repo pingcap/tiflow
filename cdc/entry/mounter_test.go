@@ -257,6 +257,7 @@ func TestMounterDisableOldValue(t *testing.T) {
 	}
 }
 
+// testMounterDisableOldValue checks row decoding when old values are disabled.
 func testMounterDisableOldValue(t *testing.T, tc struct {
 	tableName           string
 	createTableDDL      string
@@ -283,7 +284,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 
 	tk.MustExec(tc.createTableDDL)
 
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	jobs, err := getAllHistoryDDLJob(store, f)
 	require.Nil(t, err)
@@ -311,7 +312,7 @@ func testMounterDisableOldValue(t *testing.T, tc struct {
 	require.Nil(t, err)
 	scheamStorage.AdvanceResolvedTs(ver.Ver)
 	config := config.GetDefaultReplicaConfig()
-	filter, err := filter.NewFilter(config, "")
+	filter, err := filter.NewFilter(config, "", false)
 	require.Nil(t, err)
 	mounter := NewMounter(scheamStorage,
 		model.DefaultChangeFeedID("c1"), time.UTC, filter, config.Integrity).(*mounter)
@@ -1237,6 +1238,7 @@ func TestVerifyChecksumTime(t *testing.T) {
 	require.NotNil(t, event)
 }
 
+// TestDecodeRow checks row decoding against the schema at the event timestamp.
 func TestDecodeRow(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
@@ -1251,7 +1253,7 @@ func TestDecodeRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 
-	filter, err := filter.NewFilter(cfg, "")
+	filter, err := filter.NewFilter(cfg, "", false)
 	require.NoError(t, err)
 
 	schemaStorage, err := NewSchemaStorage(helper.Storage(),
@@ -1330,7 +1332,7 @@ func TestDecodeEventIgnoreRow(t *testing.T) {
 
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.student", "test.computer"}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.Nil(t, err)
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)

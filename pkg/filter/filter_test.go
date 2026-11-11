@@ -14,19 +14,23 @@
 package filter
 
 import (
+	"net/url"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/cdc/model"
 	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/stretchr/testify/require"
 )
 
+// TestShouldUseDefaultRules checks default exclusions and ordinary table matches.
 func TestShouldUseDefaultRules(t *testing.T) {
 	t.Parallel()
 
-	filter, err := NewFilter(config.GetDefaultReplicaConfig(), "")
+	filter, err := NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("information_schema", ""))
 	require.True(t, filter.ShouldIgnoreTable("information_schema", "statistics"))
@@ -38,6 +42,7 @@ func TestShouldUseDefaultRules(t *testing.T) {
 	require.True(t, filter.ShouldIgnoreTable("lightning_task_info", "conflict_records"))
 }
 
+// TestShouldUseCustomRules checks configured table inclusions and exclusions.
 func TestShouldUseCustomRules(t *testing.T) {
 	t.Parallel()
 
@@ -45,7 +50,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 		Filter: &config.FilterConfig{
 			Rules: []string{"sns.*", "ecom.*", "!sns.log", "!ecom.test"},
 		},
-	}, "")
+	}, "", false)
 	require.Nil(t, err)
 	require.True(t, filter.ShouldIgnoreTable("other", ""))
 	require.True(t, filter.ShouldIgnoreTable("other", "what"))
@@ -64,7 +69,7 @@ func TestShouldUseCustomRules(t *testing.T) {
 			// 4. do not match table school.teacher
 			Rules: []string{"*.*", "!test.season", "school.*", "!school.teacher"},
 		},
-	}, "")
+	}, "", false)
 	require.True(t, filter.ShouldIgnoreTable("test", "season"))
 	require.False(t, filter.ShouldIgnoreTable("other", ""))
 	require.False(t, filter.ShouldIgnoreTable("school", "student"))
@@ -79,13 +84,14 @@ func TestShouldUseCustomRules(t *testing.T) {
 			// 4. do not match table school.teacher
 			Rules: []string{"*.*", "!test.t1", "!test.t2"},
 		},
-	}, "")
+	}, "", false)
 	require.False(t, filter.ShouldIgnoreTable("test", "season"))
 	require.True(t, filter.ShouldIgnoreTable("test", "t1"))
 	require.True(t, filter.ShouldIgnoreTable("test", "t2"))
 	require.Nil(t, err)
 }
 
+// TestShouldIgnoreDMLEvent checks DML filtering by transaction and table rules.
 func TestShouldIgnoreDMLEvent(t *testing.T) {
 	t.Parallel()
 
@@ -140,7 +146,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 				IgnoreTxnStartTs: ftc.ignoreTxnStartTs,
 				Rules:            ftc.rules,
 			},
-		}, "")
+		}, "", false)
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			dml := &model.RowChangedEvent{
@@ -159,6 +165,7 @@ func TestShouldIgnoreDMLEvent(t *testing.T) {
 	}
 }
 
+// TestShouldIgnoreDDL checks DDL filtering by transaction and event rules.
 func TestShouldIgnoreDDL(t *testing.T) {
 	t.Parallel()
 
@@ -263,7 +270,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 				EventFilters:     ftc.eventFilters,
 				IgnoreTxnStartTs: ftc.ignoredTs,
 			},
-		}, "")
+		}, "", false)
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			ddl := &model.DDLEvent{
@@ -284,6 +291,7 @@ func TestShouldIgnoreDDL(t *testing.T) {
 	}
 }
 
+// TestShouldDiscardDDL checks DDL allow-list, transaction, and table filtering.
 func TestShouldDiscardDDL(t *testing.T) {
 	t.Parallel()
 	testCases := []struct {
@@ -386,7 +394,7 @@ func TestShouldDiscardDDL(t *testing.T) {
 				EventFilters:     ftc.eventFilters,
 				IgnoreTxnStartTs: ftc.ignoredTs,
 			},
-		}, "")
+		}, "", false)
 		require.Nil(t, err)
 		for _, tc := range ftc.cases {
 			ignore := filter.ShouldDiscardDDL(tc.ddlType, tc.schema, tc.table, tc.startTs)
@@ -428,5 +436,74 @@ func TestIsSchemaDDL(t *testing.T) {
 	}
 	for _, tc := range cases {
 		require.Equal(t, tc.isSchema, IsSchemaDDL(tc.actionType), "%#v", tc)
+	}
+}
+
+// TestTxnOrderPartitionTables checks partition rejection against table and ordering rules.
+func TestTxnOrderPartitionTables(t *testing.T) {
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"app.*", "!app.excluded"}
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered*", "app.excluded"}}
+	f, err := NewFilter(cfg, "", true)
+	require.NoError(t, err)
+	ti := model.BuildTableInfoWithPKNames4Test("app", "ordered",
+		[]*model.Column{{Name: "id", Type: mysql.TypeLong}}, map[string]struct{}{"id": {}})
+	require.NoError(t, f.VerifyTxnOrderTable(ti))
+	ti.Partition = &timodel.PartitionInfo{Enable: true, Definitions: []timodel.PartitionDefinition{{ID: 101}}}
+	require.ErrorContains(t, f.VerifyTxnOrderTable(ti), "does not support partitioned table")
+	_, err = f.ShouldIgnoreDMLEvent(&model.RowChangedEvent{TableInfo: ti}, model.RowChangedDatums{}, ti)
+	require.ErrorContains(t, err, "partitioned table")
+	// The caller validates ordering separately from DDL event filtering.
+	cfg.Filter.EventFilters = []*config.EventFilterRule{{Matcher: []string{"app.*"}, IgnoreEvent: []bf.EventType{bf.RenameTable}}}
+	f, err = NewFilter(cfg, "", true)
+	require.NoError(t, err)
+	require.ErrorContains(t, f.VerifyTxnOrderTable(ti), "partitioned table")
+	ignored, err := f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionRenameTable, TableInfo: ti, PreTableInfo: ti})
+	require.NoError(t, err)
+	require.True(t, ignored)
+	for _, name := range []string{"unordered", "excluded"} {
+		ti.TableName.Table = name
+		require.NoError(t, f.VerifyTxnOrderTable(ti))
+	}
+	ti.TableName.Table = "ORDERED"
+	require.ErrorContains(t, f.VerifyTxnOrderTable(ti), "partitioned table")
+	cfg.CaseSensitive = true
+	f, err = NewFilter(cfg, "", true)
+	require.NoError(t, err)
+	require.NoError(t, f.VerifyTxnOrderTable(ti))
+}
+
+// TestTxnOrderInvalidRules validates ordering syntax only when ordering checks are enabled.
+func TestTxnOrderInvalidRules(t *testing.T) {
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"invalid"}}
+	_, err := NewFilter(cfg, "", true)
+	require.ErrorContains(t, err, "txn-order-tables")
+	_, err = NewFilter(cfg, "", false)
+	require.NoError(t, err)
+	require.Equal(t, []string{"invalid"}, cfg.Sink.MySQLConfig.TxnOrderTables)
+}
+
+// TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks keeps partitioned tables usable for other sinks.
+func TestTxnOrderPartitionTablesIgnoredByNonMySQLSinks(t *testing.T) {
+	ti := model.BuildTableInfoWithPKNames4Test("app", "ordered",
+		[]*model.Column{{Name: "id", Type: mysql.TypeLong}}, map[string]struct{}{"id": {}})
+	ti.Partition = &timodel.PartitionInfo{Enable: true, Definitions: []timodel.PartitionDefinition{{ID: 101}}}
+	for _, sinkURI := range []string{"kafka://127.0.0.1/topic?protocol=open-protocol", "blackhole://", "s3://bucket/prefix?protocol=csv"} {
+		cfg := config.GetDefaultReplicaConfig()
+		cfg.Filter.Rules = []string{"app.*"}
+		cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered"}}
+		uri, err := url.Parse(sinkURI)
+		require.NoError(t, err)
+		require.NoError(t, cfg.ValidateAndAdjust(uri))
+		f, err := NewFilter(cfg, "", sink.IsMySQLCompatibleScheme(uri.Scheme))
+		require.NoError(t, err)
+		require.NoError(t, f.VerifyTxnOrderTable(ti))
+		ignored, err := f.ShouldIgnoreDDLEvent(&model.DDLEvent{Type: timodel.ActionCreateTable, TableInfo: ti})
+		require.NoError(t, err)
+		require.False(t, ignored)
+		ignored, err = f.ShouldIgnoreDMLEvent(&model.RowChangedEvent{TableInfo: ti}, model.RowChangedDatums{}, ti)
+		require.NoError(t, err)
+		require.False(t, ignored)
 	}
 }

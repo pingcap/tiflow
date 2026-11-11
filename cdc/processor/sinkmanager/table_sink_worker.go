@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager"
@@ -62,7 +63,8 @@ type sinkWorker struct {
 	sourceManager *sourcemanager.SourceManager
 	sinkMemQuota  *memquota.MemQuota
 	// splitTxn indicates whether to split the transaction into multiple batches.
-	splitTxn bool
+	splitTxn       bool
+	txnOrderFilter tfilter.Filter
 
 	// Metrics.
 	metricOutputEventCountKV prometheus.Counter
@@ -74,12 +76,14 @@ func newSinkWorker(
 	sourceManager *sourcemanager.SourceManager,
 	sinkQuota *memquota.MemQuota,
 	splitTxn bool,
+	txnOrderFilter tfilter.Filter,
 ) *sinkWorker {
 	return &sinkWorker{
-		changefeedID:  changefeedID,
-		sourceManager: sourceManager,
-		sinkMemQuota:  sinkQuota,
-		splitTxn:      splitTxn,
+		changefeedID:   changefeedID,
+		sourceManager:  sourceManager,
+		sinkMemQuota:   sinkQuota,
+		splitTxn:       splitTxn,
+		txnOrderFilter: txnOrderFilter,
 
 		metricOutputEventCountKV: outputEventCount.WithLabelValues(changefeedID.Namespace, changefeedID.ID, "kv"),
 	}
@@ -103,6 +107,7 @@ func (w *sinkWorker) handleTasks(ctx context.Context, taskChan <-chan *sinkTask)
 	}
 }
 
+// handleTask sends table events to a sink within task bounds and memory limits.
 func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr error) {
 	// We need to use a new batch ID for each task.
 	batchID.Add(1)
@@ -140,7 +145,7 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 			zap.Stringer("span", &task.span),
 			zap.Any("lowerBound", lowerBound),
 			zap.Any("upperBound", upperBound),
-			zap.Bool("splitTxn", w.splitTxn),
+			zap.Bool("splitTxn", advancer.splitTxn),
 			zap.Int("receivedEvents", allEventCount),
 			zap.Any("lastPos", advancer.lastPos),
 			zap.Float64("lag", time.Since(oracle.GetTimeFromTS(advancer.lastPos.CommitTs)).Seconds()),
@@ -203,6 +208,13 @@ func (w *sinkWorker) handleTask(ctx context.Context, task *sinkTask) (finalErr e
 
 		// NOTICE: The event can be filtered by the event filter.
 		if e.Row != nil {
+			if advancer.splitTxn && w.txnOrderFilter != nil {
+				table := e.Row.TableInfo.TableName
+				if w.txnOrderFilter.MatchTable(table.Schema, table.Table) {
+					// Keep complete transactions even when they exceed the memory quota.
+					advancer.splitTxn = false
+				}
+			}
 			// For all rows, we add table replicate ts, so mysql sink can determine safe-mode.
 			e.Row.ReplicatingTs = task.tableSink.GetReplicaTs()
 			x, size := handleRowChangedEvents(w.changefeedID, task.span, e)

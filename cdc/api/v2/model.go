@@ -411,6 +411,7 @@ func (c *ReplicaConfig) toInternalReplicaConfigWithOriginConfig(
 		var mysqlConfig *config.MySQLConfig
 		if c.Sink.MySQLConfig != nil {
 			mysqlConfig = &config.MySQLConfig{
+				TxnOrderTables:               c.Sink.MySQLConfig.TxnOrderTables,
 				WorkerCount:                  c.Sink.MySQLConfig.WorkerCount,
 				MaxTxnRow:                    c.Sink.MySQLConfig.MaxTxnRow,
 				MaxMultiUpdateRowSize:        c.Sink.MySQLConfig.MaxMultiUpdateRowSize,
@@ -683,6 +684,7 @@ func ToAPIReplicaConfig(c *config.ReplicaConfig) *ReplicaConfig {
 		var mysqlConfig *MySQLConfig
 		if cloned.Sink.MySQLConfig != nil {
 			mysqlConfig = &MySQLConfig{
+				TxnOrderTables:               cloned.Sink.MySQLConfig.TxnOrderTables,
 				WorkerCount:                  cloned.Sink.MySQLConfig.WorkerCount,
 				MaxTxnRow:                    cloned.Sink.MySQLConfig.MaxTxnRow,
 				MaxMultiUpdateRowSize:        cloned.Sink.MySQLConfig.MaxMultiUpdateRowSize,
@@ -1285,6 +1287,9 @@ type MySQLConfig struct {
 	EnableBatchDML               *bool   `json:"enable_batch_dml,omitempty"`
 	EnableMultiStatement         *bool   `json:"enable_multi_statement,omitempty"`
 	EnableCachePreparedStatement *bool   `json:"enable_cache_prepared_statement,omitempty"`
+
+	// TxnOrderTables selects tables whose transactions must be committed in upstream order.
+	TxnOrderTables []string `json:"txn_order_tables,omitempty"`
 }
 
 // CloudStorageConfig represents a cloud storage sink configuration
