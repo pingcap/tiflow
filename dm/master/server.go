@@ -56,6 +56,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/ui"
 	"github.com/pingcap/tiflow/dm/unit"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"go.uber.org/atomic"
@@ -1389,7 +1390,13 @@ func innerCheckAndAdjustSourceConfig(
 	if _, err = cfg.Yaml(); err != nil {
 		return err
 	}
-	return cfg.Verify()
+	if err = cfg.Verify(); err != nil {
+		return err
+	}
+	if err = bf.ValidateRules(cfg.CaseSensitive, cfg.Filters); err != nil {
+		return terror.ErrConfigBinlogEventFilter.Delegate(err)
+	}
+	return nil
 }
 
 func checkAndAdjustSourceConfig(ctx context.Context, cfg *config.SourceConfig) error {
