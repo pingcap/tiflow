@@ -723,8 +723,8 @@ func (v *DataValidator) doValidate() {
 				v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 				return
 			}
-		case *replication.GenericEvent:
-			if e.Header.EventType == replication.HEARTBEAT_EVENT {
+		case *replication.GenericEvent, *replication.HeartbeatEvent:
+			if e.Header.EventType == replication.HEARTBEAT_EVENT || e.Header.EventType == replication.HEARTBEAT_LOG_EVENT_V2 {
 				if err = v.checkAndPersistCheckpointAndData(locationForFlush); err != nil {
 					v.sendError(terror.ErrValidatorPersistData.Delegate(err))
 					return

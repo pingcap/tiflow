@@ -532,9 +532,9 @@ func (r *Relay) preprocessEvent(e *replication.BinlogEvent, parser2 *parser.Pars
 		// when RawModeEnabled not true, XIDEvent will be parsed.
 		result.GTIDSet = ev.GSet
 		result.CanSaveGTID = true // need save GTID for XID
-	case *replication.GenericEvent:
-		// handle some un-parsed events
-		if e.Header.EventType == replication.HEARTBEAT_EVENT {
+	case *replication.GenericEvent, *replication.HeartbeatEvent:
+		// Heartbeats are GenericEvent in raw mode and HeartbeatEvent in parsed mode.
+		if e.Header.EventType == replication.HEARTBEAT_EVENT || e.Header.EventType == replication.HEARTBEAT_LOG_EVENT_V2 {
 			// ignore artificial heartbeat event
 			// ref: https://dev.mysql.com/doc/internals/en/heartbeat-event.html
 			result.Ignore = true

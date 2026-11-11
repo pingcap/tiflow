@@ -52,6 +52,28 @@ func TestMinGTIDSet(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestParseLegacyMariaDBGTIDSet(t *testing.T) {
+	t.Parallel()
+	for _, flavor := range []string{mysql.MariaDBFlavor, ""} {
+		for _, input := range []string{
+			"1-1-12,1-2-9,2-3-7",
+			"2-3-7,1-2-9,1-1-12",
+			"1-2-9,1-1-12,1-1-10,2-3-7",
+		} {
+			set, err := ParserGTID(flavor, input)
+			require.NoError(t, err)
+			require.Equal(t, "1-1-12,2-3-7", set.String())
+			clone := set.Clone()
+			require.NoError(t, clone.Update("1-4-13"))
+			require.Equal(t, "1-4-13,2-3-7", clone.String())
+			require.True(t, clone.Contain(set))
+			require.Equal(t, "1-1-12,2-3-7", set.String())
+		}
+		_, err := ParserGTID(flavor, "1-1-12,invalid")
+		require.Error(t, err)
+	}
+}
+
 func TestParseGTIDNoFlavor(t *testing.T) {
 	t.Parallel()
 

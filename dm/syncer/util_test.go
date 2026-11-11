@@ -15,6 +15,7 @@ package syncer
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -23,11 +24,31 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	_ "github.com/pingcap/tidb/pkg/types/parser_driver"
 	"github.com/pingcap/tidb/pkg/util/filter"
+	"github.com/pingcap/tiflow/dm/config"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
 	"github.com/pingcap/tiflow/dm/syncer/dbconn"
 	"github.com/stretchr/testify/require"
 )
+
+func TestSubtaskCfg2BinlogSyncerCfgReadAhead(t *testing.T) {
+	ca, err := os.ReadFile("../tests/tls/conf/ca.pem")
+	require.NoError(t, err)
+	for _, name := range []string{"plaintext", "tls"} {
+		t.Run(name, func(t *testing.T) {
+			cfg := &config.SubTaskConfig{}
+			if name == "tls" {
+				cfg.From.Security = &security.Security{SSLCABytes: ca}
+			}
+			syncCfg, err := subtaskCfg2BinlogSyncerCfg(cfg, time.UTC, nil)
+			require.NoError(t, err)
+			require.Equal(t, 16*1024*1024, syncCfg.ReadAheadBufferSize)
+			require.Equal(t, name == "tls", syncCfg.TLSConfig != nil)
+			require.True(t, syncCfg.DisableRetrySync)
+		})
+	}
+}
 
 func TestGetTableByDML(t *testing.T) {
 	cases := []struct {

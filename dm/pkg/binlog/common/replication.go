@@ -44,6 +44,9 @@ func SetDefaultReplicationCfg(cfg *replication.BinlogSyncerConfig, retryCount in
 	}
 	cfg.ReadTimeout = SlaveReadTimeout
 	cfg.HeartbeatPeriod = MasterHeartbeatPeriod
+	// Enable the same packet read-ahead for plaintext and TLS remote readers.
+	// This is a per-reader packet-capacity budget, not a total memory limit.
+	cfg.ReadAheadBufferSize = 16 * 1024 * 1024
 }
 
 // SetDefaultBinlogParserCfg sets some default value for BinlogParser, the
