@@ -74,7 +74,7 @@ func TestGlueSchemaManager_GetCachedOrRegister(t *testing.T) {
 
 	schemaName := "test_schema"
 	schemaDefinition := `{"type": "record", "name": "test_schema", "fields": [{"name": "field1", "type": "string"}]}`
-	codec, _, err := m.GetCachedOrRegister(ctx, schemaName, 1, func() (string, error) {
+	codec, _, err := m.GetCachedOrRegister(ctx, schemaName, 1, insertOperation, func() (string, error) {
 		return schemaDefinition, nil
 	})
 	require.NoError(t, err)
@@ -82,7 +82,7 @@ func TestGlueSchemaManager_GetCachedOrRegister(t *testing.T) {
 	require.Equal(t, schemaDefinition, codec.Schema())
 
 	// Get the same schema again
-	codec2, _, err := m.GetCachedOrRegister(ctx, schemaName, 1, func() (string, error) {
+	codec2, _, err := m.GetCachedOrRegister(ctx, schemaName, 1, insertOperation, func() (string, error) {
 		return schemaDefinition, nil
 	})
 	require.NoError(t, err)
