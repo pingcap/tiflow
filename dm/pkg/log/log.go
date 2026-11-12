@@ -199,7 +199,11 @@ func WithCtx(ctx context.Context) Logger {
 var enabledRedactLog atomic.Bool
 
 func init() {
+<<<<<<< HEAD
 	SetRedactLog(true)
+=======
+	SetRedactLog(false)
+>>>>>>> 5c7d6830db (*(dm): add redact log config for dm worker (#11709))
 }
 
 // IsRedactLogEnabled indicates whether the log desensitization is enabled.
@@ -220,6 +224,7 @@ func RedactString(arg string) string {
 	return arg
 }
 
+<<<<<<< HEAD
 // ZapRedact omits a field's value when log redaction is enabled. It preserves
 // skipped fields, including zap.Error(nil), and the original field when disabled.
 // Use it for value fields; structural fields such as zap.Namespace must not be
@@ -231,6 +236,8 @@ func ZapRedact(field zap.Field) zap.Field {
 	return zap.String(field.Key, "?")
 }
 
+=======
+>>>>>>> 5c7d6830db (*(dm): add redact log config for dm worker (#11709))
 // ZapRedactString receives string argument and return omitted information in zap.Field if redact log enabled.
 func ZapRedactString(key, arg string) zap.Field {
 	return zap.String(key, RedactString(arg))
