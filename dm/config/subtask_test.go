@@ -615,3 +615,35 @@ func TestSubTaskConfigRedacted(t *testing.T) {
 	require.Equal(t, "downstream-secret", cfg.To.Password)
 	require.Equal(t, []byte("key"), cfg.To.Security.SSLKeyBytes)
 }
+
+// TestSubTaskConfigRedactedStorage covers the API-facing variant: the subtask
+// config API feeds sync_diff_inspector, so database credentials must survive
+// while storage credentials are still hidden.
+func TestSubTaskConfigRedactedStorage(t *testing.T) {
+	cfg := NewSubTaskConfig()
+	cfg.Name = "task-one"
+	raw := "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
+	cfg.LoaderConfig.Dir = raw
+	cfg.From.Password = "upstream-secret"
+	cfg.To.Password = "downstream-secret"
+	cfg.To.Security = &security.Security{
+		SSLCABytes:  []byte("ca"),
+		SSLKeyBytes: []byte("key"),
+	}
+	cfg.LoaderConfig.Security = &security.Security{SSLKeyBytes: []byte("loader-key")}
+
+	sanitized := cfg.RedactedStorage()
+	require.NotContains(t, sanitized.LoaderConfig.Dir, "private-")
+	require.Contains(t, sanitized.LoaderConfig.Dir, "bucket/path")
+	require.Equal(t, "upstream-secret", sanitized.From.Password)
+	require.Equal(t, "downstream-secret", sanitized.To.Password)
+	require.Equal(t, []byte("key"), sanitized.To.Security.SSLKeyBytes)
+	require.Equal(t, []byte("loader-key"), sanitized.LoaderConfig.Security.SSLKeyBytes)
+	// the original config must not be modified
+	require.Equal(t, raw, cfg.LoaderConfig.Dir)
+
+	out, err := sanitized.Toml()
+	require.NoError(t, err)
+	require.Contains(t, out, "downstream-secret")
+	require.NotContains(t, out, "private-sk")
+}
