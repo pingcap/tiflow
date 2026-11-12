@@ -241,13 +241,23 @@ func (c *SubTaskConfig) String() string {
 
 // Redacted returns a copy for diagnostics with credentials hidden: storage
 // URLs are masked, database passwords are obfuscated and inline TLS contents
-// are removed.
+// are removed. Do not use it where the config must still be able to connect.
 func (c *SubTaskConfig) Redacted() *SubTaskConfig {
 	result := *c
 	result.LoaderConfig.Dir = objstore.RedactURL(c.LoaderConfig.Dir)
 	result.LoaderConfig.Security = redactedSecurityConfig(c.LoaderConfig.Security)
 	result.From = *redactedDBConfig(&c.From)
 	result.To = *redactedDBConfig(&c.To)
+	return &result
+}
+
+// RedactedStorage returns a shallow copy with only storage credentials hidden.
+// Database credentials are kept on purpose: functional consumers of the subtask
+// config (e.g. sync_diff_inspector's dm-addr mode through GetSubTaskCfg) need
+// them to connect. Use Redacted for diagnostics instead.
+func (c *SubTaskConfig) RedactedStorage() *SubTaskConfig {
+	result := *c
+	result.LoaderConfig.Dir = objstore.RedactURL(c.LoaderConfig.Dir)
 	return &result
 }
 

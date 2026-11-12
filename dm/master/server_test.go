@@ -2922,3 +2922,26 @@ func (t *testMasterSuite) TestGetLatestMeta() {
 	require.Equal(t.T(), meta.BinLogPos, uint32(11232))
 	require.Equal(t.T(), meta.BinLogGTID, "1-2-100")
 }
+
+// TestSubTaskCfgForAPI covers the serialization used by GetSubTaskCfg. The
+// endpoint feeds sync_diff_inspector's dm-addr mode, so database credentials
+// must reach it while storage credentials stay hidden.
+func TestSubTaskCfgForAPI(t *testing.T) {
+	cfg := config.NewSubTaskConfig()
+	cfg.Name = "task-one"
+	cfg.LoaderConfig.Dir = "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
+	cfg.From.Password = "upstream-secret"
+	cfg.To.Password = "downstream-secret"
+	cfg.To.Security = &security.Security{SSLKeyBytes: []byte("key")}
+
+	out, err := subtaskCfgForAPI(cfg)
+	require.NoError(t, err)
+	require.Contains(t, out, "upstream-secret")
+	require.Contains(t, out, "downstream-secret")
+	require.Contains(t, out, "key")
+	require.NotContains(t, out, "private-sk")
+
+	redacted, err := cfg.Redacted().Toml()
+	require.NoError(t, err)
+	require.NotEqual(t, redacted, out)
+}
