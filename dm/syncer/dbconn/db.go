@@ -257,7 +257,25 @@ func (conn *DBConn) retryableFn(tctx *tcontext.Context, queries, args any) func(
 		if dbutil.IsRetryableError(err) {
 			tctx.L().Warn("execute statements", zap.Int("retry", retryTime),
 				zap.String("queries", utils.TruncateInterface(queries, -1)),
+<<<<<<< HEAD
 				zap.String("arguments", utils.TruncateInterface(args, -1)),
+=======
+				log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
+				log.ShortError(err))
+			return true
+		}
+		return false
+	}
+}
+
+func resetConnRetryableFn(tctx *tcontext.Context, queries, args any) func(int, error) bool {
+	return func(retryTime int, err error) bool {
+		if retry.IsRetryableErrorOnResetConn(err) {
+			tctx.L().Error("retrying reset connection", zap.Int("retry", retryTime),
+				zap.Int("resetRetries", retryTime),
+				zap.String("queries", utils.TruncateInterface(queries, -1)),
+				log.ZapRedactString("arguments", utils.TruncateInterface(args, -1)),
+>>>>>>> 9096744d5c (dbconn(dm): redact arguments when retrying connection resets (#12885))
 				log.ShortError(err))
 			return true
 		}
