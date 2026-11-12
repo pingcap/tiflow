@@ -424,6 +424,14 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	if err := task.Adjust(); err != nil {
 		return nil, err
 	}
+	storedTask, err := s.getTask(ctx, task.Name, openapi.DMAPIGetTaskParams{})
+	if err != nil {
+		return nil, err
+	}
+	if err = validateTaskCredentialReuse(*task, *storedTask); err != nil {
+		return nil, err
+	}
+	*task = restoreTaskCredentials(*task, *storedTask)
 	subTaskConfigList, msg, err := s.checkOpenAPITaskBeforeOperate(ctx, task)
 	if err != nil {
 		return nil, err
