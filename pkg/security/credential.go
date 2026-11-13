@@ -209,12 +209,18 @@ func addVerifyPeerCertificate(tlsCfg *tls.Config, verifyCN []string) {
 			rawCerts [][]byte, verifiedChains [][]*x509.Certificate,
 		) error {
 			cns := make([]string, 0, len(verifiedChains))
-			for _, chains := range verifiedChains {
-				for _, chain := range chains {
-					cns = append(cns, chain.Subject.CommonName)
-					if _, match := checkCN[chain.Subject.CommonName]; match {
-						return nil
-					}
+			for _, chain := range verifiedChains {
+				if len(chain) == 0 {
+					continue
+				}
+				// Only the leaf certificate identifies the caller. Every
+				// certificate in the chain shares the same trust anchor, so
+				// matching a CA or intermediate CN against the allowlist would
+				// let any certificate issued by that CA through.
+				leaf := chain[0]
+				cns = append(cns, leaf.Subject.CommonName)
+				if _, match := checkCN[leaf.Subject.CommonName]; match {
+					return nil
 				}
 			}
 			return errors.Errorf("client certificate authentication failed. "+
