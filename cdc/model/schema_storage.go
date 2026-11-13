@@ -399,9 +399,18 @@ func (ti *TableInfo) HasVirtualColumns() bool {
 // the materialized view feature. A base table with MaterializedViewBase set is
 // not included because it is still a user table and must be replicated.
 func (ti *TableInfo) IsMaterializedViewRelated() bool {
-	return ti.MaterializedView != nil ||
-		ti.MaterializedViewLog != nil ||
-		ti.MaterializedViewShadow != nil
+	return IsMaterializedViewRelated(ti.TableInfo)
+}
+
+// IsMaterializedViewRelated returns whether the TiDB table is managed
+// internally by the materialized view feature.
+func IsMaterializedViewRelated(tableInfo *model.TableInfo) bool {
+	if tableInfo == nil {
+		return false
+	}
+	return tableInfo.MaterializedView != nil ||
+		tableInfo.MaterializedViewLog != nil ||
+		tableInfo.MaterializedViewShadow != nil
 }
 
 // IsEligible returns whether the table is a eligible table
