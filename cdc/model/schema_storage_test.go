@@ -260,6 +260,8 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
 			materializedViewTable := tbl.Clone()
 			configure(materializedViewTable)
 			info := WrapTableInfo(1, "test", 0, materializedViewTable)
