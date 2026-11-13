@@ -45,9 +45,10 @@ func VerifyTables(
 		if f.ShouldIgnoreTable(tableInfo.TableName.Schema, tableInfo.TableName.Table) {
 			return
 		}
-		// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
+		// Sequence and materialized-view internal tables are not supported. TiCDC
+		// filters them instead of reporting them as user-created ineligible tables.
 		// See https://github.com/pingcap/tiflow/issues/4559
-		if tableInfo.IsSequence() {
+		if tableInfo.IsSequence() || tableInfo.IsMaterializedViewRelated() {
 			return
 		}
 		tableInfos = append(tableInfos, tableInfo)

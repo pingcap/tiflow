@@ -537,6 +537,52 @@ func TestHandleJob(t *testing.T) {
 	}
 }
 
+func TestHandleMaterializedViewIndexDDL(t *testing.T) {
+	ddlJobPuller, helper := newMockDDLJobPuller(t, true)
+	defer helper.Close()
+
+	ddlJobPullerImpl := ddlJobPuller.(*ddlJobPullerImpl)
+	ddlJobPullerImpl.setResolvedTs(10)
+
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	require.NoError(t, err)
+	ddlJobPullerImpl.filter = f
+
+	ddl := helper.DDL2Job("CREATE DATABASE test1")
+	skip, err := ddlJobPullerImpl.handleJob(ddl)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	createMaterializedView := helper.DDL2Job("CREATE TABLE test1.mv (id INT PRIMARY KEY, value INT)")
+	createMaterializedView.Type = timodel.ActionCreateMaterializedView
+	createMaterializedView.BinlogInfo.TableInfo.MaterializedView = &timodel.MaterializedViewInfo{}
+	skip, err = ddlJobPullerImpl.handleJob(createMaterializedView)
+	require.NoError(t, err)
+	require.True(t, skip)
+
+	addIndex := helper.DDL2Job("ALTER TABLE test1.mv ADD INDEX idx_value(value)")
+	require.Equal(t, timodel.ActionAddIndex, addIndex.Type)
+	addIndex.BinlogInfo.TableInfo.MaterializedView = &timodel.MaterializedViewInfo{}
+	skip, err = ddlJobPullerImpl.handleJob(addIndex)
+	require.NoError(t, err)
+	require.True(t, skip)
+
+	_, exists := ddlJobPullerImpl.schemaStorage.GetLastSnapshot().PhysicalTableByID(addIndex.TableID)
+	require.False(t, exists)
+
+	createBaseTable := helper.DDL2Job("CREATE TABLE test1.base (id INT PRIMARY KEY, value INT)")
+	createBaseTable.BinlogInfo.TableInfo.MaterializedViewBase = &timodel.MaterializedViewBaseInfo{}
+	skip, err = ddlJobPullerImpl.handleJob(createBaseTable)
+	require.NoError(t, err)
+	require.False(t, skip)
+
+	addBaseTableIndex := helper.DDL2Job("ALTER TABLE test1.base ADD INDEX idx_value(value)")
+	addBaseTableIndex.BinlogInfo.TableInfo.MaterializedViewBase = &timodel.MaterializedViewBaseInfo{}
+	skip, err = ddlJobPullerImpl.handleJob(addBaseTableIndex)
+	require.NoError(t, err)
+	require.False(t, skip)
+}
+
 func TestDDLPuller(t *testing.T) {
 	startTs := uint64(10)
 

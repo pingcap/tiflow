@@ -344,6 +344,10 @@ func (p *ddlJobPullerImpl) handleJob(job *timodel.Job) (skip bool, err error) {
 		}
 	}()
 
+	if model.IsMaterializedViewRelated(job.BinlogInfo.TableInfo) {
+		return true, nil
+	}
+
 	snap := p.schemaStorage.GetLastSnapshot()
 	if err = snap.FillSchemaName(job); err != nil {
 		log.Info("failed to fill schema name for ddl job",

@@ -244,6 +244,39 @@ func TestTableInfoGetterFuncs(t *testing.T) {
 	require.True(t, info.IsSequence())
 	require.False(t, info.IsEligible(false))
 	require.False(t, info.IsEligible(true))
+
+	// Materialized views and their internal tables are always ineligible.
+	tbl.View = nil
+	tbl.Sequence = nil
+	for name, configure := range map[string]func(*timodel.TableInfo){
+		"materialized view": func(table *timodel.TableInfo) {
+			table.MaterializedView = &timodel.MaterializedViewInfo{}
+		},
+		"materialized view log": func(table *timodel.TableInfo) {
+			table.MaterializedViewLog = &timodel.MaterializedViewLogInfo{}
+		},
+		"materialized view shadow": func(table *timodel.TableInfo) {
+			table.MaterializedViewShadow = &timodel.MaterializedViewShadowInfo{}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			materializedViewTable := tbl.Clone()
+			configure(materializedViewTable)
+			info := WrapTableInfo(1, "test", 0, materializedViewTable)
+			require.True(t, info.IsMaterializedViewRelated())
+			require.False(t, info.IsEligible(false))
+			require.False(t, info.IsEligible(true))
+		})
+	}
+
+	// A base table referenced by a materialized view is still a normal user
+	// table and can be force replicated.
+	tbl.MaterializedViewBase = &timodel.MaterializedViewBaseInfo{}
+	info = WrapTableInfo(1, "test", 0, &tbl)
+	require.False(t, info.IsMaterializedViewRelated())
+	require.True(t, info.IsEligible(true))
 }
 
 func TestTableInfoClone(t *testing.T) {

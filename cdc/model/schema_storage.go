@@ -395,11 +395,35 @@ func (ti *TableInfo) HasVirtualColumns() bool {
 	return len(ti.VirtualColumnsOffset) > 0
 }
 
+// IsMaterializedViewRelated returns whether the table is managed internally by
+// the materialized view feature. A base table with MaterializedViewBase set is
+// not included because it is still a user table and must be replicated.
+func (ti *TableInfo) IsMaterializedViewRelated() bool {
+	return IsMaterializedViewRelated(ti.TableInfo)
+}
+
+// IsMaterializedViewRelated returns whether the TiDB table is managed
+// internally by the materialized view feature.
+func IsMaterializedViewRelated(tableInfo *model.TableInfo) bool {
+	if tableInfo == nil {
+		return false
+	}
+	return tableInfo.MaterializedView != nil ||
+		tableInfo.MaterializedViewLog != nil ||
+		tableInfo.MaterializedViewShadow != nil
+}
+
 // IsEligible returns whether the table is a eligible table
 func (ti *TableInfo) IsEligible(forceReplicate bool) bool {
 	// Sequence is not supported yet, TiCDC needs to filter all sequence tables.
 	// See https://github.com/pingcap/tiflow/issues/4559
 	if ti.IsSequence() {
+		return false
+	}
+	// Materialized views and their internal log and shadow tables must never be
+	// replicated. Their contents are maintained by TiDB and cannot be treated as
+	// ordinary user table changes, even when force-replicate is enabled.
+	if ti.IsMaterializedViewRelated() {
 		return false
 	}
 	if forceReplicate {

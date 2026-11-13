@@ -295,10 +295,11 @@ func (s *schemaStorage) shouldIgnoreTable(t *model.TableInfo) bool {
 		return false
 	}
 
-	// Sequence is not supported yet, and always ineligible.
+	// Sequence and materialized-view internal tables are not supported, and
+	// always ineligible.
 	// Skip Warn to avoid confusion.
 	// See https://github.com/pingcap/tiflow/issues/4559
-	if !t.IsSequence() {
+	if !t.IsSequence() && !t.IsMaterializedViewRelated() {
 		log.Warn("skip ineligible table",
 			zap.String("namespace", s.id.Namespace),
 			zap.String("changefeed", s.id.ID),

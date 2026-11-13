@@ -187,6 +187,12 @@ func (f *filter) ShouldIgnoreDMLEvent(
 // 1. By schema name.
 // 2. By table name.
 func (f *filter) ShouldDiscardDDL(ddlType timodel.ActionType, schema, table string, startTs uint64) bool {
+	// Materialized views and their internal tables are maintained by TiDB. None
+	// of their DDLs should be applied to the downstream or schema storage.
+	if isMaterializedViewDDL(ddlType) {
+		return true
+	}
+
 	if !isAllowedDDL(ddlType) {
 		return true
 	}
@@ -253,6 +259,24 @@ func (f *filter) shouldIgnoreStartTs(ts uint64) bool {
 func isAllowedDDL(actionType timodel.ActionType) bool {
 	_, ok := ddlWhiteListMap[actionType]
 	return ok
+}
+
+func isMaterializedViewDDL(actionType timodel.ActionType) bool {
+	switch actionType {
+	case timodel.ActionCreateMaterializedViewLog,
+		timodel.ActionCreateMaterializedView,
+		timodel.ActionDropMaterializedViewLog,
+		timodel.ActionDropMaterializedView,
+		timodel.ActionAlterMaterializedViewRefresh,
+		timodel.ActionAlterMaterializedViewLogPurge,
+		timodel.ActionAlterMaterializedViewAttributes,
+		timodel.ActionMViewRefreshOutOfPlaceCutover,
+		timodel.ActionCreateMaterializedViewShadow,
+		timodel.ActionDropMaterializedViewShadow:
+		return true
+	default:
+		return false
+	}
 }
 
 // IsSchemaDDL returns true if the action type is a schema DDL.
