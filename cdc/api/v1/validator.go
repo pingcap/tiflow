@@ -158,7 +158,7 @@ func verifyCreateChangefeedConfig(
 	if err != nil {
 		return nil, err
 	}
-	tableInfos, ineligibleTables, _, err := entry.VerifyTables(f,
+	tableInfos, ineligibleTables, _, _, err := entry.VerifyTables(f,
 		up.KVStorage, changefeedConfig.StartTS)
 	if err != nil {
 		return nil, err
