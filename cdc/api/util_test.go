@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,7 +75,7 @@ func TestRedactEtcdValueOtherMetadata(t *testing.T) {
 		{"/tidb/cdc/default/default/changefeed/status/test", `{"checkpoint-ts":123}`, `"checkpoint-ts":123`},
 		{"/tidb/cdc/default/default/task/position/capture/test", `{"checkpoint-ts":123,"error":{"message":"token-secret"}}`, `"checkpoint-ts":123`},
 		{"/tidb/cdc/default/default/upstream/1", `{"id":1,"pd-endpoints":"http://127.0.0.1:2379"}`, `"pd-endpoints":"http://127.0.0.1:2379"`},
-		{"/tidb/cdc/default/__cdc_meta__/meta/capture/capture", `{"id":"capture"}`, `"id":"capture"`},
+		{etcd.GetEtcdKeyCaptureInfo("default", "capture"), `{"id":"capture"}`, `"id":"capture"`},
 	} {
 		redacted := RedactEtcdValue([]byte(tc.key), []byte(tc.value))
 		require.Contains(t, redacted, tc.want)

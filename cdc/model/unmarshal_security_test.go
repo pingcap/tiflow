@@ -37,3 +37,21 @@ func TestMetadataUnmarshalErrorDoesNotEchoRawValue(t *testing.T) {
 		})
 	}
 }
+
+func TestMetadataUnmarshalTimeErrorDoesNotEchoValue(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		value interface{ Unmarshal([]byte) error }
+		data  string
+	}{
+		{"changefeed-create-time", &ChangeFeedInfo{}, `{"create-time":"credential-sentinel"}`},
+		{"changefeed-error-time", &ChangeFeedInfo{}, `{"error":{"time":"credential-sentinel"}}`},
+		{"task-position-warning-time", &TaskPosition{}, `{"warning":{"time":"credential-sentinel"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.value.Unmarshal([]byte(tc.data))
+			require.Error(t, err)
+			require.NotContains(t, err.Error(), "credential-sentinel")
+		})
+	}
+}

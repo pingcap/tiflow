@@ -43,6 +43,28 @@ func TestCheckCaptureAlive(t *testing.T) {
 	stateTester.MustApplyPatches()
 }
 
+func TestMalformedChangefeedInfoDoesNotEchoValue(t *testing.T) {
+	changefeedID := model.DefaultChangeFeedID("test")
+	state := NewChangefeedReactorState(etcd.DefaultCDCClusterID, changefeedID)
+	key := etcd.CDCKey{
+		Tp:           etcd.CDCKeyTypeChangefeedInfo,
+		ClusterID:    etcd.DefaultCDCClusterID,
+		ChangefeedID: changefeedID,
+	}
+	err := state.Update(util.NewEtcdKey(key.String()),
+		[]byte(`{"create-time":"credential-sentinel"}`), false)
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "credential-sentinel")
+
+	state.patchAny(key.String(), changefeedInfoTPI, func(value interface{}) (interface{}, bool, error) {
+		return value, false, nil
+	})
+	patch := state.getPatches()[0].(*SingleDataPatch)
+	_, _, err = patch.Func([]byte(`{"create-time":"credential-sentinel"}`))
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "credential-sentinel")
+}
+
 func TestChangefeedStateUpdate(t *testing.T) {
 	changefeedInfo := `
 {

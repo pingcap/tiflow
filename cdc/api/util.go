@@ -100,8 +100,8 @@ func RedactEtcdValue(key, value []byte) string {
 		data = new(model.TaskPosition)
 	case len(parts) == 3 && parts[0] != "" && parts[1] == "upstream" && parts[2] != "":
 		data = new(model.UpstreamInfo)
-	case len(parts) == 4 && parts[0] == "__cdc_meta__" && parts[1] == "meta" &&
-		parts[2] == "capture" && parts[3] != "":
+	case len(parts) == 3 && parts[0] == "__cdc_meta__" &&
+		parts[1] == "capture" && parts[2] != "":
 		data = new(model.CaptureInfo)
 	default:
 		return RedactedEtcdValue

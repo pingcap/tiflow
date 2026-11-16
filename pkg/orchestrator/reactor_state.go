@@ -437,7 +437,7 @@ func (s *ChangefeedReactorState) Update(key util.EtcdKey, value []byte, _ bool) 
 
 // UpdateCDCKey updates the state by a parsed etcd key
 func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) error {
-	var e interface{}
+	var e interface{ Unmarshal([]byte) error }
 	switch key.Tp {
 	case etcd.CDCKeyTypeChangefeedInfo:
 		if key.ChangefeedID != s.ID {
@@ -473,7 +473,7 @@ func (s *ChangefeedReactorState) UpdateCDCKey(key *etcd.CDCKey, value []byte) er
 	default:
 		return nil
 	}
-	if err := json.Unmarshal(value, e); err != nil {
+	if err := e.Unmarshal(value); err != nil {
 		return errors.Trace(err)
 	}
 	if key.Tp == etcd.CDCKeyTypeChangefeedInfo {
@@ -617,7 +617,7 @@ func (s *ChangefeedReactorState) patchAny(key string, tpi interface{}, fn func(i
 			if v != nil {
 				tp := reflect.TypeOf(tpi)
 				e = reflect.New(tp.Elem()).Interface()
-				err := json.Unmarshal(v, e)
+				err := e.(interface{ Unmarshal([]byte) error }).Unmarshal(v)
 				if err != nil {
 					return nil, false, errors.Trace(err)
 				}

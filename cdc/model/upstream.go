@@ -45,7 +45,10 @@ func (c *UpstreamInfo) Marshal() ([]byte, error) {
 // Unmarshal from binary data.
 func (c *UpstreamInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, c)
-	return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
+	if err != nil {
+		return cerror.ErrUnmarshalFailed.GenWithStackByArgs()
+	}
+	return nil
 }
 
 // Clone returns a cloned upstreamInfo
