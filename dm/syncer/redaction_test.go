@@ -120,3 +120,25 @@ func TestValidatorQueryArgumentRedaction(t *testing.T) {
 		require.NoError(t, mock.ExpectationsWereMet())
 	}
 }
+
+func TestDDLContextDiagnosticCopy(t *testing.T) {
+	previous := log.IsRedactLogEnabled()
+	t.Cleanup(func() { log.SetRedactLog(previous) })
+	sql := "ALTER TABLE t ADD v VARCHAR(100) DEFAULT 'private-value'"
+	info := &ddlInfo{originDDL: sql, routedDDL: sql}
+	qec := &queryEventContext{
+		eventContext: ec, ddlSchema: "test", originSQL: sql,
+		needHandleDDLs: []string{sql}, trackInfos: []*ddlInfo{info},
+	}
+	before := qec.String()
+	log.SetRedactLog(true)
+	diagnostic := qec.forLog().String()
+	require.NotContains(t, diagnostic, "private-value")
+	require.Contains(t, diagnostic, "VARCHAR(100)")
+	require.Contains(t, diagnostic, "schema: test")
+	require.Equal(t, before, qec.String())
+	require.Equal(t, sql, info.originDDL)
+	log.SetRedactLog(false)
+	require.Same(t, qec, qec.forLog())
+	require.Same(t, info, info.forLog())
+}

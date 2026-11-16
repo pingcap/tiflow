@@ -55,7 +55,8 @@ func TestSQLFailureLogRedaction(t *testing.T) {
 		if enabled {
 			require.NotContains(t, string(data), "private-value")
 			require.Equal(t, "?", entries[0].ContextMap()["argument"])
-			require.Equal(t, "INSERT INTO t(email) VALUES (?)", entries[0].ContextMap()["query"])
+			require.Contains(t, entries[0].ContextMap()["query"], "INSERT INTO")
+			require.Contains(t, entries[0].ContextMap()["query"], "email")
 			require.Contains(t, entries[0].ContextMap()["error"], "Duplicate entry")
 			require.Contains(t, entries[0].ContextMap()["error"], "1062")
 		} else {

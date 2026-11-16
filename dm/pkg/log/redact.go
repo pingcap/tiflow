@@ -32,10 +32,10 @@ import (
 // an error packet does not expose their boundaries or sensitivity separately.
 var mysqlFormatArgument = regexp.MustCompile(`%%|%[-+# 0-9.*\[\]]*[a-zA-Z]`)
 
-// RedactDBError hides values in known MySQL data errors, including wrapped
-// errors, while retaining error codes and standard reasons. Other errors,
-// including syntax and unsupported-DDL errors, retain their original text.
-// The original error is never changed; execution and retry use that original.
+// RedactDBError hides values in known MySQL data errors and SQL-bearing DM
+// errors while retaining error codes, standard reasons and diagnostic SQL.
+// Other error classes retain their original text. The original error is never
+// changed; execution and retry continue to use that original.
 func RedactDBError(err error) string {
 	if err == nil {
 		return ""
@@ -54,7 +54,7 @@ func redactDBError(err error) (string, bool) {
 	var dmErr *terror.Error
 	// DM errors expose Cause; standard-library wrappers expose Unwrap.
 	for current := err; current != nil; {
-		if typed, ok := current.(*terror.Error); ok && dmErr == nil {
+		if typed, ok := current.(*terror.Error); ok && (dmErr == nil || sqlDiagnosticCode(typed.Code())) {
 			dmErr = typed
 		}
 		if typed, ok := current.(*mysql.MySQLError); ok {
@@ -67,11 +67,29 @@ func redactDBError(err error) (string, bool) {
 		}
 		current = next
 	}
+	if dmErr != nil {
+		cause := ""
+		if dbErr != nil {
+			cause = dbErr.Error()
+		} else if dmErr.Cause() != nil {
+			cause = dmErr.Cause().Error()
+		}
+		message, redactedCause := RedactSQLDiagnostic(int32(dmErr.Code()), dmErr.Message(), cause)
+		if message != dmErr.Message() || redactedCause != cause {
+			return fmt.Sprintf("[code=%d:class=%s:scope=%s:level=%s] %s; cause: %s",
+				dmErr.Code(), dmErr.Class(), dmErr.Scope(), dmErr.Level(), message, redactedCause), true
+		}
+	}
 	if dbErr == nil {
 		return "", false
 	}
+	switch dbErr.Number {
+	case parsermysql.ErrParse, parsermysql.ErrSyntax, parsermysql.ErrNotSupportedYet, parsermysql.ErrUnknown:
+		// Raw driver errors can quote the same SQL literals as their query field.
+		return redactSQLCause(dbErr.Error()), true
+	}
 	// Limit this change to data errors whose messages can contain row values.
-	// SQL/DDL syntax and other free-form diagnostics need a separate policy.
+	// Other MySQL errors without a SQL-bearing DM wrapper retain their text.
 	switch dbErr.Number {
 	case parsermysql.ErrDupEntry, parsermysql.ErrDupEntryWithKeyName,
 		parsermysql.ErrDupEntryAutoincrementCase, parsermysql.ErrTruncatedWrongValue,
@@ -83,15 +101,7 @@ func redactDBError(err error) (string, bool) {
 	default:
 		return "", false
 	}
-	reason := "details redacted"
-	if template := parsermysql.MySQLErrName[dbErr.Number]; template != nil {
-		reason = mysqlFormatArgument.ReplaceAllStringFunc(template.Raw, func(argument string) string {
-			if argument == "%%" {
-				return "%"
-			}
-			return "?"
-		})
-	}
+	reason := mysqlDiagnosticReason(dbErr.Number)
 	text := fmt.Sprintf("MySQL error %d: %s", dbErr.Number, reason)
 	if dmErr != nil {
 		text = fmt.Sprintf("[code=%d:class=%s:scope=%s:level=%s] %s",
@@ -100,9 +110,9 @@ func redactDBError(err error) (string, bool) {
 	return text, true
 }
 
-// WithDBErrorRedaction protects typed MySQL data-error fields, including named
-// and logger-bound errors. SQL fields and other errors retain their original
-// representation. ShortError handles errors formatted before reaching zap.
+// WithDBErrorRedaction protects typed data/SQL error fields, including named
+// and logger-bound errors. Other fields retain their original representation.
+// ShortError handles errors formatted before reaching zap.
 func WithDBErrorRedaction(logger *zap.Logger) *zap.Logger {
 	return logger.WithOptions(zap.WrapCore(func(core zapcore.Core) zapcore.Core {
 		return &dbErrorRedactingCore{Core: core}

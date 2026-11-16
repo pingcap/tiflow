@@ -50,10 +50,10 @@ func TestRedactDBError(t *testing.T) {
 			dbErr := &mysql.MySQLError{Number: tc.code, Message: tc.message}
 			before := dbErr.Error()
 			wrappers := []error{
-				dbErr, errors.Annotate(dbErr, "SQL private-value"), fmt.Errorf("query private-value: %w", dbErr),
-				terror.ErrDBExecuteFailed.Delegate(dbErr, "SQL private-value"),
-				fmt.Errorf("context private-value: %w", terror.ErrDBExecuteFailed.Delegate(dbErr, "SQL private-value")),
-				terror.ErrDBExecuteFailed.Delegate(fmt.Errorf("query private-value: %w", dbErr), "SQL private-value"),
+				dbErr, errors.Annotate(dbErr, "UPDATE t SET v='private-value'"), fmt.Errorf("query private-value: %w", dbErr),
+				terror.ErrDBExecuteFailed.Delegate(dbErr, "UPDATE t SET v='private-value'"),
+				fmt.Errorf("context private-value: %w", terror.ErrDBExecuteFailed.Delegate(dbErr, "UPDATE t SET v='private-value'")),
+				terror.ErrDBExecuteFailed.Delegate(fmt.Errorf("query private-value: %w", dbErr), "UPDATE t SET v='private-value'"),
 			}
 			for _, err := range wrappers {
 				SetRedactLog(true)
@@ -75,10 +75,7 @@ func TestRedactDBError(t *testing.T) {
 		&mysql.MySQLError{Number: 1406, Message: "Data too long for column 'email' at row 123"},
 		&mysql.MySQLError{Number: 1213, Message: "Deadlock found when trying to get lock; try restarting transaction"},
 		&mysql.MySQLError{Number: 1205, Message: "Lock wait timeout exceeded; try restarting transaction"},
-		&mysql.MySQLError{Number: 1064, Message: "syntax error near a SQL fragment"},
-		&mysql.MySQLError{Number: 1235, Message: "This version doesn't yet support a DDL feature"},
 		&mysql.MySQLError{Number: 65000, Message: "unknown server error"},
-		terror.ErrDBExecuteFailed.Delegate(errors.New("network failure"), "SQL text"),
 	} {
 		require.Equal(t, err.Error(), RedactDBError(err))
 	}

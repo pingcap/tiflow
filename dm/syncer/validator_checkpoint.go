@@ -123,7 +123,7 @@ func (c *validatorPersistHelper) createSchemaAndTables(tctx *tcontext.Context) e
 func (c *validatorPersistHelper) createSchema(tctx *tcontext.Context) error {
 	query := fmt.Sprintf("CREATE SCHEMA IF NOT EXISTS %s", dbutil.ColumnName(c.cfg.MetaSchema))
 	_, err := c.db.ExecContext(tctx, query)
-	tctx.L().Info("create checkpoint schema", zap.String("statement", query))
+	tctx.L().Info("create checkpoint schema", zap.String("statement", log.RedactSQL(query)))
 	return err
 }
 
@@ -188,7 +188,7 @@ func (c *validatorPersistHelper) createTable(tctx *tcontext.Context) error {
 			INDEX idx_stage(stage)
 		)`,
 	}
-	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", sqls))
+	tctx.L().Info("create checkpoint and data table", zap.Strings("statements", log.RedactSQLs(sqls)))
 	for _, q := range sqls {
 		if _, err := c.db.ExecContext(tctx, q); err != nil {
 			return err
