@@ -40,6 +40,7 @@ import (
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/filter"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/retry"
 	"github.com/pingcap/tiflow/pkg/sink"
@@ -154,7 +155,7 @@ func (p *processor) AddTableSpan(
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span),
+			logutil.ZapRedactStringer("span", &span),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 		return false, cerror.ErrUnexpected.FastGenByArgs("table start ts must not be 0")
@@ -171,7 +172,7 @@ func (p *processor) AddTableSpan(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				logutil.ZapRedactStringer("span", &span),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -194,7 +195,7 @@ func (p *processor) AddTableSpan(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				logutil.ZapRedactStringer("span", &span),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			return true, nil
@@ -203,7 +204,7 @@ func (p *processor) AddTableSpan(
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				logutil.ZapRedactStringer("span", &span),
 				zap.Uint64("checkpointTs", startTs),
 				zap.Bool("isPrepare", isPrepare))
 			p.removeTable(span)
@@ -219,7 +220,7 @@ func (p *processor) AddTableSpan(
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span),
+			logutil.ZapRedactStringer("span", &span),
 			zap.Uint64("checkpointTs", startTs),
 			zap.Bool("isPrepare", isPrepare))
 	}
@@ -246,7 +247,7 @@ func (p *processor) RemoveTableSpan(span tablepb.Span) bool {
 			zap.String("capture", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return true
 	}
 	return p.sinkManager.r.AsyncStopTable(span)
@@ -274,7 +275,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 				zap.String("captureID", p.captureInfo.ID),
 				zap.String("namespace", p.changefeedID.Namespace),
 				zap.String("changefeed", p.changefeedID.ID),
-				zap.Stringer("span", &span),
+				logutil.ZapRedactStringer("span", &span),
 				zap.Bool("isPrepare", isPrepare))
 		}
 
@@ -290,7 +291,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span),
+			logutil.ZapRedactStringer("span", &span),
 			zap.Uint64("tableResolvedTs", tableResolvedTs),
 			zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 			zap.Uint64("globalCheckpointTs", globalCheckpointTs),
@@ -303,7 +304,7 @@ func (p *processor) IsAddTableSpanFinished(span tablepb.Span, isPrepare bool) bo
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Stringer("span", &span),
+		logutil.ZapRedactStringer("span", &span),
 		zap.Uint64("tableResolvedTs", tableResolvedTs),
 		zap.Uint64("tableCheckpointTs", tableCheckpointTs),
 		zap.Uint64("globalCheckpointTs", globalCheckpointTs),
@@ -324,7 +325,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			zap.String("captureID", p.captureInfo.ID),
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return 0, true
 	}
 
@@ -335,7 +336,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 			zap.String("namespace", p.changefeedID.Namespace),
 			zap.String("changefeed", p.changefeedID.ID),
 			zap.Uint64("checkpointTs", stats.CheckpointTs),
-			zap.Stringer("span", &span),
+			logutil.ZapRedactStringer("span", &span),
 			zap.Any("tableStatus", state))
 		return 0, false
 	}
@@ -349,7 +350,7 @@ func (p *processor) IsRemoveTableSpanFinished(span tablepb.Span) (model.Ts, bool
 		zap.String("captureID", p.captureInfo.ID),
 		zap.String("namespace", p.changefeedID.Namespace),
 		zap.String("changefeed", p.changefeedID.ID),
-		zap.Stringer("span", &span),
+		logutil.ZapRedactStringer("span", &span),
 		zap.Uint64("checkpointTs", stats.CheckpointTs))
 
 	return stats.CheckpointTs, true

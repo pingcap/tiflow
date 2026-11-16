@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -263,7 +264,7 @@ func handleEventEntry(
 				zap.Uint64("regionID", regionID),
 				zap.Int64("tableID", state.region.span.TableID),
 				zap.Uint64("requestID", state.requestID),
-				zap.Stringer("span", &state.region.span))
+				logutil.ZapRedactStringer("span", &state.region.span))
 
 			for _, cachedEvent := range state.matcher.matchCachedRow(true) {
 				revent, err := assembleRowEvent(regionID, cachedEvent)

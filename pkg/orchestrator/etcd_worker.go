@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/chdelay"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	pkgutil "github.com/pingcap/tiflow/pkg/util"
@@ -220,7 +221,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				log.Info("Stale Etcd event dropped",
 					zap.Int64("eventRevision", response.Header.GetRevision()),
 					zap.Int64("previousRevision", worker.revision),
-					zap.Any("events", response.Events),
+					logutil.ZapRedactAny("events", response.Events),
 					zap.String("role", role))
 				continue
 			}
@@ -362,7 +363,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 					"owner resign or externally delete operation"+
 					"exit etcd worker and campaign again",
 					zap.String("ownerMetaKey", worker.ownerMetaKey),
-					zap.String("value", string(event.Kv.Value)),
+					logutil.ZapRedactString("value", string(event.Kv.Value)),
 					zap.Error(err))
 				return err
 			}

@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	mock_etcd "github.com/pingcap/tiflow/pkg/etcd/mock"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -1073,7 +1074,7 @@ func (e *MockTableExecutor) AddTableSpan(
 ) (bool, error) {
 	startTs := checkpoint.CheckpointTs
 	log.Info("AddTableSpan",
-		zap.String("span", span.String()),
+		logutil.ZapRedactString("span", span.String()),
 		zap.Any("startTs", startTs),
 		zap.Bool("isPrepare", isPrepare))
 
@@ -1105,7 +1106,7 @@ func (e *MockTableExecutor) IsAddTableSpanFinished(span tablepb.Span, isPrepare 
 	_, ok := e.tables.Get(span)
 	if !ok {
 		log.Panic("table which was added is not found",
-			zap.String("span", span.String()),
+			logutil.ZapRedactString("span", span.String()),
 			zap.Bool("isPrepare", isPrepare))
 	}
 
@@ -1130,7 +1131,7 @@ func (e *MockTableExecutor) IsAddTableSpanFinished(span tablepb.Span, isPrepare 
 func (e *MockTableExecutor) RemoveTableSpan(span tablepb.Span) bool {
 	state, ok := e.tables.Get(span)
 	if !ok {
-		log.Warn("table to be remove is not found", zap.String("span", span.String()))
+		log.Warn("table to be remove is not found", logutil.ZapRedactString("span", span.String()))
 		return true
 	}
 	switch state {
@@ -1140,7 +1141,7 @@ func (e *MockTableExecutor) RemoveTableSpan(span tablepb.Span) bool {
 	default:
 	}
 	// the current `processor implementation, does not consider table's state
-	log.Info("RemoveTableSpan", zap.String("span", span.String()), zap.Any("state", state))
+	log.Info("RemoveTableSpan", logutil.ZapRedactString("span", span.String()), zap.Any("state", state))
 
 	args := e.Called(span)
 	if args.Bool(0) {
@@ -1155,13 +1156,13 @@ func (e *MockTableExecutor) IsRemoveTableSpanFinished(span tablepb.Span) (model.
 	if !ok {
 		// the real `table executor` processor, would panic in such case.
 		log.Warn("table to be removed is not found",
-			zap.String("span", span.String()))
+			logutil.ZapRedactString("span", span.String()))
 		return 0, true
 	}
 	args := e.Called(span)
 	if args.Bool(1) {
 		log.Info("remove table finished, remove it from the executor",
-			zap.String("span", span.String()), zap.Any("state", state))
+			logutil.ZapRedactString("span", span.String()), zap.Any("state", state))
 		e.tables.Delete(span)
 	} else {
 		// revert the state back to old state, assume it's `replicating`,

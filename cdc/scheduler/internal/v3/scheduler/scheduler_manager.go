@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/member"
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"go.uber.org/zap"
 )
@@ -108,7 +109,7 @@ func (sm *Manager) MoveTable(span tablepb.Span, target model.CaptureID) {
 			"since the last triggered task not finished",
 			zap.String("namespace", sm.changefeedID.Namespace),
 			zap.String("changefeed", sm.changefeedID.ID),
-			zap.String("span", span.String()),
+			logutil.ZapRedactString("span", span.String()),
 			zap.String("targetCapture", target))
 	}
 }

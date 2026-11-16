@@ -21,12 +21,17 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestCheckCaptureAlive(t *testing.T) {
@@ -714,4 +719,44 @@ func TestCheckChangefeedNormal(t *testing.T) {
 	state.CheckChangefeedNormal()
 	stateTester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, uint64(2))
+}
+
+func TestUpdateFailureRedactsValue(t *testing.T) {
+	// An undecodable changefeed info, whose raw value may contain the sink URI.
+	const value = `{"sink-uri": "mysql://root:verysecure@127.0.0.1:3306/"`
+	testCases := []struct {
+		name     string
+		mode     redact.RedactionMode
+		expected string
+	}{
+		{name: "off", mode: redact.RedactionModeOff, expected: value},
+		{name: "on", mode: redact.RedactionModeOn, expected: "?"},
+		{name: "marker", mode: redact.RedactionModeMarker, expected: "‹" + value + "›"},
+	}
+	originalMode := redact.GetRedactionMode()
+	t.Cleanup(func() { redact.SetRedactionMode(originalMode) })
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			redact.SetRedactionMode(tc.mode)
+			core, logs := observer.New(zapcore.DebugLevel)
+			restore := log.ReplaceGlobals(zap.New(core), nil)
+			defer restore()
+
+			state := NewChangefeedReactorState(etcd.DefaultCDCClusterID,
+				model.DefaultChangeFeedID("test1"))
+			key := util.NewEtcdKey(etcd.DefaultClusterAndNamespacePrefix + "/changefeed/info/test1")
+			err := state.Update(key, []byte(value), false)
+			require.Error(t, err)
+
+			entries := logs.FilterMessage("failed to update status").All()
+			require.Len(t, entries, 1)
+			fields := entries[0].ContextMap()
+			require.Equal(t, key.String(), fields["key"])
+			require.Equal(t, tc.expected, fields["value"])
+			if tc.mode == redact.RedactionModeOn {
+				require.NotContains(t, fmt.Sprint(fields), "verysecure")
+			}
+		})
+	}
 }

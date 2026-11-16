@@ -25,9 +25,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func getTestingContext() context.Context {
-	// nolint:govet
-	ctx, _ := context.WithTimeout(context.Background(), time.Second*3)
+func getTestingContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	t.Cleanup(cancel)
 	return ctx
 }
 
@@ -35,7 +36,7 @@ func TestSchemaRegistry(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	ctx := getTestingContext()
+	ctx := getTestingContext(t)
 	manager, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
@@ -107,7 +108,7 @@ func TestSchemaRegistryBad(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	ctx := getTestingContext()
+	ctx := getTestingContext(t)
 	_, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:808", nil)
 	require.Error(t, err)
 
@@ -119,7 +120,7 @@ func TestSchemaRegistryIdempotent(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	ctx := getTestingContext()
+	ctx := getTestingContext(t)
 	manager, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 
@@ -164,7 +165,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 	startHTTPInterceptForTestingRegistry()
 	defer stopHTTPInterceptForTestingRegistry()
 
-	ctx := getTestingContext()
+	ctx := getTestingContext(t)
 	manager, err := NewConfluentSchemaManager(ctx, "http://127.0.0.1:8081", nil)
 	require.NoError(t, err)
 

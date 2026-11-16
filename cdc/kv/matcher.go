@@ -16,6 +16,7 @@ package kv
 import (
 	"github.com/pingcap/kvproto/pkg/cdcpb"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -106,7 +107,7 @@ func (m *matcher) matchCachedRow(initialized bool) []*cdcpb.Event_Row {
 			// prewrite log before initialized, a committed log  with
 			// the same key and start-ts must have been received.
 			log.Info("ignore commit event without prewrite",
-				zap.Binary("key", cacheEntry.GetKey()),
+				logutil.ZapRedactAny("key", cacheEntry.GetKey()),
 				zap.Uint64("startTs", cacheEntry.GetStartTs()))
 			continue
 		}

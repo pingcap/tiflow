@@ -23,6 +23,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	pd "github.com/tikv/pd/client"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -46,6 +47,8 @@ type Credential struct {
 
 	ClientUserRequired bool     `toml:"client-user-required" json:"client-user-required"`
 	ClientAllowedUser  []string `toml:"client-allowed-user" json:"client-allowed-user"`
+
+	RedactInfoLog logutil.RedactInfoLogType `toml:"redact-info-log" json:"redact-info-log"`
 }
 
 // Value implements the driver.Valuer interface

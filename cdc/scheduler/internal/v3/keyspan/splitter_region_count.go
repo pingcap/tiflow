@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/tikv/client-go/v2/tikv"
 	"go.uber.org/zap"
 )
@@ -53,7 +54,7 @@ func (m *regionCountSplitter) split(
 		log.Warn("schedulerv3: list regions failed, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.String("span", span.String()),
+			logutil.ZapRedactString("span", span.String()),
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
@@ -61,7 +62,7 @@ func (m *regionCountSplitter) split(
 		log.Info("schedulerv3: skip split span by region count",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.String("span", span.String()),
+			logutil.ZapRedactString("span", span.String()),
 			zap.Int("totalCaptures", captureNum),
 			zap.Int("regionCount", len(regions)),
 			zap.Int("regionThreshold", m.regionThreshold))
@@ -82,10 +83,10 @@ func (m *regionCountSplitter) split(
 			log.Warn("schedulerv3: list region out of order detected",
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.String("changefeed", m.changefeedID.ID),
-				zap.String("span", span.String()),
-				zap.Stringer("lastSpan", &spans[len(spans)-1]),
-				zap.String("startKey", hex.EncodeToString(startKey)),
-				zap.String("endKey", hex.EncodeToString(endKey)))
+				logutil.ZapRedactString("span", span.String()),
+				logutil.ZapRedactStringer("lastSpan", &spans[len(spans)-1]),
+				logutil.ZapRedactString("startKey", hex.EncodeToString(startKey)),
+				logutil.ZapRedactString("endKey", hex.EncodeToString(endKey)))
 			return []tablepb.Span{span}
 		}
 		spans = append(spans, tablepb.Span{
@@ -111,7 +112,7 @@ func (m *regionCountSplitter) split(
 	log.Info("schedulerv3: split span by region count",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.String("span", span.String()),
+		logutil.ZapRedactString("span", span.String()),
 		zap.Int("spans", len(spans)),
 		zap.Int("totalCaptures", captureNum),
 		zap.Int("regionCount", len(regions)),

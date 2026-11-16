@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/transport"
 	"github.com/pingcap/tiflow/cdc/scheduler/schedulepb"
 	"github.com/pingcap/tiflow/pkg/config"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
@@ -421,7 +422,7 @@ func (c *coordinator) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) 
 			log.Panic("invalid message no destination or unknown message type",
 				zap.String("namespace", c.changefeedID.Namespace),
 				zap.String("changefeed", c.changefeedID.ID),
-				zap.Any("message", m))
+				logutil.ZapRedactAny("message", m))
 		}
 
 		epoch := schedulepb.ProcessorEpoch{}

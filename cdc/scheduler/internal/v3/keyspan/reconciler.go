@@ -24,6 +24,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/scheduler/internal/v3/replication"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/pingcap/tiflow/pkg/upstream"
@@ -150,10 +151,10 @@ func (m *Reconciler) Reconcile(
 				zap.String("namespace", m.changefeedID.Namespace),
 				zap.Int64("tableID", tableID),
 				zap.Int("holes", len(holes)),
-				zap.String("spanStart", tableStart.String()),
-				zap.String("spanEnd", tableEnd.String()),
-				zap.String("foundStart", coveredSpans[0].String()),
-				zap.String("foundEnd", coveredSpans[len(coveredSpans)-1].String()))
+				logutil.ZapRedactString("spanStart", tableStart.String()),
+				logutil.ZapRedactString("spanEnd", tableEnd.String()),
+				logutil.ZapRedactString("foundStart", coveredSpans[0].String()),
+				logutil.ZapRedactString("foundEnd", coveredSpans[len(coveredSpans)-1].String()))
 			spans := make([]tablepb.Span, 0, len(coveredSpans)+len(holes))
 			spans = append(spans, coveredSpans...)
 			for _, s := range holes {

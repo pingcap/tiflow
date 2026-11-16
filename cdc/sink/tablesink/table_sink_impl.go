@@ -22,6 +22,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/cdc/sink/dmlsink"
 	"github.com/pingcap/tiflow/cdc/sink/tablesink/state"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tikv/client-go/v2/oracle"
@@ -239,7 +240,7 @@ func (e *EventTableSink[E, P]) freeze() {
 			log.Info("Stopping table sink",
 				zap.String("namespace", e.changefeedID.Namespace),
 				zap.String("changefeed", e.changefeedID.ID),
-				zap.Stringer("span", &e.span),
+				logutil.ZapRedactStringer("span", &e.span),
 				zap.Uint64("checkpointTs", stoppingCheckpointTs.Ts))
 			break
 		}
@@ -257,7 +258,7 @@ func (e *EventTableSink[E, P]) markAsClosed() (modified bool) {
 			log.Info("Table sink stopped",
 				zap.String("namespace", e.changefeedID.Namespace),
 				zap.String("changefeed", e.changefeedID.ID),
-				zap.Stringer("span", &e.span),
+				logutil.ZapRedactStringer("span", &e.span),
 				zap.Uint64("checkpointTs", stoppedCheckpointTs.Ts))
 			return true
 		}

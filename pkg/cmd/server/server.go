@@ -70,6 +70,8 @@ func (o *Options) addFlags(cmd *cobra.Command) {
 
 	cmd.Flags().StringVar(&o.ServerConfig.LogFile, "log-file", o.ServerConfig.LogFile, "log file path")
 	cmd.Flags().StringVar(&o.ServerConfig.LogLevel, "log-level", o.ServerConfig.LogLevel, "log level (etc: debug|info|warn|error)")
+	cmd.Flags().Var(&o.ServerConfig.Security.RedactInfoLog, "redact-info-log",
+		"whether to enable the log redaction (false|true|\"MARKER\")")
 
 	cmd.Flags().StringVar(&o.ServerConfig.DataDir, "data-dir", o.ServerConfig.DataDir, "the path to the directory used to store TiCDC-generated data")
 
@@ -105,7 +107,13 @@ func (o *Options) run(cmd *cobra.Command) error {
 	})
 	defer cancel()
 
-	_, err := ticdcutil.GetTimezone(o.ServerConfig.TZ)
+	// Initialize log redaction settings
+	err := logutil.InitLogRedactionFromType(o.ServerConfig.Security.RedactInfoLog)
+	if err != nil {
+		return errors.Annotate(err, "failed to initialize log redaction")
+	}
+
+	_, err = ticdcutil.GetTimezone(o.ServerConfig.TZ)
 	if err != nil {
 		return errors.Annotate(err, "can not load timezone, Please specify the time zone through environment variable `TZ` or command line parameters `--tz`")
 	}
@@ -196,6 +204,8 @@ func (o *Options) complete(cmd *cobra.Command) error {
 			cfg.Security.KeyPath = o.ServerConfig.Security.KeyPath
 		case "cert-allowed-cn":
 			cfg.Security.CertAllowedCN = o.ServerConfig.Security.CertAllowedCN
+		case "redact-info-log":
+			cfg.Security.RedactInfoLog = o.ServerConfig.Security.RedactInfoLog
 		case "sort-dir":
 			// user specified sorter dir should not take effect, it's always `/tmp/sorter`
 			// if user try to set sort-dir by flag, warn it.
@@ -254,6 +264,8 @@ func (o *Options) getCredential() *security.Credential {
 		CertPath:      o.CertPath,
 		KeyPath:       o.KeyPath,
 		CertAllowedCN: certAllowedCN,
+		// Keep the redaction flag when complete replaces the security config.
+		RedactInfoLog: o.ServerConfig.Security.RedactInfoLog,
 	}
 }
 

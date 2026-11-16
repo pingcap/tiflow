@@ -19,6 +19,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/memquota"
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap"
 )
 
@@ -87,7 +88,7 @@ func (a *tableSinkAdvancer) advance(isLastTime bool) (err error) {
 	log.Debug("check should advance or not",
 		zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 		zap.String("changefeed", a.task.tableSink.changefeed.ID),
-		zap.Stringer("span", &a.task.span),
+		logutil.ZapRedactStringer("span", &a.task.span),
 		zap.Bool("splitTxn", a.splitTxn),
 		zap.Uint64("currTxnCommitTs", a.currTxnCommitTs),
 		zap.Uint64("lastTxnCommitTs", a.lastTxnCommitTs),
@@ -168,7 +169,7 @@ func (a *tableSinkAdvancer) tryAdvanceAndAcquireMem(
 		log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 			zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 			zap.String("changefeed", a.task.tableSink.changefeed.ID),
-			zap.Stringer("span", &a.task.span),
+			logutil.ZapRedactStringer("span", &a.task.span),
 			zap.Uint64("memory", a.usedMem-a.availableMem))
 		a.availableMem = a.usedMem
 	}
@@ -200,7 +201,7 @@ func (a *tableSinkAdvancer) tryAdvanceAndAcquireMem(
 				log.Debug("MemoryQuotaTracing: try acquire memory for table sink task",
 					zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 					zap.String("changefeed", a.task.tableSink.changefeed.ID),
-					zap.Stringer("span", &a.task.span),
+					logutil.ZapRedactStringer("span", &a.task.span),
 					zap.Uint64("memory", requestMemSize))
 			}
 		} else {
@@ -213,7 +214,7 @@ func (a *tableSinkAdvancer) tryAdvanceAndAcquireMem(
 				log.Debug("MemoryQuotaTracing: force acquire memory for table sink task",
 					zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 					zap.String("changefeed", a.task.tableSink.changefeed.ID),
-					zap.Stringer("span", &a.task.span),
+					logutil.ZapRedactStringer("span", &a.task.span),
 					zap.Uint64("memory", requestMemSize))
 			} else {
 				// NOTE: if splitTxn is true it's not required to force acquire memory.
@@ -226,7 +227,7 @@ func (a *tableSinkAdvancer) tryAdvanceAndAcquireMem(
 				log.Debug("MemoryQuotaTracing: block acquire memory for table sink task",
 					zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 					zap.String("changefeed", a.task.tableSink.changefeed.ID),
-					zap.Stringer("span", &a.task.span),
+					logutil.ZapRedactStringer("span", &a.task.span),
 					zap.Uint64("memory", requestMemSize))
 			}
 		}
@@ -283,7 +284,7 @@ func (a *tableSinkAdvancer) cleanup() {
 		log.Debug("MemoryQuotaTracing: refund memory for table sink task",
 			zap.String("namespace", a.task.tableSink.changefeed.Namespace),
 			zap.String("changefeed", a.task.tableSink.changefeed.ID),
-			zap.Stringer("span", &a.task.span),
+			logutil.ZapRedactStringer("span", &a.task.span),
 			zap.Uint64("memory", a.availableMem-a.usedMem))
 	}
 }
@@ -301,7 +302,7 @@ func advanceTableSinkWithBatchID(
 	log.Debug("Advance table sink with batch ID",
 		zap.String("namespace", t.tableSink.changefeed.Namespace),
 		zap.String("changefeed", t.tableSink.changefeed.ID),
-		zap.Stringer("span", &t.span),
+		logutil.ZapRedactStringer("span", &t.span),
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {
@@ -320,7 +321,7 @@ func advanceTableSink(
 	log.Debug("Advance table sink without batch ID",
 		zap.String("namespace", t.tableSink.changefeed.Namespace),
 		zap.String("changefeed", t.tableSink.changefeed.ID),
-		zap.Stringer("span", &t.span),
+		logutil.ZapRedactStringer("span", &t.span),
 		zap.Any("resolvedTs", resolvedTs),
 		zap.Uint64("size", size))
 	if size > 0 {

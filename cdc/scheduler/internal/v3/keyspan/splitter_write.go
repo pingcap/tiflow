@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/pdutil"
 	"go.uber.org/zap"
 )
@@ -65,7 +66,7 @@ func (m *writeSplitter) split(
 		log.Warn("schedulerv3: scan regions failed, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.String("span", span.String()),
+			logutil.ZapRedactString("span", span.String()),
 			zap.Error(err))
 		return nil
 	}
@@ -76,7 +77,7 @@ func (m *writeSplitter) split(
 			" the maxSpanRegionLimit, skip split span",
 			zap.String("namespace", m.changefeedID.Namespace),
 			zap.String("changefeed", m.changefeedID.ID),
-			zap.String("span", span.String()),
+			logutil.ZapRedactString("span", span.String()),
 			zap.Error(err))
 		return []tablepb.Span{span}
 	}
@@ -85,7 +86,7 @@ func (m *writeSplitter) split(
 	log.Info("schedulerv3: split span by written keys",
 		zap.String("namespace", m.changefeedID.Namespace),
 		zap.String("changefeed", m.changefeedID.ID),
-		zap.String("span", span.String()),
+		logutil.ZapRedactString("span", span.String()),
 		zap.Ints("perSpanRegionCounts", splitInfo.RegionCounts),
 		zap.Uint64s("weights", splitInfo.Weights),
 		zap.Int("spans", len(splitInfo.Spans)),
@@ -260,8 +261,8 @@ func (m *writeSplitter) splitRegionsByWrittenKeysV1(
 			zap.Int("regionsLength", len(regions)),
 			zap.Int("restSpans", restSpans),
 			zap.Int64("restWeight", restWeight),
-			zap.Any("prevSpan", spans[len(spans)-2]),
-			zap.Any("lastSpan", spans[len(spans)-1]),
+			logutil.ZapRedactAny("prevSpan", spans[len(spans)-2]),
+			logutil.ZapRedactAny("lastSpan", spans[len(spans)-1]),
 		)
 	}
 	return &splitRegionsInfo{

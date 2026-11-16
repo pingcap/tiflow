@@ -27,6 +27,7 @@ import (
 	"github.com/pingcap/tiflow/cdc/processor/sourcemanager/sorter/pebble/encoding"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	"github.com/pingcap/tiflow/pkg/chann"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/spanz"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/zap"
@@ -107,7 +108,7 @@ func (s *EventSorter) AddTable(span tablepb.Span, startTs model.Ts) {
 		log.Warn("add an exist table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return
 	}
 	state := &tableState{
@@ -127,7 +128,7 @@ func (s *EventSorter) RemoveTable(span tablepb.Span) {
 		log.Warn("remove an unexist table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 		return
 	}
 	s.tables.Delete(span)
@@ -146,7 +147,7 @@ func (s *EventSorter) Add(span tablepb.Span, events ...*model.PolymorphicEvent) 
 		log.Panic("add events into an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 	}
 
 	maxCommitTs := state.maxReceivedCommitTs.Load()
@@ -195,7 +196,7 @@ func (s *EventSorter) FetchByTable(span tablepb.Span, lowerBound, upperBound sor
 		log.Panic("fetch unresolved events",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span),
+			logutil.ZapRedactStringer("span", &span),
 			zap.Uint64("upperBound", upperBound.CommitTs),
 			zap.Uint64("lowerBound", lowerBound.CommitTs),
 			zap.Uint64("resolved", sortedResolved))
@@ -253,7 +254,7 @@ func (s *EventSorter) GetStatsByTable(span tablepb.Span) sorter.TableStats {
 		log.Panic("Get stats from an non-existent table",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span))
+			logutil.ZapRedactStringer("span", &span))
 	}
 
 	maxCommitTs := state.maxReceivedCommitTs.Load()
@@ -413,7 +414,7 @@ func (s *EventSorter) batchCommitAndUpdateResolvedTs(
 					log.Debug("Table is removed, skip updating resolved",
 						zap.String("namespace", s.changefeedID.Namespace),
 						zap.String("changefeed", s.changefeedID.ID),
-						zap.Stringer("span", &span),
+						logutil.ZapRedactStringer("span", &span),
 						zap.Uint64("resolved", resolved))
 					return true
 				}
@@ -531,7 +532,7 @@ func (s *EventSorter) cleanTable(
 		log.Info("clean stale table range fails",
 			zap.String("namespace", s.changefeedID.Namespace),
 			zap.String("changefeed", s.changefeedID.ID),
-			zap.Stringer("span", &span),
+			logutil.ZapRedactStringer("span", &span),
 			zap.Error(err))
 		return err
 	}

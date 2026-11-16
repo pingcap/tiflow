@@ -29,6 +29,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/rowcodec"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/integrity"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/quotes"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -901,7 +902,7 @@ func BuildTiDBTableInfoImpl(
 			if !flag.IsHandleKey() {
 				log.Panic("Primary key must be handle key",
 					zap.String("table", tableName),
-					zap.Any("columns", columns),
+					logutil.ZapRedactAny("columns", columns),
 					zap.Any("indexColumns", indexColumns))
 			}
 			// just set it for test compatibility,
@@ -915,7 +916,7 @@ func BuildTiDBTableInfoImpl(
 			if !flag.IsPrimaryKey() && !flag.IsUniqueKey() {
 				log.Panic("Handle key must either be primary key or unique key",
 					zap.String("table", tableName),
-					zap.Any("columns", columns),
+					logutil.ZapRedactAny("columns", columns),
 					zap.Any("indexColumns", indexColumns))
 			}
 		}
@@ -987,7 +988,7 @@ func BuildTiDBTableInfoImpl(
 					zap.String("table", tableName),
 					zap.Any("colOffsets", colOffsets),
 					zap.String("indexName", indexInfo.Name.O),
-					zap.Any("columns", columns),
+					logutil.ZapRedactAny("columns", columns),
 					zap.Any("indexColumns", indexColumns))
 			}
 			hasHandleIndex = true
@@ -1009,7 +1010,7 @@ func BuildTiDBTableInfoImpl(
 	if hasPrimaryKeyColumn != hasPrimaryKeyIndex {
 		log.Panic("Primary key column and primary key index is not consistent",
 			zap.String("table", tableName),
-			zap.Any("columns", columns),
+			logutil.ZapRedactAny("columns", columns),
 			zap.Any("indexColumns", indexColumns),
 			zap.Bool("hasPrimaryKeyColumn", hasPrimaryKeyColumn),
 			zap.Bool("hasPrimaryKeyIndex", hasPrimaryKeyIndex))
@@ -1224,7 +1225,7 @@ func trySplitAndSortUpdateEvent(
 		// begin; insert into t (id) values (1); delete from t where id=1; commit;
 		// Just ignore these row changed events.
 		if colLen == 0 && preColLen == 0 {
-			log.Warn("skip emit empty row event", zap.Any("event", e))
+			log.Warn("skip emit empty row event", logutil.ZapRedactAny("event", e))
 			continue
 		}
 
@@ -1311,8 +1312,8 @@ func SplitUpdateEvent(
 		zap.Uint64("commitTs", updateEvent.CommitTs),
 		zap.String("schema", updateEvent.TableInfo.TableName.Schema),
 		zap.String("table", updateEvent.TableInfo.GetTableName()),
-		zap.Any("preCols", updateEvent.PreColumns),
-		zap.Any("cols", updateEvent.Columns))
+		logutil.ZapRedactAny("preCols", updateEvent.PreColumns),
+		logutil.ZapRedactAny("cols", updateEvent.Columns))
 
 	return &deleteEvent, &insertEvent, nil
 }
@@ -1324,7 +1325,7 @@ func (t *SingleTableTxn) Append(row *RowChangedEvent) {
 			zap.Uint64("startTs", t.StartTs),
 			zap.Uint64("commitTs", t.CommitTs),
 			zap.Any("table", t.GetPhysicalTableID()),
-			zap.Any("row", row))
+			logutil.ZapRedactAny("row", row))
 	}
 	t.Rows = append(t.Rows, row)
 }

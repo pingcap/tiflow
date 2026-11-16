@@ -16,6 +16,7 @@ package logutil
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -26,6 +27,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/logutil/redact"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"google.golang.org/grpc/grpclog"
@@ -348,4 +350,24 @@ func InitGinLogWritter() io.Writer {
 	logFunc, _ = levelToFunc(logger, zapcore.ErrorLevel)
 	gin.DefaultErrorWriter = &loggerWriter{logFunc: logFunc}
 	return gin.DefaultErrorWriter
+}
+
+// ZapRedactString returns a zap field with redacted string content
+func ZapRedactString(key, value string) zap.Field {
+	return redact.ZapString(key, value)
+}
+
+// ZapRedactAny returns a zap field with redacted content
+func ZapRedactAny(key string, value interface{}) zap.Field {
+	return redact.ZapAny(key, value)
+}
+
+// ZapRedactStringer returns a zap field with redacted content
+func ZapRedactStringer(key string, value fmt.Stringer) zap.Field {
+	return redact.ZapStringer(key, value)
+}
+
+// ZapRedactStrings returns a zap field with redacted content
+func ZapRedactStrings(key string, value []string) zap.Field {
+	return redact.ZapStrings(key, value)
 }

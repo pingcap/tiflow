@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
+	"github.com/pingcap/tiflow/pkg/logutil"
 	"github.com/pingcap/tiflow/pkg/p2p"
 	"github.com/pingcap/tiflow/pkg/version"
 	"go.etcd.io/etcd/client/v3/concurrency"
@@ -259,7 +260,7 @@ func (a *agent) handleMessage(msg []*schedulepb.Message) (result []*schedulepb.M
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Any("message", message))
+				logutil.ZapRedactAny("message", message))
 		}
 	}
 	return
@@ -275,7 +276,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 			log.Warn("schedulerv3: CheckpointTs is greater than ResolvedTs",
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.String("span", span.String()))
+				logutil.ZapRedactString("span", span.String()))
 		}
 		if table.task != nil && table.task.IsRemove {
 			status.State = tablepb.TableStateStopping
@@ -307,7 +308,7 @@ func (a *agent) handleMessageHeartbeat(request *schedulepb.Heartbeat) (*schedule
 		zap.String("capture", a.CaptureID),
 		zap.String("namespace", a.ChangeFeedID.Namespace),
 		zap.String("changefeed", a.ChangeFeedID.ID),
-		zap.Any("message", message))
+		logutil.ZapRedactAny("message", message))
 
 	return message, request.GetBarrier()
 }
@@ -370,8 +371,8 @@ func (a *agent) handleMessageDispatchTableRequest(
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.String("span", span.String()),
-				zap.Any("request", request))
+				logutil.ZapRedactString("span", span.String()),
+				logutil.ZapRedactAny("request", request))
 			return
 		}
 		task = &dispatchTableTask{
@@ -385,7 +386,7 @@ func (a *agent) handleMessageDispatchTableRequest(
 			zap.String("capture", a.CaptureID),
 			zap.String("namespace", a.ChangeFeedID.Namespace),
 			zap.String("changefeed", a.ChangeFeedID.ID),
-			zap.Any("request", request))
+			logutil.ZapRedactAny("request", request))
 		return
 	}
 	table.injectDispatchTableTask(task)
@@ -490,7 +491,7 @@ func (a *agent) sendMsgs(ctx context.Context, msgs []*schedulepb.Message) error 
 				zap.String("capture", a.CaptureID),
 				zap.String("namespace", a.ChangeFeedID.Namespace),
 				zap.String("changefeed", a.ChangeFeedID.ID),
-				zap.Any("message", m))
+				logutil.ZapRedactAny("message", m))
 		}
 		m.Header = &schedulepb.Message_Header{
 			Version:        a.Version,
