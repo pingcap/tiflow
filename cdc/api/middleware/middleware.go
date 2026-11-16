@@ -119,6 +119,13 @@ func AuthenticateMiddleware(capture capture.Capture) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		serverCfg := config.GetGlobalServerConfig()
 		if serverCfg.Security.ClientUserRequired {
+			if _, _, ok := ctx.Request.BasicAuth(); !ok {
+				err := errors.ErrCredentialNotFound.GenWithStackByArgs(
+					"please specify the user and password via authorization header")
+				ctx.IndentedJSON(http.StatusUnauthorized, model.NewHTTPError(err))
+				ctx.Abort()
+				return
+			}
 			up, err := getUpstream(capture)
 			if err != nil {
 				_ = ctx.Error(err)
@@ -146,11 +153,7 @@ func getUpstream(capture capture.Capture) (*upstream.Upstream, error) {
 
 func verify(ctx *gin.Context, up *upstream.Upstream) error {
 	// get the username and password from the authorization header
-	username, password, ok := ctx.Request.BasicAuth()
-	if !ok {
-		errMsg := "please specify the user and password via authorization header"
-		return errors.ErrCredentialNotFound.GenWithStackByArgs(errMsg)
-	}
+	username, password, _ := ctx.Request.BasicAuth()
 
 	allowed := false
 	serverCfg := config.GetGlobalServerConfig()

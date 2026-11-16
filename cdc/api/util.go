@@ -43,6 +43,9 @@ var httpBadRequestError = []*errors.Error{
 }
 
 const (
+	// RedactedEtcdValue is returned by debug APIs instead of raw metadata values.
+	RedactedEtcdValue = "<redacted>"
+
 	// OpVarAdminJob is the key of admin job in HTTP API
 	OpVarAdminJob = "admin-job"
 	// OpVarChangefeedID is the key of changefeed ID in HTTP API

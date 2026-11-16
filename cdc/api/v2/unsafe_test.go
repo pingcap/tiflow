@@ -62,20 +62,24 @@ func TestCDCMetaData(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 
 	// case 2: success
-	kvs := []*mvccpb.KeyValue{{Key: []byte{byte(0)}, Value: []byte{byte(1)}}}
+	kvs := []*mvccpb.KeyValue{{
+		Key:   []byte("/tidb/cdc/default/default/changefeed/info/test"),
+		Value: []byte(`{"sink-uri":"mysql://user:downstream-password-sentinel@localhost:3306/db"}`),
+	}}
 	etcdClient.EXPECT().GetAllCDCInfo(gomock.Any()).Return(kvs, nil).Times(1)
 
 	w = httptest.NewRecorder()
 	req, _ = http.NewRequestWithContext(context.Background(), metaData.method, metaData.url, nil)
 	router.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
+	require.NotContains(t, w.Body.String(), "downstream-password-sentinel")
 	var resp []EtcdData
 	err = json.NewDecoder(w.Body).Decode(&resp)
 	require.Nil(t, err)
 	require.Equal(t, len(kvs), len(resp))
 	for i, kv := range resp {
 		require.Equal(t, string(kvs[i].Key), kv.Key)
-		require.Equal(t, string(kvs[i].Key), kv.Key)
+		require.Equal(t, "<redacted>", kv.Value)
 	}
 }
 

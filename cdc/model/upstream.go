@@ -16,7 +16,6 @@ package model
 import (
 	"encoding/json"
 
-	"github.com/pingcap/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -46,8 +45,7 @@ func (c *UpstreamInfo) Marshal() ([]byte, error) {
 // Unmarshal from binary data.
 func (c *UpstreamInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, c)
-	return errors.Annotatef(cerror.WrapError(cerror.ErrUnmarshalFailed, err),
-		"unmarshal data: %v", data)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 }
 
 // Clone returns a cloned upstreamInfo

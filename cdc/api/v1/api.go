@@ -72,7 +72,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	// common API
 	v1.GET("/status", api.ServerStatus)
 	v1.GET("/health", api.Health)
-	v1.POST("/log", SetLogLevel)
+	v1.POST("/log", middleware.AuthenticateMiddleware(api.capture), SetLogLevel)
 
 	ownerMiddleware := middleware.ForwardToOwnerMiddleware(api.capture)
 	authenticateMiddleware := middleware.AuthenticateMiddleware(api.capture)
@@ -91,7 +91,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 
 	// owner API
 	ownerGroup := v1.Group("/owner")
-	ownerGroup.POST("/resign", ownerMiddleware, api.ResignController)
+	ownerGroup.POST("/resign", ownerMiddleware, authenticateMiddleware, api.ResignController)
 
 	// processor API
 	processorGroup := v1.Group("/processors")
@@ -103,7 +103,7 @@ func RegisterOpenAPIRoutes(router *gin.Engine, api OpenAPI) {
 	captureGroup := v1.Group("/captures")
 	captureGroup.Use(ownerMiddleware)
 	captureGroup.GET("", api.ListCapture)
-	captureGroup.PUT("/drain", api.DrainCapture)
+	captureGroup.PUT("/drain", authenticateMiddleware, api.DrainCapture)
 }
 
 // ListChangefeed lists all changgefeeds in cdc cluster

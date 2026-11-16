@@ -66,7 +66,7 @@ func newCmdShowMetadata(f factory.Factory) *cobra.Command {
 
 	command := &cobra.Command{
 		Use:   "show-metadata",
-		Short: "Show metadata stored in PD",
+		Short: "Show metadata keys stored in PD (values redacted)",
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			util.CheckErr(o.complete(f))
