@@ -199,3 +199,22 @@ func TestGenKeys(t *testing.T) {
 		require.Equal(t, tc.expected, keys)
 	}
 }
+
+// TestTxnOrderTablesKeepRowConflictKeys checks that ordering rules only affect batching.
+func TestTxnOrderTablesKeepRowConflictKeys(t *testing.T) {
+	first := newTxnEvent(orderedTestEvent(1, 1, "orders", 1))
+	sameRow := newTxnEvent(orderedTestEvent(2, 1, "orders", 1))
+	otherRow := newTxnEvent(orderedTestEvent(3, 1, "orders", 2))
+	otherTable := newTxnEvent(orderedTestEvent(4, 2, "other", 1))
+
+	for _, event := range []*txnEvent{first, sameRow, otherRow, otherTable} {
+		rowKeys := event.ConflictKeys()
+		require.NotEmpty(t, rowKeys)
+		event.tableOrder = true
+		require.ElementsMatch(t, rowKeys, event.ConflictKeys())
+		require.ElementsMatch(t, genTxnKeys(event.Event), event.ConflictKeys())
+	}
+	require.ElementsMatch(t, first.ConflictKeys(), sameRow.ConflictKeys())
+	require.NotEqual(t, first.ConflictKeys(), otherRow.ConflictKeys())
+	require.NotEqual(t, first.ConflictKeys(), otherTable.ConflictKeys())
+}

@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/BurntSushi/toml"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
 )
@@ -462,4 +463,65 @@ func TestShouldSendAllBootstrapAtStart(t *testing.T) {
 	should := true
 	sinkConfig.SendAllBootstrapAtStart = &should
 	require.True(t, sinkConfig.ShouldSendAllBootstrapAtStart())
+}
+
+// TestTxnOrderTables checks ordering rule parsing and table matching.
+func TestTxnOrderTables(t *testing.T) {
+	for _, scheme := range []string{"mysql", "mysql+ssl", "tidb", "tidb+ssl"} {
+		cfg := GetDefaultReplicaConfig()
+		cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{"APP.orders", "app.ledger_*", "!app.ledger_skip"}}
+		uri, err := url.Parse(scheme + "://127.0.0.1/")
+		require.NoError(t, err)
+		require.NoError(t, cfg.ValidateAndAdjust(uri))
+		f, err := cfg.Sink.GetTxnOrderFilter(false)
+		require.NoError(t, err)
+		require.True(t, f.MatchTable("app", "orders"))
+		require.True(t, f.MatchTable("APP", "LEDGER_1"))
+		require.False(t, f.MatchTable("app", "ledger_skip"))
+		require.False(t, f.MatchTable("app", "other"))
+		f, err = cfg.Sink.GetTxnOrderFilter(true)
+		require.NoError(t, err)
+		require.False(t, f.MatchTable("app", "orders"))
+		require.True(t, f.MatchTable("APP", "orders"))
+		require.Equal(t, cfg.Sink.MySQLConfig.TxnOrderTables, cfg.Clone().Sink.MySQLConfig.TxnOrderTables)
+	}
+	cfg := GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{"invalid"}}
+	uri, err := url.Parse("mysql://127.0.0.1/")
+	require.NoError(t, err)
+	require.ErrorContains(t, cfg.ValidateAndAdjust(uri), "txn-order-tables")
+	cfg.Sink.MySQLConfig.TxnOrderTables = nil
+	f, err := cfg.Sink.GetTxnOrderFilter(false)
+	require.NoError(t, err)
+	require.Nil(t, f)
+}
+
+// TestTxnOrderTablesIgnoredByNonMySQLSinks preserves unused rules without validating them.
+func TestTxnOrderTablesIgnoredByNonMySQLSinks(t *testing.T) {
+	for _, sinkURI := range []string{"kafka://127.0.0.1/topic?protocol=open-protocol", "blackhole://", "s3://bucket/prefix?protocol=csv"} {
+		for _, rule := range []string{"app.orders", "invalid"} {
+			cfg := GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{rule}, WorkerCount: util.AddressOf(4)}
+			uri, err := url.Parse(sinkURI)
+			require.NoError(t, err)
+			require.NoError(t, cfg.ValidateAndAdjust(uri))
+			require.Equal(t, []string{rule}, cfg.Sink.MySQLConfig.TxnOrderTables)
+			require.Equal(t, 4, *cfg.Sink.MySQLConfig.WorkerCount)
+		}
+	}
+}
+
+// TestTxnOrderTablesTOML checks decoding of ordering rules from changefeed TOML.
+func TestTxnOrderTablesTOML(t *testing.T) {
+	cfg := GetDefaultReplicaConfig()
+	_, err := toml.Decode(`[sink.mysql-config]
+txn-order-tables = ["app.orders", "app.ledger_*"]`, cfg)
+	require.NoError(t, err)
+	require.Equal(t, []string{"app.orders", "app.ledger_*"}, cfg.Sink.MySQLConfig.TxnOrderTables)
+	cfg.Sink.MySQLConfig.TxnOrderTables = nil
+	cfg.Scheduler.EnableTableAcrossNodes = true
+	uri, err := url.Parse("kafka://127.0.0.1/topic?protocol=open-protocol")
+	require.NoError(t, err)
+	require.NoError(t, cfg.ValidateAndAdjust(uri))
+	require.True(t, cfg.Scheduler.EnableTableAcrossNodes)
 }

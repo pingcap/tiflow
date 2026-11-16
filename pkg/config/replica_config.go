@@ -287,6 +287,11 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 			return err
 		}
 	}
+	if c.Sink != nil && sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		if _, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive); err != nil {
+			return err
+		}
+	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.EnableTableAcrossNodes = false

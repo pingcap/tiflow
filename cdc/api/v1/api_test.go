@@ -25,8 +25,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang/mock/gomock"
 	"github.com/pingcap/log"
+	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tiflow/cdc/capture"
 	mock_capture "github.com/pingcap/tiflow/cdc/capture/mock"
+	"github.com/pingcap/tiflow/cdc/entry"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/cdc/owner"
 	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
@@ -39,6 +41,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tikv/client-go/v2/oracle"
 	"go.uber.org/zap"
 )
 
@@ -1084,3 +1087,160 @@ func TestHealth(t *testing.T) {
 // TODO: finished these test cases after we decouple those APIs from etcdClient.
 func TestCreateChangefeed(t *testing.T) {}
 func TestUpdateChangefeed(t *testing.T) {}
+
+type snapshotRecordingStorage struct {
+	tidbkv.Storage
+	snapshotTs uint64
+}
+
+// GetSnapshot records the timestamp used to validate a changefeed update.
+func (s *snapshotRecordingStorage) GetSnapshot(version tidbkv.Version) tidbkv.Snapshot {
+	s.snapshotTs = version.Ver
+	return s.Storage.GetSnapshot(version)
+}
+
+// TestUpdateChangefeedTxnOrderTables checks v1 ordering updates against the restart schema.
+func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	startVersion, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+	helper.Tk().MustExec("create table test.regular (id int primary key)")
+	helper.Tk().MustExec("create table test.partitioned (id int primary key) partition by hash(id) partitions 2")
+	checkpointVersion, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
+	require.NoError(t, err)
+
+	orderedSink := config.GetDefaultReplicaConfig().Sink
+	orderedSink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.partitioned"}}
+	for _, tc := range []struct {
+		name         string
+		update       model.ChangefeedConfig
+		initialRules []string
+		initialOrder []string
+		wantError    string
+		ddlBarrier   bool
+	}{
+		{
+			name:      "enable ordering on an existing partitioned table",
+			update:    model.ChangefeedConfig{SinkConfig: orderedSink},
+			wantError: "txn-order-tables does not support partitioned table",
+		},
+		{
+			name:         "ignore ordering when switching to a non-MySQL sink",
+			update:       model.ChangefeedConfig{SinkURI: "blackhole://"},
+			initialOrder: []string{"test.regular"},
+		},
+		{
+			name: "ignore invalid ordering rules for a non-MySQL sink",
+			update: model.ChangefeedConfig{
+				SinkURI: "blackhole://",
+				SinkConfig: &config.SinkConfig{
+					MySQLConfig: &config.MySQLConfig{TxnOrderTables: []string{"invalid"}},
+				},
+			},
+		},
+		{
+			name:         "expand the table filter of an ordered feed",
+			update:       model.ChangefeedConfig{FilterRules: []string{"test.*"}},
+			initialRules: []string{"test.regular"},
+			initialOrder: []string{"test.partitioned"},
+			wantError:    "txn-order-tables does not support partitioned table",
+		},
+		{
+			name:         "ordering update at a DDL barrier",
+			update:       model.ChangefeedConfig{FilterRules: []string{"test.*"}},
+			initialRules: []string{"test.regular"},
+			initialOrder: []string{"test.partitioned"},
+			wantError:    "txn-order-tables does not support partitioned table",
+			ddlBarrier:   true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldConfig := config.GetDefaultReplicaConfig()
+			oldConfig.Filter.Rules = []string{"test.*"}
+			if tc.initialRules != nil {
+				oldConfig.Filter.Rules = tc.initialRules
+			}
+			if tc.initialOrder != nil {
+				oldConfig.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: tc.initialOrder}
+			}
+			oldInfo := &model.ChangeFeedInfo{
+				ID: changeFeedID.ID, Namespace: changeFeedID.Namespace,
+				State: model.StateStopped, StartTs: startVersion.Ver,
+				SinkURI: "mysql://root@127.0.0.1:1/?timeout=1s", Config: oldConfig,
+			}
+			original, err := oldInfo.Clone()
+			require.NoError(t, err)
+			ctrl := gomock.NewController(t)
+			cp := mock_capture.NewMockCapture(ctrl)
+			cp.EXPECT().IsReady().Return(true).AnyTimes()
+			cp.EXPECT().IsOwner().Return(true).AnyTimes()
+			owner := mock_owner.NewMockOwner(ctrl)
+			cp.EXPECT().GetOwner().Return(owner, nil).AnyTimes()
+			if tc.wantError == "" {
+				owner.EXPECT().UpdateChangefeed(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, info *model.ChangeFeedInfo) error {
+						require.Equal(t, "blackhole://", info.SinkURI)
+						wantRules := tc.initialOrder
+						if tc.update.SinkConfig != nil {
+							wantRules = tc.update.SinkConfig.MySQLConfig.TxnOrderTables
+						}
+						require.Equal(t, wantRules, info.Config.Sink.MySQLConfig.TxnOrderTables)
+						return nil
+					})
+			}
+			provider := mock_owner.NewMockStatusProvider(ctrl)
+			cp.EXPECT().StatusProvider().Return(provider).AnyTimes()
+			provider.EXPECT().GetChangeFeedInfo(gomock.Any(), changeFeedID).Return(oldInfo, nil)
+			status := &model.ChangeFeedStatusForAPI{CheckpointTs: checkpointVersion.Ver}
+			if tc.ddlBarrier {
+				status.MinTableBarrierTs = status.CheckpointTs
+			}
+			provider.EXPECT().GetChangeFeedStatus(gomock.Any(), changeFeedID).Return(status, nil).AnyTimes()
+			manager := upstream.NewManager4Test(&gc.MockPDClient{})
+			up, err := manager.GetDefaultUpstream()
+			require.NoError(t, err)
+			storage := &snapshotRecordingStorage{Storage: helper.Storage()}
+			up.KVStorage = storage
+			if tc.wantError == "" {
+				// Ignored ordering rules must not trigger snapshot validation.
+				up.KVStorage = nil
+			}
+			cp.EXPECT().GetUpstreamManager().Return(manager, nil).AnyTimes()
+			body, err := json.Marshal(tc.update)
+			require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodPut, "/api/v1/changefeeds/"+changeFeedID.ID, bytes.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			response := httptest.NewRecorder()
+			newRouterWithoutStatusProvider(cp).ServeHTTP(response, req)
+			if tc.ddlBarrier {
+				require.Equal(t, status.CheckpointTs-1, storage.snapshotTs)
+			}
+			if tc.wantError == "" {
+				require.Equal(t, http.StatusAccepted, response.Code, response.Body.String())
+				require.Equal(t, original.Config, oldInfo.Config)
+				return
+			}
+			require.Equal(t, http.StatusBadRequest, response.Code)
+			var responseError model.HTTPError
+			require.NoError(t, json.Unmarshal(response.Body.Bytes(), &responseError))
+			require.Equal(t, string(cerror.ErrChangefeedUpdateRefused.RFCCode()), responseError.Code)
+			require.Contains(t, responseError.Error, tc.wantError)
+			require.Equal(t, original.Config, oldInfo.Config)
+		})
+	}
+
+	t.Run("accept an ordered filter excluding partitioned tables", func(t *testing.T) {
+		cfg := config.GetDefaultReplicaConfig()
+		cfg.Filter.Rules = []string{"test.regular"}
+		cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.*"}}
+		oldInfo := &model.ChangeFeedInfo{
+			StartTs: startVersion.Ver, SinkURI: "mysql://127.0.0.1:1/", Config: cfg,
+		}
+		update := model.ChangefeedConfig{FilterRules: []string{"test.*", "!test.partitioned"}}
+		newInfo, err := VerifyUpdateChangefeedConfig(context.Background(), update, oldInfo,
+			helper.Storage(), checkpointVersion.Ver)
+		require.NoError(t, err)
+		require.Equal(t, update.FilterRules, newInfo.Config.Filter.Rules)
+	})
+}

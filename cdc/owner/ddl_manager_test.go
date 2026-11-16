@@ -31,13 +31,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// createDDLManagerForTest builds a DDL manager with mock puller and sink components.
 func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *ddlManager {
 	startTs, checkpointTs := model.Ts(0), model.Ts(1)
 	changefeedID := model.DefaultChangeFeedID("ddl-manager-test")
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
 	cfg := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.Nil(t, err)
 	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
 	require.Equal(t, nil, err)
@@ -88,6 +89,162 @@ func newFakeDDLEvent(
 		TableInfo: info,
 		Type:      actionType,
 		CommitTs:  commitTs,
+	}
+}
+
+// TestTxnOrderTablesBatchCreateEligibility checks skipped tables and index-enabled replication.
+func TestTxnOrderTablesBatchCreateEligibility(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	createPartition := helper.DDL2Job("create table app.ordered_p (id int) partition by hash(id) partitions 2")
+	createRegular := helper.DDL2Job("create table app.regular (id int primary key)")
+	dropPartition := helper.DDL2Job("drop table app.ordered_p")
+	createPartitionAgain := helper.DDL2Job("create table app.ordered_p (id int not null) partition by hash(id) partitions 2")
+	addColumn := helper.DDL2Job("alter table app.ordered_p add column v int")
+	require.Equal(t, timodel.ActionAddColumn, addColumn.Type)
+	addUniqueKey := helper.DDL2Job("alter table app.ordered_p add unique key (id)")
+	require.Equal(t, timodel.ActionAddIndex, addUniqueKey.Type)
+
+	for _, forceReplicate := range []bool{false, true} {
+		cfg := config.GetDefaultReplicaConfig()
+		cfg.ForceReplicate = forceReplicate
+		cfg.Filter.Rules = []string{"app.*"}
+		cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+		f, err := filter.NewFilter(cfg, "", true)
+		require.NoError(t, err)
+		dm := createDDLManagerForTest(t, false)
+		dm.filter = f
+		dm.schema, err = entry.NewSchemaStorage(nil, 0, forceReplicate, dm.changfeedID, util.RoleTester, f)
+		require.NoError(t, err)
+
+		// Build one batch containing an ineligible ordered partition and an
+		// eligible regular table, so both reach the owner's per-table checks.
+		batch := *createRegular
+		batch.Type = timodel.ActionCreateTables
+		batch.Query = createPartition.Query + ";" + createRegular.Query
+		history := *createRegular.BinlogInfo
+		history.MultipleTableInfos = []*timodel.TableInfo{
+			createPartition.BinlogInfo.TableInfo, createRegular.BinlogInfo.TableInfo,
+		}
+		batch.BinlogInfo = &history
+		ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+		ddlPuller.schemaStorage = dm.schema
+		ddlPuller.ddlQueue = []*timodel.Job{createSchema, &batch}
+		ddlPuller.resolvedTs = history.FinishedTS
+
+		_, _, err = dm.tick(context.Background(), 1)
+		if forceReplicate {
+			require.ErrorContains(t, err, "does not support partitioned table")
+			continue
+		}
+		require.NoError(t, err)
+		var tables []string
+		for table := range dm.pendingDDLs {
+			tables = append(tables, table.Table)
+		}
+		// The database DDL and regular table remain queued; the partition is skipped.
+		require.ElementsMatch(t, []string{"", "regular"}, tables)
+
+		// A drop can reach the owner after the table's eligibility metadata is gone.
+		ddlPuller.ddlQueue = []*timodel.Job{dropPartition}
+		ddlPuller.resolvedTs = dropPartition.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+
+		// Column changes leave the skipped partition ineligible.
+		ddlPuller.ddlQueue = []*timodel.Job{createPartitionAgain, addColumn}
+		ddlPuller.resolvedTs = addColumn.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+
+		// A usable unique index makes its partitions eligible for replication.
+		ddlPuller.ddlQueue = []*timodel.Job{addUniqueKey}
+		ddlPuller.resolvedTs = addUniqueKey.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.ErrorContains(t, err, "does not support partitioned table")
+	}
+}
+
+// TestTxnOrderTablesEligibilityChangingDDL rejects partitions newly enabled for replication.
+func TestTxnOrderTablesEligibilityChangingDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	for _, tc := range []struct {
+		name   string
+		column string
+		alter  string
+		action timodel.ActionType
+	}{
+		{"primary_key", "p int not null, id int not null", "add primary key (p,id)", timodel.ActionAddPrimaryKey},
+		{"not_null", "p int not null, id int, unique key (p,id)", "modify column id int not null", timodel.ActionModifyColumn},
+		{"multi", "p int not null, id int not null", "add unique key (p,id), add column v int", timodel.ActionMultiSchemaChange},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			table := "app.ordered_" + tc.name
+			create := helper.DDL2Job("create table " + table + " (" + tc.column + ") partition by hash(p) partitions 2")
+			alter := helper.DDL2Job("alter table " + table + " " + tc.alter)
+			require.Equal(t, tc.action, alter.Type)
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+			f, err := filter.NewFilter(cfg, "", true)
+			require.NoError(t, err)
+			dm := createDDLManagerForTest(t, false)
+			dm.filter = f
+			ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+			ddlPuller.schemaStorage = dm.schema
+			ddlPuller.ddlQueue = []*timodel.Job{createSchema, create, alter}
+			ddlPuller.resolvedTs = alter.BinlogInfo.FinishedTS
+			_, _, err = dm.tick(context.Background(), 1)
+			require.ErrorContains(t, err, "does not support partitioned table")
+		})
+	}
+}
+
+// TestTxnOrderTablesCreateValidationUsesDDLSnapshot prevents later DDLs from masking CREATE errors.
+func TestTxnOrderTablesCreateValidationUsesDDLSnapshot(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	createPartition := helper.DDL2Job("create table app.ordered_p (id int not null unique) partition by hash(id) partitions 2")
+	createRegular := helper.DDL2Job("create table app.regular (id int primary key)")
+	dropUniqueKey := helper.DDL2Job("alter table app.ordered_p drop index id")
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+	f, err := filter.NewFilter(cfg, "", true)
+	require.NoError(t, err)
+
+	for _, batchCreate := range []bool{false, true} {
+		dm := createDDLManagerForTest(t, false)
+		dm.filter = f
+		create := *createPartition
+		if batchCreate {
+			create.Type = timodel.ActionCreateTables
+			create.Query += ";" + createRegular.Query
+			history := *createRegular.BinlogInfo
+			history.MultipleTableInfos = []*timodel.TableInfo{
+				createPartition.BinlogInfo.TableInfo, createRegular.BinlogInfo.TableInfo,
+			}
+			create.BinlogInfo = &history
+		}
+		// Model a puller that applied key removal before the owner handles CREATE.
+		for _, job := range []*timodel.Job{createSchema, &create, dropUniqueKey} {
+			require.NoError(t, dm.schema.HandleDDLJob(job))
+		}
+		tableID := createPartition.BinlogInfo.TableInfo.ID
+		ineligible, err := dm.schema.IsIneligibleTable(context.Background(), tableID, create.BinlogInfo.FinishedTS)
+		require.NoError(t, err)
+		require.False(t, ineligible)
+		require.True(t, dm.schema.GetLastSnapshot().IsIneligibleTableID(tableID))
+		ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+		ddlPuller.schemaStorage = dm.schema
+		ddlPuller.ddlQueue = []*timodel.Job{&create}
+		ddlPuller.resolvedTs = dropUniqueKey.BinlogInfo.FinishedTS
+
+		_, _, err = dm.tick(context.Background(), 1)
+		require.ErrorContains(t, err, "does not support partitioned table")
+		require.Empty(t, dm.pendingDDLs)
 	}
 }
 

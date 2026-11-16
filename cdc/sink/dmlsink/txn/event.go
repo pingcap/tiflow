@@ -30,6 +30,7 @@ type txnEvent struct {
 	*dmlsink.TxnCallbackableEvent
 	start            time.Time
 	conflictResolved time.Time
+	tableOrder       bool
 }
 
 func newTxnEvent(event *dmlsink.TxnCallbackableEvent) *txnEvent {
