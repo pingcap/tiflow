@@ -25,15 +25,16 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 )
 
-func TestWriteEtcdInfoRedactsValues(t *testing.T) {
+func TestWriteEtcdInfoRedactsCredentials(t *testing.T) {
 	client := mock_etcd.NewMockCDCEtcdClient(gomock.NewController(t))
 	client.EXPECT().GetAllCDCInfo(gomock.Any()).Return([]*mvccpb.KeyValue{{
 		Key:   []byte("/tidb/cdc/default/default/changefeed/info/test"),
-		Value: []byte(`{"sink-uri":"mysql://user:downstream-password-sentinel@localhost:3306/db"}`),
+		Value: []byte(`{"sink-uri":"mysql://user:downstream-password-sentinel@localhost:3306/db","config":{"memory-quota":123}}`),
 	}}, nil)
 	var output bytes.Buffer
 	(&statusAPI{}).writeEtcdInfo(context.Background(), client, &output)
 	require.Contains(t, output.String(), "/tidb/cdc/default/default/changefeed/info/test")
-	require.Contains(t, output.String(), "<redacted>")
+	require.Contains(t, output.String(), `"memory-quota":123`)
+	require.Contains(t, output.String(), "mysql://user:xxxxx@localhost:3306/db")
 	require.NotContains(t, output.String(), "downstream-password-sentinel")
 }

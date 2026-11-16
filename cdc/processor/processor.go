@@ -983,7 +983,25 @@ func (p *processor) WriteDebugInfo(w io.Writer) error {
 		fmt.Fprintln(w, "processor is not initialized")
 		return nil
 	}
-	fmt.Fprintf(w, "%+v\n%+v\n", *p.latestInfo, *p.latestStatus)
+	info, err := p.latestInfo.Clone()
+	if err != nil {
+		return err
+	}
+	info.SinkURI = util.MaskSensitiveDataInURI(info.SinkURI)
+	if info.Config != nil {
+		info.Config.MaskSensitiveData()
+	}
+	if info.Error != nil {
+		info.Error.Message = "<redacted>"
+	}
+	if info.Warning != nil {
+		info.Warning.Message = "<redacted>"
+	}
+	redactedInfo, err := info.Marshal()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "%s\n%+v\n", redactedInfo, *p.latestStatus)
 	spans := p.sinkManager.r.GetAllCurrentTableSpans()
 	for _, span := range spans {
 		state, _ := p.sinkManager.r.GetTableState(span)

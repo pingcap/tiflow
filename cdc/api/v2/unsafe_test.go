@@ -64,7 +64,7 @@ func TestCDCMetaData(t *testing.T) {
 	// case 2: success
 	kvs := []*mvccpb.KeyValue{{
 		Key:   []byte("/tidb/cdc/default/default/changefeed/info/test"),
-		Value: []byte(`{"sink-uri":"mysql://user:downstream-password-sentinel@localhost:3306/db"}`),
+		Value: []byte(`{"sink-uri":"mysql://user:downstream-password-sentinel@localhost:3306/db","config":{"memory-quota":123},"state":"normal"}`),
 	}}
 	etcdClient.EXPECT().GetAllCDCInfo(gomock.Any()).Return(kvs, nil).Times(1)
 
@@ -79,7 +79,11 @@ func TestCDCMetaData(t *testing.T) {
 	require.Equal(t, len(kvs), len(resp))
 	for i, kv := range resp {
 		require.Equal(t, string(kvs[i].Key), kv.Key)
-		require.Equal(t, "<redacted>", kv.Value)
+		var info model.ChangeFeedInfo
+		require.NoError(t, json.Unmarshal([]byte(kv.Value), &info))
+		require.Equal(t, uint64(123), info.Config.MemoryQuota)
+		require.Equal(t, model.StateNormal, info.State)
+		require.NotContains(t, kv.Value, "downstream-password-sentinel")
 	}
 }
 

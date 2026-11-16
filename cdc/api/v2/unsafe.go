@@ -33,7 +33,7 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-// CDCMetaData returns CDC etcd keys with their values redacted.
+// CDCMetaData returns CDC etcd metadata with credentials redacted.
 func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
 	kvs, err := h.capture.GetEtcdClient().GetAllCDCInfo(c)
 	if err != nil {
@@ -44,7 +44,7 @@ func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
 	for _, pair := range kvs {
 		resp = append(resp, EtcdData{
 			Key:   string(pair.Key),
-			Value: api.RedactedEtcdValue,
+			Value: api.RedactEtcdValue(pair.Key, pair.Value),
 		})
 	}
 	c.IndentedJSON(http.StatusOK, resp)
