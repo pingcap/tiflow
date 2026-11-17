@@ -777,11 +777,11 @@ type MySQLConfig struct {
 
 // GetTxnOrderFilter parses the table rules used for transaction ordering.
 // A nil filter means that per-table transaction ordering is disabled.
-func (c *SinkConfig) GetTxnOrderFilter(caseSensitive bool) (tfilter.Filter, error) {
-	if c == nil || c.MySQLConfig == nil || len(c.MySQLConfig.TxnOrderTables) == 0 {
+func (s *SinkConfig) GetTxnOrderFilter(caseSensitive bool) (tfilter.Filter, error) {
+	if s == nil || s.MySQLConfig == nil || len(s.MySQLConfig.TxnOrderTables) == 0 {
 		return nil, nil
 	}
-	f, err := tfilter.Parse(c.MySQLConfig.TxnOrderTables)
+	f, err := tfilter.Parse(s.MySQLConfig.TxnOrderTables)
 	if err != nil {
 		return nil, cerror.ErrInvalidReplicaConfig.Wrap(err).
 			GenWithStackByArgs("invalid sink.mysql-config.txn-order-tables")

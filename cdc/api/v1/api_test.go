@@ -1204,7 +1204,7 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			cp.EXPECT().GetUpstreamManager().Return(manager, nil).AnyTimes()
 			body, err := json.Marshal(tc.update)
 			require.NoError(t, err)
-			req := httptest.NewRequest(http.MethodPut, "/api/v1/changefeeds/"+changeFeedID.ID, bytes.NewReader(body))
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPut, "/api/v1/changefeeds/"+changeFeedID.ID, bytes.NewReader(body))
 			req.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
 			newRouterWithoutStatusProvider(cp).ServeHTTP(response, req)
