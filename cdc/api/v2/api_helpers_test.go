@@ -185,4 +185,15 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, commitTs)
 	require.ErrorIs(t, err, cerror.ErrChangefeedUpdateRefused)
 	require.ErrorContains(t, err, string(cerror.ErrDispatcherFailed.RFCCode()))
+
+	cfg.SinkURI = "mysql://127.0.0.1:3306/"
+	cfg.ReplicaConfig = ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
+	cfg.ReplicaConfig.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{"test.t1"}}
+	cfg.ReplicaConfig.Scheduler.EnableTableAcrossNodes = true
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, commitTs)
+	require.ErrorIs(t, err, cerror.ErrChangefeedUpdateRefused)
+	require.ErrorContains(t, err, "txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true")
+	require.Nil(t, newCfInfo)
+	require.Nil(t, newUpInfo)
+	require.False(t, oldInfo.Config.Scheduler.EnableTableAcrossNodes)
 }

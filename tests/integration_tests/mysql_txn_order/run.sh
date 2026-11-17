@@ -15,11 +15,11 @@ function check_partition_error() {
 	grep -q 'txn-order-tables does not support partitioned table' "$WORK_DIR/$id-status.json"
 }
 
-# check_update_stopped checks that the feed is paused before updating its config.
-function check_update_stopped() {
+# check_update_state checks the lifecycle state and checkpoint initialization.
+function check_update_state() {
 	local info
-	info=$(curl -fsS --max-time 30 'http://127.0.0.1:8300/api/v2/changefeeds/update-order') || return 1
-	jq -e '.state == "stopped"' <<<"$info"
+	info=$(curl -fsS --max-time 30 'http://127.0.0.1:8300/api/v2/changefeeds') || return 1
+	jq -e --arg state "$1" 'any(.items[]; .id == "update-order" and .state == $state and .checkpoint_tso > 0)' <<<"$info"
 }
 
 # check_mysql_scheduler verifies that MySQL sinks disable replication across nodes.
@@ -35,7 +35,7 @@ function check_table_row_count() {
 }
 
 export -f check_partition_error
-export -f check_update_stopped
+export -f check_update_state
 export -f check_mysql_scheduler check_table_row_count
 export WORK_DIR
 export DOWN_TIDB_HOST DOWN_TIDB_PORT
@@ -116,6 +116,12 @@ INSERT INTO mysql_txn_order.t VALUES (1,0),(2,0);' 127.0.0.1 "$port"
 	# automatically get full single-table transactions committed in order.
 	SINK_URI="mysql://root@${DOWN_TIDB_HOST}:${DOWN_TIDB_PORT}/?worker-count=4&max-txn-row=256&safe-mode=false&batch-dml-enable=false"
 	bash "$CUR/api.sh" "$SINK_URI"
+	sed 's/enable-table-across-nodes = false/enable-table-across-nodes = true/' "$CUR/conf/changefeed.toml" >"$WORK_DIR/invalid-split.toml"
+	if run_cdc_cli changefeed create --changefeed-id=invalid-split --sink-uri="$SINK_URI" --config="$WORK_DIR/invalid-split.toml" >"$WORK_DIR/split-create.log" 2>&1; then
+		echo 'ordered tables with cross-node replication were accepted'
+		exit 1
+	fi
+	grep -q 'txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true' "$WORK_DIR/split-create.log"
 	run_cdc_cli changefeed create --changefeed-id=ordered --start-ts="$start_ts" --sink-uri="$SINK_URI" --config="$CUR/conf/changefeed.toml"
 	ensure 10 check_mysql_scheduler
 
@@ -141,8 +147,9 @@ INSERT INTO mysql_txn_order.t VALUES (1,0),(2,0);' 127.0.0.1 "$port"
 	# Enabling ordering on a paused changefeed must validate the current tables.
 	sed '/txn-order-tables/d' "$CUR/conf/changefeed.toml" >"$WORK_DIR/unordered.toml"
 	run_cdc_cli changefeed create --changefeed-id=update-order --sink-uri="$SINK_URI" --config="$WORK_DIR/unordered.toml"
+	ensure 10 check_update_state normal
 	run_cdc_cli changefeed pause --changefeed-id=update-order
-	ensure 10 check_update_stopped
+	ensure 10 check_update_state stopped
 	if run_cdc_cli changefeed update --changefeed-id=update-order --no-confirm --config="$CUR/conf/changefeed.toml" >"$WORK_DIR/partition-update.log" 2>&1; then
 		echo 'partitioned ordered table was accepted during update'
 		exit 1

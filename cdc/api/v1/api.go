@@ -496,8 +496,8 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		_ = c.Error(err)
 		return
 	}
-	schemaTs := model.GetDDLStartTs(status.CheckpointTs, status.MinTableBarrierTs)
-	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info, up.KVStorage, schemaTs)
+	checkpointTs := model.GetDDLStartTs(status.CheckpointTs, status.MinTableBarrierTs)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info, up.KVStorage, checkpointTs)
 	if err != nil {
 		_ = c.Error(err)
 		return

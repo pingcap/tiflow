@@ -484,6 +484,13 @@ func TestTxnOrderTables(t *testing.T) {
 		require.False(t, f.MatchTable("app", "orders"))
 		require.True(t, f.MatchTable("APP", "orders"))
 		require.Equal(t, cfg.Sink.MySQLConfig.TxnOrderTables, cfg.Clone().Sink.MySQLConfig.TxnOrderTables)
+		cfg.Scheduler.EnableTableAcrossNodes = true
+		require.ErrorContains(t, cfg.ValidateAndAdjust(uri),
+			"sink.mysql-config.txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true")
+		require.True(t, cfg.Scheduler.EnableTableAcrossNodes)
+		cfg.Sink.MySQLConfig.TxnOrderTables = nil
+		require.NoError(t, cfg.ValidateAndAdjust(uri))
+		require.False(t, cfg.Scheduler.EnableTableAcrossNodes)
 	}
 	cfg := GetDefaultReplicaConfig()
 	cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{"invalid"}}
@@ -502,6 +509,7 @@ func TestTxnOrderTablesIgnoredByNonMySQLSinks(t *testing.T) {
 		for _, rule := range []string{"app.orders", "invalid"} {
 			cfg := GetDefaultReplicaConfig()
 			cfg.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{rule}, WorkerCount: util.AddressOf(4)}
+			cfg.Scheduler.EnableTableAcrossNodes = true
 			uri, err := url.Parse(sinkURI)
 			require.NoError(t, err)
 			require.NoError(t, cfg.ValidateAndAdjust(uri))

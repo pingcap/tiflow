@@ -1113,6 +1113,7 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 		update       model.ChangefeedConfig
 		initialRules []string
 		initialOrder []string
+		acrossNodes  bool
 		wantError    string
 		ddlBarrier   bool
 	}{
@@ -1120,6 +1121,12 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 			name:      "enable ordering on an existing partitioned table",
 			update:    model.ChangefeedConfig{SinkConfig: orderedSink},
 			wantError: "txn-order-tables does not support partitioned table",
+		},
+		{
+			name:        "enable ordering with cross-node table replication",
+			update:      model.ChangefeedConfig{SinkConfig: orderedSink},
+			acrossNodes: true,
+			wantError:   "txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true",
 		},
 		{
 			name:         "ignore ordering when switching to a non-MySQL sink",
@@ -1153,6 +1160,7 @@ func TestUpdateChangefeedTxnOrderTables(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			oldConfig := config.GetDefaultReplicaConfig()
+			oldConfig.Scheduler.EnableTableAcrossNodes = tc.acrossNodes
 			oldConfig.Filter.Rules = []string{"test.*"}
 			if tc.initialRules != nil {
 				oldConfig.Filter.Rules = tc.initialRules

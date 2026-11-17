@@ -288,8 +288,13 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 		}
 	}
 	if c.Sink != nil && sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
-		if _, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive); err != nil {
+		orderFilter, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive)
+		if err != nil {
 			return err
+		}
+		if orderFilter != nil && c.Scheduler.EnableTableAcrossNodes {
+			return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+				"sink.mysql-config.txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true")
 		}
 	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.

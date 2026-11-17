@@ -194,7 +194,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 	changefeedConfig model.ChangefeedConfig,
 	oldInfo *model.ChangeFeedInfo,
 	kvStorage tidbkv.Storage,
-	schemaTs uint64,
+	checkpointTs uint64,
 ) (*model.ChangeFeedInfo, error) {
 	newInfo, err := oldInfo.Clone()
 	if err != nil {
@@ -261,7 +261,7 @@ func VerifyUpdateChangefeedConfig(ctx context.Context,
 				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 			}
 			// Validate the same schema snapshot that the owner will use on restart.
-			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, schemaTs, newInfo.Config.ForceReplicate)
+			tableInfos, _, _, err := entry.VerifyTables(f, kvStorage, checkpointTs, newInfo.Config.ForceReplicate)
 			if err != nil {
 				return nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 			}

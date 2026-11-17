@@ -20,10 +20,10 @@ function api_request() {
 	fi
 }
 
-# check_api_state checks the current changefeed lifecycle state.
+# check_api_state checks the lifecycle state and checkpoint initialization.
 function check_api_state() {
-	curl -fsS --max-time 30 "http://127.0.0.1:8300/api/v2/changefeeds/$1" |
-		jq -e --arg state "$2" '.state == $state'
+	curl -fsS --max-time 30 'http://127.0.0.1:8300/api/v2/changefeeds' |
+		jq -e --arg id "$1" --arg state "$2" 'any(.items[]; .id == $id and .state == $state and .checkpoint_tso > 0)'
 }
 
 # check_api_checkpoint checks that replication has reached the requested timestamp.
@@ -64,7 +64,7 @@ function ordering_update() {
 			'{sink_config: {"transaction-atomicity": "none", "mysql-config": {"txn-order-tables": $rules}}, filter_rules: $filters}'
 	else
 		jq -c --argjson rules "$rules" --argjson filters "$filters" \
-			'{replica_config: .config} | .replica_config.sink.mysql_config.txn_order_tables = $rules | .replica_config.filter.rules = $filters | .replica_config.scheduler.enable_table_across_nodes = true' \
+			'{replica_config: .config} | .replica_config.sink.mysql_config.txn_order_tables = $rules | .replica_config.filter.rules = $filters | .replica_config.scheduler.enable_table_across_nodes = false' \
 			"$WORK_DIR/api-before.json"
 	fi
 }
@@ -97,7 +97,11 @@ CREATE TABLE $schema.future_excluded (id INT PRIMARY KEY) PARTITION BY HASH(id) 
 	else
 		success=200
 		payload=$(jq -cn --arg id "$id" --arg uri "$SINK_URI" --argjson filters "$filters" --argjson rules "$future" \
-			'{changefeed_id: $id, sink_uri: $uri, replica_config: {ignore_ineligible_table: true, filter: {rules: $filters}, sink: {transaction_atomicity: "none", mysql_config: {txn_order_tables: $rules}}, scheduler: {enable_table_across_nodes: true, region_threshold: 1}}}')
+			'{changefeed_id: $id, sink_uri: $uri, replica_config: {ignore_ineligible_table: true, filter: {rules: $filters}, sink: {transaction_atomicity: "none", mysql_config: {txn_order_tables: $rules}}, scheduler: {enable_table_across_nodes: false, region_threshold: 1}}}')
+		# Ordering and cross-node table replication must be rejected together.
+		split_payload=$(echo "$payload" | jq -c '.changefeed_id += "-split" | .replica_config.scheduler.enable_table_across_nodes = true')
+		api_request 500 POST "$version/changefeeds" "$split_payload"
+		jq -e '.error_code == "CDC:ErrInvalidReplicaConfig" and (.error_msg | contains("txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true"))' "$WORK_DIR/api-response.json"
 	fi
 	# Without force-replicate, matching ineligible partitions are skipped. With
 	# force-replicate they would be copied, so ordering must reject them.
@@ -144,6 +148,10 @@ CREATE TABLE $schema.future_excluded (id INT PRIMARY KEY) PARTITION BY HASH(id) 
 	reject_api_update "$(ordering_update "$filters" "$filters")" 'txn-order-tables does not support partitioned table'
 
 	# Enable ordering for the regular table, and verify the stored API config.
+	if [ "$version" = v2 ]; then
+		payload=$(ordering_update "$regular" "$filters" | jq -c '.replica_config.scheduler.enable_table_across_nodes = true')
+		reject_api_update "$payload" 'txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true'
+	fi
 	api_request "$success" PUT "$version/changefeeds/$id" "$(ordering_update "$regular" "$filters")"
 	save_api_config "$regular" mysql
 	jq -e --argjson rules "$regular" '.config.sink.mysql_config.txn_order_tables == $rules' "$WORK_DIR/api-before.json"
@@ -151,6 +159,9 @@ CREATE TABLE $schema.future_excluded (id INT PRIMARY KEY) PARTITION BY HASH(id) 
 
 	# Non-MySQL sinks ignore the ordering rules, including matches on partitions.
 	payload=$(ordering_update "$filters" "$filters" | jq -c '.sink_uri = "blackhole://"')
+	if [ "$version" = v2 ]; then
+		payload=$(echo "$payload" | jq -c '.replica_config.scheduler.enable_table_across_nodes = true')
+	fi
 	api_request "$success" PUT "$version/changefeeds/$id" "$payload"
 	save_api_config "$filters" blackhole
 	jq -e --argjson rules "$filters" \

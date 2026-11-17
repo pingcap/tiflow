@@ -80,7 +80,7 @@ type APIV2Helpers interface {
 		oldInfo *model.ChangeFeedInfo,
 		oldUpInfo *model.UpstreamInfo,
 		kvStorage tidbkv.Storage,
-		schemaTs uint64,
+		checkpointTs uint64,
 	) (*model.ChangeFeedInfo, *model.UpstreamInfo, error)
 
 	// verifyUpstream verifies the upstreamConfig
@@ -300,7 +300,7 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 	oldInfo *model.ChangeFeedInfo,
 	oldUpInfo *model.UpstreamInfo,
 	kvStorage tidbkv.Storage,
-	schemaTs uint64,
+	checkpointTs uint64,
 ) (*model.ChangeFeedInfo, *model.UpstreamInfo, error) {
 	// update changefeed info
 	newInfo, err := oldInfo.Clone()
@@ -364,7 +364,7 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(newInfo.Config.Sink.Protocol))
 
 		// Validate the same schema snapshot that the owner will use on restart.
-		ineligibleTables, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, schemaTs, scheme, topic, protocol)
+		ineligibleTables, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, checkpointTs, scheme, topic, protocol)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
 		}
