@@ -310,6 +310,24 @@ func (m *ddlManager) tick(
 		}
 
 		for _, event := range events {
+			// Validate before the latest snapshot can cause a CREATE to be skipped.
+			switch event.Type {
+			case timodel.ActionCreateTable, timodel.ActionCreateTables,
+				timodel.ActionRenameTable, timodel.ActionRenameTables,
+				timodel.ActionRecoverTable, timodel.ActionAlterTablePartitioning,
+				timodel.ActionAddIndex, timodel.ActionAddPrimaryKey,
+				timodel.ActionModifyColumn, timodel.ActionMultiSchemaChange:
+				// Check eligibility at this DDL, since the puller may have applied later DDLs.
+				ineligible, err := m.schema.IsIneligibleTable(ctx, event.TableInfo.ID, event.CommitTs)
+				if err != nil {
+					return nil, nil, err
+				}
+				if !ineligible {
+					if err := m.filter.VerifyTxnOrderTable(event.TableInfo); err != nil {
+						return nil, nil, err
+					}
+				}
+			}
 			snap := m.schema.GetLastSnapshot()
 			if event.Type == timodel.ActionCreateTable ||
 				event.Type == timodel.ActionCreateTables {

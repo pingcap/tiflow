@@ -75,7 +75,7 @@ func NewSchemaTestHelperWithReplicaConfig(
 		tk.Session().GetSessionVars().EnableRowLevelChecksum = true
 	}
 
-	filter, err := filter.NewFilter(replicaConfig, "")
+	filter, err := filter.NewFilter(replicaConfig, "", false)
 	require.NoError(t, err)
 
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
