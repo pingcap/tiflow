@@ -65,17 +65,17 @@ func TestVerifyUpdateMaskedSinkURI(t *testing.T) {
 		SinkURI:          util.MaskSensitiveDataInURIForError(storedURI),
 		MounterWorkerNum: 32,
 	}
-	newInfo, err := VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo)
+	newInfo, err := VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, storedURI, newInfo.SinkURI)
 
 	cfg.SinkURI = "kafka://other-broker/topic?sasl-gssapi-password=xxxxx"
-	_, err = VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo)
+	_, err = VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo, nil, 0)
 	require.ErrorContains(t, err, "masked credential")
 
 	oldInfo.SinkURI = "kafka://broker/topic?sasl-gssapi-password=xxxxx&token=stored-secret"
 	cfg.SinkURI = oldInfo.SinkURI
-	newInfo, err = VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo)
+	newInfo, err = VerifyUpdateChangefeedConfig(context.Background(), cfg, oldInfo, nil, 0)
 	require.NoError(t, err)
 	require.Equal(t, oldInfo.SinkURI, newInfo.SinkURI)
 }

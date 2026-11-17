@@ -39,13 +39,8 @@ func VerifyTables(
 ) {
 	meta := kv.GetSnapshotMeta(storage, startTs)
 	snap, err := schema.NewSnapshotFromMeta(
-<<<<<<< HEAD
 		model.ChangeFeedID4Test("api", "verifyTable"),
-		meta, startTs, false /* explicitTables */, f)
-=======
-		model.GenerateChangeFeedID("api", "verifyTable"),
 		meta, startTs, false /* forceReplicate */, f)
->>>>>>> 870b83920b (sink(ticdc): support per-table transaction ordering for MySQL sinks (#12954))
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
