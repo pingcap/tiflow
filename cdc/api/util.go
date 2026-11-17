@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/httputil"
+	"github.com/pingcap/tiflow/pkg/util"
 	"go.uber.org/zap"
 )
 
@@ -43,6 +44,9 @@ var httpBadRequestError = []*errors.Error{
 }
 
 const (
+	// RedactedEtcdValue replaces metadata that cannot be safely shown.
+	RedactedEtcdValue = "<redacted>"
+
 	// OpVarAdminJob is the key of admin job in HTTP API
 	OpVarAdminJob = "admin-job"
 	// OpVarChangefeedID is the key of changefeed ID in HTTP API
@@ -72,6 +76,65 @@ const (
 	// maxForwardTimes is the max time a request can be forwarded,  non-controller->controller->changefeed owner
 	maxForwardTimes = 2
 )
+
+// RedactEtcdValue preserves known CDC metadata fields while hiding credentials.
+// Unknown or malformed values are hidden rather than returned verbatim.
+func RedactEtcdValue(key, value []byte) string {
+	parts := strings.Split(string(key), "/")
+	if len(parts) < 7 || parts[0] != "" || parts[1] != "tidb" ||
+		parts[2] != "cdc" || parts[3] == "" {
+		return RedactedEtcdValue
+	}
+	parts = parts[4:]
+
+	var data interface{}
+	switch {
+	case len(parts) == 4 && parts[0] != "" && parts[1] == "changefeed" &&
+		parts[2] == "info" && parts[3] != "":
+		data = new(model.ChangeFeedInfo)
+	case len(parts) == 4 && parts[0] != "" && parts[1] == "changefeed" &&
+		parts[2] == "status" && parts[3] != "":
+		data = new(model.ChangeFeedStatus)
+	case len(parts) == 5 && parts[0] != "" && parts[1] == "task" &&
+		parts[2] == "position" && parts[3] != "" && parts[4] != "":
+		data = new(model.TaskPosition)
+	case len(parts) == 3 && parts[0] != "" && parts[1] == "upstream" && parts[2] != "":
+		data = new(model.UpstreamInfo)
+	case len(parts) == 3 && parts[0] == "__cdc_meta__" &&
+		parts[1] == "capture" && parts[2] != "":
+		data = new(model.CaptureInfo)
+	default:
+		return RedactedEtcdValue
+	}
+	if err := json.Unmarshal(value, data); err != nil {
+		return RedactedEtcdValue
+	}
+	switch metadata := data.(type) {
+	case *model.ChangeFeedInfo:
+		metadata.SinkURI = util.MaskSensitiveDataInURI(metadata.SinkURI)
+		if metadata.Config != nil {
+			metadata.Config.MaskSensitiveData()
+		}
+		if metadata.Error != nil {
+			metadata.Error.Message = RedactedEtcdValue
+		}
+		if metadata.Warning != nil {
+			metadata.Warning.Message = RedactedEtcdValue
+		}
+	case *model.TaskPosition:
+		if metadata.Error != nil {
+			metadata.Error.Message = RedactedEtcdValue
+		}
+		if metadata.Warning != nil {
+			metadata.Warning.Message = RedactedEtcdValue
+		}
+	}
+	redacted, err := json.Marshal(data)
+	if err != nil {
+		return RedactedEtcdValue
+	}
+	return string(redacted)
+}
 
 // IsHTTPBadRequestError check if a error is a http bad request error
 func IsHTTPBadRequestError(err error) bool {

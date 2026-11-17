@@ -45,7 +45,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 
 	v2.GET("health", api.health)
 	v2.GET("status", api.serverStatus)
-	v2.POST("log", api.setLogLevel)
+	v2.POST("log", middleware.AuthenticateMiddleware(api.capture), api.setLogLevel)
 
 	ownerMiddleware := middleware.ForwardToOwnerMiddleware(api.capture)
 	authenticateMiddleware := middleware.AuthenticateMiddleware(api.capture)
@@ -66,7 +66,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// capture apis
 	captureGroup := v2.Group("/captures")
 	captureGroup.Use(ownerMiddleware)
-	captureGroup.POST("/:capture_id/drain", api.drainCapture)
+	captureGroup.POST("/:capture_id/drain", authenticateMiddleware, api.drainCapture)
 	captureGroup.GET("", api.listCaptures)
 
 	// processor apis
@@ -87,7 +87,7 @@ func RegisterOpenAPIV2Routes(router *gin.Engine, api OpenAPIV2) {
 	// owner apis
 	ownerGroup := v2.Group("/owner")
 	ownerGroup.Use(ownerMiddleware)
-	ownerGroup.POST("/resign", api.resignOwner)
+	ownerGroup.POST("/resign", authenticateMiddleware, api.resignOwner)
 
 	// common APIs
 	v2.POST("/tso", api.QueryTso)

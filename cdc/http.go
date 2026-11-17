@@ -19,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tiflow/cdc/api/middleware"
 	"github.com/pingcap/tiflow/cdc/api/owner"
 	"github.com/pingcap/tiflow/cdc/api/status"
 	v1 "github.com/pingcap/tiflow/cdc/api/v1"
@@ -48,9 +49,9 @@ func RegisterRoutes(
 	status.RegisterStatusAPIRoutes(router, capture)
 
 	// Log API
-	router.POST("/admin/log", gin.WrapF(owner.HandleAdminLogLevel))
-	router.GET("/config", func(c *gin.Context) {
-		c.JSON(http.StatusOK, config.GetGlobalServerConfig())
+	router.POST("/admin/log", middleware.AuthenticateMiddleware(capture), gin.WrapF(owner.HandleAdminLogLevel))
+	router.GET("/config", middleware.AuthenticateMiddleware(capture), func(c *gin.Context) {
+		c.JSON(http.StatusOK, redactServerConfig(config.GetGlobalServerConfig()))
 	})
 
 	// pprof debug API
@@ -72,4 +73,18 @@ func RegisterRoutes(
 	// Promtheus metrics API
 	prometheus.DefaultGatherer = registry
 	router.Any("/metrics", gin.WrapH(promhttp.Handler()))
+}
+
+func redactServerConfig(cfg *config.ServerConfig) *config.ServerConfig {
+	redacted := cfg.Clone()
+	redacted.Addr = ""
+	redacted.AdvertiseAddr = ""
+	redacted.LogFile = ""
+	redacted.Log = nil
+	redacted.DataDir = ""
+	redacted.Sorter = nil
+	redacted.Security = nil
+	redacted.Debug = nil
+	redacted.ClusterID = ""
+	return redacted
 }

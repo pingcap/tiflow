@@ -113,10 +113,12 @@ func (c *ConsistentConfig) ValidateAndAdjust() error {
 
 	uri, err := objstore.ParseRawURL(c.Storage)
 	if err != nil {
-		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
-			fmt.Sprintf("invalid storage uri: %s", c.Storage))
+		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs("invalid storage uri")
 	}
-	return redo.ValidateStorage(uri)
+	if err := redo.ValidateStorage(uri); err != nil {
+		return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs("invalid storage uri")
+	}
+	return nil
 }
 
 // MaskSensitiveData masks sensitive data in ConsistentConfig

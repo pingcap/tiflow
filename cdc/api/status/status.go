@@ -56,7 +56,7 @@ func (h *statusAPI) writeEtcdInfo(ctx context.Context, cli etcd.CDCEtcdClient, w
 	}
 
 	for _, kv := range kvs {
-		fmt.Fprintf(w, "%s\n\t%s\n\n", string(kv.Key), string(kv.Value))
+		fmt.Fprintf(w, "%s\n\t%s\n\n", string(kv.Key), api.RedactEtcdValue(kv.Key, kv.Value))
 	}
 }
 

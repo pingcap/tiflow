@@ -14,6 +14,7 @@
 package processor
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -44,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/upstream"
 	"github.com/pingcap/tiflow/pkg/util"
 	"github.com/stretchr/testify/require"
+	goatomic "go.uber.org/atomic"
 )
 
 func newProcessor4Test(
@@ -804,6 +806,32 @@ func TestProcessorNotInitialized(t *testing.T) {
 	liveness := model.LivenessCaptureAlive
 	p, _, _ := initProcessor4Test(t, &liveness, false, globalVars, changefeedVars)
 	require.Nil(t, p.WriteDebugInfo(os.Stdout))
+}
+
+func TestProcessorWriteDebugInfoRedactsCredentials(t *testing.T) {
+	info := &model.ChangeFeedInfo{
+		SinkURI: "mysql://user:db-secret@localhost:3306/db",
+		Config: &config.ReplicaConfig{Sink: &config.SinkConfig{
+			KafkaConfig: &config.KafkaConfig{SASLPassword: util.AddressOf("kafka-secret")},
+		}},
+		Error: &model.RunningError{Message: "mysql://user:error-secret@localhost/db"},
+	}
+	p := &processor{
+		initialized:  goatomic.NewBool(true),
+		latestInfo:   info,
+		latestStatus: &model.ChangeFeedStatus{CheckpointTs: 123},
+		sinkManager: component[*sinkmanager.SinkManager]{
+			r: &sinkmanager.SinkManager{},
+		},
+	}
+	var output bytes.Buffer
+	require.NoError(t, p.WriteDebugInfo(&output))
+	require.Contains(t, output.String(), "CheckpointTs:123")
+	require.Contains(t, output.String(), "mysql://user:xxxxx@localhost:3306/db")
+	for _, secret := range []string{"db-secret", "kafka-secret", "error-secret"} {
+		require.NotContains(t, output.String(), secret)
+	}
+	require.Equal(t, "mysql://user:db-secret@localhost:3306/db", info.SinkURI)
 }
 
 func TestGetPullerSplitUpdateMode(t *testing.T) {

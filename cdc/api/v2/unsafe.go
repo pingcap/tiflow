@@ -22,6 +22,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/pingcap/errors"
 	tidbkv "github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tiflow/cdc/api"
 	"github.com/pingcap/tiflow/cdc/kv"
 	"github.com/pingcap/tiflow/cdc/model"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -32,7 +33,7 @@ import (
 	pd "github.com/tikv/pd/client"
 )
 
-// CDCMetaData returns all etcd key values used by cdc
+// CDCMetaData returns CDC etcd metadata with credentials redacted.
 func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
 	kvs, err := h.capture.GetEtcdClient().GetAllCDCInfo(c)
 	if err != nil {
@@ -43,7 +44,7 @@ func (h *OpenAPIV2) CDCMetaData(c *gin.Context) {
 	for _, pair := range kvs {
 		resp = append(resp, EtcdData{
 			Key:   string(pair.Key),
-			Value: string(pair.Value),
+			Value: api.RedactEtcdValue(pair.Key, pair.Value),
 		})
 	}
 	c.IndentedJSON(http.StatusOK, resp)

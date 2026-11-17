@@ -282,7 +282,7 @@ def move_table():
 
 def resign_owner():
     url = BASE_URL1 + "/owner/resign"
-    resp = rq.post(url, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.accepted
 
     print("pass test: resign owner")
@@ -353,11 +353,11 @@ def set_log_level():
     url = BASE_URL0 + "/log"
     data = json.dumps({"log_level": "debug"})
     headers = {"Content-Type": "application/json"}
-    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     data = json.dumps({"log_level": "info"})
-    resp = rq.post(url, data=data, headers=headers, cert=CERT, verify=VERIFY)
+    resp = rq.post(url, auth=Auth, data=data, headers=headers, cert=CERT, verify=VERIFY)
     assert resp.status_code == rq.codes.ok
 
     print("pass test: set log level")
