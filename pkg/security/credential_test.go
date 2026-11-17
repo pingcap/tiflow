@@ -14,6 +14,7 @@
 package security
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -129,12 +130,13 @@ func (ca testAuthority) dial(t *testing.T, client tls.Certificate, serverTLS *tl
 
 	roots := x509.NewCertPool()
 	roots.AddCert(ca.cert)
-	conn, err := tls.Dial("tcp", ln.Addr().String(), &tls.Config{
+	dialer := &tls.Dialer{Config: &tls.Config{
 		RootCAs:      roots,
 		Certificates: []tls.Certificate{client},
 		ServerName:   "127.0.0.1",
 		MinVersion:   tls.VersionTLS12,
-	})
+	}}
+	conn, err := dialer.DialContext(context.Background(), "tcp", ln.Addr().String())
 	if err != nil {
 		return err
 	}
