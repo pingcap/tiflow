@@ -444,11 +444,47 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
+<<<<<<< HEAD
 	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
+=======
+	upManager, err := h.capture.GetUpstreamManager()
+>>>>>>> 870b83920b (sink(ticdc): support per-table transaction ordering for MySQL sinks (#12954))
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
+<<<<<<< HEAD
+=======
+	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	checkpointTs := model.GetDDLStartTs(status.CheckpointTs, status.MinTableBarrierTs)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info, up.KVStorage, checkpointTs)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	// Check whether the upstream and downstream are the different cluster.
+	notSame, err := check.UpstreamDownstreamNotSame(
+		ctx, up.PDClient, newInfo.SinkURI, model.GenerateChangeFeedID(newInfo.Namespace, newInfo.ID), newInfo.Config)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	if !notSame {
+		_ = c.Error(cerror.ErrSameUpstreamDownstream.GenWithStack(
+			"TiCDC does not support updating a changefeed with the same TiDB cluster " +
+				"as both the source and the target for the changefeed."))
+		return
+	}
+>>>>>>> 870b83920b (sink(ticdc): support per-table transaction ordering for MySQL sinks (#12954))
 
 	err = owner.UpdateChangefeed(ctx, newInfo)
 	if err != nil {

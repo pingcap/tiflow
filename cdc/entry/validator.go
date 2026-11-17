@@ -24,10 +24,14 @@ import (
 
 // VerifyTables catalog tables specified by ReplicaConfig into
 // eligible (has an unique index or primary key) and ineligible tables.
+// forceReplicate controls transaction ordering validation without changing
+// the eligible/ineligible classification.
 func VerifyTables(
 	f filter.Filter,
 	storage tidbkv.Storage,
-	startTs uint64) (
+	startTs uint64,
+	forceReplicate bool,
+) (
 	tableInfos []*model.TableInfo,
 	ineligibleTables,
 	eligibleTables []model.TableName,
@@ -35,8 +39,13 @@ func VerifyTables(
 ) {
 	meta := kv.GetSnapshotMeta(storage, startTs)
 	snap, err := schema.NewSnapshotFromMeta(
+<<<<<<< HEAD
 		model.ChangeFeedID4Test("api", "verifyTable"),
 		meta, startTs, false /* explicitTables */, f)
+=======
+		model.GenerateChangeFeedID("api", "verifyTable"),
+		meta, startTs, false /* forceReplicate */, f)
+>>>>>>> 870b83920b (sink(ticdc): support per-table transaction ordering for MySQL sinks (#12954))
 	if err != nil {
 		return nil, nil, nil, errors.Trace(err)
 	}
@@ -57,5 +66,17 @@ func VerifyTables(
 			eligibleTables = append(eligibleTables, tableInfo.TableName)
 		}
 	})
+	// The snapshot validates eligible tables. Also validate the ineligible
+	// tables that force-replicate enables, without changing their classification.
+	if forceReplicate {
+		for _, tableInfo := range tableInfos {
+			if tableInfo.IsEligible(false) {
+				continue
+			}
+			if err := f.VerifyTxnOrderTable(tableInfo); err != nil {
+				return nil, nil, nil, errors.Trace(err)
+			}
+		}
+	}
 	return
 }

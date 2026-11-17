@@ -280,6 +280,14 @@ type ChangeFeedStatus struct {
 	AdminJobType AdminJobType `json:"admin-job-type"`
 }
 
+// GetDDLStartTs returns the schema timestamp used when restarting a changefeed.
+func GetDDLStartTs(checkpointTs, minTableBarrierTs uint64) uint64 {
+	if checkpointTs > 0 && checkpointTs == minTableBarrierTs {
+		return checkpointTs - 1
+	}
+	return checkpointTs
+}
+
 // Marshal returns json encoded string of ChangeFeedStatus, only contains necessary fields stored in storage
 func (status *ChangeFeedStatus) Marshal() (string, error) {
 	data, err := json.Marshal(status)

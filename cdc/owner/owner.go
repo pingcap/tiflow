@@ -635,6 +635,7 @@ func (o *ownerImpl) handleJobs(ctx context.Context) {
 	}
 }
 
+// handleQueries returns changefeed metadata and runtime status requested by the API.
 func (o *ownerImpl) handleQueries(query *Query) error {
 	switch query.Tp {
 	case QueryAllChangeFeedSCheckpointTs:
@@ -672,6 +673,7 @@ func (o *ownerImpl) handleQueries(query *Query) error {
 		ret := &model.ChangeFeedStatusForAPI{}
 		ret.ResolvedTs = cfReactor.resolvedTs.Load()
 		ret.CheckpointTs = cfReactor.latestStatus.CheckpointTs
+		ret.MinTableBarrierTs = cfReactor.latestStatus.MinTableBarrierTs
 		query.Data = ret
 	case QueryChangeFeedSyncedStatus:
 		cfReactor, ok := o.changefeeds[query.ChangeFeedID]

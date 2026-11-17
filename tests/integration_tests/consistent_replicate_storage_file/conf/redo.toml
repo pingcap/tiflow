@@ -1,0 +1,5 @@
+[sink]
+transaction-atomicity = "none"
+
+[sink.mysql-config]
+txn-order-tables = ["consistent_replicate_storage_file.usertable*"]
