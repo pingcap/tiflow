@@ -139,6 +139,9 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 	}
 	cmd.Printf("Diff of changefeed config:\n")
 	for _, change := range changelog {
+		path := strings.Join(change.Path, ".")
+		change.From = maskChangefeedDiffValue(path, change.From)
+		change.To = maskChangefeedDiffValue(path, change.To)
 		cmd.Printf("%+v\n", change)
 	}
 
@@ -164,6 +167,41 @@ func (o *updateChangefeedOptions) run(cmd *cobra.Command) error {
 		"\nID: %s\nInfo: %s\n", o.changefeedID, infoStr)
 
 	return nil
+}
+
+func maskChangefeedDiffValue(path string, value any) any {
+	var text string
+	switch v := value.(type) {
+	case string:
+		text = v
+	case *string:
+		text = putil.GetOrZero(v)
+	}
+	if text == "" {
+		return value
+	}
+	switch path {
+	case "SinkURI",
+		"Config.Consistent.Storage",
+		"Config.Sink.SchemaRegistry",
+		"Config.Sink.KafkaConfig.SASLOAuthTokenURL",
+		"Config.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI",
+		"Config.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL":
+		return putil.MaskSensitiveDataInURIForError(text)
+	case "Config.Sink.KafkaConfig.SASLPassword",
+		"Config.Sink.KafkaConfig.SASLGssAPIPassword",
+		"Config.Sink.KafkaConfig.SASLOAuthClientSecret",
+		"Config.Sink.KafkaConfig.Key",
+		"Config.Sink.KafkaConfig.GlueSchemaRegistryConfig.AccessKey",
+		"Config.Sink.KafkaConfig.GlueSchemaRegistryConfig.SecretAccessKey",
+		"Config.Sink.KafkaConfig.GlueSchemaRegistryConfig.Token",
+		"Config.Sink.PulsarConfig.AuthenticationToken",
+		"Config.Sink.PulsarConfig.BasicPassword",
+		"Config.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey":
+		return "******"
+	default:
+		return value
+	}
 }
 
 // applyChanges applies the new changes to the old changefeed.

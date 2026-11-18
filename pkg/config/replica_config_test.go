@@ -450,13 +450,17 @@ func TestRestoreMaskedSensitiveData(t *testing.T) {
 	original.Sink.PulsarConfig = &PulsarConfig{
 		AuthenticationToken: aws.String("pulsar-token"),
 		BasicPassword:       aws.String("pulsar-password"),
-		OAuth2:              &OAuth2{OAuth2PrivateKey: "pulsar-private-key"},
+		OAuth2: &OAuth2{
+			OAuth2IssuerURL:  "https://issuer.test/oauth?token=issuer-token",
+			OAuth2PrivateKey: "pulsar-private-key",
+		},
 	}
 	original.Consistent = &ConsistentConfig{Storage: "s3://bucket/redo?access-key=redo-access&secret-access-key=redo-secret"}
 
 	masked := original.Clone()
 	masked.MaskSensitiveData()
 	require.NotContains(t, masked.Sink.KafkaConfig.LargeMessageHandle.ClaimCheckStorageURI, "claim-secret")
+	require.Equal(t, "https://issuer.test/oauth?token=xxxxx", masked.Sink.PulsarConfig.OAuth2.OAuth2IssuerURL)
 	require.Equal(t, "kafka-password", *original.Sink.KafkaConfig.SASLPassword)
 	require.NoError(t, masked.RestoreMaskedSensitiveData(original))
 	require.Equal(t, original, masked)

@@ -261,6 +261,12 @@ func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) error {
 		restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
 		if current.OAuth2 != nil && previous.OAuth2 != nil {
 			restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+			var err error
+			current.OAuth2.OAuth2IssuerURL, err = restoreMaskedURI(
+				current.OAuth2.OAuth2IssuerURL, previous.OAuth2.OAuth2IssuerURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -733,6 +739,7 @@ func (c *PulsarConfig) MaskSensitiveData() {
 		c.BasicPassword = aws.String("******")
 	}
 	if c.OAuth2 != nil {
+		c.OAuth2.OAuth2IssuerURL = util.MaskSensitiveDataInURI(c.OAuth2.OAuth2IssuerURL)
 		if c.OAuth2.OAuth2PrivateKey != "" {
 			c.OAuth2.OAuth2PrivateKey = "******"
 		}

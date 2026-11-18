@@ -81,6 +81,10 @@ func TestMaskSinkURI(t *testing.T) {
 			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-user=ticdc&sasl-password=verysecure",
 			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-password=xxxxx&sasl-user=ticdc",
 		},
+		{
+			"s3://bucket/prefix?region=us-east-1&secret-access-key=verysecure&access-key=key",
+			"s3://bucket/prefix?access-key=xxxxx&region=us-east-1&secret-access-key=xxxxx",
+		},
 	}
 
 	for _, tt := range tests {

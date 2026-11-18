@@ -106,8 +106,7 @@ func (tp *TaskPosition) Marshal() (string, error) {
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
 func (tp *TaskPosition) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, tp)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: ******")
 }
 
 // String implements fmt.Stringer interface.
@@ -226,8 +225,7 @@ func (ts *TaskStatus) Marshal() (string, error) {
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
 func (ts *TaskStatus) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, ts)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: ******")
 }
 
 // Clone returns a deep-clone of the struct
@@ -297,8 +295,7 @@ func (status *ChangeFeedStatus) Marshal() (string, error) {
 // Unmarshal unmarshals into *ChangeFeedStatus from json marshal byte slice
 func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, status)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: ******")
 }
 
 // ProcInfoSnap holds most important replication information of a processor

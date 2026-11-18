@@ -220,7 +220,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				log.Info("Stale Etcd event dropped",
 					zap.Int64("eventRevision", response.Header.GetRevision()),
 					zap.Int64("previousRevision", worker.revision),
-					zap.Any("events", response.Events),
+					zap.String("events", "******"),
 					zap.String("role", role))
 				continue
 			}
@@ -329,7 +329,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 		case mvccpb.PUT:
 			worker.handleDeleteCounter(event.Kv.Value)
 		case mvccpb.DELETE:
-			log.Warn("deletion counter key deleted", zap.Reflect("event", event))
+			log.Warn("deletion counter key deleted", zap.String("event", "******"))
 			worker.handleDeleteCounter(nil)
 		}
 		// We return here because the delete-counter is not used for business logic,
@@ -362,7 +362,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 					"owner resign or externally delete operation"+
 					"exit etcd worker and campaign again",
 					zap.String("ownerMetaKey", worker.ownerMetaKey),
-					zap.String("value", string(event.Kv.Value)),
+					zap.String("value", "******"),
 					zap.Error(err))
 				return err
 			}
@@ -542,6 +542,9 @@ func (worker *EtcdWorker) logEtcdCmps(cmps []clientv3.Cmp) {
 	log.Info("[etcd worker] ==========Failed Etcd Txn Cmps==========")
 	for _, cmp := range cmps {
 		cmp := etcdserverpb.Compare(cmp)
+		if cmp.Target == etcdserverpb.Compare_VALUE {
+			cmp.TargetUnion = &etcdserverpb.Compare_Value{Value: []byte("******")}
+		}
 		log.Info("[etcd worker] compare",
 			zap.String("cmp", cmp.String()))
 	}

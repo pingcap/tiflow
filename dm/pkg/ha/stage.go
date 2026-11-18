@@ -421,7 +421,7 @@ func watchStage(ctx context.Context, watchCh clientv3.WatchChan,
 					stage.IsDeleted = true
 				default:
 					// this should not happen.
-					log.L().Error("unsupported etcd event type", zap.Reflect("kv", ev.Kv), zap.Reflect("type", ev.Type))
+					log.L().Error("unsupported etcd event type", zap.String("kv", "******"), zap.Reflect("type", ev.Type))
 					continue
 				}
 				stage.Revision = ev.Kv.ModRevision

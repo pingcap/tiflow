@@ -47,8 +47,7 @@ func (c *CaptureInfo) Marshal() ([]byte, error) {
 // Unmarshal from binary data.
 func (c *CaptureInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, c)
-	return errors.Annotatef(cerror.WrapError(cerror.ErrUnmarshalFailed, err),
-		"unmarshal data: %v", data)
+	return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "unmarshal data: ******")
 }
 
 // ListVersionsFromCaptureInfos returns the version list of the CaptureInfo list.

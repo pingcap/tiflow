@@ -14,6 +14,7 @@
 package util
 
 import (
+	"errors"
 	"net"
 	"net/url"
 	"strings"
@@ -70,8 +71,14 @@ func MaskSinkURI(uri string) (string, error) {
 		return "", err
 	}
 	queries := uriParsed.Query()
-	if queries.Has("sasl-password") {
-		queries.Set("sasl-password", "xxxxx")
+	masked := false
+	for key := range queries {
+		if isSensitiveQueryParameter(key) {
+			queries.Set(key, "xxxxx")
+			masked = true
+		}
+	}
+	if masked {
 		uriParsed.RawQuery = queries.Encode()
 	}
 	return uriParsed.Redacted(), nil
@@ -155,8 +162,8 @@ func MaskSensitiveDataInURLError(err error) error {
 	if err == nil {
 		return nil
 	}
-	urlErr, ok := err.(*url.Error)
-	if !ok {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
 		return err
 	}
 	return &url.Error{

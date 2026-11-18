@@ -286,8 +286,7 @@ func (info *ChangeFeedInfo) Marshal() (string, error) {
 func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
-		return errors.Annotatef(
-			cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+		return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: ******")
 	}
 	return nil
 }
@@ -505,10 +504,12 @@ func (info *ChangeFeedInfo) fixMySQLSinkProtocol() {
 	protocolStr := query.Get(config.ProtocolKey)
 	if protocolStr != "" || info.Config.Sink.Protocol != nil {
 		maskedSinkURI, _ := util.MaskSinkURI(info.SinkURI)
+		maskedSinkConfig := info.Config.Clone().Sink
+		maskedSinkConfig.MaskSensitiveData()
 		log.Warn("sink URI or sink config contains protocol, but scheme is not mq",
 			zap.String("sinkURI", maskedSinkURI),
 			zap.String("protocol", protocolStr),
-			zap.Any("sinkConfig", info.Config.Sink))
+			zap.Any("sinkConfig", maskedSinkConfig))
 		// always set protocol of mysql sink to ""
 		query.Del(config.ProtocolKey)
 		info.updateSinkURIAndConfigProtocol(uri, "", query)

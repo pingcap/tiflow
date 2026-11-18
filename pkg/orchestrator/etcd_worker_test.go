@@ -34,6 +34,7 @@ import (
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -43,6 +44,30 @@ const (
 	numValuesPerGroup    = 5
 	totalTicksPerReactor = 1000
 )
+
+func TestLogEtcdCmpsMasksValues(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevel()})
+	defer restore()
+
+	const key = "/changefeed/info/test"
+	const secret = "comparison-secret"
+	cmps := []clientv3.Cmp{
+		clientv3.Compare(clientv3.Value(key), "=", secret),
+		clientv3.Compare(clientv3.ModRevision(key), "=", int64(42)),
+	}
+	worker := &EtcdWorker{}
+	worker.logEtcdCmps(cmps)
+
+	entries := logs.FilterMessage("[etcd worker] compare").All()
+	require.Len(t, entries, 2)
+	valueCmp := entries[0].ContextMap()["cmp"].(string)
+	require.Contains(t, valueCmp, key)
+	require.Contains(t, valueCmp, "******")
+	require.NotContains(t, valueCmp, secret)
+	require.Contains(t, entries[1].ContextMap()["cmp"], "mod_revision:42")
+	require.Equal(t, secret, string(cmps[0].ValueBytes()))
+}
 
 type simpleReactor struct {
 	state     *simpleReactorState
