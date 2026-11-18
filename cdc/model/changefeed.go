@@ -286,7 +286,7 @@ func (info *ChangeFeedInfo) Marshal() (string, error) {
 func (info *ChangeFeedInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, &info)
 	if err != nil {
-		return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: ******")
+		return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 	}
 	return nil
 }

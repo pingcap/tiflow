@@ -624,7 +624,7 @@ func TestNoServiceSafePoint(t *testing.T) {
 	require.Nil(t, err)
 }
 
-func TestCleanOldDataMasksValuesInLogs(t *testing.T) {
+func TestCleanOldDataOmitsValuesFromLogs(t *testing.T) {
 	s := &etcd.Tester{}
 	s.SetUpTest(t)
 	defer s.TearDownTest(t)
@@ -649,7 +649,7 @@ func TestCleanOldDataMasksValuesInLogs(t *testing.T) {
 	backupKey := etcd.MigrateBackupKey(0, key)
 	entries := logs.FilterMessage("renaming old etcd data").All()
 	require.Len(t, entries, 1)
-	require.Equal(t, map[string]any{"key": key, "newKey": backupKey, "value": "******"}, entries[0].ContextMap())
+	require.Equal(t, map[string]any{"key": key, "newKey": backupKey}, entries[0].ContextMap())
 	resp, err := client.Get(ctx, backupKey)
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)

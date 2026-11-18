@@ -16,7 +16,6 @@ package model
 import (
 	"encoding/json"
 
-	"github.com/pingcap/errors"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 )
 
@@ -47,7 +46,7 @@ func (c *CaptureInfo) Marshal() ([]byte, error) {
 // Unmarshal from binary data.
 func (c *CaptureInfo) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, c)
-	return errors.Annotate(cerror.WrapError(cerror.ErrUnmarshalFailed, err), "unmarshal data: ******")
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 }
 
 // ListVersionsFromCaptureInfos returns the version list of the CaptureInfo list.

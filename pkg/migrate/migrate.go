@@ -229,7 +229,7 @@ func (m *migrator) migrate(ctx context.Context, etcdNoMetaVersion bool, oldVersi
 				err = info.Unmarshal(v.Value)
 				if err != nil {
 					log.Error("unmarshal changefeed failed",
-						zap.String("value", "******"),
+						zap.String("key", oldKey),
 						zap.Error(err))
 					return cerror.WrapError(cerror.ErrEtcdMigrateFailed, err)
 				}
@@ -294,8 +294,7 @@ func cleanOldData(ctx context.Context, client *etcd.Client) {
 			newKey := etcd.MigrateBackupKey(0, key)
 			log.Info("renaming old etcd data",
 				zap.String("key", key),
-				zap.String("newKey", newKey),
-				zap.String("value", "******"))
+				zap.String("newKey", newKey))
 			if _, err := client.Put(ctx, newKey,
 				string(kvPair.Value)); err != nil {
 				log.Info("put new key failed", zap.String("key", key),

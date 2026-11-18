@@ -31,6 +31,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -45,7 +46,22 @@ const (
 	totalTicksPerReactor = 1000
 )
 
-func TestLogEtcdCmpsMasksValues(t *testing.T) {
+func TestEtcdEventKeysOmitsValues(t *testing.T) {
+	events := []*clientv3.Event{
+		{
+			Type: mvccpb.PUT,
+			Kv:   &mvccpb.KeyValue{Key: []byte("/changefeed/info/test"), Value: []byte("current-secret")},
+		},
+		{
+			Type:   mvccpb.DELETE,
+			Kv:     &mvccpb.KeyValue{Key: []byte("/changefeed/info/old")},
+			PrevKv: &mvccpb.KeyValue{Value: []byte("previous-secret")},
+		},
+	}
+	require.Equal(t, []string{"PUT /changefeed/info/test", "DELETE /changefeed/info/old"}, etcdEventKeys(events))
+}
+
+func TestLogEtcdCmpsOmitsValues(t *testing.T) {
 	core, logs := observer.New(zap.InfoLevel)
 	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevel()})
 	defer restore()
@@ -63,8 +79,8 @@ func TestLogEtcdCmpsMasksValues(t *testing.T) {
 	require.Len(t, entries, 2)
 	valueCmp := entries[0].ContextMap()["cmp"].(string)
 	require.Contains(t, valueCmp, key)
-	require.Contains(t, valueCmp, "******")
 	require.NotContains(t, valueCmp, secret)
+	require.NotContains(t, valueCmp, "value:")
 	require.Contains(t, entries[1].ContextMap()["cmp"], "mod_revision:42")
 	require.Equal(t, secret, string(cmps[0].ValueBytes()))
 }

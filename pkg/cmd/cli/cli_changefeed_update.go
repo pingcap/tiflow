@@ -198,7 +198,7 @@ func maskChangefeedDiffValue(path string, value any) any {
 		"Config.Sink.PulsarConfig.AuthenticationToken",
 		"Config.Sink.PulsarConfig.BasicPassword",
 		"Config.Sink.PulsarConfig.OAuth2.OAuth2PrivateKey":
-		return "******"
+		return config.MaskedSensitiveValue
 	default:
 		return value
 	}
