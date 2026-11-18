@@ -63,6 +63,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/pingcap/tiflow/pkg/version"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -2921,4 +2922,26 @@ func (t *testMasterSuite) TestGetLatestMeta() {
 	require.Equal(t.T(), meta.BinLogName, "mysql-bin.000009")
 	require.Equal(t.T(), meta.BinLogPos, uint32(11232))
 	require.Equal(t.T(), meta.BinLogGTID, "1-2-100")
+}
+
+func TestSourceConfigMixedAction(t *testing.T) {
+	_, err := conn.MockDefaultDBProvider()
+	require.NoError(t, err)
+	defer func() { conn.DefaultDBProvider = &conn.DefaultDBProviderImpl{} }()
+
+	// The sample config pins flavor and server-id, so adjusting it runs no query.
+	newSource := func(actionOfSecondRule bf.ActionType) *config.SourceConfig {
+		cfg, err2 := config.SourceCfgFromYaml(config.SampleSourceConfig)
+		require.NoError(t, err2)
+		cfg.Filters = []*bf.BinlogEventRule{
+			{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN a_col"}, Action: bf.Ignore},
+			{SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: actionOfSecondRule},
+		}
+		return cfg
+	}
+
+	err = checkAndAdjustSourceConfigForDMCtl(context.Background(), newSource(bf.Do))
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+
+	require.NoError(t, checkAndAdjustSourceConfigForDMCtl(context.Background(), newSource(bf.Ignore)))
 }

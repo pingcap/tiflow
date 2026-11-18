@@ -87,6 +87,9 @@ func TaskConfigToSubTaskConfigs(c *TaskConfig, sources map[string]dbconfig.DBCon
 		for j, name := range inst.FilterRules {
 			cfg.FilterRules[j] = c.Filters[name]
 		}
+		if err := bf.ValidateRules(cfg.CaseSensitive, cfg.FilterRules); err != nil {
+			return nil, terror.ErrConfigBinlogEventFilter.Delegate(err)
+		}
 
 		cfg.ColumnMappingRules = make([]*column.Rule, len(inst.ColumnMappingRules))
 		for j, name := range inst.ColumnMappingRules {
@@ -337,6 +340,9 @@ func OpenAPITaskToSubTaskConfigs(task *openapi.Task, toDBCfg *dbconfig.DBConfig,
 		}
 		subTaskCfg.RouteRules = routeRules
 		subTaskCfg.FilterRules = filterRules
+		if err := bf.ValidateRules(subTaskCfg.CaseSensitive, subTaskCfg.FilterRules); err != nil {
+			return nil, terror.ErrConfigBinlogEventFilter.Delegate(err)
+		}
 		if len(doDBs) > 0 || len(doTables) > 0 {
 			bAList := &filter.Rules{}
 			if len(doDBs) > 0 {

@@ -61,6 +61,65 @@ func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 	testShardAndFilterTaskToSubTaskConfigs(c)
 }
 
+func TestTaskConfigMixedAction(t *testing.T) {
+	const sourceID = "mysql-replica-01"
+	newTask := func(actionOfSecondRule bf.ActionType) *TaskConfig {
+		cfg := NewTaskConfig()
+		cfg.Name = "test"
+		cfg.TaskMode = ModeIncrement
+		cfg.TargetDB = &dbconfig.DBConfig{Host: "127.0.0.1", Port: 4000, User: "root"}
+		cfg.Filters = map[string]*bf.BinlogEventRule{
+			"a": {SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN a_col"}, Action: bf.Ignore},
+			"b": {SchemaPattern: "*", SQLPattern: []string{"ADD COLUMN b_col"}, Action: actionOfSecondRule},
+		}
+		cfg.MySQLInstances = []*MySQLInstance{{
+			SourceID:    sourceID,
+			FilterRules: []string{"a", "b"},
+			Meta:        &Meta{BinLogName: "mysql-bin.000001", BinLogPos: 4},
+		}}
+		require.NoError(t, cfg.Adjust())
+		return cfg
+	}
+	sources := map[string]dbconfig.DBConfig{sourceID: {Host: "127.0.0.1", Port: 3306, User: "root"}}
+
+	_, err := TaskConfigToSubTaskConfigs(newTask(bf.Do), sources)
+	require.ErrorContains(t, err, "only supported when all of them are Ignore rules")
+
+	_, err = TaskConfigToSubTaskConfigs(newTask(bf.Ignore), sources)
+	require.NoError(t, err)
+}
+
+func TestOpenAPITaskAliasedKey(t *testing.T) {
+	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
+	require.NoError(t, err)
+	// "[ab]" and "[ba]" are one key that reads back under one spelling, so the
+	// rules there cannot be listed and composed. Every rule this path builds is
+	// an Ignore rule, so this is the only conflict it can report.
+	filtered := task.TableMigrateRule[0]
+	require.NotNil(t, filtered.BinlogFilterRule)
+	filtered.Source.Schema = "[ab]"
+	aliased := filtered
+	aliased.Source.Schema = "[ba]"
+	task.TableMigrateRule[0] = filtered
+	task.TableMigrateRule = append(task.TableMigrateRule, aliased)
+
+	sourceCfgMap := make(map[string]*SourceConfig, len(task.SourceConfig.SourceConf))
+	for _, sourceConf := range task.SourceConfig.SourceConf {
+		sourceCfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+		require.NoError(t, err)
+		sourceCfg.SourceID = sourceConf.SourceName
+		sourceCfgMap[sourceConf.SourceName] = sourceCfg
+	}
+	toDBCfg := &dbconfig.DBConfig{
+		Host: task.TargetConfig.Host,
+		Port: task.TargetConfig.Port,
+		User: task.TargetConfig.User,
+	}
+
+	_, err = OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+	require.ErrorContains(t, err, "write the pattern the same way in both")
+}
+
 func TestValidateMetricLabels(t *testing.T) {
 	testCases := []struct {
 		name    string
