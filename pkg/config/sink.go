@@ -258,15 +258,21 @@ func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) error {
 			restoreMaskedValue(&currentGlue.Token, oldGlue.Token)
 		}
 	}
-	if s.PulsarConfig != nil && old.PulsarConfig != nil {
-		current, previous := s.PulsarConfig, old.PulsarConfig
-		restoreMaskedString(&current.AuthenticationToken, previous.AuthenticationToken)
-		restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
-		if current.OAuth2 != nil && previous.OAuth2 != nil {
-			restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+	if current := s.PulsarConfig; current != nil {
+		previous := old.PulsarConfig
+		if previous != nil {
+			restoreMaskedString(&current.AuthenticationToken, previous.AuthenticationToken)
+			restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
+		}
+		if current.OAuth2 != nil {
+			var previousIssuerURL string
+			if previous != nil && previous.OAuth2 != nil {
+				restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+				previousIssuerURL = previous.OAuth2.OAuth2IssuerURL
+			}
 			var err error
 			current.OAuth2.OAuth2IssuerURL, err = restoreMaskedURI(
-				current.OAuth2.OAuth2IssuerURL, previous.OAuth2.OAuth2IssuerURL)
+				current.OAuth2.OAuth2IssuerURL, previousIssuerURL)
 			if err != nil {
 				return err
 			}

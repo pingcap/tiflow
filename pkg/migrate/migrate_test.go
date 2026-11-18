@@ -650,6 +650,9 @@ func TestCleanOldDataOmitsValuesFromLogs(t *testing.T) {
 	entries := logs.FilterMessage("renaming old etcd data").All()
 	require.Len(t, entries, 1)
 	require.Equal(t, map[string]any{"key": key, "newKey": backupKey}, entries[0].ContextMap())
+	for _, entry := range logs.All() {
+		require.NotContains(t, fmt.Sprint(entry.Message, entry.ContextMap()), secret)
+	}
 	resp, err := client.Get(ctx, backupKey)
 	require.NoError(t, err)
 	require.Len(t, resp.Kvs, 1)

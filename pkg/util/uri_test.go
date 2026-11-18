@@ -85,6 +85,14 @@ func TestMaskSinkURI(t *testing.T) {
 			"s3://bucket/prefix?region=us-east-1&secret-access-key=verysecure&access-key=key",
 			"s3://bucket/prefix?access-key=xxxxx&region=us-east-1&secret-access-key=xxxxx",
 		},
+		{
+			"kafka://broker:9093/cdc?sasl-password=fixture%zz&kafka-client-id=producer",
+			"kafka://broker:9093/cdc?kafka-client-id=producer",
+		},
+		{
+			"kafka://broker:9093/cdc?sasl-oauth-client-secret=secret&kafka-client-id=producer",
+			"kafka://broker:9093/cdc?kafka-client-id=producer&sasl-oauth-client-secret=xxxxx",
+		},
 	}
 
 	for _, tt := range tests {
@@ -92,6 +100,9 @@ func TestMaskSinkURI(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tt.masked, maskedURI)
 	}
+	_, err := MaskSinkURI("mysql:root:fixture-password@db:3306/app")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "fixture-password")
 }
 
 func TestMaskSensitiveDataInURI(t *testing.T) {
@@ -114,6 +125,10 @@ func TestMaskSensitiveDataInURI(t *testing.T) {
 		{
 			"mysql://root:123456@127.0.0.1:3306/?client_secret=c",
 			"mysql://root:xxxxx@127.0.0.1:3306/?client_secret=xxxxx",
+		},
+		{
+			"kafka://broker:9093/cdc?sasl-oauth-client-secret=secret&kafka-client-id=producer",
+			"kafka://broker:9093/cdc?kafka-client-id=producer&sasl-oauth-client-secret=xxxxx",
 		},
 		{
 			"",
@@ -147,6 +162,7 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 		"mysql://root:xxxxx@127.0.0.1:3306/?sasl-password=xxxxx",
 		MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1:3306/?sasl-password=rawsecret"))
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1/%zz"))
+	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql:root:fixture-password@db:3306/app"))
 }
 
 func TestHasMaskedSensitiveDataInURI(t *testing.T) {
@@ -154,6 +170,7 @@ func TestHasMaskedSensitiveDataInURI(t *testing.T) {
 	require.True(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=xxxxx&region=us-east-1"))
 	require.False(t, HasMaskedSensitiveDataInURI("s3://bucket/path?region=xxxxx"))
 	require.False(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=real-key"))
+	require.False(t, HasMaskedSensitiveDataInURI("kafka://broker:9093/cdc?kafka-client-id=xxxxx"))
 }
 
 func TestMaskSensitiveDataInURLError(t *testing.T) {

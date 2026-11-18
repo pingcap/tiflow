@@ -25,6 +25,7 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
@@ -59,6 +60,50 @@ func TestEtcdEventKeysOmitsValues(t *testing.T) {
 		},
 	}
 	require.Equal(t, []string{"PUT /changefeed/info/test", "DELETE /changefeed/info/old"}, etcdEventKeys(events))
+}
+
+func TestEtcdWorkerDeleteLogsKeepFields(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevel()})
+	defer restore()
+
+	const prefix = "/test"
+	const ownerKey = prefix + "/owner"
+	worker := &EtcdWorker{prefix: util.NormalizePrefix(prefix), ownerMetaKey: ownerKey, isOwner: true}
+	event := &clientv3.Event{
+		Type: mvccpb.DELETE,
+		Kv: &mvccpb.KeyValue{
+			Key:         []byte(prefix + etcd.DeletionCounterKey),
+			Value:       []byte("current-secret"),
+			ModRevision: 42,
+		},
+		PrevKv: &mvccpb.KeyValue{Value: []byte("previous-secret")},
+	}
+	require.NoError(t, worker.handleEvent(t.Context(), event))
+	entries := logs.FilterMessage("deletion counter key deleted").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.EqualValues(t, 42, fields["revision"])
+	loggedEvent, err := json.Marshal(fields["event"])
+	require.NoError(t, err)
+	var safeEvent clientv3.Event
+	require.NoError(t, json.Unmarshal(loggedEvent, &safeEvent))
+	require.Equal(t, event.Type, safeEvent.Type)
+	require.NotNil(t, safeEvent.Kv)
+	require.Equal(t, event.Kv.Key, safeEvent.Kv.Key)
+	require.Equal(t, event.Kv.ModRevision, safeEvent.Kv.ModRevision)
+	require.Empty(t, safeEvent.Kv.Value)
+	require.Nil(t, safeEvent.PrevKv)
+	require.Equal(t, "current-secret", string(event.Kv.Value))
+	require.Equal(t, "previous-secret", string(event.PrevKv.Value))
+
+	event.Kv.Key = []byte(ownerKey)
+	require.True(t, cerrors.ErrNotOwner.Equal(worker.handleEvent(t.Context(), event)))
+	entries = logs.FilterField(zap.String("ownerMetaKey", ownerKey)).All()
+	require.Len(t, entries, 1)
+	fields = entries[0].ContextMap()
+	require.Equal(t, config.MaskedSensitiveValue, fields["value"])
+	require.EqualValues(t, 42, fields["revision"])
 }
 
 func TestLogEtcdCmpsOmitsValues(t *testing.T) {

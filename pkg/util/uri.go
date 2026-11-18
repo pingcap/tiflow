@@ -71,8 +71,11 @@ func MaskSinkURI(uri string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	queries := uriParsed.Query()
-	masked := false
+	if uriParsed.Opaque != "" {
+		return "", errors.New("invalid opaque URI")
+	}
+	queries, queryErr := url.ParseQuery(uriParsed.RawQuery)
+	masked := queryErr != nil
 	for key := range queries {
 		if isSensitiveQueryParameter(key) {
 			queries.Set(key, "xxxxx")
@@ -102,7 +105,7 @@ var sensitiveQueryParameterNames = []string{
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
 func MaskSensitiveDataInURI(uri string) string {
 	uriParsed, err := url.Parse(uri)
-	if err != nil {
+	if err != nil || uriParsed.Opaque != "" {
 		return ""
 	}
 	queries := uriParsed.Query()
@@ -117,6 +120,9 @@ func MaskSensitiveDataInURI(uri string) string {
 
 func isSensitiveQueryParameter(key string) bool {
 	lower := strings.ToLower(key)
+	if lower == "kafka-client-id" {
+		return false
+	}
 	for _, secretKey := range sensitiveQueryParameterNames {
 		if strings.Contains(lower, secretKey) {
 			return true

@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/chdelay"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
@@ -338,7 +339,13 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 		case mvccpb.PUT:
 			worker.handleDeleteCounter(event.Kv.Value)
 		case mvccpb.DELETE:
+			safeKV := *event.Kv
+			safeKV.Value = nil
+			safeEvent := *event
+			safeEvent.Kv = &safeKV
+			safeEvent.PrevKv = nil
 			log.Warn("deletion counter key deleted",
+				zap.Reflect("event", &safeEvent),
 				zap.ByteString("key", event.Kv.Key), zap.Int64("revision", event.Kv.ModRevision))
 			worker.handleDeleteCounter(nil)
 		}
@@ -372,6 +379,7 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 					"owner resign or externally delete operation"+
 					"exit etcd worker and campaign again",
 					zap.String("ownerMetaKey", worker.ownerMetaKey),
+					zap.String("value", config.MaskedSensitiveValue),
 					zap.Int64("revision", event.Kv.ModRevision),
 					zap.Error(err))
 				return err

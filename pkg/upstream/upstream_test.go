@@ -155,11 +155,14 @@ func TestFetchTiDBTopologyMasksInvalidValues(t *testing.T) {
 	defer cancel()
 	const rawValue = "test-topology-value"
 	const infoKey = topologyTiDB + "/invalid-address/info"
-	const ttlKey = topologyTiDB + "/localhost:4000/ttl"
+	const validAddressPrefix = topologyTiDB + "/localhost:4000"
+	const ttlKey = validAddressPrefix + "/ttl"
 	for _, key := range []string{infoKey, ttlKey} {
 		_, err = client.Put(ctx, key, rawValue)
 		require.NoError(t, err)
 	}
+	_, err = client.Put(ctx, validAddressPrefix+"/info", "{}")
+	require.NoError(t, err)
 
 	core, logs := observer.New(zap.WarnLevel)
 	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevelAt(zap.WarnLevel)})
@@ -168,6 +171,7 @@ func TestFetchTiDBTopologyMasksInvalidValues(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, nodes)
 
+	encoder := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig())
 	for message, key := range map[string]string{
 		"Ignored invalid tidb topology info entry": infoKey,
 		"Ignored invalid tidb topology TTL entry":  ttlKey,
@@ -177,7 +181,11 @@ func TestFetchTiDBTopologyMasksInvalidValues(t *testing.T) {
 		fields := entries[0].ContextMap()
 		require.Equal(t, key, fields["key"])
 		require.Equal(t, "******", fields["value"])
-		require.NotContains(t, fields["error"], rawValue)
+		encoded, err := encoder.EncodeEntry(entries[0].Entry, entries[0].Context)
+		require.NoError(t, err)
+		warning := encoded.String()
+		encoded.Free()
+		require.NotContains(t, warning, rawValue)
 	}
 }
 

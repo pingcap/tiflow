@@ -127,10 +127,6 @@ func TestSchemaRegistryRedactsNestedURLErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	core, logs := observer.New(zap.ErrorLevel)
-	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevelAt(zap.ErrorLevel)})
-	defer restore()
-
 	for _, tc := range []struct {
 		name, registryURL, credential, reason string
 	}{
@@ -138,12 +134,15 @@ func TestSchemaRegistryRedactsNestedURLErrors(t *testing.T) {
 		{"malformed redirect", server.URL, redirectToken, "invalid redirect Location header"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			core, logs := observer.New(zap.ErrorLevel)
+			t.Cleanup(log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevelAt(zap.ErrorLevel)}))
+
 			_, err := NewConfluentSchemaManager(t.Context(), tc.registryURL, nil)
 			require.Error(t, err)
 			require.NotContains(t, err.Error(), tc.credential)
 			require.ErrorContains(t, err, tc.reason)
 
-			entries := logs.TakeAll()
+			entries := logs.All()
 			require.Len(t, entries, 1)
 			require.Equal(t, "Test connection to Schema Registry failed", entries[0].Message)
 			loggedErr := entries[0].ContextMap()["error"].(string)
