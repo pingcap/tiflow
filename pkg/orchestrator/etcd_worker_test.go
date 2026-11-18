@@ -25,15 +25,18 @@ import (
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
 	"github.com/pingcap/tiflow/pkg/orchestrator/util"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -43,6 +46,89 @@ const (
 	numValuesPerGroup    = 5
 	totalTicksPerReactor = 1000
 )
+
+func TestEtcdEventKeysOmitsValues(t *testing.T) {
+	events := []*clientv3.Event{
+		{
+			Type: mvccpb.PUT,
+			Kv:   &mvccpb.KeyValue{Key: []byte("/changefeed/info/test"), Value: []byte("current-secret")},
+		},
+		{
+			Type:   mvccpb.DELETE,
+			Kv:     &mvccpb.KeyValue{Key: []byte("/changefeed/info/old")},
+			PrevKv: &mvccpb.KeyValue{Value: []byte("previous-secret")},
+		},
+	}
+	require.Equal(t, []string{"PUT /changefeed/info/test", "DELETE /changefeed/info/old"}, etcdEventKeys(events))
+}
+
+func TestEtcdWorkerDeleteLogsKeepFields(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevel()})
+	defer restore()
+
+	const prefix = "/test"
+	const ownerKey = prefix + "/owner"
+	worker := &EtcdWorker{prefix: util.NormalizePrefix(prefix), ownerMetaKey: ownerKey, isOwner: true}
+	event := &clientv3.Event{
+		Type: mvccpb.DELETE,
+		Kv: &mvccpb.KeyValue{
+			Key:         []byte(prefix + etcd.DeletionCounterKey),
+			Value:       []byte("current-secret"),
+			ModRevision: 42,
+		},
+		PrevKv: &mvccpb.KeyValue{Value: []byte("previous-secret")},
+	}
+	require.NoError(t, worker.handleEvent(t.Context(), event))
+	entries := logs.FilterMessage("deletion counter key deleted").All()
+	require.Len(t, entries, 1)
+	fields := entries[0].ContextMap()
+	require.EqualValues(t, 42, fields["revision"])
+	loggedEvent, err := json.Marshal(fields["event"])
+	require.NoError(t, err)
+	var safeEvent clientv3.Event
+	require.NoError(t, json.Unmarshal(loggedEvent, &safeEvent))
+	require.Equal(t, event.Type, safeEvent.Type)
+	require.NotNil(t, safeEvent.Kv)
+	require.Equal(t, event.Kv.Key, safeEvent.Kv.Key)
+	require.Equal(t, event.Kv.ModRevision, safeEvent.Kv.ModRevision)
+	require.Empty(t, safeEvent.Kv.Value)
+	require.Nil(t, safeEvent.PrevKv)
+	require.Equal(t, "current-secret", string(event.Kv.Value))
+	require.Equal(t, "previous-secret", string(event.PrevKv.Value))
+
+	event.Kv.Key = []byte(ownerKey)
+	require.True(t, cerrors.ErrNotOwner.Equal(worker.handleEvent(t.Context(), event)))
+	entries = logs.FilterField(zap.String("ownerMetaKey", ownerKey)).All()
+	require.Len(t, entries, 1)
+	fields = entries[0].ContextMap()
+	require.Equal(t, config.MaskedSensitiveValue, fields["value"])
+	require.EqualValues(t, 42, fields["revision"])
+}
+
+func TestLogEtcdCmpsOmitsValues(t *testing.T) {
+	core, logs := observer.New(zap.InfoLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevel()})
+	defer restore()
+
+	const key = "/changefeed/info/test"
+	const secret = "comparison-secret"
+	cmps := []clientv3.Cmp{
+		clientv3.Compare(clientv3.Value(key), "=", secret),
+		clientv3.Compare(clientv3.ModRevision(key), "=", int64(42)),
+	}
+	worker := &EtcdWorker{}
+	worker.logEtcdCmps(cmps)
+
+	entries := logs.FilterMessage("[etcd worker] compare").All()
+	require.Len(t, entries, 2)
+	valueCmp := entries[0].ContextMap()["cmp"].(string)
+	require.Contains(t, valueCmp, key)
+	require.NotContains(t, valueCmp, secret)
+	require.NotContains(t, valueCmp, "value:")
+	require.Contains(t, entries[1].ContextMap()["cmp"], "mod_revision:42")
+	require.Equal(t, secret, string(cmps[0].ValueBytes()))
+}
 
 type simpleReactor struct {
 	state     *simpleReactorState
