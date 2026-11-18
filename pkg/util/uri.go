@@ -14,10 +14,16 @@
 package util
 
 import (
+<<<<<<< HEAD
+=======
+	"context"
+>>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 	"errors"
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/pingcap/tiflow/pkg/sink"
 )
 
 // IsValidIPv6AddressFormatInURI reports whether hostPort is a valid IPv6 address in URI.
@@ -66,13 +72,19 @@ func validOptionalPort(port string) bool {
 
 // MaskSinkURI returns a sink uri that sensitive infos has been masked.
 func MaskSinkURI(uri string) (string, error) {
-	uriParsed, err := url.Parse(uri)
+	uriParsed, err := parseURIForMasking(uri)
 	if err != nil {
-		return "", err
+		return "", MaskSensitiveDataInURLError(err)
 	}
-	queries := uriParsed.Query()
-	if queries.Has("sasl-password") {
-		queries.Set("sasl-password", "xxxxx")
+	queries, queryErr := url.ParseQuery(uriParsed.RawQuery)
+	masked := queryErr != nil
+	for key := range queries {
+		if isSensitiveQueryParameter(key) {
+			queries.Set(key, "xxxxx")
+			masked = true
+		}
+	}
+	if masked {
 		uriParsed.RawQuery = queries.Encode()
 	}
 	return uriParsed.Redacted(), nil
@@ -94,8 +106,13 @@ var sensitiveQueryParameterNames = []string{
 
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
 func MaskSensitiveDataInURI(uri string) string {
+<<<<<<< HEAD
 	uriParsed, err := url.Parse(uri)
 	if err != nil || uriParsed.Opaque != "" {
+=======
+	uriParsed, err := parseURIForMasking(uri)
+	if err != nil {
+>>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 		return ""
 	}
 	queries := uriParsed.Query()
@@ -108,8 +125,33 @@ func MaskSensitiveDataInURI(uri string) string {
 	return uriParsed.Redacted()
 }
 
+func parseURIForMasking(uri string) (*url.URL, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Opaque != "" {
+		return nil, errors.New("invalid opaque URI")
+	}
+
+	scheme := parsed.Scheme
+	requiresAuthority := scheme == "http" || scheme == "https" || sink.IsMQScheme(scheme) ||
+		(sink.IsStorageScheme(scheme) && scheme != sink.FileScheme && scheme != sink.CloudStorageNoopScheme)
+	if sink.IsMySQLCompatibleScheme(scheme) {
+		// The MySQL sink supports a default address in URLs like mysql://.
+		requiresAuthority = parsed.Path != "" || parsed.Fragment != ""
+	}
+	if parsed.Host == "" && requiresAuthority {
+		return nil, errors.New("network URI is missing authority")
+	}
+	return parsed, nil
+}
+
 func isSensitiveQueryParameter(key string) bool {
 	lower := strings.ToLower(key)
+	if lower == "kafka-client-id" {
+		return false
+	}
 	for _, secretKey := range sensitiveQueryParameterNames {
 		if strings.Contains(lower, secretKey) {
 			return true
@@ -151,18 +193,51 @@ func MaskSensitiveDataInURIForError(uri string) string {
 	return maskedURI
 }
 
-// MaskSensitiveDataInURLError masks the URL carried by net/url errors.
+// MaskSensitiveDataInURLError masks a net/url error's URL and sanitizes its cause.
 func MaskSensitiveDataInURLError(err error) error {
 	if err == nil {
 		return nil
 	}
-	urlErr, ok := err.(*url.Error)
-	if !ok {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
 		return err
 	}
 	return &url.Error{
 		Op:  urlErr.Op,
 		URL: MaskSensitiveDataInURIForError(urlErr.URL),
+<<<<<<< HEAD
 		Err: errors.New("invalid URI"),
+=======
+		Err: sanitizeURLErrorCause(urlErr.Op, urlErr.Err),
+	}
+}
+
+func sanitizeURLErrorCause(op string, err error) error {
+	// Parser and redirect errors can quote the input, including credentials.
+	// Use fixed descriptions so the cause cannot reintroduce that text.
+	var message string
+	if err != nil {
+		message = err.Error()
+	}
+	var escapeErr url.EscapeError
+	var hostErr url.InvalidHostError
+	switch {
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	case strings.HasPrefix(message, "failed to parse Location header "):
+		return errors.New("invalid redirect Location header")
+	case strings.HasPrefix(message, "invalid port "):
+		return errors.New("invalid port")
+	case errors.As(err, &escapeErr):
+		return errors.New("invalid URL escape")
+	case errors.As(err, &hostErr):
+		return errors.New("invalid URL host")
+	case op == "parse":
+		return errors.New("invalid URL")
+	default:
+		return errors.New("URL request failed")
+>>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 	}
 }
