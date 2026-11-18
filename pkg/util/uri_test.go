@@ -166,9 +166,7 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 		"mysql://root:xxxxx@127.0.0.1:3306/?sasl-password=xxxxx",
 		MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1:3306/?sasl-password=rawsecret"))
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1/%zz"))
-<<<<<<< HEAD
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("kafka:alice:verysecure@broker:9092/topic"))
-=======
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql:root:fixture-password@db:3306/app"))
 }
 
@@ -207,7 +205,6 @@ func TestMaskURIMissingAuthority(t *testing.T) {
 		require.Equal(t, tc.masked, masked)
 		require.Equal(t, tc.masked, MaskSensitiveDataInURI(tc.uri))
 	}
->>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 }
 
 func TestHasMaskedSensitiveDataInURI(t *testing.T) {
@@ -226,15 +223,10 @@ func TestMaskSensitiveDataInURLError(t *testing.T) {
 
 	maskedErr := MaskSensitiveDataInURLError(err)
 	require.NotContains(t, maskedErr.Error(), "verysecure")
-<<<<<<< HEAD
-	require.Contains(t, maskedErr.Error(), `parse "<invalid uri>"`)
-	require.Equal(t, `parse "<invalid uri>": invalid URI`, maskedErr.Error())
+	require.EqualError(t, maskedErr, `parse "<invalid uri>": invalid URL escape`)
 
 	_, err = url.Parse("mysql://root:verysecure/more@host:3306/")
 	require.Error(t, err)
 	maskedErr = MaskSensitiveDataInURLError(err)
 	require.NotContains(t, maskedErr.Error(), "verysecure")
-=======
-	require.EqualError(t, maskedErr, `parse "<invalid uri>": invalid URL escape`)
->>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 }

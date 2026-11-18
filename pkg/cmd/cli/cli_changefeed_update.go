@@ -23,6 +23,7 @@ import (
 	cmdcontext "github.com/pingcap/tiflow/pkg/cmd/context"
 	"github.com/pingcap/tiflow/pkg/cmd/factory"
 	"github.com/pingcap/tiflow/pkg/cmd/util"
+	"github.com/pingcap/tiflow/pkg/config"
 	putil "github.com/pingcap/tiflow/pkg/util"
 	"github.com/r3labs/diff"
 	"github.com/spf13/cobra"

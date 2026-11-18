@@ -14,10 +14,7 @@
 package util
 
 import (
-<<<<<<< HEAD
-=======
 	"context"
->>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 	"errors"
 	"net"
 	"net/url"
@@ -106,13 +103,8 @@ var sensitiveQueryParameterNames = []string{
 
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
 func MaskSensitiveDataInURI(uri string) string {
-<<<<<<< HEAD
-	uriParsed, err := url.Parse(uri)
-	if err != nil || uriParsed.Opaque != "" {
-=======
 	uriParsed, err := parseURIForMasking(uri)
 	if err != nil {
->>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 		return ""
 	}
 	queries := uriParsed.Query()
@@ -205,9 +197,6 @@ func MaskSensitiveDataInURLError(err error) error {
 	return &url.Error{
 		Op:  urlErr.Op,
 		URL: MaskSensitiveDataInURIForError(urlErr.URL),
-<<<<<<< HEAD
-		Err: errors.New("invalid URI"),
-=======
 		Err: sanitizeURLErrorCause(urlErr.Op, urlErr.Err),
 	}
 }
@@ -238,6 +227,5 @@ func sanitizeURLErrorCause(op string, err error) error {
 		return errors.New("invalid URL")
 	default:
 		return errors.New("URL request failed")
->>>>>>> da015a26ea (log(ticdc): redact sensitive values in sink and etcd output (#12996))
 	}
 }
