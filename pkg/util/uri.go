@@ -19,6 +19,8 @@ import (
 	"net"
 	"net/url"
 	"strings"
+
+	"github.com/pingcap/tiflow/pkg/sink"
 )
 
 // IsValidIPv6AddressFormatInURI reports whether hostPort is a valid IPv6 address in URI.
@@ -67,12 +69,9 @@ func validOptionalPort(port string) bool {
 
 // MaskSinkURI returns a sink uri that sensitive infos has been masked.
 func MaskSinkURI(uri string) (string, error) {
-	uriParsed, err := url.Parse(uri)
+	uriParsed, err := parseURIForMasking(uri)
 	if err != nil {
-		return "", err
-	}
-	if uriParsed.Opaque != "" {
-		return "", errors.New("invalid opaque URI")
+		return "", MaskSensitiveDataInURLError(err)
 	}
 	queries, queryErr := url.ParseQuery(uriParsed.RawQuery)
 	masked := queryErr != nil
@@ -104,8 +103,8 @@ var sensitiveQueryParameterNames = []string{
 
 // MaskSensitiveDataInURI returns an uri that sensitive infos has been masked.
 func MaskSensitiveDataInURI(uri string) string {
-	uriParsed, err := url.Parse(uri)
-	if err != nil || uriParsed.Opaque != "" {
+	uriParsed, err := parseURIForMasking(uri)
+	if err != nil {
 		return ""
 	}
 	queries := uriParsed.Query()
@@ -116,6 +115,28 @@ func MaskSensitiveDataInURI(uri string) string {
 	}
 	uriParsed.RawQuery = queries.Encode()
 	return uriParsed.Redacted()
+}
+
+func parseURIForMasking(uri string) (*url.URL, error) {
+	parsed, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+	if parsed.Opaque != "" {
+		return nil, errors.New("invalid opaque URI")
+	}
+
+	scheme := parsed.Scheme
+	requiresAuthority := scheme == "http" || scheme == "https" || sink.IsMQScheme(scheme) ||
+		(sink.IsStorageScheme(scheme) && scheme != sink.FileScheme && scheme != sink.CloudStorageNoopScheme)
+	if sink.IsMySQLCompatibleScheme(scheme) {
+		// The MySQL sink supports a default address in URLs like mysql://.
+		requiresAuthority = parsed.Path != "" || parsed.Fragment != ""
+	}
+	if parsed.Host == "" && requiresAuthority {
+		return nil, errors.New("network URI is missing authority")
+	}
+	return parsed, nil
 }
 
 func isSensitiveQueryParameter(key string) bool {

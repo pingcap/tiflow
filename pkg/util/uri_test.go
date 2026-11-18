@@ -165,6 +165,43 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql:root:fixture-password@db:3306/app"))
 }
 
+func TestMaskURIMissingAuthority(t *testing.T) {
+	for _, uri := range []string{
+		"mysql:/root:fixture-password@db:3306/app",
+		"mysql:///root:fixture-password@db:3306/app",
+		"tidb+ssl:/root:fixture-password@db:4000/app",
+		"kafka+ssl:/fixture-password@broker:9093/topic",
+		"pulsar+https:/fixture-password@broker/topic",
+		"https:/user:fixture-password@registry.test",
+		"s3:/fixture-password@bucket/prefix",
+	} {
+		masked, err := MaskSinkURI(uri)
+		require.ErrorContains(t, err, "missing authority")
+		require.NotContains(t, err.Error(), "fixture-password")
+		require.Empty(t, masked)
+		require.Empty(t, MaskSensitiveDataInURI(uri))
+		require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError(uri))
+	}
+
+	_, err := MaskSinkURI("mysql:/root:fixture-password%zz@db:3306/app")
+	require.EqualError(t, err, `parse "<invalid uri>": invalid URL escape`)
+
+	for _, tc := range []struct{ uri, masked string }{
+		{"mysql://root:fixture-password@db:3306/app", "mysql://root:xxxxx@db:3306/app"},
+		{"mysql://", "mysql:"},
+		{"mysql://?time-zone=UTC", "mysql:?time-zone=UTC"},
+		{"blackhole://", "blackhole:"},
+		{"file:///tmp/output", "file:///tmp/output"},
+		{"local:///tmp/output", "local:///tmp/output"},
+		{"noop://", "noop:"},
+	} {
+		masked, err := MaskSinkURI(tc.uri)
+		require.NoError(t, err)
+		require.Equal(t, tc.masked, masked)
+		require.Equal(t, tc.masked, MaskSensitiveDataInURI(tc.uri))
+	}
+}
+
 func TestHasMaskedSensitiveDataInURI(t *testing.T) {
 	require.True(t, HasMaskedSensitiveDataInURI("mysql://root:xxxxx@localhost:3306"))
 	require.True(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=xxxxx&region=us-east-1"))
