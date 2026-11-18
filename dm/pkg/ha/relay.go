@@ -230,7 +230,7 @@ func WatchRelayConfig(ctx context.Context, cli *clientv3.Client,
 					bound.IsDeleted = true
 				default:
 					// this should not happen.
-					log.L().Error("unsupported etcd event type", zap.String("kv", "******"), zap.Reflect("type", ev.Type))
+					log.L().Error("unsupported etcd event type", zap.Reflect("kv", ev.Kv), zap.Reflect("type", ev.Type))
 					continue
 				}
 				bound.Revision = ev.Kv.ModRevision
