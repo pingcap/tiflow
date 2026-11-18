@@ -31,12 +31,13 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 )
 
+// TestAllPhysicalTables checks selection of replicated table and partition IDs.
 func TestAllPhysicalTables(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
@@ -89,12 +90,13 @@ func TestAllPhysicalTables(t *testing.T) {
 	require.Equal(t, tableIDs, expectedTableIDs)
 }
 
+// TestNewSchemaStorage checks schema storage initialization from upstream metadata.
 func TestNewSchemaStorage(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	cfg := config.GetDefaultReplicaConfig()
 	cfg.Filter.Rules = []string{"test.t1"}
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.Nil(t, err)
 
 	// add table before create schema storage
@@ -112,10 +114,11 @@ func TestNewSchemaStorage(t *testing.T) {
 	require.Equal(t, job1.BinlogInfo.TableInfo.Name.O, tableInfos[0].TableName.Table)
 }
 
+// TestAllTables checks selection of replicated logical tables.
 func TestAllTables(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	// add table before create schema storage
 	job := helper.DDL2Job("create table test.dongment (id int primary key)")
@@ -155,12 +158,13 @@ func TestAllTables(t *testing.T) {
 	}, tableName)
 }
 
+// TestIsIneligibleTableID checks eligibility tracking for tables and partitions.
 func TestIsIneligibleTableID(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
@@ -213,12 +217,13 @@ func compareEvents(t *testing.T, e1, e2 *model.DDLEvent) {
 	}
 }
 
+// TestBuildDDLEventsFromSingleTableDDL checks conversion of table DDL jobs into events.
 func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
@@ -288,13 +293,14 @@ func TestBuildDDLEventsFromSingleTableDDL(t *testing.T) {
 	})
 }
 
+// TestBuildDDLEventsFromRenameTablesDDL checks event conversion for batch renames.
 func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
@@ -421,13 +427,14 @@ func TestBuildDDLEventsFromRenameTablesDDL(t *testing.T) {
 	})
 }
 
+// TestBuildDDLEventsFromDropTablesDDL checks event conversion for dropping tables.
 func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
@@ -524,13 +531,14 @@ func TestBuildDDLEventsFromDropTablesDDL(t *testing.T) {
 	})
 }
 
+// TestBuildDDLEventsFromDropViewsDDL checks event conversion for dropping views.
 func TestBuildDDLEventsFromDropViewsDDL(t *testing.T) {
 	helper := NewSchemaTestHelper(t)
 	defer helper.Close()
 
 	ver, err := helper.Storage().CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	schema, err := NewSchemaStorage(helper.Storage(), ver.Ver,
 		false, dummyChangeFeedID, util.RoleTester, f)
