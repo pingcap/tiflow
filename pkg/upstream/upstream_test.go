@@ -23,6 +23,7 @@ import (
 
 	"github.com/benbjohnson/clock"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,6 +32,7 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestUpstreamShouldClose(t *testing.T) {
@@ -139,6 +141,44 @@ func TestRegisterTopo(t *testing.T) {
 		require.NoError(t, err)
 		return len(resp.Kvs) == 0
 	}, time.Second*5, time.Millisecond*100)
+}
+
+func TestFetchTiDBTopologyMasksInvalidValues(t *testing.T) {
+	s := &etcd.Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+	client, err := clientv3.New(clientv3.Config{Endpoints: []string{s.ClientURL.String()}})
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	const rawValue = "test-topology-value"
+	const infoKey = topologyTiDB + "/invalid-address/info"
+	const ttlKey = topologyTiDB + "/localhost:4000/ttl"
+	for _, key := range []string{infoKey, ttlKey} {
+		_, err = client.Put(ctx, key, rawValue)
+		require.NoError(t, err)
+	}
+
+	core, logs := observer.New(zap.WarnLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevelAt(zap.WarnLevel)})
+	defer restore()
+	nodes, err := fetchTiDBTopology(ctx, client)
+	require.NoError(t, err)
+	require.Empty(t, nodes)
+
+	for message, key := range map[string]string{
+		"Ignored invalid tidb topology info entry": infoKey,
+		"Ignored invalid tidb topology TTL entry":  ttlKey,
+	} {
+		entries := logs.FilterMessage(message).All()
+		require.Len(t, entries, 1)
+		fields := entries[0].ContextMap()
+		require.Equal(t, key, fields["key"])
+		require.Equal(t, "******", fields["value"])
+		require.NotContains(t, fields["error"], rawValue)
+	}
 }
 
 func TestVerify(t *testing.T) {

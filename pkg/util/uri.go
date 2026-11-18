@@ -14,6 +14,7 @@
 package util
 
 import (
+	"context"
 	"errors"
 	"net"
 	"net/url"
@@ -157,7 +158,7 @@ func MaskSensitiveDataInURIForError(uri string) string {
 	return maskedURI
 }
 
-// MaskSensitiveDataInURLError masks the URL carried by net/url errors.
+// MaskSensitiveDataInURLError masks a net/url error's URL and sanitizes its cause.
 func MaskSensitiveDataInURLError(err error) error {
 	if err == nil {
 		return nil
@@ -169,6 +170,35 @@ func MaskSensitiveDataInURLError(err error) error {
 	return &url.Error{
 		Op:  urlErr.Op,
 		URL: MaskSensitiveDataInURIForError(urlErr.URL),
-		Err: urlErr.Err,
+		Err: sanitizeURLErrorCause(urlErr.Op, urlErr.Err),
+	}
+}
+
+func sanitizeURLErrorCause(op string, err error) error {
+	// Parser and redirect errors can quote the input, including credentials.
+	// Use fixed descriptions so the cause cannot reintroduce that text.
+	var message string
+	if err != nil {
+		message = err.Error()
+	}
+	var escapeErr url.EscapeError
+	var hostErr url.InvalidHostError
+	switch {
+	case errors.Is(err, context.Canceled):
+		return context.Canceled
+	case errors.Is(err, context.DeadlineExceeded):
+		return context.DeadlineExceeded
+	case strings.HasPrefix(message, "failed to parse Location header "):
+		return errors.New("invalid redirect Location header")
+	case strings.HasPrefix(message, "invalid port "):
+		return errors.New("invalid port")
+	case errors.As(err, &escapeErr):
+		return errors.New("invalid URL escape")
+	case errors.As(err, &hostErr):
+		return errors.New("invalid URL host")
+	case op == "parse":
+		return errors.New("invalid URL")
+	default:
+		return errors.New("URL request failed")
 	}
 }

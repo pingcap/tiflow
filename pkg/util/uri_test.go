@@ -163,6 +163,5 @@ func TestMaskSensitiveDataInURLError(t *testing.T) {
 
 	maskedErr := MaskSensitiveDataInURLError(err)
 	require.NotContains(t, maskedErr.Error(), "verysecure")
-	require.Contains(t, maskedErr.Error(), `parse "<invalid uri>"`)
-	require.Contains(t, maskedErr.Error(), "invalid URL escape")
+	require.EqualError(t, maskedErr, `parse "<invalid uri>": invalid URL escape`)
 }

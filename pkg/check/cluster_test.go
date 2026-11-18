@@ -67,7 +67,7 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 		{
 			name:         "invalid uri",
 			sinkURI:      "mysql://user:verysecure@127.0.0.1/%zz",
-			wantErr:      errors.New(`parse "<invalid uri>": invalid URL escape "%zz"`),
+			wantErr:      errors.New(`parse "<invalid uri>": invalid URL escape`),
 			wantNotInErr: "verysecure",
 		},
 		{

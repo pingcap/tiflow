@@ -17,12 +17,16 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/linkedin/goavro/v2"
+	"github.com/pingcap/log"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func getTestingContext() context.Context {
@@ -113,6 +117,40 @@ func TestSchemaRegistryBad(t *testing.T) {
 
 	_, err = NewConfluentSchemaManager(ctx, "https://127.0.0.1:8080", nil)
 	require.Error(t, err)
+}
+
+func TestSchemaRegistryRedactsNestedURLErrors(t *testing.T) {
+	const redirectToken = "test-redirect-token"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Location", "https://example.invalid/%zz?token="+redirectToken)
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer server.Close()
+
+	core, logs := observer.New(zap.ErrorLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevelAt(zap.ErrorLevel)})
+	defer restore()
+
+	for _, tc := range []struct {
+		name, registryURL, credential, reason string
+	}{
+		{"invalid port", "https://user:test-registry-password", "test-registry-password", "invalid port"},
+		{"malformed redirect", server.URL, redirectToken, "invalid redirect Location header"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := NewConfluentSchemaManager(t.Context(), tc.registryURL, nil)
+			require.Error(t, err)
+			require.NotContains(t, err.Error(), tc.credential)
+			require.ErrorContains(t, err, tc.reason)
+
+			entries := logs.TakeAll()
+			require.Len(t, entries, 1)
+			require.Equal(t, "Test connection to Schema Registry failed", entries[0].Message)
+			loggedErr := entries[0].ContextMap()["error"].(string)
+			require.NotContains(t, loggedErr, tc.credential)
+			require.Contains(t, loggedErr, tc.reason)
+		})
+	}
 }
 
 func TestSchemaRegistryIdempotent(t *testing.T) {
