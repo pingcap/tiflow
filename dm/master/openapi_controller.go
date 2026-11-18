@@ -22,7 +22,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -533,11 +532,6 @@ func (s *Server) getTask(ctx context.Context, taskName string, req openapi.DMAPI
 	for sourceName := range subTaskConfigM {
 		subTaskConfigList = append(subTaskConfigList, subTaskConfigM[sourceName])
 	}
-	// SubTaskConfigsToOpenAPITask takes the target/loader settings from the
-	// first entry, so keep the order deterministic across map iterations.
-	sort.Slice(subTaskConfigList, func(i, j int) bool {
-		return subTaskConfigList[i].SourceID < subTaskConfigList[j].SourceID
-	})
 	task := config.SubTaskConfigsToOpenAPITask(subTaskConfigList)
 	if req.WithStatus != nil && *req.WithStatus {
 		subTaskStatusList, err := s.getTaskStatus(ctx, task.Name)
