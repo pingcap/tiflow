@@ -10,6 +10,11 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 API_VERSION="v1alpha1"
 
 function get_mysql_ssl_data_path() {
+	if [[ -d "$WORK_DIR/mysql-ssl" ]]; then
+		echo "$WORK_DIR/mysql-ssl/"
+		return
+	fi
+
 	run_sql 'SHOW VARIABLES WHERE Variable_Name = "datadir"' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	mysql_data_path=$(cat "$TEST_DIR/sql_res.$TEST_NAME.txt" | grep Value | cut -d ':' -f 2 | xargs)
 	echo "$mysql_data_path"
@@ -64,6 +69,13 @@ function prepare_data() {
 }
 
 function setup_mysql_tls() {
+	# CI copies MySQL certificates to the shared workspace. Keep a writable copy
+	# for this test, which temporarily renames the CA certificate.
+	if [[ -n "${WORKSPACE:-}" && -f "$WORKSPACE/mysql-ssl/ca.pem" ]]; then
+		mkdir -m 700 "$WORK_DIR/mysql-ssl"
+		cp "$WORKSPACE/mysql-ssl/"{ca.pem,client-cert.pem,client-key.pem} "$WORK_DIR/mysql-ssl/"
+	fi
+
 	mysql_data_path=$(get_mysql_ssl_data_path)
 	echo "mysql_ssl_setup at=$mysql_data_path"
 
