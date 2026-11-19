@@ -32,6 +32,9 @@ import (
 )
 
 const (
+	// MaskedSensitiveValue is the placeholder used for credentials in displayed configuration.
+	MaskedSensitiveValue = "******"
+
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
 	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
@@ -255,12 +258,24 @@ func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) error {
 			restoreMaskedValue(&currentGlue.Token, oldGlue.Token)
 		}
 	}
-	if s.PulsarConfig != nil && old.PulsarConfig != nil {
-		current, previous := s.PulsarConfig, old.PulsarConfig
-		restoreMaskedString(&current.AuthenticationToken, previous.AuthenticationToken)
-		restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
-		if current.OAuth2 != nil && previous.OAuth2 != nil {
-			restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+	if current := s.PulsarConfig; current != nil {
+		previous := old.PulsarConfig
+		if previous != nil {
+			restoreMaskedString(&current.AuthenticationToken, previous.AuthenticationToken)
+			restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
+		}
+		if current.OAuth2 != nil {
+			var previousIssuerURL string
+			if previous != nil && previous.OAuth2 != nil {
+				restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+				previousIssuerURL = previous.OAuth2.OAuth2IssuerURL
+			}
+			var err error
+			current.OAuth2.OAuth2IssuerURL, err = restoreMaskedURI(
+				current.OAuth2.OAuth2IssuerURL, previousIssuerURL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -273,7 +288,7 @@ func restoreMaskedString(current **string, previous *string) {
 }
 
 func restoreMaskedValue(current *string, previous string) {
-	if *current == "******" {
+	if *current == MaskedSensitiveValue {
 		*current = previous
 	}
 }
@@ -537,26 +552,26 @@ func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
 	if k.SASLPassword != nil && *k.SASLPassword != "" {
-		k.SASLPassword = aws.String("******")
+		k.SASLPassword = aws.String(MaskedSensitiveValue)
 	}
 	if k.SASLGssAPIPassword != nil && *k.SASLGssAPIPassword != "" {
-		k.SASLGssAPIPassword = aws.String("******")
+		k.SASLGssAPIPassword = aws.String(MaskedSensitiveValue)
 	}
 	if k.SASLOAuthClientSecret != nil && *k.SASLOAuthClientSecret != "" {
-		k.SASLOAuthClientSecret = aws.String("******")
+		k.SASLOAuthClientSecret = aws.String(MaskedSensitiveValue)
 	}
 	if k.Key != nil && *k.Key != "" {
-		k.Key = aws.String("******")
+		k.Key = aws.String(MaskedSensitiveValue)
 	}
 	if k.GlueSchemaRegistryConfig != nil {
 		if k.GlueSchemaRegistryConfig.AccessKey != "" {
-			k.GlueSchemaRegistryConfig.AccessKey = "******"
+			k.GlueSchemaRegistryConfig.AccessKey = MaskedSensitiveValue
 		}
 		if k.GlueSchemaRegistryConfig.Token != "" {
-			k.GlueSchemaRegistryConfig.Token = "******"
+			k.GlueSchemaRegistryConfig.Token = MaskedSensitiveValue
 		}
 		if k.GlueSchemaRegistryConfig.SecretAccessKey != "" {
-			k.GlueSchemaRegistryConfig.SecretAccessKey = "******"
+			k.GlueSchemaRegistryConfig.SecretAccessKey = MaskedSensitiveValue
 		}
 	}
 	if k.SASLOAuthTokenURL != nil {
@@ -725,14 +740,15 @@ func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
 // MaskSensitiveData masks sensitive data in PulsarConfig
 func (c *PulsarConfig) MaskSensitiveData() {
 	if c.AuthenticationToken != nil && *c.AuthenticationToken != "" {
-		c.AuthenticationToken = aws.String("******")
+		c.AuthenticationToken = aws.String(MaskedSensitiveValue)
 	}
 	if c.BasicPassword != nil && *c.BasicPassword != "" {
-		c.BasicPassword = aws.String("******")
+		c.BasicPassword = aws.String(MaskedSensitiveValue)
 	}
 	if c.OAuth2 != nil {
+		c.OAuth2.OAuth2IssuerURL = util.MaskSensitiveDataInURI(c.OAuth2.OAuth2IssuerURL)
 		if c.OAuth2.OAuth2PrivateKey != "" {
-			c.OAuth2.OAuth2PrivateKey = "******"
+			c.OAuth2.OAuth2PrivateKey = MaskedSensitiveValue
 		}
 	}
 }

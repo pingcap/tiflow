@@ -14,6 +14,8 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +27,7 @@ import (
 	v2 "github.com/pingcap/tiflow/cdc/api/v2"
 	"github.com/pingcap/tiflow/pkg/config"
 	putil "github.com/pingcap/tiflow/pkg/util"
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
 
@@ -170,4 +173,42 @@ func TestChangefeedUpdateCli(t *testing.T) {
 	o.changefeedID = "abcd"
 	o.namespace = "ns"
 	require.NotNil(t, o.run(cmd))
+}
+
+func TestChangefeedUpdateRedactsPreview(t *testing.T) {
+	f := newMockFactory(gomock.NewController(t))
+	o := newUpdateChangefeedOptions(newChangefeedCommonOptions())
+	require.NoError(t, o.complete(f))
+	cmd := &cobra.Command{}
+	o.addFlags(cmd)
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+
+	const oldURI = "mysql://root:old-sink-password@example.invalid:3306"
+	const newURI = "mysql://root:new-sink-password@example.invalid:3306"
+	const registryURL = "https://user:registry-password@example.invalid"
+	require.NoError(t, cmd.ParseFlags([]string{
+		"--changefeed-id=test",
+		"--no-confirm",
+		"--sink-uri=" + newURI,
+		"--schema-registry=" + registryURL,
+		"--target-ts=42",
+	}))
+	f.changefeeds.EXPECT().Get(gomock.Any(), "default", "test").Return(&v2.ChangeFeedInfo{
+		SinkURI: oldURI,
+		Config:  v2.ToAPIReplicaConfig(config.GetDefaultReplicaConfig()),
+	}, nil)
+	f.changefeeds.EXPECT().Update(gomock.Any(), gomock.Any(), "default", "test").
+		DoAndReturn(func(_ context.Context, cfg *v2.ChangefeedConfig, _, _ string) (*v2.ChangeFeedInfo, error) {
+			require.Equal(t, newURI, cfg.SinkURI)
+			require.Equal(t, registryURL, *cfg.ReplicaConfig.Sink.SchemaRegistry)
+			return &v2.ChangeFeedInfo{}, nil
+		})
+	require.NoError(t, o.run(cmd))
+	require.Contains(t, output.String(), "mysql://root:xxxxx@example.invalid:3306")
+	require.Contains(t, output.String(), "Path:[Config Sink SchemaRegistry] From:<nil> To:https://user:xxxxx@example.invalid")
+	require.Contains(t, output.String(), "Path:[TargetTs] From:0 To:42")
+	require.NotContains(t, output.String(), "old-sink-password")
+	require.NotContains(t, output.String(), "new-sink-password")
+	require.NotContains(t, output.String(), "registry-password")
 }

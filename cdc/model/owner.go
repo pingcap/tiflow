@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/pingcap/errors"
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
 	"github.com/pingcap/tiflow/cdc/processor/tablepb"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -106,8 +105,7 @@ func (tp *TaskPosition) Marshal() (string, error) {
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
 func (tp *TaskPosition) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, tp)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 }
 
 // String implements fmt.Stringer interface.
@@ -226,8 +224,7 @@ func (ts *TaskStatus) Marshal() (string, error) {
 // Unmarshal unmarshals into *TaskStatus from json marshal byte slice
 func (ts *TaskStatus) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, ts)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 }
 
 // Clone returns a deep-clone of the struct
@@ -297,8 +294,7 @@ func (status *ChangeFeedStatus) Marshal() (string, error) {
 // Unmarshal unmarshals into *ChangeFeedStatus from json marshal byte slice
 func (status *ChangeFeedStatus) Unmarshal(data []byte) error {
 	err := json.Unmarshal(data, status)
-	return errors.Annotatef(
-		cerror.WrapError(cerror.ErrUnmarshalFailed, err), "Unmarshal data: %v", data)
+	return cerror.WrapError(cerror.ErrUnmarshalFailed, err)
 }
 
 // ProcInfoSnap holds most important replication information of a processor
