@@ -64,7 +64,10 @@ func validateTaskCredentialReuse(task, stored openapi.Task) error {
 		}
 	}
 	full, oldFull := task.SourceConfig.FullMigrateConf, stored.SourceConfig.FullMigrateConf
-	if full != nil && oldFull != nil && taskSecurityNeedsRestore(full.Security, oldFull.Security) {
+	// The loader (lightning) falls back to the target DB TLS when
+	// full_migrate_conf has no security, so a PD address change must be
+	// validated against the TLS config that the loader will actually use.
+	if full != nil && oldFull != nil && taskSecurityNeedsRestore(loaderSecurity(task), loaderSecurity(stored)) {
 		pdAddrChanged := (full.PdAddr == nil) != (oldFull.PdAddr == nil) ||
 			(full.PdAddr != nil && oldFull.PdAddr != nil && *full.PdAddr != *oldFull.PdAddr)
 		if pdAddrChanged {
@@ -72,6 +75,15 @@ func validateTaskCredentialReuse(task, stored openapi.Task) error {
 		}
 	}
 	return nil
+}
+
+// loaderSecurity returns the TLS config the loader will use: its own security
+// when configured, otherwise the target DB security (see loader.GetLightningConfig).
+func loaderSecurity(task openapi.Task) *openapi.Security {
+	if full := task.SourceConfig.FullMigrateConf; full != nil && full.Security != nil {
+		return full.Security
+	}
+	return task.TargetConfig.Security
 }
 
 func taskSecurityNeedsRestore(security, stored *openapi.Security) bool {

@@ -703,7 +703,10 @@ func (s *Server) GetSubTaskCfg(ctx context.Context, req *pb.GetSubTaskCfgRequest
 	cfgs := make([]string, 0, len(subCfgs))
 
 	for _, cfg := range subCfgs {
-		cfgBytes, err := subtaskCfgForAPI(cfg)
+		// This API feeds sync_diff_inspector's dm-addr mode, which connects to
+		// the upstream and downstream itself, so database credentials must stay
+		// usable; only storage URLs are redacted.
+		cfgBytes, err := cfg.RedactedStorage().Toml()
 		if err != nil {
 			// nolint:nilerr
 			return &pb.GetSubTaskCfgResponse{
@@ -718,14 +721,6 @@ func (s *Server) GetSubTaskCfg(ctx context.Context, req *pb.GetSubTaskCfgRequest
 		Result: true,
 		Cfgs:   cfgs,
 	}, nil
-}
-
-// subtaskCfgForAPI serializes a subtask config for GetSubTaskCfg. The API is
-// consumed by sync_diff_inspector's dm-addr mode, which connects to the
-// upstream and downstream itself, so database credentials must stay usable;
-// only storage URLs are redacted. Use SubTaskConfig.Redacted for diagnostics.
-func subtaskCfgForAPI(cfg *config.SubTaskConfig) (string, error) {
-	return cfg.RedactedStorage().Toml()
 }
 
 // UpdateTask implements MasterServer.UpdateTask
