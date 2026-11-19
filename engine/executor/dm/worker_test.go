@@ -138,6 +138,11 @@ func TestWorker(t *testing.T) {
 	unitHolder.On("Stage").Return(metadata.StageRunning, nil).Twice()
 	require.NoError(t, dmWorker.Tick(context.Background()))
 
+	// Reset LatestResumeTime to make auto-resume timing deterministic regardless of test execution speed.
+	// Without this reset, slow CI environments (e.g., a DB insert taking >1s) may cause the first
+	// StageError tick to dispatch an unexpected Resume() call before time.Sleep(time.Second) below.
+	dmWorker.autoResume.LatestResumeTime = time.Now()
+
 	// auto resume error
 	unitHolder.On("Stage").Return(metadata.StageError, &pb.ProcessResult{Errors: []*pb.ProcessError{{ErrCode: 0}}}).Twice()
 	require.NoError(t, dmWorker.Tick(context.Background()))
