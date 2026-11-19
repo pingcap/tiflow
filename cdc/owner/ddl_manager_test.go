@@ -31,13 +31,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// createDDLManagerForTest builds a DDL manager with mock puller and sink components.
 func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *ddlManager {
 	startTs, checkpointTs := model.Ts(0), model.Ts(1)
 	changefeedID := model.DefaultChangeFeedID("ddl-manager-test")
 	ddlSink := &mockDDLSink{}
 	ddlPuller := &mockDDLPuller{}
 	cfg := config.GetDefaultReplicaConfig()
-	f, err := filter.NewFilter(cfg, "")
+	f, err := filter.NewFilter(cfg, "", false)
 	require.Nil(t, err)
 	schema, err := entry.NewSchemaStorage(nil, startTs, cfg.ForceReplicate, changefeedID, util.RoleTester, f)
 	require.Equal(t, nil, err)
@@ -56,6 +57,19 @@ func createDDLManagerForTest(t *testing.T, shouldSendAllBootstrapAtStart bool) *
 		func(err error) {},
 	)
 	return res
+}
+
+type schemaStorageWithOldTables struct {
+	entry.SchemaStorage
+	ddlTs  model.Ts
+	tables []*model.TableInfo
+}
+
+func (s *schemaStorageWithOldTables) AllTables(_ context.Context, ts model.Ts) ([]*model.TableInfo, error) {
+	if ts == s.ddlTs-1 {
+		return s.tables, nil
+	}
+	return nil, nil
 }
 
 func newFakeDDLEvent(
@@ -78,6 +92,162 @@ func newFakeDDLEvent(
 	}
 }
 
+// TestTxnOrderTablesBatchCreateEligibility checks skipped tables and index-enabled replication.
+func TestTxnOrderTablesBatchCreateEligibility(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	createPartition := helper.DDL2Job("create table app.ordered_p (id int) partition by hash(id) partitions 2")
+	createRegular := helper.DDL2Job("create table app.regular (id int primary key)")
+	dropPartition := helper.DDL2Job("drop table app.ordered_p")
+	createPartitionAgain := helper.DDL2Job("create table app.ordered_p (id int not null) partition by hash(id) partitions 2")
+	addColumn := helper.DDL2Job("alter table app.ordered_p add column v int")
+	require.Equal(t, timodel.ActionAddColumn, addColumn.Type)
+	addUniqueKey := helper.DDL2Job("alter table app.ordered_p add unique key (id)")
+	require.Equal(t, timodel.ActionAddIndex, addUniqueKey.Type)
+
+	for _, forceReplicate := range []bool{false, true} {
+		cfg := config.GetDefaultReplicaConfig()
+		cfg.ForceReplicate = forceReplicate
+		cfg.Filter.Rules = []string{"app.*"}
+		cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+		f, err := filter.NewFilter(cfg, "", true)
+		require.NoError(t, err)
+		dm := createDDLManagerForTest(t, false)
+		dm.filter = f
+		dm.schema, err = entry.NewSchemaStorage(nil, 0, forceReplicate, dm.changfeedID, util.RoleTester, f)
+		require.NoError(t, err)
+
+		// Build one batch containing an ineligible ordered partition and an
+		// eligible regular table, so both reach the owner's per-table checks.
+		batch := *createRegular
+		batch.Type = timodel.ActionCreateTables
+		batch.Query = createPartition.Query + ";" + createRegular.Query
+		history := *createRegular.BinlogInfo
+		history.MultipleTableInfos = []*timodel.TableInfo{
+			createPartition.BinlogInfo.TableInfo, createRegular.BinlogInfo.TableInfo,
+		}
+		batch.BinlogInfo = &history
+		ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+		ddlPuller.schemaStorage = dm.schema
+		ddlPuller.ddlQueue = []*timodel.Job{createSchema, &batch}
+		ddlPuller.resolvedTs = history.FinishedTS
+
+		_, _, err = dm.tick(context.Background(), 1)
+		if forceReplicate {
+			require.ErrorContains(t, err, "does not support partitioned table")
+			continue
+		}
+		require.NoError(t, err)
+		var tables []string
+		for table := range dm.pendingDDLs {
+			tables = append(tables, table.Table)
+		}
+		// The database DDL and regular table remain queued; the partition is skipped.
+		require.ElementsMatch(t, []string{"", "regular"}, tables)
+
+		// A drop can reach the owner after the table's eligibility metadata is gone.
+		ddlPuller.ddlQueue = []*timodel.Job{dropPartition}
+		ddlPuller.resolvedTs = dropPartition.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+
+		// Column changes leave the skipped partition ineligible.
+		ddlPuller.ddlQueue = []*timodel.Job{createPartitionAgain, addColumn}
+		ddlPuller.resolvedTs = addColumn.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.NoError(t, err)
+
+		// A usable unique index makes its partitions eligible for replication.
+		ddlPuller.ddlQueue = []*timodel.Job{addUniqueKey}
+		ddlPuller.resolvedTs = addUniqueKey.BinlogInfo.FinishedTS
+		_, _, err = dm.tick(context.Background(), 1)
+		require.ErrorContains(t, err, "does not support partitioned table")
+	}
+}
+
+// TestTxnOrderTablesEligibilityChangingDDL rejects partitions newly enabled for replication.
+func TestTxnOrderTablesEligibilityChangingDDL(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	for _, tc := range []struct {
+		name   string
+		column string
+		alter  string
+		action timodel.ActionType
+	}{
+		{"primary_key", "p int not null, id int not null", "add primary key (p,id)", timodel.ActionAddPrimaryKey},
+		{"not_null", "p int not null, id int, unique key (p,id)", "modify column id int not null", timodel.ActionModifyColumn},
+		{"multi", "p int not null, id int not null", "add unique key (p,id), add column v int", timodel.ActionMultiSchemaChange},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			table := "app.ordered_" + tc.name
+			create := helper.DDL2Job("create table " + table + " (" + tc.column + ") partition by hash(p) partitions 2")
+			alter := helper.DDL2Job("alter table " + table + " " + tc.alter)
+			require.Equal(t, tc.action, alter.Type)
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+			f, err := filter.NewFilter(cfg, "", true)
+			require.NoError(t, err)
+			dm := createDDLManagerForTest(t, false)
+			dm.filter = f
+			ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+			ddlPuller.schemaStorage = dm.schema
+			ddlPuller.ddlQueue = []*timodel.Job{createSchema, create, alter}
+			ddlPuller.resolvedTs = alter.BinlogInfo.FinishedTS
+			_, _, err = dm.tick(context.Background(), 1)
+			require.ErrorContains(t, err, "does not support partitioned table")
+		})
+	}
+}
+
+// TestTxnOrderTablesCreateValidationUsesDDLSnapshot prevents later DDLs from masking CREATE errors.
+func TestTxnOrderTablesCreateValidationUsesDDLSnapshot(t *testing.T) {
+	helper := entry.NewSchemaTestHelper(t)
+	defer helper.Close()
+	createSchema := helper.DDL2Job("create database app")
+	createPartition := helper.DDL2Job("create table app.ordered_p (id int not null unique) partition by hash(id) partitions 2")
+	createRegular := helper.DDL2Job("create table app.regular (id int primary key)")
+	dropUniqueKey := helper.DDL2Job("alter table app.ordered_p drop index id")
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"app.ordered_*"}}
+	f, err := filter.NewFilter(cfg, "", true)
+	require.NoError(t, err)
+
+	for _, batchCreate := range []bool{false, true} {
+		dm := createDDLManagerForTest(t, false)
+		dm.filter = f
+		create := *createPartition
+		if batchCreate {
+			create.Type = timodel.ActionCreateTables
+			create.Query += ";" + createRegular.Query
+			history := *createRegular.BinlogInfo
+			history.MultipleTableInfos = []*timodel.TableInfo{
+				createPartition.BinlogInfo.TableInfo, createRegular.BinlogInfo.TableInfo,
+			}
+			create.BinlogInfo = &history
+		}
+		// Model a puller that applied key removal before the owner handles CREATE.
+		for _, job := range []*timodel.Job{createSchema, &create, dropUniqueKey} {
+			require.NoError(t, dm.schema.HandleDDLJob(job))
+		}
+		tableID := createPartition.BinlogInfo.TableInfo.ID
+		ineligible, err := dm.schema.IsIneligibleTable(context.Background(), tableID, create.BinlogInfo.FinishedTS)
+		require.NoError(t, err)
+		require.False(t, ineligible)
+		require.True(t, dm.schema.GetLastSnapshot().IsIneligibleTableID(tableID))
+		ddlPuller := dm.ddlPuller.(*mockDDLPuller)
+		ddlPuller.schemaStorage = dm.schema
+		ddlPuller.ddlQueue = []*timodel.Job{&create}
+		ddlPuller.resolvedTs = dropUniqueKey.BinlogInfo.FinishedTS
+
+		_, _, err = dm.tick(context.Background(), 1)
+		require.ErrorContains(t, err, "does not support partitioned table")
+		require.Empty(t, dm.pendingDDLs)
+	}
+}
+
 func TestGetNextDDL(t *testing.T) {
 	dm := createDDLManagerForTest(t, false)
 	dm.executingDDL = newFakeDDLEvent(1,
@@ -94,6 +264,185 @@ func TestGetNextDDL(t *testing.T) {
 	dm.pendingDDLs[ddl2.TableInfo.TableName] = append(dm.
 		pendingDDLs[ddl2.TableInfo.TableName], ddl2)
 	require.Equal(t, ddl1, dm.getNextDDL())
+}
+
+func TestCheckpointWaitsForAllDDLEventsAtSameTs(t *testing.T) {
+	const ddlTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	sink := dm.ddlSink.(*mockDDLSink)
+	ddl1 := newFakeDDLEvent(1, "first", timodel.ActionDropColumn, ddlTs)
+	ddl2 := newFakeDDLEvent(2, "second", timodel.ActionDropColumn, ddlTs)
+	ddl1.Query = "ALTER TABLE first DROP COLUMN c"
+	ddl2.Query = "ALTER TABLE second DROP COLUMN c"
+	dm.pendingDDLs[ddl1.TableInfo.TableName] = []*model.DDLEvent{ddl1}
+	dm.pendingDDLs[ddl2.TableInfo.TableName] = []*model.DDLEvent{ddl2}
+
+	for i := 0; i < 2; i++ {
+		_, _, err := dm.tick(context.Background(), ddlTs)
+		require.NoError(t, err)
+		require.NotNil(t, dm.executingDDL)
+		require.Equal(t, ddlTs, dm.checkpointTs)
+		checkpointTs, _ := sink.getCheckpointTsAndTableNames()
+		require.Less(t, checkpointTs, ddlTs)
+
+		sink.ddlDone = true
+		_, _, err = dm.tick(context.Background(), ddlTs)
+		require.NoError(t, err)
+		require.Nil(t, dm.executingDDL)
+		checkpointTs, _ = sink.getCheckpointTsAndTableNames()
+		require.Less(t, checkpointTs, ddlTs)
+		sink.ddlDone = false
+	}
+
+	_, _, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	checkpointTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Equal(t, ddlTs, checkpointTs)
+}
+
+func TestRenameKeepsBarrierUntilCheckpointWritten(t *testing.T) {
+	const ddlTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	sink := dm.ddlSink.(*mockDDLSink)
+	sink.holdCheckpointAck = true
+	ddl := newFakeDDLEvent(1, "table10", timodel.ActionRenameTable, ddlTs)
+	ddl.Query = "RENAME TABLE test.table1 TO test.table10"
+	ddl.PreTableInfo = newFakeDDLEvent(1, "table1", timodel.ActionRenameTable, ddlTs).TableInfo
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, barrier, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	sink.ddlDone = true
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	require.Nil(t, dm.executingDDL)
+
+	// The owner has offered WM(T), but the Kafka sink has not written it yet.
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	emittedTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Equal(t, ddlTs, emittedTs)
+	require.Less(t, sink.getLastWrittenCheckpointTs(), ddlTs)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+
+	sink.mu.Lock()
+	sink.mu.writtenCheckpointTs = ddlTs
+	sink.mu.Unlock()
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Greater(t, barrier.MinTableBarrierTs, ddlTs)
+}
+
+func TestDropSchemaRetainsOldTopicsUntilCheckpointWritten(t *testing.T) {
+	const ddlTs = model.Ts(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = ddlTs + 1
+	dm.schema = &schemaStorageWithOldTables{
+		SchemaStorage: dm.schema,
+		ddlTs:         ddlTs,
+		tables: []*model.TableInfo{
+			{TableName: model.TableName{Schema: "dropped", Table: "table1"}},
+			{TableName: model.TableName{Schema: "dropped", Table: "table2"}},
+			{TableName: model.TableName{Schema: "kept", Table: "table3"}},
+		},
+	}
+	sink := dm.ddlSink.(*mockDDLSink)
+	sink.holdCheckpointAck = true
+	ddl := newFakeDDLEvent(0, "", timodel.ActionDropSchema, ddlTs)
+	ddl.TableInfo.TableName.Schema = "dropped"
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, _, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	sink.ddlDone = true
+	_, barrier, err := dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Len(t, sink.mu.retainedTables, 2)
+	require.ElementsMatch(t, []model.TableName{
+		{Schema: "dropped", Table: "table1"},
+		{Schema: "dropped", Table: "table2"},
+	}, []model.TableName{
+		sink.mu.retainedTables[0].TableName,
+		sink.mu.retainedTables[1].TableName,
+	})
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Equal(t, ddlTs, barrier.MinTableBarrierTs)
+	sink.mu.Lock()
+	sink.mu.writtenCheckpointTs = ddlTs
+	sink.mu.Unlock()
+	_, barrier, err = dm.tick(context.Background(), ddlTs)
+	require.NoError(t, err)
+	require.Greater(t, barrier.MinTableBarrierTs, ddlTs)
+}
+
+func TestCheckpointWaitsForDDLPuller(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	puller := dm.ddlPuller.(*mockDDLPuller)
+	sink := dm.ddlSink.(*mockDDLSink)
+	puller.resolvedTs = checkpointTs - 1
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ := sink.getCheckpointTsAndTableNames()
+	require.Less(t, emittedTs, checkpointTs)
+
+	puller.resolvedTs = checkpointTs
+	_, _, err = dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ = sink.getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
+}
+
+type mockDDLPullerWithAheadResolvedTs struct {
+	*mockDDLPuller
+	reportedTs model.Ts
+}
+
+func (m *mockDDLPullerWithAheadResolvedTs) ResolvedTs() model.Ts {
+	return m.reportedTs
+}
+
+func TestCheckpointWaitsForActualPullerResolvedTs(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	puller := dm.ddlPuller.(*mockDDLPuller)
+	puller.resolvedTs = checkpointTs - 1
+	// A DDL at checkpointTs can enter the queue after PopFrontDDL returns nil.
+	// ResolvedTs then reports its FinishedTS ahead of the actual resolved ts.
+	dm.ddlPuller = &mockDDLPullerWithAheadResolvedTs{puller, checkpointTs}
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	require.Equal(t, checkpointTs, dm.ddlResolvedTs)
+	emittedTs, _ := dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Less(t, emittedTs, checkpointTs)
+
+	puller.resolvedTs = checkpointTs
+	_, _, err = dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ = dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
+}
+
+func TestCheckpointAdvancesBeforeFutureDDL(t *testing.T) {
+	const checkpointTs = uint64(10)
+	dm := createDDLManagerForTest(t, false)
+	dm.ddlPuller.(*mockDDLPuller).resolvedTs = checkpointTs + 1
+	ddl := newFakeDDLEvent(1, "future", timodel.ActionDropColumn, checkpointTs+1)
+	dm.pendingDDLs[ddl.TableInfo.TableName] = []*model.DDLEvent{ddl}
+
+	_, _, err := dm.tick(context.Background(), checkpointTs)
+	require.NoError(t, err)
+	emittedTs, _ := dm.ddlSink.(*mockDDLSink).getCheckpointTsAndTableNames()
+	require.Equal(t, checkpointTs, emittedTs)
 }
 
 func TestBarriers(t *testing.T) {

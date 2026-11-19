@@ -30,6 +30,7 @@ type txnEvent struct {
 	*dmlsink.TxnCallbackableEvent
 	start            time.Time
 	conflictResolved time.Time
+	tableOrder       bool
 }
 
 func newTxnEvent(event *dmlsink.TxnCallbackableEvent) *txnEvent {
@@ -42,6 +43,11 @@ func (e *txnEvent) OnConflictResolved() {
 
 // ConflictKeys implements causality.txnEvent interface.
 func (e *txnEvent) ConflictKeys() []uint64 {
+	if e.tableOrder {
+		// Physical table IDs are unique within the upstream cluster. Reserve the
+		// high bit for table keys, separate from the existing 32-bit row hashes.
+		return []uint64{uint64(e.Event.PhysicalTableID) | (1 << 63)}
+	}
 	return genTxnKeys(e.TxnCallbackableEvent.Event)
 }
 

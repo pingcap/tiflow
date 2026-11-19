@@ -297,12 +297,12 @@ func newMockRPCClient(client pb.WorkerClient) workerrpc.Client {
 
 func defaultWorkerSource() ([]string, []string) {
 	return []string{
-		"mysql-replica-01",
-		"mysql-replica-02",
-	}, []string{
-		"127.0.0.1:8262",
-		"127.0.0.1:8263",
-	}
+			"mysql-replica-01",
+			"mysql-replica-02",
+		}, []string{
+			"127.0.0.1:8262",
+			"127.0.0.1:8263",
+		}
 }
 
 func makeNilWorkerClients(workers []string) map[string]workerrpc.Client {
@@ -2944,4 +2944,40 @@ func TestSubTaskCfgForAPI(t *testing.T) {
 	redacted, err := cfg.Redacted().Toml()
 	require.NoError(t, err)
 	require.NotEqual(t, redacted, out)
+}
+
+func TestGetCfgDoesNotWipeSourceTLS(t *testing.T) {
+	require.NoError(t, log.InitLogger(&log.Config{}))
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, t)
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	cfg := config.NewSourceConfig()
+	cfg.SourceID = "tls-source"
+	cfg.From = dbconfig.DBConfig{
+		Host:     "127.0.0.1",
+		Port:     3306,
+		User:     "root",
+		Password: "secret",
+		Security: &security.Security{
+			SSLCABytes:   []byte("ca"),
+			SSLCertBytes: []byte("cert"),
+			SSLKeyBytes:  []byte("key"),
+		},
+	}
+	require.NoError(t, server.scheduler.AddSourceCfg(cfg))
+
+	resp, err := server.GetCfg(ctx, &pb.GetCfgRequest{Name: cfg.SourceID, Type: pb.CfgType_SourceType})
+	require.NoError(t, err)
+	require.True(t, resp.Result, resp.Msg)
+
+	// GetCfg must only redact the response copy, not the live source config.
+	live := server.scheduler.GetSourceCfgByID(cfg.SourceID)
+	require.NotNil(t, live.From.Security)
+	require.Equal(t, []byte("ca"), live.From.Security.SSLCABytes)
+	require.Equal(t, []byte("cert"), live.From.Security.SSLCertBytes)
+	require.Equal(t, []byte("key"), live.From.Security.SSLKeyBytes)
 }
