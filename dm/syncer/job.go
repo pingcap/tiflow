@@ -95,7 +95,7 @@ type job struct {
 	timezone    string
 
 	// Includes keys from row images removed by compaction.
-	cachedCausalityKeys []string
+	cachedCausalityKeys *compactionCausality
 }
 
 func (j *job) clone() *job {
@@ -106,26 +106,9 @@ func (j *job) clone() *job {
 
 func (j *job) causalityKeys() []string {
 	if j.cachedCausalityKeys != nil {
-		return j.cachedCausalityKeys
+		return j.cachedCausalityKeys.keys
 	}
 	return j.dml.CausalityKeys()
-}
-
-func (j *job) mergeCausalityKeys(previous *job) {
-	currentKeys := j.causalityKeys()
-	previousKeys := previous.causalityKeys()
-	keys := make([]string, 0, len(currentKeys)+len(previousKeys))
-	seen := make(map[string]struct{}, cap(keys))
-	for _, group := range [][]string{currentKeys, previousKeys} {
-		for _, key := range group {
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			keys = append(keys, key)
-		}
-	}
-	j.cachedCausalityKeys = keys
 }
 
 func (j *job) String() string {

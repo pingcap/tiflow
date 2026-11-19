@@ -195,3 +195,37 @@ func TestCompactorPreservesInterleavedUniqueKeyReuse(t *testing.T) {
 	}
 	require.Equal(t, map[int]int{91: 91, 92: 92}, rows)
 }
+
+func TestCompactorPreservesInterleavedHistoricalKeyReuse(t *testing.T) {
+	ti := mockTableInfo(t, "CREATE TABLE tb(a INT PRIMARY KEY, b INT UNIQUE)")
+	source := &cdcmodel.TableName{Schema: "test", Table: "tb"}
+	c := &compactor{
+		logger:             log.L(),
+		keyMap:             make(map[string]map[string]int),
+		outCh:              make(chan *job, 4),
+		updateJobMetricsFn: func(bool, string, *job) {},
+	}
+	changes := []*sqlmodel.RowChange{
+		sqlmodel.NewRowChange(source, nil, []interface{}{91, 92}, nil, ti, nil, nil),
+		sqlmodel.NewRowChange(source, nil, nil, []interface{}{91, 91}, ti, nil, nil),
+		// b=92 exists only in the merged job's history at this point.
+		sqlmodel.NewRowChange(source, nil, nil, []interface{}{92, 92}, ti, nil, nil),
+		// Move the job reusing b=92 through another merge as well.
+		sqlmodel.NewRowChange(source, nil, []interface{}{92, 92}, []interface{}{92, 93}, ti, nil, nil),
+		sqlmodel.NewRowChange(source, nil, []interface{}{91, 91}, []interface{}{91, 90}, ti, nil, nil),
+	}
+	for _, change := range changes {
+		c.compactJob(newDMLJob(change, ec))
+	}
+	// The final UPDATE must flush the two preceding merged jobs first.
+	require.Len(t, c.outCh, 2)
+	released := <-c.outCh
+	reused := <-c.outCh
+	require.Equal(t, []interface{}{91, 91}, released.dml.GetPostValues())
+	require.Contains(t, released.causalityKeys(), "92.b.test.tb")
+	require.Equal(t, []interface{}{92, 93}, reused.dml.GetPostValues())
+	require.Contains(t, reused.causalityKeys(), "92.b.test.tb")
+	c.flushBuffer()
+	require.Len(t, c.outCh, 1)
+	require.Equal(t, []interface{}{91, 90}, (<-c.outCh).dml.GetPostValues())
+}
