@@ -36,6 +36,8 @@ type compactor struct {
 	keyMap map[string]map[string]int // table -> key(pk or (uk + not null)) -> index in buffer
 	buffer []*job
 
+	causalityKeyPositions map[string]int // causality key -> last buffer position using it
+
 	// for MetricsProxies
 	task               string
 	source             string
@@ -94,7 +96,7 @@ func (c *compactor) run() {
 			}
 			// if dml has no PK/NOT NULL UK, do not compact it.
 			if !j.dml.HasNotNullUniqueIdx() {
-				c.buffer = append(c.buffer, j)
+				c.bufferJob(j)
 				continue
 			}
 
@@ -147,6 +149,22 @@ func (c *compactor) flushBuffer() {
 	}
 	c.keyMap = make(map[string]map[string]int)
 	c.buffer = c.buffer[0:0]
+	clear(c.causalityKeyPositions)
+}
+
+func (c *compactor) bufferJob(j *job) {
+	// Cache every DML's keys here so the causality stage does not evaluate
+	// keys concurrently with the compactor using the shared TiDB session context.
+	if j.cachedCausalityKeys == nil {
+		j.cachedCausalityKeys = j.dml.CausalityKeys()
+	}
+	if c.causalityKeyPositions == nil {
+		c.causalityKeyPositions = make(map[string]int)
+	}
+	for _, key := range j.cachedCausalityKeys {
+		c.causalityKeyPositions[key] = len(c.buffer)
+	}
+	c.buffer = append(c.buffer, j)
 }
 
 // compactJob compact jobs.
@@ -184,12 +202,26 @@ func (c *compactor) compactJob(j *job) {
 	// if no such key in the buffer, add it
 	if !ok {
 		tableKeyMap[key] = len(c.buffer)
-		c.buffer = append(c.buffer, j)
+		c.bufferJob(j)
 		return
 	}
 
 	prevJob := c.buffer[prevPos]
+	for _, key := range prevJob.causalityKeys() {
+		if c.causalityKeyPositions[key] > prevPos {
+			// Moving the previous job here would cross a dependent row change.
+			// Flush it in its original position before merging any more jobs.
+			c.flushBuffer()
+			c.safeMode = j.safeMode
+			c.compactJob(j)
+			return
+		}
+	}
 	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
+
+	// Snapshot dependencies before Reduce overwrites row images, including keys
+	// retained by earlier merges. DELETE + INSERT must still release the old UK.
+	j.mergeCausalityKeys(prevJob)
 
 	// adjust safemode
 	adjustSafeMode(j, prevJob)
@@ -200,7 +232,7 @@ func (c *compactor) compactJob(j *job) {
 	// mark previous job as compacted(nil), add new job
 	c.buffer[prevPos] = nil
 	tableKeyMap[key] = len(c.buffer)
-	c.buffer = append(c.buffer, j)
+	c.bufferJob(j)
 	c.logger.Debug("finish to compact", zap.Stringer("dml", j.dml))
 	c.updateJobMetricsFn(true, adminQueueName, newCompactJob(prevJob.targetTable))
 }
