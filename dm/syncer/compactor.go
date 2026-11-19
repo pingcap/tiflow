@@ -25,10 +25,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// compactionCausality stays with a merged job as its buffer position changes.
+// compactedCausality stays with a merged job as its buffer position changes.
 // A later job using one of its keys blocks further moves across that job.
 // Once flushed, it is read-only for the downstream causality stage.
-type compactionCausality struct {
+type compactedCausality struct {
 	keys    []string
 	blocked bool
 }
@@ -44,7 +44,7 @@ type compactor struct {
 	keyMap map[string]map[string]int // table -> key(pk or (uk + not null)) -> index in buffer
 	buffer []*job
 
-	causalityKeyOwners map[string]*compactionCausality // key -> last group using it
+	causalityKeyOwners map[string]*compactedCausality // key -> last group using it
 
 	// for MetricsProxies
 	task               string
@@ -165,7 +165,7 @@ func (c *compactor) bufferJob(j *job) {
 	// keys concurrently with the compactor using the shared TiDB session context.
 	if j.cachedCausalityKeys == nil {
 		keys := j.dml.CausalityKeys()
-		j.cachedCausalityKeys = &compactionCausality{keys: keys[:0]}
+		j.cachedCausalityKeys = &compactedCausality{keys: keys[:0]}
 		c.addCausalityKeys(j.cachedCausalityKeys, keys)
 	}
 	c.buffer = append(c.buffer, j)
@@ -174,9 +174,9 @@ func (c *compactor) bufferJob(j *job) {
 // addCausalityKeys processes only the incoming row's keys. Ownership of older
 // keys stays with the group across merges, so neither deduplication nor conflict
 // detection needs to scan the accumulated history.
-func (c *compactor) addCausalityKeys(group *compactionCausality, keys []string) {
+func (c *compactor) addCausalityKeys(group *compactedCausality, keys []string) {
 	if c.causalityKeyOwners == nil {
-		c.causalityKeyOwners = make(map[string]*compactionCausality)
+		c.causalityKeyOwners = make(map[string]*compactedCausality)
 	}
 	for _, key := range keys {
 		previous := c.causalityKeyOwners[key]

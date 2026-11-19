@@ -95,7 +95,7 @@ type job struct {
 	timezone    string
 
 	// Includes keys from row images removed by compaction.
-	cachedCausalityKeys *compactionCausality
+	cachedCausalityKeys *compactedCausality
 }
 
 func (j *job) clone() *job {
