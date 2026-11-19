@@ -103,6 +103,13 @@ func (s *Syncer) genEvents(ctx context.Context, sqls []string) ([]*replication.B
 			if err != nil {
 				return nil, err
 			}
+			if len(tables) == 0 {
+				// e.g. `CREATE DATABASE` has no table to operate on, and the
+				// injected event needs a schema.
+				return nil, terror.Annotatef(
+					terror.ErrSyncerUnitInjectDDLWithoutSchema.New("injected DDL has no table"),
+					"sql %s", sql)
+			}
 
 			schema := tables[0].Schema
 			if len(schema) == 0 {
