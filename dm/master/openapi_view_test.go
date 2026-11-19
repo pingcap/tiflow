@@ -1027,10 +1027,10 @@ func (s *OpenAPIViewSuite) TestTaskRoundTripKeepsStorageCredentials() {
 	// credentials are not returned by read APIs
 	s.Equal(config.ObfuscatedPasswordForFeedback, readTask.TargetConfig.Password)
 	s.Require().NotNil(readTask.TargetConfig.Security)
-	s.Empty(readTask.TargetConfig.Security.SslCaContent)
-	s.Empty(readTask.TargetConfig.Security.SslCertContent)
-	s.Empty(readTask.TargetConfig.Security.SslKeyContent)
-	s.Empty(readTask.SourceConfig.FullMigrateConf.Security.SslKeyContent)
+	s.Equal(config.ObfuscatedTLSContentForFeedback, readTask.TargetConfig.Security.SslCaContent)
+	s.Equal(config.ObfuscatedTLSContentForFeedback, readTask.TargetConfig.Security.SslCertContent)
+	s.Equal(config.ObfuscatedTLSContentForFeedback, readTask.TargetConfig.Security.SslKeyContent)
+	s.Equal(config.ObfuscatedTLSContentForFeedback, readTask.SourceConfig.FullMigrateConf.Security.SslKeyContent)
 
 	batch := 1000
 	readTask.SourceConfig.IncrMigrateConf.ReplBatch = &batch

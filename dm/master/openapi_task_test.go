@@ -43,13 +43,27 @@ func TestTaskCredentialCopies(t *testing.T) {
 	require.Equal(t, config.ObfuscatedPasswordForFeedback, redacted.TargetConfig.Password)
 	for _, security := range []*openapi.Security{redacted.TargetConfig.Security, redacted.SourceConfig.FullMigrateConf.Security} {
 		require.NotNil(t, security)
-		require.Empty(t, security.SslCaContent)
-		require.Empty(t, security.SslCertContent)
-		require.Empty(t, security.SslKeyContent)
+		require.Equal(t, config.ObfuscatedTLSContentForFeedback, security.SslCaContent)
+		require.Equal(t, config.ObfuscatedTLSContentForFeedback, security.SslCertContent)
+		require.Equal(t, config.ObfuscatedTLSContentForFeedback, security.SslKeyContent)
 	}
 	require.Equal(t, task.TargetConfig.Security.CertAllowedCn, redacted.TargetConfig.Security.CertAllowedCn)
 	require.Equal(t, task.SourceConfig.FullMigrateConf.Security.CertAllowedCn, redacted.SourceConfig.FullMigrateConf.Security.CertAllowedCn)
 	require.Equal(t, redacted, redactTaskForResponse(redacted))
+
+	// The YAML editor converts the redacted task before editing it. The TLS
+	// placeholders must pass the loader security validation (empty contents are
+	// rejected there) without exposing the stored material.
+	sourceCfgMap := make(map[string]*config.SourceConfig)
+	for _, sourceConf := range task.SourceConfig.SourceConf {
+		sourceCfg := config.NewSourceConfig()
+		sourceCfg.SourceID = sourceConf.SourceName
+		sourceCfgMap[sourceConf.SourceName] = sourceCfg
+	}
+	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(&redacted)
+	subTaskCfgs, err := config.OpenAPITaskToSubTaskConfigs(&redacted, toDBCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, config.ObfuscatedTLSContentForFeedback, string(subTaskCfgs[0].LoaderConfig.Security.SSLKeyBytes))
 
 	// Restoring a response for update must not turn that response into a secret
 	// container or mutate the stored task through shared pointers.
