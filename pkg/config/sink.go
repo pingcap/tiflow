@@ -24,6 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/log"
+	tfilter "github.com/pingcap/tidb/pkg/util/table-filter"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/sink"
 	"github.com/pingcap/tiflow/pkg/util"
@@ -31,6 +32,9 @@ import (
 )
 
 const (
+	// MaskedSensitiveValue is the placeholder used for credentials in displayed configuration.
+	MaskedSensitiveValue = "******"
+
 	// DefaultMaxMessageBytes sets the default value for max-message-bytes.
 	DefaultMaxMessageBytes = 10 * 1024 * 1024 // 10M
 	// DefaultAdvanceTimeoutInSec sets the default value for advance-timeout-in-sec.
@@ -216,6 +220,91 @@ func (s *SinkConfig) MaskSensitiveData() {
 	if s.PulsarConfig != nil {
 		s.PulsarConfig.MaskSensitiveData()
 	}
+}
+
+func (s *SinkConfig) restoreMaskedSensitiveData(old *SinkConfig) error {
+	if s.SchemaRegistry != nil && old.SchemaRegistry != nil {
+		var err error
+		*s.SchemaRegistry, err = restoreMaskedURI(*s.SchemaRegistry, *old.SchemaRegistry)
+		if err != nil {
+			return err
+		}
+	}
+	if s.KafkaConfig != nil && old.KafkaConfig != nil {
+		current, previous := s.KafkaConfig, old.KafkaConfig
+		restoreMaskedString(&current.SASLPassword, previous.SASLPassword)
+		restoreMaskedString(&current.SASLGssAPIPassword, previous.SASLGssAPIPassword)
+		restoreMaskedString(&current.SASLOAuthClientSecret, previous.SASLOAuthClientSecret)
+		restoreMaskedString(&current.Key, previous.Key)
+		if current.SASLOAuthTokenURL != nil && previous.SASLOAuthTokenURL != nil {
+			var err error
+			*current.SASLOAuthTokenURL, err = restoreMaskedURI(*current.SASLOAuthTokenURL, *previous.SASLOAuthTokenURL)
+			if err != nil {
+				return err
+			}
+		}
+		if current.LargeMessageHandle != nil && previous.LargeMessageHandle != nil {
+			var err error
+			current.LargeMessageHandle.ClaimCheckStorageURI, err = restoreMaskedURI(
+				current.LargeMessageHandle.ClaimCheckStorageURI, previous.LargeMessageHandle.ClaimCheckStorageURI)
+			if err != nil {
+				return err
+			}
+		}
+		if current.GlueSchemaRegistryConfig != nil && previous.GlueSchemaRegistryConfig != nil {
+			currentGlue, oldGlue := current.GlueSchemaRegistryConfig, previous.GlueSchemaRegistryConfig
+			restoreMaskedValue(&currentGlue.AccessKey, oldGlue.AccessKey)
+			restoreMaskedValue(&currentGlue.SecretAccessKey, oldGlue.SecretAccessKey)
+			restoreMaskedValue(&currentGlue.Token, oldGlue.Token)
+		}
+	}
+	if current := s.PulsarConfig; current != nil {
+		previous := old.PulsarConfig
+		if previous != nil {
+			restoreMaskedString(&current.AuthenticationToken, previous.AuthenticationToken)
+			restoreMaskedString(&current.BasicPassword, previous.BasicPassword)
+		}
+		if current.OAuth2 != nil {
+			var previousIssuerURL string
+			if previous != nil && previous.OAuth2 != nil {
+				restoreMaskedValue(&current.OAuth2.OAuth2PrivateKey, previous.OAuth2.OAuth2PrivateKey)
+				previousIssuerURL = previous.OAuth2.OAuth2IssuerURL
+			}
+			var err error
+			current.OAuth2.OAuth2IssuerURL, err = restoreMaskedURI(
+				current.OAuth2.OAuth2IssuerURL, previousIssuerURL)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func restoreMaskedString(current **string, previous *string) {
+	if *current != nil && previous != nil {
+		restoreMaskedValue(*current, *previous)
+	}
+}
+
+func restoreMaskedValue(current *string, previous string) {
+	if *current == MaskedSensitiveValue {
+		*current = previous
+	}
+}
+
+func restoreMaskedURI(current, previous string) (string, error) {
+	if current == previous {
+		return current, nil
+	}
+	if masked := util.MaskSensitiveDataInURI(previous); masked != previous && current == masked {
+		return previous, nil
+	}
+	if util.HasMaskedSensitiveDataInURI(current) {
+		return "", cerror.ErrInvalidReplicaConfig.GenWithStack(
+			"updated URI contains a masked credential; provide the full URI")
+	}
+	return current, nil
 }
 
 // ShouldSendBootstrapMsg returns whether the sink should send bootstrap message.
@@ -464,17 +553,35 @@ func (k *KafkaConfig) GetOutputRawChangeEvent() bool {
 
 // MaskSensitiveData masks sensitive data in KafkaConfig
 func (k *KafkaConfig) MaskSensitiveData() {
-	k.SASLPassword = aws.String("******")
-	k.SASLGssAPIPassword = aws.String("******")
-	k.SASLOAuthClientSecret = aws.String("******")
-	k.Key = aws.String("******")
+	if k.SASLPassword != nil && *k.SASLPassword != "" {
+		k.SASLPassword = aws.String(MaskedSensitiveValue)
+	}
+	if k.SASLGssAPIPassword != nil && *k.SASLGssAPIPassword != "" {
+		k.SASLGssAPIPassword = aws.String(MaskedSensitiveValue)
+	}
+	if k.SASLOAuthClientSecret != nil && *k.SASLOAuthClientSecret != "" {
+		k.SASLOAuthClientSecret = aws.String(MaskedSensitiveValue)
+	}
+	if k.Key != nil && *k.Key != "" {
+		k.Key = aws.String(MaskedSensitiveValue)
+	}
 	if k.GlueSchemaRegistryConfig != nil {
-		k.GlueSchemaRegistryConfig.AccessKey = "******"
-		k.GlueSchemaRegistryConfig.Token = "******"
-		k.GlueSchemaRegistryConfig.SecretAccessKey = "******"
+		if k.GlueSchemaRegistryConfig.AccessKey != "" {
+			k.GlueSchemaRegistryConfig.AccessKey = MaskedSensitiveValue
+		}
+		if k.GlueSchemaRegistryConfig.Token != "" {
+			k.GlueSchemaRegistryConfig.Token = MaskedSensitiveValue
+		}
+		if k.GlueSchemaRegistryConfig.SecretAccessKey != "" {
+			k.GlueSchemaRegistryConfig.SecretAccessKey = MaskedSensitiveValue
+		}
 	}
 	if k.SASLOAuthTokenURL != nil {
 		k.SASLOAuthTokenURL = aws.String(util.MaskSensitiveDataInURI(*k.SASLOAuthTokenURL))
+	}
+	if k.LargeMessageHandle != nil {
+		k.LargeMessageHandle.ClaimCheckStorageURI = util.MaskSensitiveDataInURI(
+			k.LargeMessageHandle.ClaimCheckStorageURI)
 	}
 }
 
@@ -634,14 +741,17 @@ func (c *PulsarConfig) GetOutputRawChangeEvent() bool {
 
 // MaskSensitiveData masks sensitive data in PulsarConfig
 func (c *PulsarConfig) MaskSensitiveData() {
-	if c.AuthenticationToken != nil {
-		c.AuthenticationToken = aws.String("******")
+	if c.AuthenticationToken != nil && *c.AuthenticationToken != "" {
+		c.AuthenticationToken = aws.String(MaskedSensitiveValue)
 	}
-	if c.BasicPassword != nil {
-		c.BasicPassword = aws.String("******")
+	if c.BasicPassword != nil && *c.BasicPassword != "" {
+		c.BasicPassword = aws.String(MaskedSensitiveValue)
 	}
 	if c.OAuth2 != nil {
-		c.OAuth2.OAuth2PrivateKey = "******"
+		c.OAuth2.OAuth2IssuerURL = util.MaskSensitiveDataInURI(c.OAuth2.OAuth2IssuerURL)
+		if c.OAuth2.OAuth2PrivateKey != "" {
+			c.OAuth2.OAuth2PrivateKey = MaskedSensitiveValue
+		}
 	}
 }
 
@@ -678,6 +788,26 @@ type MySQLConfig struct {
 	EnableBatchDML               *bool   `toml:"enable-batch-dml" json:"enable-batch-dml,omitempty"`
 	EnableMultiStatement         *bool   `toml:"enable-multi-statement" json:"enable-multi-statement,omitempty"`
 	EnableCachePreparedStatement *bool   `toml:"enable-cache-prepared-statement" json:"enable-cache-prepared-statement,omitempty"`
+
+	// TxnOrderTables selects tables whose transactions must be committed in upstream order.
+	TxnOrderTables []string `toml:"txn-order-tables" json:"txn-order-tables,omitempty"`
+}
+
+// GetTxnOrderFilter parses the table rules used for transaction ordering.
+// A nil filter means that per-table transaction ordering is disabled.
+func (c *SinkConfig) GetTxnOrderFilter(caseSensitive bool) (tfilter.Filter, error) {
+	if c == nil || c.MySQLConfig == nil || len(c.MySQLConfig.TxnOrderTables) == 0 {
+		return nil, nil
+	}
+	f, err := tfilter.Parse(c.MySQLConfig.TxnOrderTables)
+	if err != nil {
+		return nil, cerror.ErrInvalidReplicaConfig.Wrap(err).
+			GenWithStackByArgs("invalid sink.mysql-config.txn-order-tables")
+	}
+	if !caseSensitive {
+		f = tfilter.CaseInsensitive(f)
+	}
+	return f, nil
 }
 
 // CloudStorageConfig represents a cloud storage sink configuration

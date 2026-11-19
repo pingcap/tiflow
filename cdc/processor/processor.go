@@ -651,7 +651,11 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	// Clone the config to avoid data race
 	cfConfig := p.latestInfo.Config.Clone()
 
-	p.filter, err = filter.NewFilter(cfConfig, util.GetTimeZoneName(tz))
+	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
+	if err != nil {
+		return errors.Trace(err)
+	}
+	p.filter, err = filter.NewFilter(cfConfig, util.GetTimeZoneName(tz), isMysqlBackend)
 	if err != nil {
 		return errors.Trace(err)
 	}
@@ -704,10 +708,6 @@ func (p *processor) lazyInitImpl(_ context.Context) (err error) {
 	p.sourceManager.changefeedID = p.changefeedID
 	p.sourceManager.spawn(ctx)
 
-	isMysqlBackend, err := isMysqlCompatibleBackend(p.latestInfo.SinkURI)
-	if err != nil {
-		return errors.Trace(err)
-	}
 	p.sinkManager.r = sinkmanager.New(
 		p.changefeedID, p.latestInfo.SinkURI, cfConfig, p.upstream,
 		p.ddlHandler.r.schemaStorage, p.redo.r, p.sourceManager.r, isMysqlBackend)

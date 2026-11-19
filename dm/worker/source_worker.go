@@ -546,7 +546,7 @@ func (w *SourceWorker) EnableHandleSubtasks() error {
 		return err
 	}
 
-	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), zap.Any("subTasks", subTaskCfgM))
+	w.l.Info("starting to handle mysql source", zap.String("sourceCfg", w.cfg.String()), zap.Any("subTasks", config.RedactedSubTaskConfigs(subTaskCfgM)))
 
 	for _, subTaskCfg := range subTaskCfgM {
 		expectStage := subTaskStages[subTaskCfg.Name]
@@ -660,7 +660,7 @@ func (w *SourceWorker) StartSubTask(cfg *config.SubTaskConfig, expectStage, vali
 		return nil
 	}
 
-	w.l.Info("subtask created", zap.Stringer("config", cfg2))
+	w.l.Info("subtask created", zap.Stringer("config", cfg2.Redacted()))
 	st.Run(expectStage, validatorStage, w.getRelayWithoutLock())
 	return nil
 }

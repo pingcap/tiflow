@@ -170,6 +170,13 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	require.Equal(t, "p3", newUpInfo.KeyPath)
 	require.Equal(t, []string{"c", "d"}, newUpInfo.CertAllowedCN)
 	require.Equal(t, "blackhole://", newCfInfo.SinkURI)
+	oldInfo.Config.Sink.KafkaConfig = &config.KafkaConfig{SASLPassword: util.AddressOf("stored-secret")}
+	cfg.ReplicaConfig.Sink.KafkaConfig = &KafkaConfig{SASLPassword: util.AddressOf("******")}
+	newCfInfo, _, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
+	require.NoError(t, err)
+	require.Equal(t, "stored-secret", *newCfInfo.Config.Sink.KafkaConfig.SASLPassword)
+	oldInfo.Config.Sink.KafkaConfig = nil
+	cfg.ReplicaConfig.Sink.KafkaConfig = nil
 	oldInfo.StartTs = 10
 	cfg.TargetTs = 9
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, 0)
@@ -185,4 +192,37 @@ func TestVerifyUpdateChangefeedConfig(t *testing.T) {
 	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, commitTs)
 	require.ErrorIs(t, err, cerror.ErrChangefeedUpdateRefused)
 	require.ErrorContains(t, err, string(cerror.ErrDispatcherFailed.RFCCode()))
+
+	cfg.SinkURI = "mysql://127.0.0.1:3306/"
+	cfg.ReplicaConfig = ToAPIReplicaConfig(config.GetDefaultReplicaConfig())
+	cfg.ReplicaConfig.Sink.MySQLConfig = &MySQLConfig{TxnOrderTables: []string{"test.t1"}}
+	cfg.ReplicaConfig.Scheduler.EnableTableAcrossNodes = true
+	newCfInfo, newUpInfo, err = h.verifyUpdateChangefeedConfig(ctx, cfg, oldInfo, oldUpInfo, storage, commitTs)
+	require.ErrorIs(t, err, cerror.ErrChangefeedUpdateRefused)
+	require.ErrorContains(t, err, "txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true")
+	require.Nil(t, newCfInfo)
+	require.Nil(t, newUpInfo)
+	require.False(t, oldInfo.Config.Scheduler.EnableTableAcrossNodes)
+}
+
+func TestVerifyUpdateMaskedSinkURI(t *testing.T) {
+	storedURI := "s3://bucket/path?access-key=stored-secret"
+	oldInfo := &model.ChangeFeedInfo{
+		SinkURI: storedURI,
+		Config:  config.GetDefaultReplicaConfig(),
+	}
+	cfg := &ChangefeedConfig{
+		SinkURI: util.MaskSensitiveDataInURIForError(storedURI),
+		PDAddrs: []string{"pd"},
+	}
+	h := &APIV2HelpersImpl{}
+	newInfo, _, err := h.verifyUpdateChangefeedConfig(context.Background(), cfg,
+		oldInfo, &model.UpstreamInfo{}, nil, 0)
+	require.NoError(t, err)
+	require.Equal(t, storedURI, newInfo.SinkURI)
+
+	cfg.SinkURI = "s3://other-bucket/path?access-key=xxxxx"
+	_, _, err = h.verifyUpdateChangefeedConfig(context.Background(), cfg,
+		oldInfo, &model.UpstreamInfo{}, nil, 0)
+	require.ErrorContains(t, err, "masked credential")
 }

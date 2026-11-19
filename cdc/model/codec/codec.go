@@ -172,7 +172,7 @@ func decodeVersion(bts []byte) (uint16, []byte) {
 }
 
 func redoLogFromV1(rv1 *codecv1.RedoLog) (r *model.RedoLog) {
-	r = &model.RedoLog{Type: (model.RedoLogType)(rv1.Type)}
+	r = &model.RedoLog{Type: model.RedoLogType(rv1.Type)}
 	if rv1.RedoRow != nil && rv1.RedoRow.Row != nil {
 		r.RedoRow.Row = &model.RowChangedEventInRedoLog{
 			StartTs:      rv1.RedoRow.Row.StartTs,

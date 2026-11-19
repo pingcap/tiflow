@@ -67,7 +67,8 @@ mysql -uroot -h ${MYSQL_HOST} -P ${MYSQL_PORT} -e "insert into Router_test_1.Tbl
 
 echo "test router 1: normal rule"
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_router_1.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
-sync_diff_inspector --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
+# These assertions inspect SQL in debug logs. Disable redaction explicitly.
+sync_diff_inspector --redact-info-log=false --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
 check_contains "as CHECKSUM FROM \`router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_contains "as CHECKSUM FROM \`Router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_contains "as CHECKSUM FROM \`router_test_0\`.\`Tbl\`" $OUT_DIR/sync_diff.log
@@ -80,7 +81,7 @@ rm -rf $OUT_DIR/*
 
 echo "test router 2: only schema rule"
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_router_2.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
-sync_diff_inspector --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
+sync_diff_inspector --redact-info-log=false --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
 check_contains "as CHECKSUM FROM \`router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_contains "as CHECKSUM FROM \`Router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_not_contains "as CHECKSUM FROM \`router_test_0\`.\`Tbl\`" $OUT_DIR/sync_diff.log
@@ -94,7 +95,7 @@ rm -rf $OUT_DIR/*
 
 echo "test router 3: other rule"
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_router_3.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
-sync_diff_inspector --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
+sync_diff_inspector --redact-info-log=false --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
 check_not_contains "as CHECKSUM FROM \`router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_not_contains "as CHECKSUM FROM \`Router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_not_contains "as CHECKSUM FROM \`router_test_0\`.\`Tbl\`" $OUT_DIR/sync_diff.log
@@ -107,7 +108,7 @@ rm -rf $OUT_DIR/*
 
 echo "test router 4: no rule"
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_router_4.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
-sync_diff_inspector --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
+sync_diff_inspector --redact-info-log=false --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
 check_not_contains "as CHECKSUM FROM \`router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_not_contains "as CHECKSUM FROM \`Router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_not_contains "as CHECKSUM FROM \`router_test_0\`.\`Tbl\`" $OUT_DIR/sync_diff.log
@@ -120,7 +121,7 @@ rm -rf $OUT_DIR/*
 
 echo "test router 5: regex rule"
 sed "s/\"127.0.0.1\"#MYSQL_HOST/\"${MYSQL_HOST}\"/g" ./config_router_5.toml | sed "s/3306#MYSQL_PORT/${MYSQL_PORT}/g" >./config.toml
-sync_diff_inspector --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
+sync_diff_inspector --redact-info-log=false --config=./config.toml -L debug >$OUT_DIR/shard_diff.output || true
 check_contains "as CHECKSUM FROM \`router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_contains "as CHECKSUM FROM \`Router_test_0\`.\`tbl\`" $OUT_DIR/sync_diff.log
 check_contains "as CHECKSUM FROM \`router_test_0\`.\`Tbl\`" $OUT_DIR/sync_diff.log

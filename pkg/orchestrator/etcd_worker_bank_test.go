@@ -113,7 +113,7 @@ type bankReactor struct {
 }
 
 func (b *bankReactor) Tick(ctx context.Context, state ReactorState) (nextState ReactorState, err error) {
-	bankState := (state).(*bankReactorState)
+	bankState := state.(*bankReactorState)
 	bankState.Check()
 	// transfer 20% of account
 	bankState.TransferRandomly(rand.Intn(b.accountNumber/5 + 2))

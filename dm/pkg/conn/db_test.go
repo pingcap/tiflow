@@ -696,6 +696,27 @@ func TestFetchTargetDoTables(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestRouteTargetDoTables(t *testing.T) {
+	t.Parallel()
+
+	r, err := regexprrouter.NewRegExprRouter(false, []*router.TableRule{
+		{SchemaPattern: "shard*", TablePattern: "tbl*", TargetSchema: "shard", TargetTable: "tbl"},
+	})
+	require.NoError(t, err)
+
+	tablesMap, extendedCols, err := RouteTargetDoTables("", map[string][]string{
+		"shard1": {"tbl1", "tbl2"},
+	}, r)
+	require.NoError(t, err)
+	require.Equal(t, map[filter.Table][]filter.Table{
+		{Schema: "shard", Name: "tbl"}: {
+			{Schema: "shard1", Name: "tbl1"},
+			{Schema: "shard1", Name: "tbl2"},
+		},
+	}, tablesMap)
+	require.Empty(t, extendedCols)
+}
+
 func addRowsForSchemas(rows *sqlmock.Rows, schemas []string) {
 	for _, d := range schemas {
 		rows.AddRow(d)

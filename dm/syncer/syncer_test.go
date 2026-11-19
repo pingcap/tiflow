@@ -16,6 +16,7 @@ package syncer
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/pingcap/failpoint"
 	pclog "github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/objstore/storeapi"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	pmysql "github.com/pingcap/tidb/pkg/parser/mysql"
@@ -52,6 +54,7 @@ import (
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
 	"github.com/pingcap/tiflow/dm/pkg/retry"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
+	"github.com/pingcap/tiflow/dm/pkg/storage"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"github.com/pingcap/tiflow/dm/syncer/binlogstream"
@@ -1326,6 +1329,100 @@ func (s *testSyncerSuite) TestRemoveMetadataIsFine(c *check.C) {
 	c.Assert(fresh, check.IsFalse)
 }
 
+func TestLoadTableStructureFromExternalStorage(t *testing.T) {
+	ctx := context.Background()
+	localDir := t.TempDir()
+	dumpStorage, err := storage.CreateStorage(ctx, localDir)
+	require.NoError(t, err)
+	t.Cleanup(dumpStorage.Close)
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db-schema-create.sql", []byte("CREATE DATABASE `source_db`;\n")))
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.t-schema.sql", []byte(
+		"CREATE TABLE `t` (`a` BIGINT, `b` VARCHAR(20));\n")))
+	// A data file must never be read as a schema file.
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.t.0.sql", []byte("not valid SQL")))
+
+	syncer := newTestSyncerForExternalStorage(t, dumpStorage)
+	require.NoError(t, syncer.loadTableStructureFromDump(ctx))
+
+	tableInfo, err := syncer.schemaTracker.GetTableInfo(&filter.Table{Schema: "source_db", Name: "t"})
+	require.NoError(t, err)
+	require.Equal(t, "a", tableInfo.Columns[0].Name.O)
+	require.Equal(t, "b", tableInfo.Columns[1].Name.O)
+}
+
+type readErrorStorage struct {
+	storeapi.Storage
+	failFile string
+}
+
+func (s *readErrorStorage) ReadFile(ctx context.Context, name string) ([]byte, error) {
+	if name == s.failFile {
+		return nil, errors.New("injected read error")
+	}
+	return s.Storage.ReadFile(ctx, name)
+}
+
+func TestLoadTableStructureFromExternalStorageReadError(t *testing.T) {
+	ctx := context.Background()
+	dumpStorage, err := storage.CreateStorage(ctx, t.TempDir())
+	require.NoError(t, err)
+	t.Cleanup(dumpStorage.Close)
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db-schema-create.sql", []byte("CREATE DATABASE `source_db`;\n")))
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.bad-schema.sql", []byte("CREATE TABLE `bad` (`a` BIGINT);\n")))
+	require.NoError(t, dumpStorage.WriteFile(ctx, "source_db.good-schema.sql", []byte("CREATE TABLE `good` (`a` BIGINT);\n")))
+
+	syncer := newTestSyncerForExternalStorage(t, &readErrorStorage{
+		Storage:  dumpStorage,
+		failFile: "source_db.bad-schema.sql",
+	})
+	require.EqualError(t, syncer.loadTableStructureFromDump(ctx), "injected read error")
+
+	_, err = syncer.schemaTracker.GetTableInfo(&filter.Table{Schema: "source_db", Name: "good"})
+	require.NoError(t, err)
+}
+
+type walkErrorStorage struct {
+	storeapi.Storage
+	err error
+}
+
+func (s *walkErrorStorage) WalkDir(context.Context, *storeapi.WalkOption, func(string, int64) error) error {
+	return s.err
+}
+
+func TestLoadTableStructureFromDumpRedactsStorageError(t *testing.T) {
+	// Azure SDK errors contain the complete request URL, including SAS signatures.
+	storageErr := errors.New(`Get "https://account.blob.core.windows.net/container?comp=list&restype=container&sig=private-sas-signature&sv=2024-11-04": dial tcp: connection refused`)
+	syncer := newTestSyncerForExternalStorage(t, &walkErrorStorage{err: storageErr})
+	core, logs := observer.New(zap.WarnLevel)
+	syncer.tctx = syncer.tctx.WithLogger(log.Logger{Logger: zap.New(core)})
+
+	require.Error(t, syncer.loadTableStructureFromDump(context.Background()))
+	require.NotEmpty(t, logs.All())
+	for _, entry := range logs.All() {
+		require.NotContains(t, fmt.Sprint(entry.ContextMap()), "private-sas-signature", entry.Message)
+	}
+}
+
+func newTestSyncerForExternalStorage(t *testing.T, dumpStorage storeapi.Storage) *Syncer {
+	t.Helper()
+	ctx := context.Background()
+	cfg := genDefaultSubTaskConfig4Test()
+	localLoaderDir := cfg.LoaderConfig.Dir
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(localLoaderDir)) })
+	cfg.LoaderConfig.Dir = "s3://unused/dump"
+	cfg.LoaderConfig.PoolSize = 4
+	cfg.ExtStorage = dumpStorage
+
+	syncer := NewSyncer(cfg, nil, nil)
+	var err error
+	syncer.schemaTracker, err = schema.NewTestTracker(ctx, cfg.Name, nil, log.L())
+	require.NoError(t, err)
+	t.Cleanup(func() { syncer.schemaTracker.Close() })
+	require.NoError(t, syncer.genRouter())
+	return syncer
+}
+
 func (s *testSyncerSuite) TestTrackDDL(c *check.C) {
 	var (
 		testDB   = "test_db"
@@ -2040,13 +2137,42 @@ func TestCheckCanUpdateCfg(t *testing.T) {
 	require.True(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(syncer.CheckCanUpdateCfg(cfg2)))
 
 	// update ba list or route rules or filter rules is ok or syncerCfg
-	cfg2.Name = cfg.Name
+	cfg2, err := cfg.Clone()
+	require.NoError(t, err)
 
 	cfg2.BAList = &filter.Rules{DoDBs: []string{"test"}}
 	cfg2.RouteRules = []*router.TableRule{{SchemaPattern: "test", TargetSchema: "test1"}}
 	cfg2.FilterRules = []*bf.BinlogEventRule{{SchemaPattern: "test"}}
 	cfg2.SyncerConfig.Compact = !cfg.SyncerConfig.Compact
-	require.NoError(t, syncer.CheckCanUpdateCfg(cfg))
+	cfg2.MetricLabels = map[string]string{"project_id": "123"}
+	require.NoError(t, syncer.CheckCanUpdateCfg(cfg2))
+}
+
+func TestCheckCanUpdateCfgRejectsTimezoneChange(t *testing.T) {
+	cfg := genDefaultSubTaskConfig4Test()
+	cfg.Timezone = "UTC"
+	syncer := NewSyncer(cfg, nil, nil)
+
+	newCfg := cloneSubTaskConfigForSyncerTest(t, cfg)
+	newCfg.Timezone = "Asia/Shanghai"
+	err := syncer.CheckCanUpdateCfg(newCfg)
+	require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+	require.ErrorContains(t, err, "fields that should not be changed")
+}
+
+func TestCheckCanUpdateCfgRejectsSafeModeChange(t *testing.T) {
+	for _, oldSafeMode := range []bool{false, true} {
+		cfg := genDefaultSubTaskConfig4Test()
+		cfg.SyncerConfig.SafeMode = oldSafeMode
+		syncer := NewSyncer(cfg, nil, nil)
+		newCfg, err := cfg.Clone()
+		require.NoError(t, err)
+		newCfg.SyncerConfig.SafeMode = !oldSafeMode
+
+		err = syncer.CheckCanUpdateCfg(newCfg)
+		require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+		require.ErrorContains(t, err, "safe-mode")
+	}
 }
 
 func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {
@@ -2087,6 +2213,57 @@ func TestCheckCanUpdateCfgRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T
 	newCfg.SyncerConfig.Compact = true
 	newCfg.SyncerConfig.MultipleRows = true
 	require.NoError(t, syncer.CheckCanUpdateCfg(newCfg))
+}
+
+func TestCheckCanUpdateCfgTargetSession(t *testing.T) {
+	testCases := []struct {
+		name    string
+		old     map[string]string
+		new     map[string]string
+		allowed bool
+	}{
+		{name: "omitted and explicit default", old: nil, new: map[string]string{"FOREIGN_KEY_CHECKS": "0"}, allowed: true},
+		{
+			name: "runtime derived session difference",
+			old: map[string]string{
+				"foreign_key_checks": "1",
+				"sql_mode":           "ANSI_QUOTES",
+				"tidb_txn_mode":      "optimistic",
+			},
+			new: map[string]string{
+				"foreign_key_checks": "1",
+				"tidb_txn_mode":      "optimistic",
+			},
+			allowed: true,
+		},
+		{
+			name:    "legacy enabled value and canonical one",
+			old:     map[string]string{"foreign_key_checks": "ON"},
+			new:     map[string]string{"FOREIGN_KEY_CHECKS": "1"},
+			allowed: true,
+		},
+		{name: "foreign key checks changed", old: nil, new: map[string]string{"foreign_key_checks": "1"}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			oldCfg := genDefaultSubTaskConfig4Test()
+			oldCfg.SyncerConfig.WorkerCount = 1
+			oldCfg.To.Session = testCase.old
+			syncer := NewSyncer(oldCfg, nil, nil)
+
+			newCfg, err := oldCfg.Clone()
+			require.NoError(t, err)
+			newCfg.To.Session = testCase.new
+			err = syncer.CheckCanUpdateCfg(newCfg)
+			if testCase.allowed {
+				require.NoError(t, err)
+				return
+			}
+			require.Truef(t, terror.ErrWorkerUpdateSubTaskConfig.Equal(err), "err: %v", err)
+			require.ErrorContains(t, err, "foreign_key_checks")
+		})
+	}
 }
 
 func TestUpdateRejectsForeignKeyChecksDMLBoundaryOptions(t *testing.T) {

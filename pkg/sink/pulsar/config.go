@@ -109,7 +109,13 @@ func NewPulsarConfig(sinkURI *url.URL, pulsarConfig *config.PulsarConfig) (*conf
 		pulsarConfig.SendTimeout = c.SendTimeout
 	}
 
-	log.L().Debug("new pulsar config success", zap.Any("config", pulsarConfig))
+	maskedConfig := *pulsarConfig
+	if pulsarConfig.OAuth2 != nil {
+		oauth2 := *pulsarConfig.OAuth2
+		maskedConfig.OAuth2 = &oauth2
+	}
+	maskedConfig.MaskSensitiveData()
+	log.L().Debug("new pulsar config success", zap.Any("config", &maskedConfig))
 
 	return pulsarConfig, nil
 }

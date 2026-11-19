@@ -287,6 +287,16 @@ func (c *ReplicaConfig) ValidateAndAdjust(sinkURI *url.URL) error { // check sin
 			return err
 		}
 	}
+	if c.Sink != nil && sink.IsMySQLCompatibleScheme(sinkURI.Scheme) {
+		orderFilter, err := c.Sink.GetTxnOrderFilter(c.CaseSensitive)
+		if err != nil {
+			return err
+		}
+		if orderFilter != nil && c.Scheduler.EnableTableAcrossNodes {
+			return cerror.ErrInvalidReplicaConfig.GenWithStackByArgs(
+				"sink.mysql-config.txn-order-tables cannot be used with scheduler.enable-table-across-nodes=true")
+		}
+	}
 	// TODO: Remove the hack once span replication is compatible with all sinks.
 	if !isSinkCompatibleWithSpanReplication(sinkURI) {
 		c.Scheduler.EnableTableAcrossNodes = false
@@ -359,4 +369,25 @@ func (c *ReplicaConfig) MaskSensitiveData() {
 	if c.Consistent != nil {
 		c.Consistent.MaskSensitiveData()
 	}
+}
+
+// RestoreMaskedSensitiveData keeps existing secrets when an API client sends a
+// redacted changefeed config back in an update request.
+func (c *ReplicaConfig) RestoreMaskedSensitiveData(old *ReplicaConfig) error {
+	if old == nil {
+		return nil
+	}
+	if c.Sink != nil && old.Sink != nil {
+		if err := c.Sink.restoreMaskedSensitiveData(old.Sink); err != nil {
+			return err
+		}
+	}
+	if c.Consistent != nil && old.Consistent != nil {
+		var err error
+		c.Consistent.Storage, err = restoreMaskedURI(c.Consistent.Storage, old.Consistent.Storage)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

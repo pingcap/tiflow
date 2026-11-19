@@ -8,6 +8,15 @@ import (
 	"fmt"
 )
 
+// Defines values for OperateTaskTableStructureRequestSchemaSource.
+const (
+	OperateTaskTableStructureRequestSchemaSourceDownstream OperateTaskTableStructureRequestSchemaSource = "downstream"
+
+	OperateTaskTableStructureRequestSchemaSourceSql OperateTaskTableStructureRequestSchemaSource = "sql"
+
+	OperateTaskTableStructureRequestSchemaSourceUpstream OperateTaskTableStructureRequestSchemaSource = "upstream"
+)
+
 // Defines values for TaskOnDuplicate.
 const (
 	TaskOnDuplicateError TaskOnDuplicate = "error"
@@ -89,6 +98,13 @@ const (
 	TaskStageRunning TaskStage = "Running"
 
 	TaskStageStopped TaskStage = "Stopped"
+)
+
+// Defines values for TaskTargetSessionForeignKeyChecks.
+const (
+	TaskTargetSessionForeignKeyChecksN0 TaskTargetSessionForeignKeyChecks = "0"
+
+	TaskTargetSessionForeignKeyChecksN1 TaskTargetSessionForeignKeyChecks = "1"
 )
 
 // AlertManagerTopology defines model for AlertManagerTopology.
@@ -292,17 +308,23 @@ type OperateTaskResponse struct {
 	Task Task `json:"task"`
 }
 
-// action to operate table request
+// request to replace a task table schema
 type OperateTaskTableStructureRequest struct {
-	// Writes the schema to the checkpoint so that DM can load it after restarting the task
+	// Compatibility field. The schema is always written to the checkpoint, even when false
 	Flush *bool `json:"flush,omitempty"`
 
-	// sql you want to operate
-	SqlContent string `json:"sql_content"`
+	// `sql` uses `sql_content`; `upstream` reads the source table; `downstream` reads the routed target table
+	SchemaSource *OperateTaskTableStructureRequestSchemaSource `json:"schema_source,omitempty"`
 
-	// Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode
+	// CREATE TABLE statement required when `schema_source` is `sql`; omit otherwise
+	SqlContent *string `json:"sql_content,omitempty"`
+
+	// Whether to update optimistic sharding metadata. Ignored outside optimistic mode
 	Sync *bool `json:"sync,omitempty"`
 }
+
+// `sql` uses `sql_content`; `upstream` reads the source table; `downstream` reads the routed target table
+type OperateTaskTableStructureRequestSchemaSource string
 
 // PrometheusTopology defines model for PrometheusTopology.
 type PrometheusTopology struct {
@@ -462,7 +484,7 @@ type StartTaskRequest struct {
 	// source name list
 	SourceNameList *SourceNameList `json:"source_name_list,omitempty"`
 
-	// task start time. Prefer RFC3339-like values with timezone offset (+08:00 or +0800). Legacy values without timezone are interpreted in upstream timezone.
+	// task start time. Prefer RFC3339-like values with timezone offset (`+08:00` or `+0800`). Legacy values without timezone are interpreted in upstream timezone.
 	StartTime *string `json:"start_time,omitempty"`
 }
 
@@ -542,6 +564,9 @@ type Task struct {
 	// downstream database for storing meta information
 	MetaSchema *string `json:"meta_schema,omitempty"`
 
+	// Labels added to task-scoped metrics. At most 8 labels are allowed. Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__", and may contain at most 64 bytes. Values may contain at most 256 bytes. The following built-in names are reserved: __name__, instance, job, kind, le, medium, name, node, phase, quantile, queueNo, queue_id, result, resumable_err, source_id, stage, state, table, target_schema, target_table, task, type, and worker.
+	MetricLabels *Task_MetricLabels `json:"metric_labels,omitempty"`
+
 	// task name
 	Name string `json:"name"`
 
@@ -566,11 +591,19 @@ type Task struct {
 
 	// migrate mode
 	TaskMode TaskTaskMode `json:"task_mode"`
+
+	// task time zone. If omitted or empty, use the downstream database time zone
+	Timezone *string `json:"timezone,omitempty"`
 }
 
 // Task_BinlogFilterRule defines model for Task.BinlogFilterRule.
 type Task_BinlogFilterRule struct {
 	AdditionalProperties map[string]TaskBinLogFilterRule `json:"-"`
+}
+
+// Labels added to task-scoped metrics. At most 8 labels are allowed. Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__", and may contain at most 64 bytes. Values may contain at most 256 bytes. The following built-in names are reserved: __name__, instance, job, kind, le, medium, name, node, phase, quantile, queueNo, queue_id, result, resumable_err, source_id, stage, state, table, target_schema, target_table, task, type, and worker.
+type Task_MetricLabels struct {
+	AdditionalProperties map[string]string `json:"-"`
 }
 
 // how to handle conflicted data
@@ -605,7 +638,11 @@ type TaskFullMigrateConf struct {
 	// to control the way in which data is exported for consistency assurance
 	Consistency *string `json:"consistency,omitempty"`
 
-	// storage dir name
+	// Storage directory for full import.
+	//
+	// Notes:
+	// - When `import_mode` is `import-into`, this must be a shared storage URI (for example, `s3://bucket/prefix`).
+	// - Local filesystem paths (for example, `/data/...` or `./exported_data`) are rejected when `import_mode` is `import-into`.
 	DataDir *string `json:"data_dir,omitempty"`
 
 	// disk quota for physical import
@@ -614,7 +651,15 @@ type TaskFullMigrateConf struct {
 	// full export of concurrent
 	ExportThreads *int `json:"export_threads,omitempty"`
 
-	// to control import mode of full import
+	// Import mode of full import.
+	//
+	// Notes:
+	// - `import-into` does not support sharding / multi-source tasks (for example, when `task.shard_mode` is set, or `source_config.source_conf` contains multiple sources).
+	// - `import-into` requires `data_dir` to be a shared storage URI (for example, `s3://bucket/prefix`).
+	//
+	// Validation failures (error message may be returned):
+	// - `import-into` + sharding/multi-source: "import-into mode does not support sharding"
+	// - `import-into` + local `data_dir`: "import-into mode requires shared storage"
 	ImportMode *TaskFullMigrateConfImportMode `json:"import_mode,omitempty"`
 
 	// full import of concurrent
@@ -645,7 +690,15 @@ type TaskFullMigrateConfAnalyze string
 // to control checksum of physical import
 type TaskFullMigrateConfChecksum string
 
-// to control import mode of full import
+// Import mode of full import.
+//
+// Notes:
+// - `import-into` does not support sharding / multi-source tasks (for example, when `task.shard_mode` is set, or `source_config.source_conf` contains multiple sources).
+// - `import-into` requires `data_dir` to be a shared storage URI (for example, `s3://bucket/prefix`).
+//
+// Validation failures (error message may be returned):
+// - `import-into` + sharding/multi-source: "import-into mode does not support sharding"
+// - `import-into` + local `data_dir`: "import-into mode requires shared storage"
 type TaskFullMigrateConfImportMode string
 
 // to control the duplication resolution when meet duplicate rows for logical import
@@ -661,6 +714,11 @@ type TaskIncrMigrateConf struct {
 
 	// incremental task of concurrent
 	ReplThreads *int `json:"repl_threads,omitempty"`
+
+	// Whether to keep safe mode enabled during incremental replication.
+	// When false, DM may still enable it temporarily during initialization or checkpoint recovery.
+	// `safe_mode_time_duration` takes precedence when specified at task start.
+	SafeMode *bool `json:"safe_mode,omitempty"`
 }
 
 // task migrate targets
@@ -746,9 +804,21 @@ type TaskTargetDataBase struct {
 	// data source ssl configuration, the field will be hidden when getting the data source configuration from the interface
 	Security *Security `json:"security"`
 
+	// Downstream database session parameters for incremental replication. Only use this field after all DM masters are upgraded, because older versions ignore it.
+	Session *TaskTargetSession `json:"session,omitempty"`
+
 	// source username
 	User string `json:"user"`
 }
+
+// Downstream database session parameters for incremental replication. Only use this field after all DM masters are upgraded, because older versions ignore it.
+type TaskTargetSession struct {
+	// Whether foreign key checks are enabled during incremental replication. If omitted, DM uses "0". This setting cannot be changed through task updates.
+	ForeignKeyChecks *TaskTargetSessionForeignKeyChecks `json:"foreign_key_checks,omitempty"`
+}
+
+// Whether foreign key checks are enabled during incremental replication. If omitted, DM uses "0". This setting cannot be changed through task updates.
+type TaskTargetSessionForeignKeyChecks string
 
 // TaskTemplateRequest defines model for TaskTemplateRequest.
 type TaskTemplateRequest struct {
@@ -863,6 +933,13 @@ type DMAPIImportTaskTemplateJSONBody TaskTemplateRequest
 type DMAPIDeleteTaskParams struct {
 	// force stop task even if some subtask is running
 	Force *bool `json:"force,omitempty"`
+
+	// Whether to keep downstream checkpoints and resumable internal metadata when deleting the task.
+	// Optimistic shard DDL metadata is always removed.
+	// With force=true, only already-persisted checkpoint state is retained; deletion does not flush the latest checkpoint.
+	// Stop the task and wait for the stop operation to complete before deleting it when the latest checkpoint must be retained.
+	// Only use keep_meta=true after all DM masters are upgraded, because older versions ignore unknown query parameters.
+	KeepMeta *bool `json:"keep_meta,omitempty"`
 }
 
 // DMAPIGetTaskParams defines parameters for DMAPIGetTask.
@@ -981,6 +1058,59 @@ func (a *Task_BinlogFilterRule) UnmarshalJSON(b []byte) error {
 
 // Override default JSON handling for Task_BinlogFilterRule to handle AdditionalProperties
 func (a Task_BinlogFilterRule) MarshalJSON() ([]byte, error) {
+	var err error
+	object := make(map[string]json.RawMessage)
+
+	for fieldName, field := range a.AdditionalProperties {
+		object[fieldName], err = json.Marshal(field)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
+		}
+	}
+	return json.Marshal(object)
+}
+
+// Getter for additional properties for Task_MetricLabels. Returns the specified
+// element and whether it was found
+func (a Task_MetricLabels) Get(fieldName string) (value string, found bool) {
+	if a.AdditionalProperties != nil {
+		value, found = a.AdditionalProperties[fieldName]
+	}
+	return
+}
+
+// Setter for additional properties for Task_MetricLabels
+func (a *Task_MetricLabels) Set(fieldName string, value string) {
+	if a.AdditionalProperties == nil {
+		a.AdditionalProperties = make(map[string]string)
+	}
+	a.AdditionalProperties[fieldName] = value
+}
+
+// Override default JSON handling for Task_MetricLabels to handle AdditionalProperties
+func (a *Task_MetricLabels) UnmarshalJSON(b []byte) error {
+	object := make(map[string]json.RawMessage)
+	err := json.Unmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if len(object) != 0 {
+		a.AdditionalProperties = make(map[string]string)
+		for fieldName, fieldBuf := range object {
+			var fieldVal string
+			err := json.Unmarshal(fieldBuf, &fieldVal)
+			if err != nil {
+				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
+			}
+			a.AdditionalProperties[fieldName] = fieldVal
+		}
+	}
+	return nil
+}
+
+// Override default JSON handling for Task_MetricLabels to handle AdditionalProperties
+func (a Task_MetricLabels) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 

@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/capture"
 	"github.com/pingcap/tiflow/cdc/model"
+	"github.com/pingcap/tiflow/cdc/owner"
 	"github.com/pingcap/tiflow/cdc/scheduler"
 	"github.com/pingcap/tiflow/pkg/config"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
@@ -280,6 +281,31 @@ func ForwardToCapture(c *gin.Context, fromID, toAddr string) {
 		_ = c.Error(err)
 		return
 	}
+}
+
+// CollectTaskStatuses returns the per-capture task statuses of a changefeed.
+func CollectTaskStatuses(
+	ctx context.Context,
+	provider owner.StatusProvider,
+	changefeedID model.ChangeFeedID,
+) ([]model.CaptureTaskStatus, error) {
+	processorInfos, err := provider.GetAllTaskStatuses(ctx, changefeedID)
+	if err != nil {
+		return nil, err
+	}
+	taskStatus := make([]model.CaptureTaskStatus, 0, len(processorInfos))
+	for captureID, status := range processorInfos {
+		tables := make([]int64, 0, len(status.Tables))
+		for tableID := range status.Tables {
+			tables = append(tables, tableID)
+		}
+		taskStatus = append(taskStatus,
+			model.CaptureTaskStatus{
+				CaptureID: captureID, Tables: tables,
+				Operation: status.Operation,
+			})
+	}
+	return taskStatus, nil
 }
 
 // HandleOwnerDrainCapture schedule drain the target capture

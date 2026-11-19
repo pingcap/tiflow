@@ -49,6 +49,10 @@ type DDLSink interface {
 	// this function will return after recording the checkpointTs specified in memory immediately
 	// and the recorded checkpointTs will be sent and updated to downstream data source every second
 	emitCheckpointTs(ts uint64, tables []*model.TableInfo)
+	// getLastWrittenCheckpointTs returns the latest checkpoint successfully written to the sink.
+	getLastWrittenCheckpointTs() model.Ts
+	// retainTablesForCheckpoint keeps old table topics until a covering checkpoint is written.
+	retainTablesForCheckpoint(ts model.Ts, tables []*model.TableInfo)
 	// emitDDLEvent emits DDL event and return true if the DDL is executed
 	// the DDL event will be sent to another goroutine and execute to downstream
 	// the caller of this function can call again and again until a true returned
@@ -68,14 +72,16 @@ type ddlSinkImpl struct {
 	// It is used to record the checkpointTs and the names of the table at that time.
 	mu struct {
 		sync.Mutex
-		checkpointTs  model.Ts
-		currentTables []*model.TableInfo
+		checkpointTs        model.Ts
+		writtenCheckpointTs model.Ts
+		currentTables       []*model.TableInfo
+		// Keep old table topics through the first checkpoint covering their DDLs.
+		pendingDDLTables map[model.TableName]pendingDDLTable
 	}
 	// ddlSentTsMap is used to check whether a ddl event in a ddl job has been
 	// sent to `ddlCh` successfully.
 	ddlSentTsMap map[*model.DDLEvent]model.Ts
-
-	ddlCh chan *model.DDLEvent
+	ddlCh        chan *model.DDLEvent
 
 	sink ddlsink.Sink
 	// `sinkInitHandler` can be helpful in unit testing.
@@ -91,6 +97,11 @@ type ddlSinkImpl struct {
 	sinkRetry     *retry.ErrorRetry
 	reportError   func(err error)
 	reportWarning func(err error)
+}
+
+type pendingDDLTable struct {
+	commitTs model.Ts
+	table    *model.TableInfo
 }
 
 func newDDLSink(
@@ -110,6 +121,7 @@ func newDDLSink(
 		reportError:   reportError,
 		reportWarning: reportWarning,
 	}
+	res.mu.pendingDDLTables = make(map[model.TableName]pendingDDLTable)
 	return res
 }
 
@@ -225,6 +237,11 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 		}
 		tables := make([]*model.TableInfo, 0, len(s.mu.currentTables))
 		tables = append(tables, s.mu.currentTables...)
+		for _, pending := range s.mu.pendingDDLTables {
+			if pending.commitTs <= checkpointTs {
+				tables = append(tables, pending.table)
+			}
+		}
 		s.mu.Unlock()
 
 		if err = s.makeSinkReady(ctx); err == nil {
@@ -232,6 +249,14 @@ func (s *ddlSinkImpl) writeCheckpointTs(ctx context.Context, lastCheckpointTs *m
 		}
 		if err == nil {
 			*lastCheckpointTs = checkpointTs
+			s.mu.Lock()
+			for name, pending := range s.mu.pendingDDLTables {
+				if pending.commitTs <= checkpointTs {
+					delete(s.mu.pendingDDLTables, name)
+				}
+			}
+			s.mu.writtenCheckpointTs = checkpointTs
+			s.mu.Unlock()
 		}
 		return
 	}
@@ -268,7 +293,11 @@ func (s *ddlSinkImpl) writeDDLEvent(ctx context.Context, ddl *model.DDLEvent) er
 		return
 	}
 
-	return s.observedRetrySinkAction(ctx, "writeDDLEvent", doWrite)
+	err := s.observedRetrySinkAction(ctx, "writeDDLEvent", doWrite)
+	if err == nil && ddl.PreTableInfo != nil && ddl.PreTableInfo.TableName.Table != "" {
+		s.retainTablesForCheckpoint(ddl.CommitTs, []*model.TableInfo{ddl.PreTableInfo})
+	}
+	return err
 }
 
 func (s *ddlSinkImpl) run(ctx context.Context) {
@@ -293,9 +322,8 @@ func (s *ddlSinkImpl) run(ctx context.Context) {
 		defer ticker.Stop()
 		var lastCheckpointTs model.Ts
 		for {
-			// `ticker.C` and `ddlCh` may can be triggered at the same time, it
-			// does not matter which one emit first, since TiCDC allow DDL with
-			// CommitTs equal to the last CheckpointTs be emitted later.
+			// The owner only advances the emitted checkpoint after all DDLs at
+			// that ts have finished, so either channel can be selected first.
 			select {
 			case <-ctx.Done():
 				err = ctx.Err()
@@ -323,6 +351,20 @@ func (s *ddlSinkImpl) emitCheckpointTs(ts uint64, tables []*model.TableInfo) {
 	defer s.mu.Unlock()
 	s.mu.checkpointTs = ts
 	s.mu.currentTables = tables
+}
+
+func (s *ddlSinkImpl) getLastWrittenCheckpointTs() model.Ts {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.writtenCheckpointTs
+}
+
+func (s *ddlSinkImpl) retainTablesForCheckpoint(ts model.Ts, tables []*model.TableInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, table := range tables {
+		s.mu.pendingDDLTables[table.TableName] = pendingDDLTable{commitTs: ts, table: table}
+	}
 }
 
 // emitDDLEvent returns true if the ddl event is already executed.

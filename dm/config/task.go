@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"sort"
@@ -29,6 +30,7 @@ import (
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
 	"github.com/pingcap/tidb/pkg/lightning/config"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -537,6 +539,10 @@ type TaskConfig struct {
 	IsSharding                bool   `yaml:"is-sharding" toml:"is-sharding" json:"is-sharding"`
 	ShardMode                 string `yaml:"shard-mode" toml:"shard-mode" json:"shard-mode"` // when `shard-mode` set, we always enable sharding support.
 	StrictOptimisticShardMode bool   `yaml:"strict-optimistic-shard-mode" toml:"strict-optimistic-shard-mode" json:"strict-optimistic-shard-mode"`
+
+	// MetricLabels are propagated to task-scoped metrics. They are opaque to DM.
+	MetricLabels map[string]string `yaml:"metric-labels,omitempty" toml:"metric-labels,omitempty" json:"metric-labels,omitempty"`
+
 	// treat it as hidden configuration
 	IgnoreCheckingItems []string `yaml:"ignore-checking-items" toml:"ignore-checking-items" json:"ignore-checking-items"`
 	// we store detail status in meta
@@ -633,6 +639,37 @@ func (c *TaskConfig) String() string {
 		log.L().Error("marshal task config to yaml", zap.String("task", c.Name), log.ShortError(err))
 	}
 	return string(cfg)
+}
+
+// Redacted returns a copy for diagnostics with storage credentials hidden.
+func (c *TaskConfig) Redacted() *TaskConfig {
+	result := *c
+	cloneLoader := func(loader *LoaderConfig) *LoaderConfig {
+		if loader == nil {
+			return nil
+		}
+		copyLoader := *loader
+		copyLoader.Dir = objstore.RedactURL(loader.Dir)
+		return &copyLoader
+	}
+	if c.Loaders != nil {
+		result.Loaders = make(map[string]*LoaderConfig, len(c.Loaders))
+		for name, loader := range c.Loaders {
+			result.Loaders[name] = cloneLoader(loader)
+		}
+	}
+	if c.MySQLInstances != nil {
+		result.MySQLInstances = make([]*MySQLInstance, len(c.MySQLInstances))
+		for i, instance := range c.MySQLInstances {
+			if instance == nil {
+				continue
+			}
+			copyInstance := *instance
+			copyInstance.Loader = cloneLoader(instance.Loader)
+			result.MySQLInstances[i] = &copyInstance
+		}
+	}
+	return &result
 }
 
 // JSON returns the config's json string.
@@ -1250,6 +1287,7 @@ func (c *SyncerConfigForDowngrade) omitDefaultVals() {
 // When we add any new config item into SourceConfig, we should update it also.
 type TaskConfigForDowngrade struct {
 	Name                    string                               `yaml:"name"`
+	MetricLabels            map[string]string                    `yaml:"metric-labels,omitempty"`
 	TaskMode                string                               `yaml:"task-mode"`
 	IsSharding              bool                                 `yaml:"is-sharding"`
 	ShardMode               string                               `yaml:"shard-mode"`
@@ -1287,6 +1325,7 @@ func NewTaskConfigForDowngrade(taskConfig *TaskConfig) *TaskConfigForDowngrade {
 	targetDB := *taskConfig.TargetDB
 	return &TaskConfigForDowngrade{
 		Name:                      taskConfig.Name,
+		MetricLabels:              maps.Clone(taskConfig.MetricLabels),
 		TaskMode:                  taskConfig.TaskMode,
 		IsSharding:                taskConfig.IsSharding,
 		ShardMode:                 taskConfig.ShardMode,

@@ -3,6 +3,8 @@
 #log configuration
 log-level = "info"
 log-file = "dm-worker.log"
+# Redact sensitive information in logs by default. Set to false to disable redaction.
+redact-info-log = true
 
 #dm-worker listen address
 worker-addr = ":8262"

@@ -57,7 +57,7 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 		wantClusterID uint64
 		wantIsTiDB    bool
 		wantErr       error
-		wantNotInErr  string
+		wantNotInErr  []string
 	}{
 		{
 			name:       "non mysql scheme",
@@ -67,8 +67,8 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 		{
 			name:         "invalid uri",
 			sinkURI:      "mysql://user:verysecure@127.0.0.1/%zz",
-			wantErr:      errors.New(`parse "<invalid uri>": invalid URL escape "%zz"`),
-			wantNotInErr: "verysecure",
+			wantErr:      errors.New(`parse "<invalid uri>": invalid URL escape`),
+			wantNotInErr: []string{"verysecure", "%zz"},
 		},
 		{
 			name:    "connect error",
@@ -137,8 +137,8 @@ func TestGetClusterIDBySinkURI(t *testing.T) {
 			if tc.wantErr != nil {
 				require.Error(t, err)
 				require.Contains(t, err.Error(), tc.wantErr.Error())
-				if tc.wantNotInErr != "" {
-					require.NotContains(t, err.Error(), tc.wantNotInErr)
+				for _, omitted := range tc.wantNotInErr {
+					require.NotContains(t, err.Error(), omitted)
 				}
 			} else {
 				require.NoError(t, err)

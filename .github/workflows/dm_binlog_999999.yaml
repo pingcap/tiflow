@@ -33,6 +33,7 @@ jobs:
         if: ${{ github.event.inputs.pr != '' }}
         uses: actions/checkout@v6
         with:
+          repository: pingcap/tiflow
           ref: refs/pull/${{ github.event.inputs.pr }}/head
 
       - name: Set DOCKER_HOST
@@ -42,12 +43,6 @@ jobs:
         run: |
           sudo curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
           sudo chmod +x /usr/local/bin/docker-compose
-
-      - name: Cache go modules
-        uses: actions/cache@v5
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-ticdc-${{ hashFiles('go.sum') }}
 
       - name: Cache Tools
         id: cache-tools
@@ -64,7 +59,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y curl
           sudo docker-compose -f ./dm/tests/binlog_999999/docker-compose.yml up -d
-          curl http://download.pingcap.org/tidb-nightly-linux-amd64.tar.gz | tar xz
+          curl --fail --location --retry 3 --retry-all-errors --retry-delay 5 \
+            --output tidb-nightly-linux-amd64.tar.gz \
+            https://download.pingcap.com/tidb-nightly-linux-amd64.tar.gz
+          tar xzf tidb-nightly-linux-amd64.tar.gz
           mv tidb-nightly-linux-amd64/bin/tidb-server bin/
           curl -O https://dl.min.io/server/minio/release/linux-amd64/minio
           chmod +x minio

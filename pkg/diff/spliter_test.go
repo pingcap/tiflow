@@ -445,14 +445,15 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		| Db_name | Table_name | Column_name | Is_index | Bucket_id | Count | Repeats | Lower_Bound | Upper_Bound |
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 		| test    | test       | PRIMARY     |        1 |         0 |    64 |       1 | (0, 0)      | (63, 11)    |
-		| test    | test       | PRIMARY     |        1 |         1 |   128 |       1 | (64, 12)    | (127, 23)   |
-		| test    | test       | PRIMARY     |        1 |         2 |   192 |       1 | (128, 24)   | (191, 35)   |
-		| test    | test       | PRIMARY     |        1 |         3 |   256 |       1 | (192, 36)   | (255, 47)   |
-		| test    | test       | PRIMARY     |        1 |         4 |   320 |       1 | (256, 48)   | (319, 59)   |
+		| test    | test       | PRIMARY     |        1 |         1 |    64 |       1 | (64, 12)    | (127, 23)   |
+		| test    | test       | PRIMARY     |        1 |         2 |    64 |       1 | (128, 24)   | (191, 35)   |
+		| test    | test       | PRIMARY     |        1 |         3 |    64 |       1 | (192, 36)   | (255, 47)   |
+		| test    | test       | PRIMARY     |        1 |         4 |    64 |       1 | (256, 48)   | (319, 59)   |
 		+---------+------------+-------------+----------+-----------+-------+---------+-------------+-------------+
 	*/
 
-	// Mock query with subquery to get all table_ids (main table + partitions) at once
+	// Mock query using the logical table ID. For partitioned tables this selects
+	// global statistics and avoids mixing per-partition histograms.
 	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
 	for i := 0; i < 5; i++ {
 		// Encode index bounds as real encoded keys: PRIMARY(a, b) where both a and b are integers.
@@ -465,10 +466,10 @@ func createFakeResultForBucketSplit(mock sqlmock.Sqlmock, aRandomValues, bRandom
 		lowerEncoded, _ := codec.EncodeKey(time.UTC, nil, lowerDatums...)
 		upperEncoded, _ := codec.EncodeKey(time.UTC, nil, upperDatums...)
 
-		statsRows.AddRow(1, 1, i, (i+1)*64, lowerEncoded, upperEncoded)
+		statsRows.AddRow(1, 1, i, 64, lowerEncoded, upperEncoded)
 	}
-	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id = \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(statsRows)
 
 	for i := 0; i < len(aRandomValues); i++ {

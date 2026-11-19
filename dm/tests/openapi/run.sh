@@ -57,6 +57,26 @@ function init_data_with_diff_column() {
 	run_sql_source2 "INSERT INTO openapi.t(i,j) VALUES (3, 4);"
 }
 
+function check_task_metric_label() {
+	local port=$1
+	local task=$2
+	local label=$3
+	local value=$4
+
+	for _ in $(seq 1 30); do
+		if curl -sf "http://127.0.0.1:$port/metrics" |
+			grep '^dm_worker_task_state{' |
+			grep -F "task=\"$task\"" |
+			grep -Fq "$label=\"$value\""; then
+			return 0
+		fi
+		sleep 1
+	done
+
+	echo "task metric label $label=$value not found for task $task on port $port"
+	return 1
+}
+
 function clean_cluster_sources_and_tasks() {
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 	openapi_source_check "delete_source_with_force_success" "mysql-02"
@@ -415,7 +435,7 @@ function test_noshard_task() {
 	openapi_source_check "get_source_status_success" "mysql-02"
 
 	# create no shard task success
-	openapi_task_check "create_noshard_task_success" $task_name $target_table_name
+	openapi_task_check "create_noshard_task_success" "$task_name" "$target_table_name" "all" "123"
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Stopped\"" 2
@@ -424,6 +444,8 @@ function test_noshard_task() {
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $task_name" \
 		"\"stage\": \"Running\"" 2
+	check_task_metric_label $WORKER1_PORT "$task_name" "keyspace_id" "123"
+	check_task_metric_label $WORKER2_PORT "$task_name" "keyspace_id" "123"
 	init_noshard_data
 	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
 
@@ -434,6 +456,25 @@ function test_noshard_task() {
 	openapi_task_check "get_task_status_success" "$task_name" 2
 	openapi_task_check "check_sync_task_status_success" "$task_name" 2500 5000 18000 42000
 
+	# stop task first for operate schema
+	openapi_task_check "stop_task_success" "$task_name" "mysql-02"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name -s mysql-02" \
+		'"stage": "Paused"' 1 \
+		'"unit": "Sync"' 1
+
+	# operate schema
+	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
+
+	# start task again
+	openapi_task_check "start_task_success" "$task_name" "mysql-02" "false"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name -s mysql-02" \
+		'"stage": "Running"' 1 \
+		'"unit": "Sync"' 1
+	run_sql_source2 "INSERT INTO openapi.t2(i,j) VALUES (5, 6);"
+	check_sync_diff $WORK_DIR $cur/conf/diff_config_no_shard.toml
+
 	# delete source with force
 	openapi_source_check "delete_source_with_force_success" "mysql-01"
 
@@ -442,15 +483,6 @@ function test_noshard_task() {
 
 	# get task list
 	openapi_task_check "get_task_list" 1
-
-	# stop task first for operate schema
-	openapi_task_check "stop_task_success" "$task_name" "mysql-02"
-
-	# operate schema
-	openapi_task_check "operate_schema_and_table_success" "$task_name" "mysql-02" "openapi" "t2"
-
-	# start task again
-	openapi_task_check "start_task_success" "$task_name" "mysql-02"
 
 	# delete task failed because there is a running task
 	openapi_task_check "delete_task_failed" "$task_name"
@@ -465,6 +497,84 @@ function test_noshard_task() {
 	openapi_source_check "list_source_success" 0
 	run_sql_tidb "DROP DATABASE if exists openapi;"
 	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: NO SHARD TASK SUCCESS"
+}
+
+function test_delete_task_keep_meta() {
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>START TEST OPENAPI: DELETE TASK KEEP META"
+	prepare_database
+
+	task_name="test_keep_meta"
+	target_schema_v1="openapi_keep_meta_v1"
+	target_schema_v2="openapi_keep_meta_v2"
+	checkpoint_table="${task_name}_syncer_checkpoint"
+
+	openapi_source_check "create_source1_success"
+	openapi_source_check "list_source_success" 1
+
+	run_sql_source1 "CREATE TABLE openapi.keep_meta(id INT PRIMARY KEY, value INT);"
+	master_status=($(get_master_status $MYSQL_HOST1 $MYSQL_PORT1))
+	binlog_name=${master_status[0]}
+	binlog_pos=${master_status[1]}
+	binlog_gtid=${master_status[2]:-}
+
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v1};"
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v2};"
+	run_sql_tidb "CREATE DATABASE ${target_schema_v1};"
+	run_sql_tidb "CREATE DATABASE ${target_schema_v2};"
+	run_sql_tidb "CREATE TABLE ${target_schema_v1}.keep_meta(id INT PRIMARY KEY, value INT);"
+	run_sql_tidb "CREATE TABLE ${target_schema_v2}.keep_meta(id INT PRIMARY KEY, value INT);"
+
+	openapi_task_check "create_keep_meta_task_success" "$task_name" "$target_schema_v1" "$binlog_name" "$binlog_pos" "$binlog_gtid"
+	openapi_task_check "start_task_success" "$task_name" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
+
+	run_sql_source1 "INSERT INTO openapi.keep_meta VALUES (1, 10);"
+	run_sql_tidb_with_retry "SELECT count(1) FROM ${target_schema_v1}.keep_meta WHERE id = 1;" "count(1): 1"
+
+	# stop-task flushes the checkpoint before keep-meta deletes the task definition.
+	openapi_task_check "stop_task_success" "$task_name" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Paused\"" 1
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 1"
+	openapi_task_check "delete_task_with_keep_meta_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 1"
+
+	# Recreate the same task from the original binlog position but route new
+	# events to v2. The retained checkpoint must prevent row 1 from replaying.
+	openapi_task_check "create_keep_meta_task_success" "$task_name" "$target_schema_v2" "$binlog_name" "$binlog_pos" "$binlog_gtid"
+	openapi_task_check "start_task_success" "$task_name" ""
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Running\"" 1
+	run_sql_source1 "INSERT INTO openapi.keep_meta VALUES (2, 20);"
+	run_sql_tidb_with_retry "SELECT count(1) FROM ${target_schema_v2}.keep_meta WHERE id = 2;" "count(1): 1"
+	run_sql_tidb_with_retry "SELECT count(1) FROM ${target_schema_v2}.keep_meta;" "count(1): 1"
+
+	# force and keep-meta are orthogonal. Only already-persisted checkpoints are
+	# guaranteed here, so this is intentionally a metadata-retention smoke test.
+	openapi_task_check "delete_task_with_force_keep_meta_success" "$task_name"
+	openapi_task_check "get_task_list" 0
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 1"
+
+	# Recreate the stopped task once more and use the default delete behavior.
+	# Omitting keep_meta must remove the retained downstream checkpoint.
+	openapi_task_check "create_keep_meta_task_success" "$task_name" "$target_schema_v2" "$binlog_name" "$binlog_pos" "$binlog_gtid"
+	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
+		"query-status $task_name" \
+		"\"stage\": \"Stopped\"" 1
+	openapi_task_check "delete_task_success" "$task_name"
+	run_sql_tidb_with_retry "SELECT count(1) FROM information_schema.tables WHERE table_schema = 'dm_meta' AND table_name = '${checkpoint_table}';" "count(1): 0"
+
+	openapi_source_check "delete_source_success" "mysql-01"
+	openapi_source_check "list_source_success" 0
+	run_sql_source1 "DROP DATABASE IF EXISTS openapi;"
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v1};"
+	run_sql_tidb "DROP DATABASE IF EXISTS ${target_schema_v2};"
+	echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>TEST OPENAPI: DELETE TASK KEEP META SUCCESS"
 }
 
 function test_complex_operations_of_source_and_task() {
@@ -1320,6 +1430,7 @@ function run() {
 	test_shard_task
 	test_multi_tasks
 	test_noshard_task
+	test_delete_task_keep_meta
 	test_dump_and_load_task
 	test_task_templates
 	test_noshard_task_dump_status

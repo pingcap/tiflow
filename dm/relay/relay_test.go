@@ -32,6 +32,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
+	"github.com/pingcap/tiflow/dm/config/security"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
 	"github.com/pingcap/tiflow/dm/pkg/conn"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
@@ -622,6 +623,18 @@ func (t *testRelaySuite) TestReSetupMeta(c *check.C) {
 	uuid003 := fmt.Sprintf("%s.000003", uuid)
 	t.verifyMetadata(c, r, uuid003, minCheckpoint, emptyGTID.String(), []string{uuid002, uuid003})
 	c.Assert(mockDB.ExpectationsWereMet(), check.IsNil)
+}
+
+func (t *testRelaySuite) TestSetSyncConfigTLSCipherSuites(c *check.C) {
+	ca, err := os.ReadFile("../tests/tls/conf/ca.pem")
+	c.Assert(err, check.IsNil)
+
+	cfg := newRelayCfg(c, gmysql.MySQLFlavor)
+	cfg.From.Security = &security.Security{SSLCABytes: ca}
+	r := NewRelay(cfg).(*Relay)
+	c.Assert(r.setSyncConfig(), check.IsNil)
+	c.Assert(r.syncerCfg.TLSConfig, check.NotNil)
+	c.Assert(r.syncerCfg.TLSConfig.CipherSuites, check.DeepEquals, conn.MySQLTLSCipherSuites())
 }
 
 func (t *testRelaySuite) verifyMetadata(c *check.C, r *Relay, uuidExpected string,

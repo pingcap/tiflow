@@ -66,6 +66,7 @@ type mockStatusProvider struct {
 	changefeedInfo         *model.ChangeFeedInfo
 	processors             []*model.ProcInfoSnap
 	taskStatus             map[model.CaptureID]*model.TaskStatus
+	taskStatusErr          error
 	changefeedInfos        map[model.ChangeFeedID]*model.ChangeFeedInfo
 	changefeedStatuses     map[model.ChangeFeedID]*model.ChangeFeedStatusForAPI
 	changeFeedSyncedStatus *model.ChangeFeedSyncedStatusForAPI
@@ -102,6 +103,9 @@ func (m *mockStatusProvider) GetAllTaskStatuses(
 	map[model.CaptureID]*model.TaskStatus,
 	error,
 ) {
+	if m.taskStatusErr != nil {
+		return nil, m.taskStatusErr
+	}
 	return m.taskStatus, m.err
 }
 

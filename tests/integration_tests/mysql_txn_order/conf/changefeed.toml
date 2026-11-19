@@ -1,0 +1,13 @@
+# The ordered table overrides transaction-atomicity=none.
+[filter]
+rules = ["mysql_txn_order.*"]
+
+[sink]
+transaction-atomicity = "none"
+
+[sink.mysql-config]
+txn-order-tables = ["mysql_txn_order.t", "mysql_txn_order.ordered_*"]
+
+[scheduler]
+enable-table-across-nodes = false
+region-threshold = 1

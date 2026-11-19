@@ -17,7 +17,8 @@ echo "---------1. chunk is in the last of the bucket---------"
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/check-one-bucket=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+# These assertions inspect chunk bounds in logs. Disable redaction explicitly.
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # Save the last chunk's info,
 # to which we will check whether the first chunk's info is next in the next running.
@@ -38,7 +39,7 @@ done
 [[ $((${last_chunk_index_array[2]} + 1)) -eq ${last_chunk_index_array[3]} ]] || exit 1
 rm -f $OUT_DIR/sync_diff.log
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 first_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'lowerBounds=' '{print $2}' | sed 's/[]["]//g' | sort -n | awk 'NR==1')
 echo $first_chunk_info | awk -F '=' '{print $1}' >$OUT_DIR/first_chunk_bound
 cat $OUT_DIR/first_chunk_bound
@@ -63,7 +64,7 @@ export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/che
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/ignore-last-n-chunk-in-bucket=return(1);\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # Save the last chunk's info,
 # to which we will check whether the first chunk's info is next in the next running.
@@ -84,7 +85,7 @@ done
 [[ $((${last_chunk_index_array[2]} + 2)) -eq ${last_chunk_index_array[3]} ]] || exit 1
 rm -f $OUT_DIR/sync_diff.log
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 first_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'lowerBounds=' '{print $2}' | sed 's/[]["]//g' | sort -n | awk 'NR==1')
 echo $first_chunk_info | awk -F '=' '{print $1}' >$OUT_DIR/first_chunk_bound
 cat $OUT_DIR/first_chunk_bound
@@ -111,7 +112,7 @@ mkdir -p $OUT_DIR
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/check-one-chunk=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 check_contains "choose limit splitter" $OUT_DIR/sync_diff.log
 # Save the last chunk's info to verify continuation.
@@ -137,7 +138,7 @@ echo $bucket_index_right
 
 rm -f $OUT_DIR/sync_diff.log
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 first_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'lowerBounds=' '{print $2}' | sed 's/[]["]//g' | sort -n | awk 'NR==1')
 echo $first_chunk_info | awk -F '=' '{print $1}' >$OUT_DIR/first_chunk_bound
 cat $OUT_DIR/first_chunk_bound
@@ -156,7 +157,7 @@ mkdir -p $OUT_DIR
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/ignore-last-n-chunk-in-bucket=return(1);\
 github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return();\
 github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 check_contains "check pass!!!" $OUT_DIR/sync_diff.log
 # Save the last chunk's info,
 # to which we will check whether the first chunk's info is next in the next running.
@@ -178,7 +179,7 @@ done
 
 rm -f $OUT_DIR/sync_diff.log
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/splitter/print-chunk-info=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output
 first_chunk_info=$(grep 'print-chunk-info' $OUT_DIR/sync_diff.log | awk -F 'lowerBounds=' '{print $2}' | sed 's/[]["]//g' | sort -n | awk 'NR==1')
 echo $first_chunk_info | awk -F '=' '{print $1}' >$OUT_DIR/first_chunk_bound
 cat $OUT_DIR/first_chunk_bound
@@ -195,7 +196,7 @@ echo "================test checkpoint continous================="
 mysql -uroot -h 127.0.0.1 -P 4000 -e "create table IF NOT EXISTS diff_test.ttt(a int, aa int, primary key(a), key(aa));"
 mysql -uroot -h ${MYSQL_HOST} -P ${MYSQL_PORT} -e "create table IF NOT EXISTS diff_test.ttt(a int, b int, primary key(a), key(b));"
 export GO_FAILPOINTS="github.com/pingcap/tiflow/sync_diff_inspector/diff/wait-for-checkpoint=return()"
-sync_diff_inspector --config=./config.toml >$OUT_DIR/checkpoint_diff.output || true
+sync_diff_inspector --redact-info-log=false --config=./config.toml >$OUT_DIR/checkpoint_diff.output || true
 grep 'save checkpoint' $OUT_DIR/sync_diff.log | awk 'END {print}' >$OUT_DIR/checkpoint_info
 check_not_contains 'has-upper\":true' $OUT_DIR/checkpoint_info
 

@@ -14,6 +14,9 @@
 package loader
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pingcap/errors"
@@ -23,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/config/dbconfig"
 	"github.com/pingcap/tiflow/dm/config/security"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	certificate "github.com/pingcap/tiflow/pkg/security"
 	"github.com/prometheus/client_golang/prometheus"
@@ -122,6 +126,15 @@ func TestGetLightiningConfig(t *testing.T) {
 	lightningDefaultQuota := lcfg.NewConfig().TikvImporter.DiskQuota
 	// when we don't set dm loader disk quota, it should be equal to lightning's default quota
 	require.Equal(t, lightningDefaultQuota, conf.TikvImporter.DiskQuota)
+
+	conf, err = GetLightningConfig(&lcfg.GlobalConfig{}, &config.SubTaskConfig{
+		To: dbconfig.DBConfig{Session: map[string]string{
+			"foreign_key_checks": "1",
+		}},
+		LoaderConfig: config.LoaderConfig{Dir: "/tmp"},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "0", conf.TiDB.Vars["foreign_key_checks"])
 
 	conf, err = GetLightningConfig(&lcfg.GlobalConfig{},
 		&config.SubTaskConfig{
@@ -310,4 +323,28 @@ func TestMetricProxies(t *testing.T) {
 	metricFamilies, err = registry.Gather()
 	require.NoError(t, err)
 	require.Len(t, metricFamilies, 0)
+}
+
+func TestCleanRemoteDumpFiles(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "cleanup.log")
+	require.NoError(t, log.InitLogger(&log.Config{Level: "info", File: file}))
+	t.Cleanup(func() {
+		_ = log.L().Sync()
+		_ = log.InitLogger(&log.Config{Level: "info"})
+	})
+	for _, dir := range []string{
+		"s3://bucket/path?secret-access-key=private-sk",
+		"gs://bucket/path",
+		"azure://container/path?account-key=private-key",
+	} {
+		cfg := &config.SubTaskConfig{Mode: config.ModeAll, LoaderConfig: config.LoaderConfig{Dir: dir}}
+		cleanDumpFiles(context.Background(), cfg)
+		require.Equal(t, dir, cfg.Dir)
+	}
+	require.NoError(t, log.L().Sync())
+	data, err := os.ReadFile(file)
+	require.NoError(t, err)
+	require.NotContains(t, string(data), "private-")
+	require.NotContains(t, string(data), "fail to collect files")
+	require.Contains(t, string(data), "remote storage does not need")
 }

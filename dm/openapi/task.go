@@ -15,6 +15,8 @@ package openapi
 
 import (
 	"encoding/json"
+
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 )
 
 var defaultMetaSchema = "dm_meta"
@@ -23,6 +25,11 @@ var defaultMetaSchema = "dm_meta"
 func (t *Task) Adjust() error {
 	if t.MetaSchema == nil {
 		t.MetaSchema = &defaultMetaSchema
+	}
+	if t.Timezone != nil && *t.Timezone != "" {
+		if _, err := utils.ParseTimeZone(*t.Timezone); err != nil {
+			return err
+		}
 	}
 	return nil
 }

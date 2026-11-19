@@ -209,29 +209,14 @@ func (h *OpenAPI) GetChangefeed(c *gin.Context) {
 		return
 	}
 
-	taskStatus := make([]model.CaptureTaskStatus, 0)
-	if info.State == model.StateNormal {
-		processorInfos, err := h.statusProvider().GetAllTaskStatuses(ctx, changefeedID)
-		if err != nil {
-			_ = c.Error(err)
-			return
-		}
-		for captureID, status := range processorInfos {
-			tables := make([]int64, 0)
-			for tableID := range status.Tables {
-				tables = append(tables, tableID)
-			}
-			taskStatus = append(taskStatus,
-				model.CaptureTaskStatus{
-					CaptureID: captureID, Tables: tables,
-					Operation: status.Operation,
-				})
+	var taskStatus []model.CaptureTaskStatus
+	if info.State.IsRunning() {
+		if taskStatus, err = api.CollectTaskStatuses(ctx, h.statusProvider(), changefeedID); err != nil {
+			log.Warn("failed to get task statuses, returning changefeed detail without task_status",
+				zap.String("changefeed", changefeedID.String()), zap.Error(err))
 		}
 	}
-	sinkURI, err := util.MaskSinkURI(info.SinkURI)
-	if err != nil {
-		log.Error("failed to mask sink URI", zap.Error(err))
-	}
+	sinkURI := util.MaskSensitiveDataInURIForError(info.SinkURI)
 
 	changefeedDetail := &model.ChangefeedDetail{
 		UpstreamID:     info.UpstreamID,
@@ -493,18 +478,23 @@ func (h *OpenAPI) UpdateChangefeed(c *gin.Context) {
 		return
 	}
 
-	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info)
-	if err != nil {
-		_ = c.Error(err)
-		return
-	}
-
 	upManager, err := h.capture.GetUpstreamManager()
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 	up, err := upManager.GetDefaultUpstream()
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	status, err := h.statusProvider().GetChangeFeedStatus(ctx, changefeedID)
+	if err != nil {
+		_ = c.Error(err)
+		return
+	}
+	checkpointTs := model.GetDDLStartTs(status.CheckpointTs, status.MinTableBarrierTs)
+	newInfo, err := VerifyUpdateChangefeedConfig(ctx, changefeedConfig, info, up.KVStorage, checkpointTs)
 	if err != nil {
 		_ = c.Error(err)
 		return

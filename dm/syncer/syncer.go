@@ -33,7 +33,9 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	tidbddl "github.com/pingcap/tidb/pkg/ddl"
+	"github.com/pingcap/tidb/pkg/lightning/mydump"
 	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/pingcap/tidb/pkg/parser/ast"
 	"github.com/pingcap/tidb/pkg/sessionctx"
@@ -55,6 +57,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/ha"
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	parserpkg "github.com/pingcap/tiflow/dm/pkg/parser"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/schema"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
@@ -102,6 +105,8 @@ const (
 
 	unhandledEventSampleInterval = 5 * time.Minute
 	unhandledEventSampleFirst    = 1
+
+	maxSchemaFileReadConcurrency = 16
 )
 
 // waitXIDStatus represents the status for waiting XID event when pause/stop task.
@@ -545,9 +550,26 @@ func (s *Syncer) Init(ctx context.Context) (err error) {
 		metricProxies.Init(s.cfg.MetricsFactory)
 	}
 	s.metricsProxies = metricProxies.CacheForOneTask(s.cfg.Name, s.cfg.WorkerName, s.cfg.SourceID)
+	s.updateSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
 
 	s.ddlWorker = NewDDLWorker(&s.tctx.Logger, s)
 	return nil
+}
+
+func (s *Syncer) updateSyncerBinlogMetrics(checkpoint binlog.Location) {
+	s.metricsProxies.Metrics.BinlogSyncerPosGauge.Set(float64(checkpoint.Position.Pos))
+
+	index, err := utils.GetFilenameIndex(checkpoint.Position.Name)
+	if err != nil {
+		// An empty binlog filename is expected for a fresh or GTID-only checkpoint.
+		// Use NaN so the unknown file number is not exposed as a valid zero value.
+		s.metricsProxies.Metrics.BinlogSyncerFileGauge.Set(math.NaN())
+		if checkpoint.Position.Name != "" {
+			s.tctx.L().Warn("fail to get index number of checkpoint binlog file", log.ShortError(err))
+		}
+		return
+	}
+	s.metricsProxies.Metrics.BinlogSyncerFileGauge.Set(float64(index))
 }
 
 // buildLowerCaseTableNamesMap build a lower case schema map and lower case table map for all tables
@@ -1599,7 +1621,7 @@ func (s *Syncer) syncDDL(queueBucket string, db *dbconn.DBConn, ddlJobChan chan 
 			case s.optimist.PendingOperation() == nil:
 				err = terror.ErrWorkerDDLLockOpNotFound.Generate(shardInfo)
 			default:
-				err = s.optimist.DoneOperation(*(s.optimist.PendingOperation()))
+				err = s.optimist.DoneOperation(*s.optimist.PendingOperation())
 			}
 		}
 		if err != nil {
@@ -1837,6 +1859,11 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	// Init initializes metrics for tasks that do not enter Run. Refresh them
+	// here because Run may select a different checkpoint from start time or
+	// metadata, and GTID adjustment may further update the global checkpoint.
+	s.updateSyncerBinlogMetrics(s.checkpoint.GlobalPoint())
+
 	if fresh && config.HasLoad(s.cfg.Mode) {
 		delLoadTask = true
 		flushCheckpoint = true
@@ -1899,7 +1926,7 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 	if freshAndAllMode {
 		err = s.loadTableStructureFromDump(ctx)
 		if err != nil {
-			s.tctx.L().Warn("error happened when load table structure from dump files", zap.Error(err))
+			s.tctx.L().Warn("error happened when load table structure from dump files", redact.Error(err))
 			cleanDumpFile = false
 		} else {
 			err = s.flushCheckPoints()
@@ -1917,8 +1944,8 @@ func (s *Syncer) Run(ctx context.Context) (err error) {
 
 	if cleanDumpFile {
 		s.tctx.L().Info("try to remove all dump files")
-		if err = storage.RemoveAll(ctx, s.cfg.Dir, nil); err != nil {
-			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", s.cfg.Dir), zap.Error(err))
+		if err = storage.RemoveAll(ctx, s.cfg.Dir, s.cfg.ExtStorage); err != nil {
+			s.tctx.L().Warn("error when remove loaded dump folder", zap.String("data folder", objstore.RedactURL(s.cfg.Dir)), redact.Error(err))
 		}
 	}
 
@@ -3052,14 +3079,19 @@ func (s *Syncer) genRouter() error {
 
 func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	logger := s.tctx.L()
-	// TODO: delete this check after we support parallel reading the files to improve load speed
-	if !storage.IsLocalDiskPath(s.cfg.LoaderConfig.Dir) {
-		logger.Warn("skip load table structure from dump files for non-local-dir loader because it may be slow", zap.String("loaderDir", s.cfg.LoaderConfig.Dir))
-		return nil
+	dumpStorage := s.cfg.ExtStorage
+	if dumpStorage == nil {
+		var err error
+		dumpStorage, err = storage.CreateStorage(ctx, s.cfg.LoaderConfig.Dir)
+		if err != nil {
+			logger.Warn("fail to create dump storage", redact.Error(err))
+			return err
+		}
+		defer dumpStorage.Close()
 	}
-	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, nil)
+	files, err := storage.CollectDirFiles(ctx, s.cfg.LoaderConfig.Dir, dumpStorage)
 	if err != nil {
-		logger.Warn("fail to get dump files", zap.Error(err))
+		logger.Warn("fail to get dump files", redact.Error(err))
 		return err
 	}
 	var dbs, tables []string
@@ -3099,19 +3131,39 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 	if err != nil {
 		logger.Error("failed to create parser from SQL Mode, will skip loadTableStructureFromDump",
 			zap.String("SQLMode", s.cfg.LoaderConfig.SQLMode),
-			zap.Error(err))
+			redact.Error(err))
 		return err
 	}
 
-	for _, dbAndFile := range tableFiles {
+	type schemaFileReadResult struct {
+		content []byte
+		err     error
+	}
+	readConcurrency := min(max(s.cfg.LoaderConfig.PoolSize, 1), maxSchemaFileReadConcurrency)
+	readResults, err := mydump.ParallelProcess(
+		ctx,
+		tableFiles,
+		readConcurrency,
+		func(ctx context.Context, dbAndFile [2]string) (schemaFileReadResult, error) {
+			content, readErr := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, dbAndFile[1], dumpStorage)
+			// Keep reading the remaining schema files and report the first error,
+			// which preserves the existing best-effort behavior.
+			return schemaFileReadResult{content: content, err: readErr}, nil
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	for i, dbAndFile := range tableFiles {
 		db, file := dbAndFile[0], dbAndFile[1]
-		content, err2 := storage.ReadFile(ctx, s.cfg.LoaderConfig.Dir, file, nil)
+		content, err2 := readResults[i].content, readResults[i].err
 		if err2 != nil {
 			logger.Warn("fail to read file for creating table in schema tracker",
 				zap.String("db", db),
-				zap.String("path", s.cfg.LoaderConfig.Dir),
+				zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 				zap.String("file", file),
-				zap.Error(err2))
+				redact.Error(err2))
 			setFirstErr(err2)
 			continue
 		}
@@ -3125,10 +3177,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 			if err != nil {
 				logger.Warn("fail to parse statement for creating table in schema tracker",
 					zap.String("db", db),
-					zap.String("path", s.cfg.LoaderConfig.Dir),
+					zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 					zap.String("file", file),
 					zap.ByteString("statement", stmt),
-					zap.Error(err))
+					redact.Error(err))
 				setFirstErr(err)
 				continue
 			}
@@ -3141,10 +3193,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
-						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
 						zap.ByteString("statement", stmt),
-						zap.Error(err))
+						redact.Error(err))
 					setFirstErr(err)
 					continue
 				}
@@ -3156,10 +3208,10 @@ func (s *Syncer) loadTableStructureFromDump(ctx context.Context) error {
 				err = s.schemaTracker.Exec(ctx, db, stmtNode)
 				if err != nil {
 					logger.Warn("fail to create table for dump files",
-						zap.Any("path", s.cfg.LoaderConfig.Dir),
+						zap.String("path", objstore.RedactURL(s.cfg.LoaderConfig.Dir)),
 						zap.Any("file", file),
 						zap.ByteString("statement", stmt),
-						zap.Error(err))
+						redact.Error(err))
 					setFirstErr(err)
 					continue
 				}
@@ -3395,13 +3447,19 @@ func (s *Syncer) Resume(ctx context.Context, pr chan pb.ProcessResult) {
 
 // CheckCanUpdateCfg check if task config can be updated.
 // 1. task must not in a pessimistic ddl state.
-// 2. only balist, route/filter rules and syncerConfig can be updated at this moment.
+// 2. only balist, route/filter rules, syncerConfig and metric labels can be updated at this moment.
 // 3. some config fields from sourceCfg also can be updated, see more in func `copyConfigFromSource`.
 func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	s.RLock()
 	defer s.RUnlock()
 	if err := config.CheckForeignKeyChecksSyncerOptions(newCfg.To.Session, newCfg.SyncerConfig); err != nil {
 		return err
+	}
+	if s.cfg.SyncerConfig.SafeMode != newCfg.SyncerConfig.SafeMode {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef(
+			"can't update safe-mode for syncer because it requires reinitialization, task: %s",
+			s.cfg.Name,
+		)
 	}
 	// can't update when in sharding merge
 	if s.cfg.ShardMode == config.ShardPessimistic {
@@ -3413,6 +3471,12 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	if err := s.checkForeignKeyCausalityConfigUpdate(newCfg); err != nil {
 		return err
 	}
+	if config.IsForeignKeyChecksEnabled(s.cfg.To.Session) != config.IsForeignKeyChecksEnabled(newCfg.To.Session) {
+		return terror.ErrWorkerUpdateSubTaskConfig.Generatef(
+			"can't update foreign_key_checks for syncer because it requires reinitialization, task: %s",
+			s.cfg.Name,
+		)
+	}
 
 	oldCfg, err := s.cfg.Clone()
 	if err != nil {
@@ -3423,6 +3487,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	oldCfg.RouteRules = newCfg.RouteRules
 	oldCfg.FilterRules = newCfg.FilterRules
 	oldCfg.SyncerConfig = newCfg.SyncerConfig
+	oldCfg.MetricLabels = newCfg.MetricLabels
 	oldCfg.To.Session = newCfg.To.Session // session is adjusted in `createDBs`
 
 	// support fields that changed in func `copyConfigFromSource`
@@ -3441,7 +3506,7 @@ func (s *Syncer) CheckCanUpdateCfg(newCfg *config.SubTaskConfig) error {
 	newCfg.DumpIOTotalBytes = oldCfg.DumpIOTotalBytes
 
 	if oldCfg.String() != newCfg.String() {
-		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg), zap.Stringer("new cfg", newCfg))
+		s.tctx.L().Warn("can not update cfg", zap.Stringer("old cfg", oldCfg.Redacted()), zap.Stringer("new cfg", newCfg.Redacted()))
 		return terror.ErrWorkerUpdateSubTaskConfig.Generatef("can't update subtask config for syncer because new config contains some fields that should not be changed, task: %s", s.cfg.Name)
 	}
 	return nil

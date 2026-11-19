@@ -14,6 +14,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -30,6 +31,7 @@ import (
 
 func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 	certAllowedCn := []string{"test"}
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
 	task := &openapi.Task{
 		TargetConfig: openapi.TaskTargetDataBase{
 			Host:     "root",
@@ -37,6 +39,9 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 			Port:     4000,
 			User:     "root",
 			Security: &openapi.Security{CertAllowedCn: &certAllowedCn},
+			Session: &openapi.TaskTargetSession{
+				ForeignKeyChecks: &foreignKeyChecks,
+			},
 		},
 	}
 	dbCfg := GetTargetDBCfgFromOpenAPITask(task)
@@ -46,6 +51,9 @@ func (t *testConfig) TestTaskGetTargetDBCfg(c *check.C) {
 	c.Assert(dbCfg.User, check.Equals, task.TargetConfig.User)
 	c.Assert(dbCfg.Security, check.NotNil)
 	c.Assert([]string{dbCfg.Security.CertAllowedCN[0]}, check.DeepEquals, certAllowedCn)
+	c.Assert(dbCfg.Session, check.DeepEquals, map[string]string{"foreign_key_checks": "1"})
+	dbCfg.Session["foreign_key_checks"] = "0"
+	c.Assert(*task.TargetConfig.Session.ForeignKeyChecks, check.Equals, openapi.TaskTargetSessionForeignKeyChecksN1)
 }
 
 func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
@@ -53,19 +61,71 @@ func (t *testConfig) TestOpenAPITaskToSubTaskConfigs(c *check.C) {
 	testShardAndFilterTaskToSubTaskConfigs(c)
 }
 
+func TestValidateMetricLabels(t *testing.T) {
+	testCases := []struct {
+		name    string
+		labels  map[string]string
+		wantErr string
+	}{
+		{name: "empty", labels: nil},
+		{name: "valid", labels: map[string]string{"keyspace_id": "123", "tenant": "租户"}},
+		{name: "starts with digit", labels: map[string]string{"1tenant": "123"}, wantErr: "invalid metric label name"},
+		{name: "contains hyphen", labels: map[string]string{"tenant-id": "123"}, wantErr: "invalid metric label name"},
+		{name: "contains whitespace", labels: map[string]string{"tenant id": "123"}, wantErr: "invalid metric label name"},
+		{name: "unicode name", labels: map[string]string{"租户": "123"}, wantErr: "invalid metric label name"},
+		{name: "reserved prefix", labels: map[string]string{"__tenant": "123"}, wantErr: "invalid metric label name"},
+		{name: "built-in label", labels: map[string]string{"target_schema": "db"}, wantErr: "conflicts with built-in label"},
+		{name: "lightning label", labels: map[string]string{"phase": "restore"}, wantErr: "conflicts with built-in label"},
+		{name: "histogram label", labels: map[string]string{"le": "1"}, wantErr: "conflicts with built-in label"},
+		{name: "summary label", labels: map[string]string{"quantile": "0.5"}, wantErr: "conflicts with built-in label"},
+		{name: "too many", labels: map[string]string{
+			"label_1": "", "label_2": "", "label_3": "", "label_4": "", "label_5": "",
+			"label_6": "", "label_7": "", "label_8": "", "label_9": "",
+		}, wantErr: "too many metric labels"},
+		{name: "name too long", labels: map[string]string{strings.Repeat("a", maxMetricLabelName+1): ""}, wantErr: "metric label name"},
+		{name: "value too long", labels: map[string]string{"tenant": strings.Repeat("a", maxMetricLabelValue+1)}, wantErr: `value of metric label "tenant"`},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateMetricLabels(tc.labels)
+			if tc.wantErr == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, tc.wantErr)
+			require.True(t, terror.ErrConfigInvalidMetricLabels.Equal(err))
+		})
+	}
+	for name := range reservedMetricLabels {
+		t.Run("reserved/"+name, func(t *testing.T) {
+			require.Error(t, ValidateMetricLabels(map[string]string{name: "value"}))
+		})
+	}
+}
+
 func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg1.From.Session = map[string]string{"time_zone": "UTC"}
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
 	toDBCfg := &dbconfig.DBConfig{
 		Host:     task.TargetConfig.Host,
 		Port:     task.TargetConfig.Port,
 		User:     task.TargetConfig.User,
 		Password: task.TargetConfig.Password,
+		Session: map[string]string{
+			"foreign_key_checks": "1",
+			"time_zone":          "UTC",
+		},
 		Security: &security.Security{
 			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
 			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
@@ -82,6 +142,7 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	subTaskConfig := subTaskConfigList[0]
 	// check task name and mode
 	c.Assert(subTaskConfig.Name, check.Equals, task.Name)
+	c.Assert(subTaskConfig.Timezone, check.Equals, *task.Timezone)
 	// check task meta
 	c.Assert(subTaskConfig.MetaSchema, check.Equals, *task.MetaSchema)
 	c.Assert(subTaskConfig.Meta, check.IsNil)
@@ -93,8 +154,15 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.CaseSensitive, check.Equals, sourceCfg1.CaseSensitive)
 	// check from
 	c.Assert(subTaskConfig.From.Host, check.Equals, sourceCfg1.From.Host)
+	c.Assert(subTaskConfig.From.Session["time_zone"], check.Equals, *task.Timezone)
+	c.Assert(sourceCfg1.From.Session["time_zone"], check.Equals, "UTC")
 	// check to
 	c.Assert(subTaskConfig.To.Host, check.Equals, toDBCfg.Host)
+	c.Assert(subTaskConfig.To.Session["time_zone"], check.Equals, *task.Timezone)
+	c.Assert(toDBCfg.Session["time_zone"], check.Equals, "UTC")
+	c.Assert(subTaskConfig.To.Session["foreign_key_checks"], check.Equals, "1")
+	toDBCfg.Session["foreign_key_checks"] = "0"
+	c.Assert(subTaskConfig.To.Session["foreign_key_checks"], check.Equals, "1")
 	// check dumpling loader syncer config
 	c.Assert(subTaskConfig.MydumperConfig.Threads, check.Equals, *task.SourceConfig.FullMigrateConf.ExportThreads)
 	c.Assert(subTaskConfig.LoaderConfig.Dir, check.Equals, fmt.Sprintf(
@@ -102,6 +170,7 @@ func testNoShardTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTaskConfig.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
 	c.Assert(subTaskConfig.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
 	c.Assert(subTaskConfig.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTaskConfig.SyncerConfig.SafeMode, check.Equals, *task.SourceConfig.IncrMigrateConf.SafeMode)
 	// check route
 	c.Assert(subTaskConfig.RouteRules, check.HasLen, 1)
 	rule := subTaskConfig.RouteRules[0]
@@ -193,6 +262,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask1Config.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
 	c.Assert(subTask1Config.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
 	c.Assert(subTask1Config.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTask1Config.SyncerConfig.SafeMode, check.Equals, *task.SourceConfig.IncrMigrateConf.SafeMode)
 	// check route
 	c.Assert(subTask1Config.RouteRules, check.HasLen, 1)
 	rule := subTask1Config.RouteRules[0]
@@ -257,6 +327,7 @@ func testShardAndFilterTaskToSubTaskConfigs(c *check.C) {
 	c.Assert(subTask2Config.LoaderConfig.PoolSize, check.Equals, *task.SourceConfig.FullMigrateConf.ImportThreads)
 	c.Assert(subTask2Config.SyncerConfig.WorkerCount, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplThreads)
 	c.Assert(subTask2Config.SyncerConfig.Batch, check.Equals, *task.SourceConfig.IncrMigrateConf.ReplBatch)
+	c.Assert(subTask2Config.SyncerConfig.SafeMode, check.Equals, *task.SourceConfig.IncrMigrateConf.SafeMode)
 	// check route
 	c.Assert(subTask2Config.RouteRules, check.HasLen, 1)
 	rule = subTask2Config.RouteRules[0]
@@ -285,29 +356,120 @@ func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
 	testShardAndFilterSubTaskConfigsToOpenAPITask(c)
 }
 
+func TestOpenAPITaskBinlogFilterBindings(t *testing.T) {
+	for _, withRoute := range []bool{false, true} {
+		for _, caseSensitive := range []bool{false, true} {
+			t.Run(fmt.Sprintf("route=%t/case-sensitive=%t", withRoute, caseSensitive), func(t *testing.T) {
+				task, err := fixtures.GenNoShardOpenAPITaskForTest()
+				require.NoError(t, err)
+				sourceName := task.SourceConfig.SourceConf[0].SourceName
+				otherSource := "mysql-replica-02"
+				task.SourceConfig.SourceConf = append(task.SourceConfig.SourceConf, openapi.TaskSourceConf{SourceName: otherSource})
+				sourceCfgMap := make(map[string]*SourceConfig)
+				for _, name := range []string{sourceName, otherSource} {
+					cfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+					require.NoError(t, err)
+					cfg.SourceID = name
+					cfg.CaseSensitive = caseSensitive
+					sourceCfgMap[name] = cfg
+				}
+				filters := map[string]openapi.TaskBinLogFilterRule{
+					"insert": {IgnoreEvent: &[]string{"insert"}},
+					"update": {IgnoreEvent: &[]string{"update"}},
+					"ddl":    {IgnoreSql: &[]string{"^ALTER TABLE"}},
+				}
+				task.BinlogFilterRule = &openapi.Task_BinlogFilterRule{AdditionalProperties: filters}
+				rules := []struct {
+					source, schema, table string
+					filters               []string
+				}{
+					{sourceName, "Db", "T1", []string{"insert", "ddl"}},
+					{sourceName, "Db", "T2", []string{"update"}},
+					{sourceName, "Db", "T3", nil},
+					{sourceName, "Other", "T1", []string{"update"}},
+					{sourceName, "Scope", "", []string{"ddl"}},
+					{sourceName, "Scope", "T1", nil},
+					{sourceName, "Wild_*", "T*", []string{"insert"}},
+					{sourceName, "Wild_1", "T1", nil},
+					{otherSource, "Db", "T1", []string{"update"}},
+					{otherSource, "Db", "T2", nil},
+				}
+				expected := make(map[openapi.TaskTableMigrateRuleSource][]openapi.TaskBinLogFilterRule)
+				task.TableMigrateRule = nil
+				for _, rule := range rules {
+					source := openapi.TaskTableMigrateRuleSource{SourceName: rule.source, Schema: rule.schema, Table: rule.table}
+					migrateRule := openapi.TaskTableMigrateRule{Source: source}
+					if withRoute {
+						targetSchema := "target"
+						migrateRule.Target = &openapi.TaskTableMigrateRuleTarget{Schema: &targetSchema}
+					}
+					if len(rule.filters) > 0 {
+						migrateRule.BinlogFilterRule = &rule.filters
+					}
+					task.TableMigrateRule = append(task.TableMigrateRule, migrateRule)
+					if !caseSensitive {
+						source.Schema = strings.ToLower(source.Schema)
+						source.Table = strings.ToLower(source.Table)
+					}
+					expected[source] = nil
+					for _, name := range rule.filters {
+						expected[source] = append(expected[source], filters[name])
+					}
+				}
+
+				toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
+				subtasks, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+				require.NoError(t, err)
+				readBack := SubTaskConfigsToOpenAPITask(subtasks)
+				require.Len(t, readBack.TableMigrateRule, len(expected))
+				for _, rule := range readBack.TableMigrateRule {
+					want, ok := expected[rule.Source]
+					require.True(t, ok, "unexpected source: %+v", rule.Source)
+					if len(want) == 0 {
+						require.Nil(t, rule.BinlogFilterRule, "unfiltered source: %+v", rule.Source)
+						continue
+					}
+					require.NotNil(t, rule.BinlogFilterRule)
+					var got []openapi.TaskBinLogFilterRule
+					for _, name := range *rule.BinlogFilterRule {
+						filterRule, ok := readBack.BinlogFilterRule.Get(name)
+						require.True(t, ok)
+						got = append(got, filterRule)
+					}
+					require.ElementsMatch(t, want, got, "source: %+v", rule.Source)
+				}
+
+				recreated, err := OpenAPITaskToSubTaskConfigs(readBack, toDBCfg, sourceCfgMap)
+				require.NoError(t, err)
+				require.Len(t, recreated, len(subtasks))
+				for i, cfg := range recreated {
+					require.Equal(t, subtasks[i].SourceID, cfg.SourceID)
+					require.ElementsMatch(t, subtasks[i].FilterRules, cfg.FilterRules)
+					require.ElementsMatch(t, subtasks[i].RouteRules, cfg.RouteRules)
+				}
+			})
+		}
+	}
+}
+
 func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
 	sourceCfg1, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
 	c.Assert(err, check.IsNil)
 	source1Name := task.SourceConfig.SourceConf[0].SourceName
 	sourceCfg1.SourceID = task.SourceConfig.SourceConf[0].SourceName
 	sourceCfgMap := map[string]*SourceConfig{source1Name: sourceCfg1}
-	toDBCfg := &dbconfig.DBConfig{
-		Host:     task.TargetConfig.Host,
-		Port:     task.TargetConfig.Port,
-		User:     task.TargetConfig.User,
-		Password: task.TargetConfig.Password,
-		Security: &security.Security{
-			SSLCABytes:    []byte(task.TargetConfig.Security.SslCaContent),
-			SSLCertBytes:  []byte(task.TargetConfig.Security.SslCertContent),
-			SSLKeyBytes:   []byte(task.TargetConfig.Security.SslKeyContent),
-			CertAllowedCN: *task.TargetConfig.Security.CertAllowedCn,
-		},
-	}
+	toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
 	subTaskConfigList, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
 	c.Assert(err, check.IsNil)
 	c.Assert(subTaskConfigList, check.HasLen, 1)
+	subTaskConfigList[0].To.Session["tidb_txn_mode"] = "optimistic"
+	subTaskConfigList[0].To.Session["time_zone"] = "UTC"
 
 	// prepare sub task config
 	subTaskConfigMap := make(map[string]map[string]*SubTaskConfig)
@@ -317,6 +479,10 @@ func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	taskList := SubTaskConfigsToOpenAPITaskList(subTaskConfigMap)
 	c.Assert(taskList, check.HasLen, 1)
 	newTask := taskList[0]
+	c.Assert(*newTask.TargetConfig.Session.ForeignKeyChecks, check.Equals, openapi.TaskTargetSessionForeignKeyChecksN1)
+	*newTask.TargetConfig.Session.ForeignKeyChecks = openapi.TaskTargetSessionForeignKeyChecksN0
+	c.Assert(subTaskConfigList[0].To.Session["foreign_key_checks"], check.Equals, "1")
+	*newTask.TargetConfig.Session.ForeignKeyChecks = openapi.TaskTargetSessionForeignKeyChecksN1
 	c.Assert(&task, check.DeepEquals, newTask)
 }
 
@@ -413,6 +579,43 @@ func TestConvertWithIgnoreCheckItems(t *testing.T) {
 	require.Equal(t, *newTask, task)
 }
 
+func TestOpenAPITaskSafeModeDefaults(t *testing.T) {
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+	sourceCfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	sourceName := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg.SourceID = sourceName
+	sourceCfgMap := map[string]*SourceConfig{sourceName: sourceCfg}
+	toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
+
+	safeModeFalse := false
+	safeModeTrue := true
+	testCases := []struct {
+		name     string
+		safeMode *bool
+		expected bool
+	}{
+		{name: "omitted", safeMode: nil, expected: false},
+		{name: "false", safeMode: &safeModeFalse, expected: false},
+		{name: "true", safeMode: &safeModeTrue, expected: true},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			task.SourceConfig.IncrMigrateConf.SafeMode = testCase.safeMode
+			subTaskCfgs, convertErr := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+			require.NoError(t, convertErr)
+			require.Len(t, subTaskCfgs, 1)
+			require.Equal(t, testCase.expected, subTaskCfgs[0].SyncerConfig.SafeMode)
+
+			convertedTask := SubTaskConfigsToOpenAPITask(subTaskCfgs)
+			require.NotNil(t, convertedTask.SourceConfig.IncrMigrateConf.SafeMode)
+			require.Equal(t, testCase.expected, *convertedTask.SourceConfig.IncrMigrateConf.SafeMode)
+		})
+	}
+}
+
 func TestOpenAPITaskImportIntoMultiSourceRejected(t *testing.T) {
 	task, err := fixtures.GenShardAndFilterOpenAPITaskForTest()
 	require.NoError(t, err)
@@ -450,6 +653,65 @@ func TestOpenAPITaskImportIntoMultiSourceRejected(t *testing.T) {
 	require.ErrorContains(t, err, "import-into mode does not support sharding")
 }
 
+func TestConvertTargetSession(t *testing.T) {
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	require.NoError(t, err)
+	sourceCfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+	require.NoError(t, err)
+	sourceName := task.SourceConfig.SourceConf[0].SourceName
+	sourceCfg.SourceID = sourceName
+	sourceCfgMap := map[string]*SourceConfig{sourceName: sourceCfg}
+
+	foreignKeyChecks := openapi.TaskTargetSessionForeignKeyChecksN1
+	task.TargetConfig.Session = &openapi.TaskTargetSession{
+		ForeignKeyChecks: &foreignKeyChecks,
+	}
+	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"foreign_key_checks": "1",
+		"time_zone":          taskCfg.Timezone,
+	}, taskCfg.TargetDB.Session)
+
+	legacySession := map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": taskCfg.Timezone}
+	taskCfg.TargetDB.Session = legacySession
+	converted, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Nil(t, converted.TargetConfig.Session)
+	require.Equal(t, map[string]string{"sql_mode": "ANSI_QUOTES", "time_zone": taskCfg.Timezone}, legacySession)
+
+	uppercaseSession := map[string]string{
+		"FOREIGN_KEY_CHECKS": "0",
+		"sql_mode":           "ANSI_QUOTES",
+		"time_zone":          taskCfg.Timezone,
+	}
+	taskCfg.TargetDB.Session = uppercaseSession
+	converted, err = TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
+	require.NoError(t, err)
+	require.Equal(t, openapi.TaskTargetSessionForeignKeyChecksN0, *converted.TargetConfig.Session.ForeignKeyChecks)
+	require.Equal(t, taskCfg.Timezone, *converted.Timezone)
+	require.Equal(t, map[string]string{
+		"FOREIGN_KEY_CHECKS": "0",
+		"sql_mode":           "ANSI_QUOTES",
+		"time_zone":          taskCfg.Timezone,
+	}, uppercaseSession)
+	*converted.TargetConfig.Session.ForeignKeyChecks = openapi.TaskTargetSessionForeignKeyChecksN1
+	require.Equal(t, "0", uppercaseSession["FOREIGN_KEY_CHECKS"])
+}
+
+func TestProjectTargetSession(t *testing.T) {
+	enabled := projectTargetSession(map[string]string{
+		"FOREIGN_KEY_CHECKS": "ON",
+		"tidb_txn_mode":      "optimistic",
+	})
+	require.Equal(t, openapi.TaskTargetSessionForeignKeyChecksN1, *enabled.ForeignKeyChecks)
+
+	disabled := projectTargetSession(map[string]string{"foreign_key_checks": "off"})
+	require.Equal(t, openapi.TaskTargetSessionForeignKeyChecksN0, *disabled.ForeignKeyChecks)
+
+	require.Nil(t, projectTargetSession(map[string]string{"tidb_txn_mode": "optimistic"}))
+}
+
 func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	// one source task
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
@@ -464,10 +726,33 @@ func TestConvertBetweenOpenAPITaskAndTaskConfig(t *testing.T) {
 	taskCfg, err := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, taskCfg)
+	require.Equal(t, *task.Timezone, taskCfg.Timezone)
 	task1, err := TaskConfigToOpenAPITask(taskCfg, sourceCfgMap)
 	require.NoError(t, err)
 	require.NotNil(t, task1)
 	require.EqualValues(t, task1, &task)
+
+	configuredTimezone := task.Timezone
+	emptyTimezone := ""
+	for _, tc := range []struct {
+		name     string
+		timezone *string
+	}{
+		{name: "omitted", timezone: nil},
+		{name: "empty", timezone: &emptyTimezone},
+	} {
+		t.Run(tc.name+" timezone uses downstream default", func(t *testing.T) {
+			task.Timezone = tc.timezone
+			taskCfgWithoutTimezone, convertErr := OpenAPITaskToTaskConfig(&task, sourceCfgMap)
+			require.NoError(t, convertErr)
+			require.Empty(t, taskCfgWithoutTimezone.Timezone)
+
+			taskWithoutTimezone, convertErr := TaskConfigToOpenAPITask(taskCfgWithoutTimezone, sourceCfgMap)
+			require.NoError(t, convertErr)
+			require.Nil(t, taskWithoutTimezone.Timezone)
+		})
+	}
+	task.Timezone = configuredTimezone
 
 	// test update some fields in task
 	{

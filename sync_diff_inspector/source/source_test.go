@@ -21,11 +21,14 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/testkit"
 	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
 	"github.com/pingcap/tidb/pkg/util/dbutil"
 	filter "github.com/pingcap/tidb/pkg/util/table-filter"
@@ -263,19 +266,6 @@ func TestTiDBSource(t *testing.T) {
 
 	rowIter.Close()
 
-	analyze := tidb.GetTableAnalyzer()
-	statsRows := sqlmock.NewRows([]string{"is_index", "hist_id", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
-		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
-	}
-	mock.ExpectQuery("SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound FROM mysql.stats_buckets WHERE table_id IN \\(\\s*SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = \\? AND table_name = \\? UNION ALL SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = \\? AND table_name = \\?\\s*\\) ORDER BY is_index, hist_id, bucket_id").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
-		WillReturnRows(statsRows)
-	countRows := sqlmock.NewRows([]string{"Cnt"}).AddRow(0)
-	mock.ExpectQuery("SELECT COUNT.*").WillReturnRows(countRows)
-	chunkIter, err := analyze.AnalyzeSplitter(ctx, tableDiffs[0], tableCase.rangeInfo)
-	require.NoError(t, err)
-	chunkIter.Close()
 	tidb.Close()
 }
 
@@ -292,10 +282,6 @@ func TestFallbackToRandomIfRangeIsSet(t *testing.T) {
 			AddRow("test1", "base", "NO", "single_tg"))
 	mock.ExpectQuery("SELECT version()*").WillReturnRows(sqlmock.NewRows([]string{"version()"}).AddRow("5.7.25-TiDB-v4.0.12"))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(1) cnt")).WillReturnRows(sqlmock.NewRows([]string{"cnt"}).AddRow(100))
-	statsRows := sqlmock.NewRows([]string{"hist_id", "is_index", "bucket_id", "count", "lower_bound", "upper_bound"})
-	for i := 0; i < 5; i++ {
-		statsRows.AddRow(1, 1, i, (i+1)*64, fmt.Sprintf("(%d, %d)", i*64, i*12), fmt.Sprintf("(%d, %d)", (i+1)*64-1, (i+1)*12-1))
-	}
 	f, err := filter.Parse([]string{"source_test.*"})
 	require.NoError(t, err)
 
@@ -1065,4 +1051,173 @@ func TestCheckTableMatched(t *testing.T) {
 	require.Equal(t, 0, tables[0].TableLack)
 	require.Equal(t, 1, tables[1].TableLack)
 	require.Equal(t, -1, tables[2].TableLack)
+}
+
+func TestTiDBTableAnalyzer(t *testing.T) {
+	ctx := context.Background()
+	store, dom := testkit.CreateMockStoreAndDomain(t)
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("CREATE DATABASE source_test")
+	tk.MustExec("USE source_test")
+	tk.MustExec("CREATE TABLE test (a INT, b VARCHAR(10), PRIMARY KEY (a, b))")
+	tk.MustExec(buildSourceInsertSQL("test", 320))
+	tk.MustExec("ANALYZE TABLE test WITH 5 BUCKETS, 0 TOPN")
+
+	tbl, err := dom.InfoSchema().TableByName(
+		ctx,
+		ast.NewCIStr("source_test"),
+		ast.NewCIStr("test"),
+	)
+	require.NoError(t, err)
+
+	db := testkit.CreateMockDB(tk)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+	tableDiff := &common.TableDiff{
+		Schema:    "source_test",
+		Table:     "test",
+		Info:      tbl.Meta(),
+		ChunkSize: 64,
+	}
+	analyzer := &TiDBTableAnalyzer{
+		dbConn:            db,
+		bucketSpliterPool: utils.NewWorkerPool(1, "bucket-analyzer"),
+	}
+
+	iter, err := analyzer.AnalyzeSplitter(ctx, tableDiff, nil)
+	require.NoError(t, err)
+	require.IsType(t, &splitter.BucketIterator{}, iter)
+	bucketIter := iter.(*splitter.BucketIterator)
+	chunks := requireChunksCoverTable(t, ctx, db, "source_test.test", iter, 320)
+	require.GreaterOrEqual(t, len(chunks), 3)
+	indexID := bucketIter.GetIndexID()
+	iter.Close()
+
+	checkpointChunk := chunks[2]
+	resumedIter, err := analyzer.AnalyzeSplitter(ctx, tableDiff, &splitter.RangeInfo{
+		ChunkRange: checkpointChunk,
+		IndexID:    indexID,
+	})
+	require.NoError(t, err)
+	require.IsType(t, &splitter.BucketIterator{}, resumedIter)
+	defer resumedIter.Close()
+
+	nextChunk, err := resumedIter.Next()
+	require.NoError(t, err)
+	require.NotNil(t, nextChunk)
+	for i, bound := range nextChunk.Bounds {
+		require.Equal(t, checkpointChunk.Bounds[i].Upper, bound.Lower)
+	}
+}
+
+func TestTiDBTableAnalyzerForPartitionTable(t *testing.T) {
+	testCases := []struct {
+		pruneMode        string
+		expectedIterator splitter.ChunkIterator
+	}{
+		{pruneMode: "dynamic", expectedIterator: &splitter.BucketIterator{}},
+		// Static pruning has no table-level global statistics, so the analyzer falls back to random splitting.
+		{pruneMode: "static", expectedIterator: &splitter.RandomIterator{}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.pruneMode, func(t *testing.T) {
+			ctx := context.Background()
+			store, dom := testkit.CreateMockStoreAndDomain(t)
+			tk := testkit.NewTestKit(t, store)
+			tk.MustExec("SET @@tidb_partition_prune_mode = '" + testCase.pruneMode + "'")
+			tk.MustExec("SET @@tidb_analyze_version = 2")
+			tk.MustExec("CREATE DATABASE partition_source_test")
+			tk.MustExec("USE partition_source_test")
+			tk.MustExec(`CREATE TABLE test (a INT, b VARCHAR(10), PRIMARY KEY (a, b))
+				PARTITION BY RANGE (a) (
+					PARTITION p0 VALUES LESS THAN (160),
+					PARTITION p1 VALUES LESS THAN MAXVALUE
+				)`)
+			tk.MustExec(buildSourceInsertSQL("test", 320))
+			tk.MustExec("ANALYZE TABLE test WITH 5 BUCKETS, 0 TOPN")
+
+			tbl, err := dom.InfoSchema().TableByName(
+				ctx,
+				ast.NewCIStr("partition_source_test"),
+				ast.NewCIStr("test"),
+			)
+			require.NoError(t, err)
+
+			db := testkit.CreateMockDB(tk)
+			t.Cleanup(func() {
+				require.NoError(t, db.Close())
+			})
+			tableDiff := &common.TableDiff{
+				Schema:    "partition_source_test",
+				Table:     "test",
+				Info:      tbl.Meta(),
+				Range:     "TRUE",
+				ChunkSize: 64,
+			}
+			analyzer := &TiDBTableAnalyzer{
+				dbConn:            db,
+				bucketSpliterPool: utils.NewWorkerPool(1, "partition-analyzer"),
+			}
+
+			iter, err := analyzer.AnalyzeSplitter(ctx, tableDiff, nil)
+			require.NoError(t, err)
+			require.IsType(t, testCase.expectedIterator, iter)
+			requireChunksCoverTable(t, ctx, db, "partition_source_test.test", iter, 320)
+			iter.Close()
+		})
+	}
+}
+
+type sourceTestRow struct {
+	a int
+	b string
+}
+
+func requireChunksCoverTable(
+	t *testing.T,
+	ctx context.Context,
+	db *sql.DB,
+	qualifiedTable string,
+	iter splitter.ChunkIterator,
+	expectedRows int,
+) []*chunk.Range {
+	t.Helper()
+
+	seen := make(map[sourceTestRow]struct{}, expectedRows)
+	chunks := make([]*chunk.Range, 0)
+	for {
+		chunkRange, err := iter.Next()
+		require.NoError(t, err)
+		if chunkRange == nil {
+			break
+		}
+		chunks = append(chunks, chunkRange)
+
+		where, args := chunkRange.ToString("")
+		rows, err := db.QueryContext(ctx, "SELECT a, b FROM "+qualifiedTable+" WHERE "+where, args...)
+		require.NoError(t, err)
+		for rows.Next() {
+			var row sourceTestRow
+			require.NoError(t, rows.Scan(&row.a, &row.b))
+			_, exists := seen[row]
+			require.False(t, exists, "row (%d, %s) is covered by multiple chunks", row.a, row.b)
+			seen[row] = struct{}{}
+		}
+		require.NoError(t, rows.Err())
+		require.NoError(t, rows.Close())
+	}
+
+	require.NotEmpty(t, chunks)
+	require.Len(t, seen, expectedRows)
+	return chunks
+}
+
+func buildSourceInsertSQL(table string, rowCount int) string {
+	values := make([]string, 0, rowCount)
+	for i := range rowCount {
+		values = append(values, fmt.Sprintf("(%d, '%d')", i, i%60))
+	}
+	return fmt.Sprintf("INSERT INTO %s VALUES %s", table, strings.Join(values, ","))
 }

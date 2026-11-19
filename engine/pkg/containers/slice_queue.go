@@ -119,7 +119,7 @@ func (q *SliceQueue[T]) allocateSlice() []T {
 		return make([]T, 0, 16)
 	}
 
-	return *(ptr.(*[]T))
+	return *ptr.(*[]T)
 }
 
 func (q *SliceQueue[T]) freeSlice(s []T) {

@@ -14,9 +14,13 @@
 package api
 
 import (
+	"context"
 	"testing"
 
+	"github.com/golang/mock/gomock"
 	"github.com/pingcap/errors"
+	"github.com/pingcap/tiflow/cdc/model"
+	mock_owner "github.com/pingcap/tiflow/cdc/owner/mock"
 	cerror "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -31,4 +35,33 @@ func TestIsHTTPBadRequestError(t *testing.T) {
 	require.Equal(t, false, IsHTTPBadRequestError(err))
 	err = nil
 	require.Equal(t, false, IsHTTPBadRequestError(err))
+}
+
+func TestCollectTaskStatuses(t *testing.T) {
+	t.Parallel()
+	changefeedID := model.DefaultChangeFeedID("test-cf")
+
+	// success: task statuses are collected per capture.
+	ctrl := gomock.NewController(t)
+	provider := mock_owner.NewMockStatusProvider(ctrl)
+	provider.EXPECT().GetAllTaskStatuses(gomock.Any(), changefeedID).Return(
+		map[model.CaptureID]*model.TaskStatus{
+			"capture-1": {Tables: map[model.TableID]*model.TableReplicaInfo{
+				3508: {}, 3520: {},
+			}},
+		}, nil)
+	taskStatus, err := CollectTaskStatuses(context.Background(), provider, changefeedID)
+	require.NoError(t, err)
+	require.Len(t, taskStatus, 1)
+	require.Equal(t, "capture-1", taskStatus[0].CaptureID)
+	require.ElementsMatch(t, []model.TableID{3508, 3520}, taskStatus[0].Tables)
+
+	// a lookup failure is propagated to the caller, which decides whether the
+	// task_status can be omitted.
+	provider = mock_owner.NewMockStatusProvider(ctrl)
+	provider.EXPECT().GetAllTaskStatuses(gomock.Any(), changefeedID).Return(
+		nil, cerror.ErrChangeFeedNotExists.GenWithStackByArgs(changefeedID))
+	taskStatus, err = CollectTaskStatuses(context.Background(), provider, changefeedID)
+	require.Error(t, err)
+	require.Nil(t, taskStatus)
 }

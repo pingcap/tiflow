@@ -2,19 +2,19 @@
 # The members of 'sig-community-*' are synced from memberships defined in repository: https://github.com/pingcap/community.
 aliases:
   sig-critical-approvers-cdc:
-    - yudongusa
-    - likidu
+    - lidezhu
+    - nongfushanquan
   sig-critical-approvers-dm:
     - yudongusa
     - likidu
   sig-approvers-dm:
-    - Benjamin2037
+    - bb7133
     - D3Hunter
     - GMHDBJD
     - lance6716
     - joechenrh
   sig-approvers-engine:
-    - Benjamin2037
+    - bb7133
     - D3Hunter
     - GMHDBJD
     - lance6716
@@ -26,6 +26,7 @@ aliases:
     - fengou1
     - iamxy
     - joccau
+    - joechenrh
     - nongfushanquan
     - tiancaiamao
   sig-community-approvers:
@@ -75,4 +76,3 @@ aliases:
     - zhangjinpeng87
     - zhaoxinyu
     - zwj-coder
-    - joechenrh

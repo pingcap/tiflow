@@ -54,7 +54,9 @@ func encodeTableMapColumnMeta(columnType []byte) ([]byte, error) {
 		case gmysql.MYSQL_TYPE_VAR_STRING, gmysql.MYSQL_TYPE_VARCHAR, gmysql.MYSQL_TYPE_BIT:
 			buf.WriteByte(0xff)
 			buf.WriteByte(0xff)
-		case gmysql.MYSQL_TYPE_BLOB, gmysql.MYSQL_TYPE_DOUBLE, gmysql.MYSQL_TYPE_FLOAT, gmysql.MYSQL_TYPE_GEOMETRY, gmysql.MYSQL_TYPE_JSON,
+		case gmysql.MYSQL_TYPE_JSON:
+			buf.WriteByte(0x04) // length of the value length, MySQL always uses 4 bytes
+		case gmysql.MYSQL_TYPE_BLOB, gmysql.MYSQL_TYPE_DOUBLE, gmysql.MYSQL_TYPE_FLOAT, gmysql.MYSQL_TYPE_GEOMETRY,
 			gmysql.MYSQL_TYPE_TIME2, gmysql.MYSQL_TYPE_DATETIME2, gmysql.MYSQL_TYPE_TIMESTAMP2:
 			buf.WriteByte(0xff)
 		case gmysql.MYSQL_TYPE_NEWDATE, gmysql.MYSQL_TYPE_ENUM, gmysql.MYSQL_TYPE_SET, gmysql.MYSQL_TYPE_TINY_BLOB, gmysql.MYSQL_TYPE_MEDIUM_BLOB, gmysql.MYSQL_TYPE_LONG_BLOB:
@@ -236,13 +238,24 @@ func encodeColumnValue(v interface{}, tp byte, meta uint16) ([]byte, error) {
 		}
 	case gmysql.MYSQL_TYPE_STRING:
 		err = writeStringColumnValue(buf, v)
+	case gmysql.MYSQL_TYPE_JSON:
+		// v is the JSONB binary encoding of the value.
+		value, ok := v.([]byte)
+		if !ok {
+			err = terror.ErrBinlogColumnTypeMisMatch.Generate(v, reflect.TypeOf(v), reflect.TypeOf([]byte{}))
+		} else {
+			err = writeIntegerColumnValue(buf, uint32(len(value)), reflect.TypeOf(uint32(0)))
+			if err == nil {
+				buf.Write(value)
+			}
+		}
 	case gmysql.MYSQL_TYPE_VARCHAR, gmysql.MYSQL_TYPE_VAR_STRING,
 		gmysql.MYSQL_TYPE_NEWDECIMAL, gmysql.MYSQL_TYPE_BIT,
 		gmysql.MYSQL_TYPE_TIMESTAMP, gmysql.MYSQL_TYPE_TIMESTAMP2,
 		gmysql.MYSQL_TYPE_DATETIME, gmysql.MYSQL_TYPE_DATETIME2,
 		gmysql.MYSQL_TYPE_TIME, gmysql.MYSQL_TYPE_TIME2,
 		gmysql.MYSQL_TYPE_YEAR, gmysql.MYSQL_TYPE_ENUM, gmysql.MYSQL_TYPE_SET,
-		gmysql.MYSQL_TYPE_BLOB, gmysql.MYSQL_TYPE_JSON, gmysql.MYSQL_TYPE_GEOMETRY:
+		gmysql.MYSQL_TYPE_BLOB, gmysql.MYSQL_TYPE_GEOMETRY:
 		// this generator is used for testing, so some types supporting can be added later.
 		err = terror.ErrBinlogGoMySQLTypeNotSupport.Generate(tp)
 	default:

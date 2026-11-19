@@ -143,3 +143,17 @@ func TestIsResumableRelayError(t *testing.T) {
 		require.Equal(t, tc.resumable, IsResumableRelayError(err))
 	}
 }
+
+func TestProcessErrorURLCredentials(t *testing.T) {
+	raw := errors.New("AccessDenied: Get https://bucket/path?X-Amz-Signature=private-sig status code: 403 request id: test-id")
+	err := terror.ErrDumpUnitRuntime.Delegate(raw, "fail to remove output directory: s3://bucket/path?secret-access-key=private-sk")
+	before := err.Error()
+	result := NewProcessError(err)
+	require.NotContains(t, result.String(), "private-")
+	require.Equal(t, int32(32001), result.ErrCode)
+	require.Contains(t, result.RawCause, "AccessDenied")
+	require.Contains(t, result.RawCause, "status code: 403")
+	require.Contains(t, result.RawCause, "request id: test-id")
+	require.Equal(t, before, err.Error())
+	require.NotContains(t, NewProcessError(raw).Message, "private-")
+}

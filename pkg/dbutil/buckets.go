@@ -28,6 +28,7 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	tidbdbutil "github.com/pingcap/tidb/pkg/util/dbutil"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 )
 
@@ -70,22 +71,31 @@ func GetBucketsInfo(ctx context.Context, db QueryExecutor, schema, table string,
 		columnTypeMap[col.ID] = &col.FieldType
 	}
 
+	// For a partitioned table, tidb_table_id identifies its global statistics.
+	// Per-partition histograms cannot be concatenated because their bounds are
+	// not globally ordered. If global statistics are unavailable, returning no
+	// buckets lets the caller fall back to the random splitter.
 	query := `SELECT is_index, hist_id, bucket_id, count, lower_bound, upper_bound
 FROM mysql.stats_buckets
-WHERE table_id IN (
+WHERE table_id = (
 	SELECT tidb_table_id FROM information_schema.tables WHERE table_schema = ? AND table_name = ?
-	UNION ALL
-	SELECT tidb_partition_id FROM information_schema.partitions WHERE table_schema = ? AND table_name = ?
 )
 ORDER BY is_index, hist_id, bucket_id`
 
 	log.Debug("GetBucketsInfo", zap.String("sql", query), zap.String("schema", schema), zap.String("table", table))
 
-	rows, err := db.QueryContext(ctx, query, schema, table, schema, table)
+	rows, err := db.QueryContext(ctx, query, schema, table)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
 	defer rows.Close()
+	type histogramID struct {
+		isIndex int64
+		histID  int64
+	}
+	// mysql.stats_buckets persists each bucket's delta. Bucket splitter callers
+	// expect the cumulative counts returned by SHOW STATS_BUCKETS.
+	cumulativeCounts := make(map[histogramID]int64)
 
 	for rows.Next() {
 		var isIndex, histID, bucketID, count sql.NullInt64
@@ -116,7 +126,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			lowerBoundStr, decodeErr = decodeIndexBound(lowerBoundBytes, idxColumnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode lower_bound for index",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
 			}
@@ -124,7 +134,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			upperBoundStr, decodeErr = decodeIndexBound(upperBoundBytes, idxColumnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode upper_bound for index",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
 			}
@@ -144,7 +154,7 @@ ORDER BY is_index, hist_id, bucket_id`
 			lowerBoundStr, decodeErr = decodeColumnBound(lowerBoundBytes, columnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode lower_bound for column",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				lowerBoundStr = fmt.Sprintf("0x%x", lowerBoundBytes)
 			}
@@ -152,14 +162,19 @@ ORDER BY is_index, hist_id, bucket_id`
 			upperBoundStr, decodeErr = decodeColumnBound(upperBoundBytes, columnTypes)
 			if decodeErr != nil {
 				log.Warn("Failed to decode upper_bound for column",
-					zap.Error(decodeErr),
+					dmlog.ZapRedact(zap.Error(decodeErr)),
 					zap.Int64("histID", histID.Int64))
 				upperBoundStr = fmt.Sprintf("0x%x", upperBoundBytes)
 			}
 		}
 
+		histogram := histogramID{
+			isIndex: isIndex.Int64,
+			histID:  histID.Int64,
+		}
+		cumulativeCounts[histogram] += count.Int64
 		b := Bucket{
-			Count:      count.Int64,
+			Count:      cumulativeCounts[histogram],
 			LowerBound: lowerBoundStr,
 			UpperBound: upperBoundStr,
 		}

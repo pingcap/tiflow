@@ -725,6 +725,80 @@ func checkRelayStatus(cli pb.WorkerClient, expect pb.Stage) bool {
 	return status.SourceStatus.RelayStatus.Stage == expect
 }
 
+func TestQueryStatusDoesNotAccumulateSourceErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		sourceErr  error
+		errorCount int
+	}{
+		{name: "no stored error", errorCount: 1},
+		{name: "existing stored error", sourceErr: errors.New("failed to enable subtasks"), errorCount: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.NewSourceConfig()
+			cfg.SourceID = "source-1"
+			w, err := NewSourceWorker(cfg, nil, "worker-1", "")
+			require.NoError(t, err)
+			w.closed.Store(false)
+			defer w.Stop(true)
+
+			s := &Server{cfg: NewConfig(), worker: w}
+			s.setSourceStatus(cfg.SourceID, tc.sourceErr, true)
+			storedStatus := s.getSourceStatus(true)
+			storedBytes, err := storedStatus.Marshal()
+			require.NoError(t, err)
+
+			// A missing upstream connection produces a source error on every query.
+			req := &pb.QueryStatusRequest{Name: "missing-task"}
+			var firstResponse *pb.QueryStatusResponse
+			var firstBytes []byte
+			checkResponse := func(resp *pb.QueryStatusResponse, err error) {
+				require.NoError(t, err)
+				require.True(t, resp.Result)
+				require.Equal(t, cfg.SourceID, resp.SourceStatus.Source)
+				require.Len(t, resp.SourceStatus.Result.Errors, tc.errorCount)
+				require.Equal(t, w.getSourceStatusErr(), resp.SourceStatus.Result.Errors[tc.errorCount-1])
+				data, err := resp.Marshal()
+				require.NoError(t, err)
+				if firstResponse == nil {
+					firstResponse, firstBytes = resp, data
+				} else {
+					require.Equal(t, firstBytes, data)
+				}
+			}
+			for i := 0; i < 3; i++ {
+				checkResponse(s.QueryStatus(context.Background(), req))
+			}
+
+			// Concurrent queries must also own their error lists.
+			type queryResult struct {
+				response *pb.QueryStatusResponse
+				err      error
+			}
+			results := make(chan queryResult, 8)
+			for i := 0; i < cap(results); i++ {
+				go func() {
+					resp, err := s.QueryStatus(context.Background(), req)
+					results <- queryResult{response: resp, err: err}
+				}()
+			}
+			for i := 0; i < cap(results); i++ {
+				result := <-results
+				checkResponse(result.response, result.err)
+			}
+
+			// Neither the saved source status nor an earlier response may change.
+			storedStatus = s.getSourceStatus(true)
+			data, err := storedStatus.Marshal()
+			require.NoError(t, err)
+			require.Equal(t, storedBytes, data)
+			data, err = firstResponse.Marshal()
+			require.NoError(t, err)
+			require.Equal(t, firstBytes, data)
+		})
+	}
+}
+
 func loadSourceConfigWithoutPassword(c *check.C) *config.SourceConfig {
 	sourceCfg, err := config.SourceCfgFromYamlAndVerify(config.SampleSourceConfig)
 	c.Assert(err, check.IsNil)

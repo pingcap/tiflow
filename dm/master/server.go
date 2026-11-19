@@ -524,7 +524,7 @@ func (s *Server) StartTask(ctx context.Context, req *pb.StartTaskRequest) (*pb.S
 	}
 	resp.CheckResult = msg
 
-	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.JSON()), zap.String("request", "StartTask"))
+	log.L().Info("", zap.String("task name", cfg.Name), zap.String("task", cfg.Redacted().JSON()), zap.String("request", "StartTask"))
 
 	sourceRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs))
 	if len(req.Sources) > 0 {
@@ -664,17 +664,21 @@ func (s *Server) OperateTask(ctx context.Context, req *pb.OperateTaskRequest) (*
 	resp.Sources = s.getSourceRespsAfterOperation(ctx, req.Name, sources, []string{}, req)
 
 	if req.Op == pb.TaskOp_Delete {
-		// delete meta data for optimist
-		if len(req.Sources) == 0 {
-			err2 = s.optimist.RemoveMetaDataWithTask(req.Name)
-		} else {
-			err2 = s.optimist.RemoveMetaDataWithTaskAndSources(req.Name, sources...)
-		}
-		if err2 != nil {
-			log.L().Error("failed to delete metadata for task", zap.String("task name", req.Name), log.ShortError(err2))
-		}
+		s.removeOptimisticMetaData(req.Name, req.Sources)
 	}
 	return resp, nil
+}
+
+func (s *Server) removeOptimisticMetaData(taskName string, sources []string) {
+	var err error
+	if len(sources) == 0 {
+		err = s.optimist.RemoveMetaDataWithTask(taskName)
+	} else {
+		err = s.optimist.RemoveMetaDataWithTaskAndSources(taskName, sources...)
+	}
+	if err != nil {
+		log.L().Error("failed to delete metadata for task", zap.String("task name", taskName), log.ShortError(err))
+	}
 }
 
 // GetSubTaskCfg implements MasterServer.GetSubTaskCfg.
@@ -699,7 +703,7 @@ func (s *Server) GetSubTaskCfg(ctx context.Context, req *pb.GetSubTaskCfgRequest
 	cfgs := make([]string, 0, len(subCfgs))
 
 	for _, cfg := range subCfgs {
-		cfgBytes, err := cfg.Toml()
+		cfgBytes, err := cfg.Redacted().Toml()
 		if err != nil {
 			// nolint:nilerr
 			return &pb.GetSubTaskCfgResponse{
@@ -748,7 +752,7 @@ func (s *Server) UpdateTask(ctx context.Context, req *pb.UpdateTaskRequest) (*pb
 		return resp, nil
 	}
 	resp.CheckResult = msg
-	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg))
+	log.L().Info("update task", zap.String("task name", cfg.Name), zap.Stringer("task", cfg.Redacted()))
 
 	workerRespCh := make(chan *pb.CommonWorkerResponse, len(stCfgs)+len(req.Sources))
 	if len(req.Sources) > 0 {
@@ -1136,7 +1140,7 @@ func (s *Server) getStatusFromWorkers(
 	)
 	setWorkerResp := func(resp *pb.QueryStatusResponse) {
 		workerRespMu.Lock()
-		workerResps = append(workerResps, resp)
+		workerResps = append(workerResps, resp.Redacted())
 		workerRespMu.Unlock()
 	}
 
@@ -2013,7 +2017,7 @@ func (s *Server) waitOperationOk(
 				zap.Stringer("expect", expect),
 				log.ShortError(err))
 		} else {
-			queryResp := resp.QueryStatus
+			queryResp := resp.QueryStatus.Redacted()
 			if queryResp == nil {
 				// should not happen
 				return false, "", nil, errors.Errorf("expect a query-status response, got type %v", resp.Type)
@@ -2520,11 +2524,14 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		// For the get-config command, we want to filter out fields that are not easily readable by humans,
 		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
+		// ClearSSLBytesData mutates the receiver, and TargetDB aliases the
+		// subtask config's Security, so redact a deep copy only.
+		taskCfg.TargetDB = taskCfg.TargetDB.Clone()
 		taskCfg.TargetDB.Password = config.ObfuscatedPasswordForFeedback
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
 		}
-		return taskCfg.String()
+		return taskCfg.Redacted().String()
 	}
 	switch req.Type {
 	case pb.CfgType_TaskTemplateType:
@@ -2624,6 +2631,10 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 
 			return resp2, nil
 		}
+		// ClearSSLBytesData mutates the receiver, and GetSourceCfgByID returns a
+		// shallow copy that shares Security with the live config, so redact a
+		// deep copy only.
+		sourceCfg.From = *sourceCfg.From.Clone()
 		sourceCfg.From.Password = config.ObfuscatedPasswordForFeedback
 		if sourceCfg.From.Security != nil {
 			sourceCfg.From.Security.ClearSSLBytesData()
@@ -3064,7 +3075,7 @@ func (s *Server) GetValidationStatus(ctx context.Context, req *pb.GetValidationS
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation status", zap.Reflect("subtask", subTaskCfgs))
+	log.L().Info("query validation status", zap.Reflect("subtask", redactedSubTaskCfgs(subTaskCfgs)))
 	var (
 		workerResps  = make([]*pb.GetValidationStatusResponse, 0)
 		workerRespMu sync.Mutex
@@ -3126,7 +3137,7 @@ func (s *Server) GetValidationError(ctx context.Context, req *pb.GetValidationEr
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("query validation error", zap.Reflect("subtask", subTaskCfgs))
+	log.L().Info("query validation error", zap.Reflect("subtask", redactedSubTaskCfgs(subTaskCfgs)))
 	var (
 		workerResps  = make([]*pb.GetValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3181,7 +3192,7 @@ func (s *Server) OperateValidationError(ctx context.Context, req *pb.OperateVali
 		// nolint:nilerr
 		return resp, nil
 	}
-	log.L().Info("operate validation error", zap.Reflect("subtask", subTaskCfgs))
+	log.L().Info("operate validation error", zap.Reflect("subtask", redactedSubTaskCfgs(subTaskCfgs)))
 	var (
 		workerResps  = make([]*pb.OperateValidationErrorResponse, 0)
 		workerRespMu sync.Mutex
@@ -3466,4 +3477,13 @@ func (s *Server) ListSourceConfigs(ctx context.Context, req *emptypb.Empty) (*pb
 		Result:        true,
 		SourceConfigs: contents,
 	}, nil
+}
+
+// redactedSubTaskCfgs returns copies of the subtask configs of tasks for diagnostics.
+func redactedSubTaskCfgs(cfgs map[string]map[string]config.SubTaskConfig) map[string]map[string]config.SubTaskConfig {
+	result := make(map[string]map[string]config.SubTaskConfig, len(cfgs))
+	for task, sourceCfgs := range cfgs {
+		result[task] = config.RedactedSubTaskConfigs(sourceCfgs)
+	}
+	return result
 }

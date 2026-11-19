@@ -26,6 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	backuppb "github.com/pingcap/kvproto/pkg/brpb"
+	berrors "github.com/pingcap/tidb/br/pkg/errors"
 	"github.com/pingcap/tidb/pkg/objstore/recording"
 	"github.com/pingcap/tidb/pkg/objstore/s3like"
 	"github.com/pingcap/tidb/pkg/objstore/s3store"
@@ -153,7 +154,8 @@ func TestIsS3AndAdjustAndTrimPath(t *testing.T) {
 				// error
 				_, err = AdjustPath("1invalid:", testSeparator+testUniqueID.test)
 				require.Error(t, err)
-				require.Regexp(t, "parse (.*)1invalid:(.*): first path segment in URL cannot contain colon*", err.Error())
+				require.True(t, berrors.ErrStorageInvalidConfig.Equal(err), "unexpected error: %v", err)
+				require.NotContains(t, err.Error(), "1invalid:")
 				// normal
 				var expectPath string
 				if testPath.isURLFormat {

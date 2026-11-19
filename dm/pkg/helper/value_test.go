@@ -36,11 +36,11 @@ func TestIsNil(t *testing.T) {
 	require.False(t, IsNil(make(chan int)))
 
 	// func
-	require.True(t, IsNil((fIsNil)(nil)))
+	require.True(t, IsNil(fIsNil(nil)))
 	require.False(t, IsNil(fIsNil1))
 
 	// interface (error is an interface)
-	require.True(t, IsNil((error)(nil)))
+	require.True(t, IsNil(error(nil)))
 	require.False(t, IsNil(errors.New("")))
 
 	// map

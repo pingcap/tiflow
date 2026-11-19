@@ -549,6 +549,19 @@ paths:
           schema:
             type: boolean
             example: true
+        - name: "keep_meta"
+          in: query
+          required: false
+          description: |-
+            Whether to keep downstream checkpoints and resumable internal metadata when deleting the task.
+            Optimistic shard DDL metadata is always removed.
+            With force=true, only already-persisted checkpoint state is retained; deletion does not flush the latest checkpoint.
+            Stop the task and wait for the stop operation to complete before deleting it when the latest checkpoint must be retained.
+            Only use keep_meta=true after all DM masters are upgraded, because older versions ignore unknown query parameters.
+          schema:
+            type: boolean
+            default: false
+            example: true
       responses:
         "204":
           description: "success"
@@ -1649,11 +1662,30 @@ components:
         security:
           $ref: "#/components/schemas/Security"
           description: "downstram database ssl config"
+        session:
+          $ref: "#/components/schemas/TaskTargetSession"
       required:
         - "host"
         - "port"
         - "user"
         - "password"
+    TaskTargetSession:
+      description: >-
+        Downstream database session parameters for incremental replication.
+        Only use this field after all DM masters are upgraded, because older
+        versions ignore it.
+      type: object
+      additionalProperties: false
+      properties:
+        foreign_key_checks:
+          type: string
+          enum:
+            - "0"
+            - "1"
+          description: >-
+            Whether foreign key checks are enabled during incremental replication.
+            If omitted, DM uses "0". This setting cannot be changed through task
+            updates.
     TaskBinLogFilterRule:
       description: "Filtering rules at binlog level"
       type: object
@@ -1794,6 +1826,13 @@ components:
           type: integer
           description: incremental synchronization of batch execution sql quantities
           default: 100
+        safe_mode:
+          type: boolean
+          description: |-
+            Whether to keep safe mode enabled during incremental replication.
+            When false, DM may still enable it temporarily during initialization or checkpoint recovery.
+            `safe_mode_time_duration` takes precedence when specified at task start.
+          default: false
     TaskSourceConf:
       type: object
       properties:
@@ -1855,6 +1894,18 @@ components:
       description: "task"
       type: object
       properties:
+        metric_labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: >-
+            Labels added to task-scoped metrics. At most 8 labels are allowed.
+            Names must match [a-zA-Z_][a-zA-Z0-9_]*, must not start with "__",
+            and may contain at most 64 bytes. Values may contain at most 256
+            bytes. The following built-in names are reserved: __name__,
+            instance, job, kind, le, medium, name, node, phase, quantile,
+            queueNo, queue_id, result, resumable_err, source_id, stage, state,
+            table, target_schema, target_table, task, type, and worker.
         name:
           type: string
           example: "task-1"
@@ -1885,6 +1936,10 @@ components:
           example: "dm-meta"
           description: "downstream database for storing meta information"
           default: "dm-meta"
+        timezone:
+          type: string
+          example: "Asia/Shanghai"
+          description: "task time zone. If omitted or empty, use the downstream database time zone"
         enhance_online_schema_change:
           type: boolean
           example: true
@@ -2303,22 +2358,29 @@ components:
       required:
         - "task"
     OperateTaskTableStructureRequest:
-      description: action to operate table request
+      description: request to replace a task table schema
       type: object
       properties:
+        schema_source:
+          type: string
+          enum:
+            - sql
+            - upstream
+            - downstream
+          default: sql
+          description: "`sql` uses `sql_content`; `upstream` reads the source table; `downstream` reads the routed target table"
         sql_content:
           type: string
           example: "CREATE TABLE `t1` ( `c1` int(11) DEFAULT NULL, `c2` int(11) DEFAULT NULL, `c3` int(11) DEFAULT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;"
-          description: "sql you want to operate"
+          description: "CREATE TABLE statement required when `schema_source` is `sql`; omit otherwise"
         flush:
           type: boolean
           default: true
-          description: "Writes the schema to the checkpoint so that DM can load it after restarting the task"
+          description: "Compatibility field. The schema is always written to the checkpoint, even when false"
         sync:
           type: boolean
-          description: "Updates the optimistic sharding metadata with this schema only used when an error occurs in the optimistic sharding DDL mode"
-      required:
-        - "sql_content"
+          default: true
+          description: "Whether to update optimistic sharding metadata. Ignored outside optimistic mode"
     OperateTaskResponse:
       type: object
       properties: 

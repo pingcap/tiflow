@@ -519,6 +519,20 @@ func FetchTargetDoTables(
 ) (map[filter.Table][]filter.Table, map[filter.Table][]string, error) {
 	// fetch tables from source and filter them
 	sourceTables, err := FetchAllDoTables(ctx, db, bw)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return RouteTargetDoTables(source, sourceTables, router)
+}
+
+// RouteTargetDoTables routes filtered source tables to their target tables.
+func RouteTargetDoTables(
+	source string,
+	sourceTables map[string][]string,
+	router *regexprrouter.RouteTable,
+) (map[filter.Table][]filter.Table, map[filter.Table][]string, error) {
+	var err error
 
 	failpoint.Inject("FetchTargetDoTablesFailed", func(val failpoint.Value) {
 		err = tmysql.NewErr(uint16(val.(int)))

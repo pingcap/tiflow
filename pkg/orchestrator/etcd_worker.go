@@ -23,6 +23,7 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/pkg/chdelay"
+	"github.com/pingcap/tiflow/pkg/config"
 	cerrors "github.com/pingcap/tiflow/pkg/errors"
 	"github.com/pingcap/tiflow/pkg/etcd"
 	"github.com/pingcap/tiflow/pkg/migrate"
@@ -220,7 +221,7 @@ func (worker *EtcdWorker) Run(ctx context.Context, session *concurrency.Session,
 				log.Info("Stale Etcd event dropped",
 					zap.Int64("eventRevision", response.Header.GetRevision()),
 					zap.Int64("previousRevision", worker.revision),
-					zap.Any("events", response.Events),
+					zap.Strings("events", etcdEventKeys(response.Events)),
 					zap.String("role", role))
 				continue
 			}
@@ -323,13 +324,29 @@ func isRetryableError(err error) bool {
 	return ok
 }
 
+// etcdEventKeys records event types and keys without logging metadata values.
+func etcdEventKeys(events []*clientv3.Event) []string {
+	keys := make([]string, 0, len(events))
+	for _, event := range events {
+		keys = append(keys, event.Type.String()+" "+string(event.Kv.Key))
+	}
+	return keys
+}
+
 func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) error {
 	if worker.isDeleteCounterKey(event.Kv.Key) {
 		switch event.Type {
 		case mvccpb.PUT:
 			worker.handleDeleteCounter(event.Kv.Value)
 		case mvccpb.DELETE:
-			log.Warn("deletion counter key deleted", zap.Reflect("event", event))
+			safeKV := *event.Kv
+			safeKV.Value = nil
+			safeEvent := *event
+			safeEvent.Kv = &safeKV
+			safeEvent.PrevKv = nil
+			log.Warn("deletion counter key deleted",
+				zap.Reflect("event", &safeEvent),
+				zap.ByteString("key", event.Kv.Key), zap.Int64("revision", event.Kv.ModRevision))
 			worker.handleDeleteCounter(nil)
 		}
 		// We return here because the delete-counter is not used for business logic,
@@ -362,7 +379,8 @@ func (worker *EtcdWorker) handleEvent(_ context.Context, event *clientv3.Event) 
 					"owner resign or externally delete operation"+
 					"exit etcd worker and campaign again",
 					zap.String("ownerMetaKey", worker.ownerMetaKey),
-					zap.String("value", string(event.Kv.Value)),
+					zap.String("value", config.MaskedSensitiveValue),
+					zap.Int64("revision", event.Kv.ModRevision),
 					zap.Error(err))
 				return err
 			}
@@ -542,6 +560,9 @@ func (worker *EtcdWorker) logEtcdCmps(cmps []clientv3.Cmp) {
 	log.Info("[etcd worker] ==========Failed Etcd Txn Cmps==========")
 	for _, cmp := range cmps {
 		cmp := etcdserverpb.Compare(cmp)
+		if _, ok := cmp.TargetUnion.(*etcdserverpb.Compare_Value); ok {
+			cmp.TargetUnion = nil
+		}
 		log.Info("[etcd worker] compare",
 			zap.String("cmp", cmp.String()))
 	}

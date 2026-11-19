@@ -134,6 +134,7 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 		}
 
 		if tlsConfig != nil {
+			tlsConfig.CipherSuites = MySQLTLSCipherSuites()
 			name := "dm" + strconv.FormatInt(atomic.AddInt64(&customID, 1), 10)
 			err = mysql.RegisterTLSConfig(name, tlsConfig)
 			if err != nil {

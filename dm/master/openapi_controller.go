@@ -35,6 +35,7 @@ import (
 	"github.com/pingcap/tiflow/dm/openapi"
 	"github.com/pingcap/tiflow/dm/pb"
 	"github.com/pingcap/tiflow/dm/pkg/ha"
+	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.uber.org/zap"
@@ -434,7 +435,7 @@ func (s *Server) updateTask(ctx context.Context, req openapi.UpdateTaskRequest) 
 	return res, s.scheduler.UpdateSubTasks(ctx, subtaskCfgPointersToInstances(subTaskConfigList...)...)
 }
 
-func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) error {
+func (s *Server) deleteTask(ctx context.Context, taskName string, force, keepMeta bool) error {
 	// check if there is running task
 	var task *openapi.Task
 	var err error
@@ -457,37 +458,61 @@ func (s *Server) deleteTask(ctx context.Context, taskName string, force bool) er
 		}
 	}
 
-	// remove meta
-	release, err := s.scheduler.AcquireSubtaskLatch(taskName)
-	if err != nil {
-		return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
-	}
-	released := false
-	defer func() {
-		if !released {
-			release()
+	if !keepMeta {
+		// remove meta
+		release, err := s.scheduler.AcquireSubtaskLatch(taskName)
+		if err != nil {
+			return terror.ErrSchedulerLatchInUse.Generate("RemoveMeta", taskName)
 		}
-	}()
+		released := false
+		defer func() {
+			if !released {
+				release()
+			}
+		}()
 
-	metaSchema := *task.MetaSchema
-	if err = s.removeInternalMetaData(taskName); err != nil {
-		return terror.Annotate(err, "while removing metadata")
+		metaSchema := *task.MetaSchema
+		if err = s.removeInternalMetaData(taskName); err != nil {
+			return terror.Annotate(err, "while removing metadata")
+		}
+
+		toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
+		// Bound the entire downstream cleanup flow, not just the initial connection setup.
+		cleanupCtx, cleanupCancel := context.WithTimeout(ctx, openAPIDeleteTaskDownstreamTimeout)
+		defer cleanupCancel()
+		if adjustErr := AdjustTargetDBSessionCfgWithTimeout(cleanupCtx, toDBCfg, openAPIDeleteTaskDownstreamTimeout); adjustErr != nil {
+			log.L().Warn("skip downstream metadata cleanup when deleting task", zap.String("task", taskName), zap.Error(adjustErr))
+		} else if err = s.removeDownstreamMetaData(cleanupCtx, taskName, metaSchema, toDBCfg, openAPIDeleteTaskDownstreamTimeout); err != nil {
+			log.L().Warn("failed to remove downstream metadata when deleting task", zap.String("task", taskName), zap.Error(err))
+		}
+		release()
+		released = true
 	}
 
-	toDBCfg := config.GetTargetDBCfgFromOpenAPITask(task)
-	// Bound the entire downstream cleanup flow, not just the initial connection setup.
-	cleanupCtx, cleanupCancel := context.WithTimeout(ctx, openAPIDeleteTaskDownstreamTimeout)
-	defer cleanupCancel()
-	if adjustErr := AdjustTargetDBSessionCfgWithTimeout(cleanupCtx, toDBCfg, openAPIDeleteTaskDownstreamTimeout); adjustErr != nil {
-		log.L().Warn("skip downstream metadata cleanup when deleting task", zap.String("task", taskName), zap.Error(adjustErr))
-	} else if err = s.removeDownstreamMetaData(cleanupCtx, taskName, metaSchema, toDBCfg, openAPIDeleteTaskDownstreamTimeout); err != nil {
-		log.L().Warn("failed to remove downstream metadata when deleting task", zap.String("task", taskName), zap.Error(err))
-	}
-	release()
-	released = true
 	sourceNameList := s.getTaskSourceNameList(taskName)
 	// delete subtask on worker
-	return s.scheduler.RemoveSubTasks(taskName, sourceNameList...)
+	if err := s.scheduler.RemoveSubTasks(taskName, sourceNameList...); err != nil {
+		return err
+	}
+	if keepMeta {
+		deleteReq := &pb.OperateTaskRequest{
+			Name:    taskName,
+			Op:      pb.TaskOp_Delete,
+			Sources: sourceNameList,
+		}
+		workerResponses := s.getSourceRespsAfterOperation(ctx, taskName, sourceNameList, []string{}, deleteReq)
+		for _, response := range workerResponses {
+			if !response.Result {
+				log.L().Warn("failed to confirm subtask removal before optimistic metadata cleanup",
+					zap.String("task", taskName),
+					zap.String("source", response.Source),
+					zap.String("worker", response.Worker),
+					zap.String("message", response.Msg))
+			}
+		}
+		s.removeOptimisticMetaData(taskName, nil)
+	}
+	return nil
 }
 
 func (s *Server) getTask(ctx context.Context, taskName string, req openapi.DMAPIGetTaskParams) (*openapi.Task, error) {
@@ -528,7 +553,7 @@ func (s *Server) getTaskStatus(ctx context.Context, taskName string) ([]openapi.
 			errorMsg = fmt.Sprintf("%s, Workaround: %s", errorMsg, err.Workaround)
 		}
 		errorMsg = fmt.Sprintf("%s.", errorMsg)
-		return errorMsg
+		return redact.Text(errorMsg)
 	}
 
 	formatProcessErrors := func(errors []*pb.ProcessError) string {

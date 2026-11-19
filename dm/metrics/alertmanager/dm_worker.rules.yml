@@ -125,12 +125,12 @@ groups:
       summary: dm relay binlog file not catch up master server exceed 10 min
 
   - alert: DM_binlog_file_gap_between_master_syncer
-    expr: dm_syncer_binlog_file{node="master"} - ON(instance, task, job) dm_syncer_binlog_file{node="syncer"} > 1
+    expr: (dm_syncer_binlog_file{node="master"} - ON(instance, task, job) dm_syncer_binlog_file{node="syncer"} > 1) and ON(instance, task, job) (dm_worker_task_state == 2)
     for: 10m
     labels:
       env: ENV_LABELS_ENV
       level: critical
-      expr: dm_syncer_binlog_file{node="master"} - ON(instance, task, job) dm_syncer_binlog_file{node="syncer"} > 1
+      expr: (dm_syncer_binlog_file{node="master"} - ON(instance, task, job) dm_syncer_binlog_file{node="syncer"} > 1) and ON(instance, task, job) (dm_worker_task_state == 2)
     annotations:
       description: 'cluster: ENV_LABELS_ENV, instance: {{ $labels.instance }}, task: {{ $labels.task }}, values: {{ $value }}'
       value: '{{ $value }}'
