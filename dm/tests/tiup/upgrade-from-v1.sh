@@ -30,7 +30,7 @@ function deploy_v1_by_ansible() {
 	# step 3
 	su tidb <<EOF
     cd /home/tidb
-    wget https://download.pingcap.org/dm-ansible-v1.0.7.tar.gz
+    wget https://download.pingcap.com/dm-ansible-v1.0.7.tar.gz
 EOF
 
 	# step 4
