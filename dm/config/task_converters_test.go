@@ -263,6 +263,102 @@ func (t *testConfig) TestSubTaskConfigsToOpenAPITask(c *check.C) {
 	testShardAndFilterSubTaskConfigsToOpenAPITask(c)
 }
 
+func TestOpenAPITaskBinlogFilterBindings(t *testing.T) {
+	for _, withRoute := range []bool{false, true} {
+		for _, caseSensitive := range []bool{false, true} {
+			t.Run(fmt.Sprintf("route=%t/case-sensitive=%t", withRoute, caseSensitive), func(t *testing.T) {
+				task, err := fixtures.GenNoShardOpenAPITaskForTest()
+				require.NoError(t, err)
+				sourceName := task.SourceConfig.SourceConf[0].SourceName
+				otherSource := "mysql-replica-02"
+				task.SourceConfig.SourceConf = append(task.SourceConfig.SourceConf, openapi.TaskSourceConf{SourceName: otherSource})
+				sourceCfgMap := make(map[string]*SourceConfig)
+				for _, name := range []string{sourceName, otherSource} {
+					cfg, err := SourceCfgFromYamlAndVerify(SampleSourceConfig)
+					require.NoError(t, err)
+					cfg.SourceID = name
+					cfg.CaseSensitive = caseSensitive
+					sourceCfgMap[name] = cfg
+				}
+				filters := map[string]openapi.TaskBinLogFilterRule{
+					"insert": {IgnoreEvent: &[]string{"insert"}},
+					"update": {IgnoreEvent: &[]string{"update"}},
+					"ddl":    {IgnoreSql: &[]string{"^ALTER TABLE"}},
+				}
+				task.BinlogFilterRule = &openapi.Task_BinlogFilterRule{AdditionalProperties: filters}
+				rules := []struct {
+					source, schema, table string
+					filters               []string
+				}{
+					{sourceName, "Db", "T1", []string{"insert", "ddl"}},
+					{sourceName, "Db", "T2", []string{"update"}},
+					{sourceName, "Db", "T3", nil},
+					{sourceName, "Other", "T1", []string{"update"}},
+					{sourceName, "Scope", "", []string{"ddl"}},
+					{sourceName, "Scope", "T1", nil},
+					{sourceName, "Wild_*", "T*", []string{"insert"}},
+					{sourceName, "Wild_1", "T1", nil},
+					{otherSource, "Db", "T1", []string{"update"}},
+					{otherSource, "Db", "T2", nil},
+				}
+				expected := make(map[openapi.TaskTableMigrateRuleSource][]openapi.TaskBinLogFilterRule)
+				task.TableMigrateRule = nil
+				for _, rule := range rules {
+					source := openapi.TaskTableMigrateRuleSource{SourceName: rule.source, Schema: rule.schema, Table: rule.table}
+					migrateRule := openapi.TaskTableMigrateRule{Source: source}
+					if withRoute {
+						targetSchema := "target"
+						migrateRule.Target = &openapi.TaskTableMigrateRuleTarget{Schema: &targetSchema}
+					}
+					if len(rule.filters) > 0 {
+						migrateRule.BinlogFilterRule = &rule.filters
+					}
+					task.TableMigrateRule = append(task.TableMigrateRule, migrateRule)
+					if !caseSensitive {
+						source.Schema = strings.ToLower(source.Schema)
+						source.Table = strings.ToLower(source.Table)
+					}
+					expected[source] = nil
+					for _, name := range rule.filters {
+						expected[source] = append(expected[source], filters[name])
+					}
+				}
+
+				toDBCfg := GetTargetDBCfgFromOpenAPITask(&task)
+				subtasks, err := OpenAPITaskToSubTaskConfigs(&task, toDBCfg, sourceCfgMap)
+				require.NoError(t, err)
+				readBack := SubTaskConfigsToOpenAPITask(subtasks)
+				require.Len(t, readBack.TableMigrateRule, len(expected))
+				for _, rule := range readBack.TableMigrateRule {
+					want, ok := expected[rule.Source]
+					require.True(t, ok, "unexpected source: %+v", rule.Source)
+					if len(want) == 0 {
+						require.Nil(t, rule.BinlogFilterRule, "unfiltered source: %+v", rule.Source)
+						continue
+					}
+					require.NotNil(t, rule.BinlogFilterRule)
+					var got []openapi.TaskBinLogFilterRule
+					for _, name := range *rule.BinlogFilterRule {
+						filterRule, ok := readBack.BinlogFilterRule.Get(name)
+						require.True(t, ok)
+						got = append(got, filterRule)
+					}
+					require.ElementsMatch(t, want, got, "source: %+v", rule.Source)
+				}
+
+				recreated, err := OpenAPITaskToSubTaskConfigs(readBack, toDBCfg, sourceCfgMap)
+				require.NoError(t, err)
+				require.Len(t, recreated, len(subtasks))
+				for i, cfg := range recreated {
+					require.Equal(t, subtasks[i].SourceID, cfg.SourceID)
+					require.ElementsMatch(t, subtasks[i].FilterRules, cfg.FilterRules)
+					require.ElementsMatch(t, subtasks[i].RouteRules, cfg.RouteRules)
+				}
+			})
+		}
+	}
+}
+
 func testNoShardSubTaskConfigsToOpenAPITask(c *check.C) {
 	task, err := fixtures.GenNoShardOpenAPITaskForTest()
 	c.Assert(err, check.IsNil)
