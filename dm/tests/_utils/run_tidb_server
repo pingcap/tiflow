@@ -14,9 +14,9 @@ set -eu
 PORT=$1
 PASSWORD=$2
 STATUS_PORT=${4:-10080}
-TEST_DIR=/tmp/dm_test
+TEST_DIR=${TEST_DIR:-/tmp/dm_test}
 
-tmp_config="/tmp/dm_test/tidb.toml"
+tmp_config="$TEST_DIR/tidb.toml"
 rm -f $tmp_config
 
 # Next-gen TiDB rejects startup without a keyspace and requires a tikv-worker
@@ -67,16 +67,33 @@ bin/tidb-server \
 	${STORE_ARGS} \
 	--config "$tmp_config" \
 	--log-file "$TEST_DIR/downstream/tidb/log/tidb.log" &
+tidb_pid=$!
+
+fail_startup() {
+	echo "$1"
+	if [ -f "$TEST_DIR/downstream/tidb/log/tidb.log" ]; then
+		tail -n 80 "$TEST_DIR/downstream/tidb/log/tidb.log"
+	fi
+	exit 1
+}
 
 echo "Verifying TiDB is started..."
 i=0
-# TiDB [security] ssl-* only enables TLS on the mysql port, NOT the HTTP
-# status port. Always probe via plain HTTP status endpoint.
+retry_times=10
+if [ "${NEXT_GEN:-}" = "1" ]; then
+	# Cold next-gen bootstrap includes distributed DDL before SQL is ready.
+	retry_times=60
+fi
+# Wait for bootstrap to complete, rather than just the SQL port opening.
 while ! mysql -uroot -h127.0.0.1 -P${PORT} --default-character-set utf8 -e 'select * from mysql.tidb;'; do
+	if ! kill -0 "$tidb_pid" 2>/dev/null; then
+		tidb_exit_status=0
+		wait "$tidb_pid" || tidb_exit_status=$?
+		fail_startup "TiDB exited before becoming ready (exit status: $tidb_exit_status)"
+	fi
 	i=$((i + 1))
-	if [ "$i" -gt 10 ]; then
-		echo 'Failed to start TiDB'
-		exit 1
+	if [ "$i" -gt "$retry_times" ]; then
+		fail_startup "Failed to start TiDB after $((retry_times * 2)) seconds of polling"
 	fi
 	sleep 2
 done

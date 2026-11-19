@@ -134,8 +134,10 @@ function run_test() {
 	echo "check task result"
 	# wait for both sources to finish physical import and enter sync,
 	# then sync catches up with binlog (including increments written above)
+	# Allow two minutes for import retries and the all-worker completion barrier.
 	run_dm_ctl_with_retry $WORK_DIR "127.0.0.1:$MASTER_PORT" \
 		"query-status $2" \
+		60 \
 		'"unit": "Sync"' 2
 
 	# check table data (full dump + increments replicated via sync)
