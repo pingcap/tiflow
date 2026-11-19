@@ -33,11 +33,24 @@ func redactTaskForResponse(task openapi.Task) openapi.Task {
 	return task
 }
 
+// redactTaskSecurity keeps the shape of the configured TLS material (so that a
+// client can round-trip the task without dropping TLS) but replaces every
+// non-empty content with a placeholder. The stored value is restored on write.
 func redactTaskSecurity(security *openapi.Security) *openapi.Security {
 	if security == nil {
 		return nil
 	}
-	return &openapi.Security{CertAllowedCn: security.CertAllowedCn}
+	redacted := &openapi.Security{CertAllowedCn: security.CertAllowedCn}
+	if security.SslCaContent != "" {
+		redacted.SslCaContent = config.ObfuscatedTLSContentForFeedback
+	}
+	if security.SslCertContent != "" {
+		redacted.SslCertContent = config.ObfuscatedTLSContentForFeedback
+	}
+	if security.SslKeyContent != "" {
+		redacted.SslKeyContent = config.ObfuscatedTLSContentForFeedback
+	}
+	return redacted
 }
 
 // Do not send stored secrets to a different endpoint during update prechecks.
@@ -63,14 +76,14 @@ func validateTaskCredentialReuse(task, stored openapi.Task) error {
 
 func taskSecurityNeedsRestore(security, stored *openapi.Security) bool {
 	return security != nil && stored != nil &&
-		((security.SslCaContent == "" && stored.SslCaContent != "") ||
-			(security.SslCertContent == "" && stored.SslCertContent != "") ||
-			(security.SslKeyContent == "" && stored.SslKeyContent != ""))
+		(security.SslCaContent == config.ObfuscatedTLSContentForFeedback ||
+			security.SslCertContent == config.ObfuscatedTLSContentForFeedback ||
+			security.SslKeyContent == config.ObfuscatedTLSContentForFeedback)
 }
 
 // restoreTaskCredentials supports editing a redacted GET response. The password
-// placeholder and empty TLS content mean unchanged; a nil security object still
-// means disabling TLS. Explicit nonempty credentials are left for normal update
+// and TLS placeholders mean unchanged; a nil security object still means
+// disabling TLS. Explicit non-empty credentials are left for normal update
 // validation. Do not modify objects shared with the request or stored task.
 func restoreTaskCredentials(task, stored openapi.Task) openapi.Task {
 	if task.TargetConfig.Password == config.ObfuscatedPasswordForFeedback {
@@ -90,13 +103,13 @@ func restoreTaskSecurity(security, stored *openapi.Security) *openapi.Security {
 		return security
 	}
 	result := *security
-	if result.SslCaContent == "" {
+	if result.SslCaContent == config.ObfuscatedTLSContentForFeedback {
 		result.SslCaContent = stored.SslCaContent
 	}
-	if result.SslCertContent == "" {
+	if result.SslCertContent == config.ObfuscatedTLSContentForFeedback {
 		result.SslCertContent = stored.SslCertContent
 	}
-	if result.SslKeyContent == "" {
+	if result.SslKeyContent == config.ObfuscatedTLSContentForFeedback {
 		result.SslKeyContent = stored.SslKeyContent
 	}
 	return &result
