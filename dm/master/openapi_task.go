@@ -60,7 +60,7 @@ func validateTaskCredentialReuse(task, stored openapi.Task) error {
 	target, oldTarget := task.TargetConfig, stored.TargetConfig
 	if target.Password == config.ObfuscatedPasswordForFeedback || taskSecurityNeedsRestore(target.Security, oldTarget.Security) {
 		if target.Host != oldTarget.Host || target.Port != oldTarget.Port || target.User != oldTarget.User {
-			return terror.ErrOpenAPICommonError.Generate("provide credentials explicitly when changing target connection parameters")
+			return terror.ErrOpenAPICommonError.New("provide credentials explicitly when changing target connection parameters")
 		}
 	}
 	full, oldFull := task.SourceConfig.FullMigrateConf, stored.SourceConfig.FullMigrateConf
@@ -71,7 +71,7 @@ func validateTaskCredentialReuse(task, stored openapi.Task) error {
 		pdAddrChanged := (full.PdAddr == nil) != (oldFull.PdAddr == nil) ||
 			(full.PdAddr != nil && oldFull.PdAddr != nil && *full.PdAddr != *oldFull.PdAddr)
 		if pdAddrChanged {
-			return terror.ErrOpenAPICommonError.Generate("provide TLS content explicitly when changing the PD address")
+			return terror.ErrOpenAPICommonError.New("provide TLS content explicitly when changing the PD address")
 		}
 	}
 	return nil
