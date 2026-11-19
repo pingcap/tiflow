@@ -124,6 +124,25 @@ func TestValidateTaskCredentialReuse(t *testing.T) {
 		explicit := restoreTaskCredentials(redacted, task)
 		require.NoError(t, validateTaskCredentialReuse(explicit, task))
 	}
+
+	// A physical-import task without full_migrate_conf.security uses the target
+	// DB TLS for the loader (and therefore for PD), so moving PD while keeping
+	// the target placeholders must not reuse the stored TLS identity.
+	fallback := task
+	fallback.SourceConfig.FullMigrateConf.Security = nil
+	redacted := redactTaskForResponse(fallback)
+	require.NoError(t, validateTaskCredentialReuse(redacted, fallback))
+	otherPD := "other-pd:2379"
+	redacted.SourceConfig.FullMigrateConf.PdAddr = &otherPD
+	require.Error(t, validateTaskCredentialReuse(redacted, fallback))
+	// Supplying the TLS content explicitly makes the change valid again.
+	explicit := restoreTaskCredentials(redacted, fallback)
+	explicit.SourceConfig.FullMigrateConf.Security = &openapi.Security{
+		SslCaContent:   fallback.TargetConfig.Security.SslCaContent,
+		SslCertContent: fallback.TargetConfig.Security.SslCertContent,
+		SslKeyContent:  fallback.TargetConfig.Security.SslKeyContent,
+	}
+	require.NoError(t, validateTaskCredentialReuse(explicit, fallback))
 }
 
 func (s *OpenAPIViewSuite) TestTaskCredentialRedaction() {

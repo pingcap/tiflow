@@ -2934,7 +2934,7 @@ func TestSubTaskCfgForAPI(t *testing.T) {
 	cfg.To.Password = "downstream-secret"
 	cfg.To.Security = &security.Security{SSLKeyBytes: []byte("key")}
 
-	out, err := subtaskCfgForAPI(cfg)
+	out, err := cfg.RedactedStorage().Toml()
 	require.NoError(t, err)
 	require.Contains(t, out, "upstream-secret")
 	require.Contains(t, out, "downstream-secret")
