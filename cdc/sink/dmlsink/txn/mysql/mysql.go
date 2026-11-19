@@ -201,10 +201,16 @@ func NewMySQLBackends(
 
 // OnTxnEvent implements interface backend.
 // It adds the event to the buffer, and return true if it needs flush immediately.
-func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent) (needFlush bool) {
+func (s *mysqlBackend) OnTxnEvent(event *dmlsink.TxnCallbackableEvent, tableOrder bool) (needFlush bool) {
 	s.events = append(s.events, event)
 	s.rows += len(event.Event.Rows)
-	return s.rows >= s.cfg.MaxTxnRow
+	maxTxnRow := s.cfg.MaxTxnRow
+	if tableOrder {
+		// Flush before accepting another ordered transaction. Preceding ordinary
+		// transactions can share this commit without affecting per-table order.
+		maxTxnRow = 1
+	}
+	return s.rows >= maxTxnRow
 }
 
 // Flush implements interface backend.

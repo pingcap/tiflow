@@ -10,6 +10,11 @@ WORK_DIR=$TEST_DIR/$TEST_NAME
 API_VERSION="v1alpha1"
 
 function get_mysql_ssl_data_path() {
+	if [[ -d "$WORK_DIR/mysql-ssl" ]]; then
+		echo "$WORK_DIR/mysql-ssl/"
+		return
+	fi
+
 	run_sql 'SHOW VARIABLES WHERE Variable_Name = "datadir"' $MYSQL_PORT1 $MYSQL_PASSWORD1
 	mysql_data_path=$(cat "$TEST_DIR/sql_res.$TEST_NAME.txt" | grep Value | cut -d ':' -f 2 | xargs)
 	echo "$mysql_data_path"
@@ -64,6 +69,13 @@ function prepare_data() {
 }
 
 function setup_mysql_tls() {
+	# CI copies MySQL certificates to the shared workspace. Keep a writable copy
+	# for this test, which temporarily renames the CA certificate.
+	if [[ -n "${WORKSPACE:-}" && -f "$WORKSPACE/mysql-ssl/ca.pem" ]]; then
+		mkdir -m 700 "$WORK_DIR/mysql-ssl"
+		cp "$WORKSPACE/mysql-ssl/"{ca.pem,client-cert.pem,client-key.pem} "$WORK_DIR/mysql-ssl/"
+	fi
+
 	mysql_data_path=$(get_mysql_ssl_data_path)
 	echo "mysql_ssl_setup at=$mysql_data_path"
 
@@ -72,15 +84,32 @@ function setup_mysql_tls() {
 	# only mysql 8.0 support use `ALTER INSTANCE RELOAD TLS` to reload cert
 	# when use mysql 5.7 we need to restart mysql-server manually if your local server do not enable ssl
 
+	# The certificates live in the MySQL server's datadir, which is not readable
+	# from the test runner when MySQL runs in another container (CI). In that case
+	# the CI job stages a readable copy of them in a mysql-ssl dir next to the
+	# repository, so prefer that copy. Work on a private copy in $WORK_DIR either
+	# way: the HA case below renames ca.pem, and that must not touch a system
+	# directory nor a fixture shared with the other containers.
+	mysql_ssl_dir=$WORK_DIR/mysql-ssl
+	ssl_src=$mysql_data_path
+	workspace=$(cd "$cur/../../../.." && pwd)
+	if [ -f "$workspace/mysql-ssl/ca.pem" ]; then
+		ssl_src=$workspace/mysql-ssl
+	fi
+	rm -rf "$mysql_ssl_dir"
+	mkdir -p "$mysql_ssl_dir"
+	cp "$ssl_src"/*.pem "$mysql_ssl_dir"/
+	echo "mysql_ssl_setup from=$ssl_src to=$mysql_ssl_dir"
+
 	run_sql "grant all on *.* to 'dm_tls_test'@'%' identified by '123456' require ssl;" $MYSQL_PORT1 $MYSQL_PASSWORD1
 	run_sql 'flush privileges;' $MYSQL_PORT1 $MYSQL_PASSWORD1
 
 	cp $cur/conf/source1.yaml $WORK_DIR/source1.yaml
-	sed -i "s%dir-placeholer%$mysql_data_path%g" $WORK_DIR/source1.yaml
+	sed -i "s%dir-placeholer%$mysql_ssl_dir/%g" $WORK_DIR/source1.yaml
 	# add a tls source with only ca
 	cp $cur/conf/source-only-ca.yaml $WORK_DIR/source-only-ca.yaml
-	sed -i "s%dir-placeholer%$mysql_data_path%g" $WORK_DIR/source-only-ca.yaml
-	echo "add dm_tls_test user done $mysql_data_path"
+	sed -i "s%dir-placeholer%$mysql_ssl_dir/%g" $WORK_DIR/source-only-ca.yaml
+	echo "add dm_tls_test user done $mysql_ssl_dir"
 }
 
 function prepare_test() {
@@ -221,11 +250,8 @@ function test_worker_ha_when_enable_source_tls() {
 	kill_process dm-worker1
 	check_port_offline $WORKER1_PORT 20
 
-	mysql_data_path=$(get_mysql_ssl_data_path)
-	echo "mysql_ssl_setup at=$mysql_data_path"
-
 	# change ca.pem name to make sure HA
-	mv "$mysql_data_path/ca.pem" "$mysql_data_path/ca.pem.bak"
+	mv "$mysql_ssl_dir/ca.pem" "$mysql_ssl_dir/ca.pem.bak"
 
 	run_dm_worker $WORK_DIR/worker2 $WORKER2_PORT $WORK_DIR/dm-worker2.toml
 	check_rpc_alive $cur/../bin/check_worker_online 127.0.0.1:$WORKER2_PORT "$cur/conf/ca.pem" "$cur/conf/dm.pem" "$cur/conf/dm.key"
@@ -252,7 +278,7 @@ function test_worker_ha_when_enable_source_tls() {
 	check_sync_diff $WORK_DIR $cur/conf/diff_config.toml
 
 	# resume ca.pem
-	mv "$mysql_data_path/ca.pem.bak" "$mysql_data_path/ca.pem"
+	mv "$mysql_ssl_dir/ca.pem.bak" "$mysql_ssl_dir/ca.pem"
 
 	echo "============================== test_worker_ha_when_enable_source_tls success =================================="
 }

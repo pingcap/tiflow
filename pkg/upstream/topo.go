@@ -77,7 +77,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 			if err != nil {
 				log.Warn("Ignored invalid tidb topology info entry",
 					zap.String("key", key),
-					zap.String("value", string(kv.Value)),
+					zap.String("value", "******"),
 					zap.Error(err))
 				continue
 			}
@@ -90,7 +90,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 			if !alive || err != nil {
 				log.Warn("Ignored invalid tidb topology TTL entry",
 					zap.String("key", key),
-					zap.String("value", string(kv.Value)),
+					zap.String("value", "******"),
 					zap.Error(err))
 				continue
 			}
@@ -110,7 +110,7 @@ func fetchTiDBTopology(ctx context.Context, etcdClient *clientv3.Client) ([]tidb
 func parseTiDBAliveness(value []byte) (bool, error) {
 	unixTimestampNano, err := strconv.ParseUint(string(value), 10, 64)
 	if err != nil {
-		return false, errors.ErrUnmarshalFailed.Wrap(err)
+		return false, errors.ErrUnmarshalFailed.Wrap(err.(*strconv.NumError).Err)
 	}
 	t := time.Unix(0, int64(unixTimestampNano))
 	if time.Since(t) > topologyTiDBTTL*time.Second {

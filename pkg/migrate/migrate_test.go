@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/pingcap/errors"
+	"github.com/pingcap/log"
 	"github.com/pingcap/tiflow/cdc/model"
 	"github.com/pingcap/tiflow/pkg/config"
 	"github.com/pingcap/tiflow/pkg/etcd"
@@ -36,6 +37,8 @@ import (
 	"github.com/tikv/client-go/v2/oracle"
 	pd "github.com/tikv/pd/client"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const cycylicChangefeedInfo = `{"upstream-id":0,"sink-uri":"blackhole://","opts":{"a":"b"},
@@ -621,18 +624,40 @@ func TestNoServiceSafePoint(t *testing.T) {
 	require.Nil(t, err)
 }
 
-func TestMaskChangefeedData(t *testing.T) {
-	info := model.ChangeFeedInfo{
-		SinkURI: "mysql://root:root@127.0.0.1:3306",
-		StartTs: 1, TargetTs: 100, State: model.StateNormal,
+func TestCleanOldDataOmitsValuesFromLogs(t *testing.T) {
+	s := &etcd.Tester{}
+	s.SetUpTest(t)
+	defer s.TearDownTest(t)
+	client, err := clientv3.New(clientv3.Config{Endpoints: []string{s.ClientURL.String()}})
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	const secret = "migration-secret"
+	const key = oldChangefeedPrefix + "/test"
+	// Invalid metadata must still be backed up verbatim.
+	value := `{"sink-uri":"mysql://root:` + secret + `@example.invalid/%zz"}`
+	_, err = client.Put(ctx, key, value)
+	require.NoError(t, err)
+
+	core, logs := observer.New(zap.InfoLevel)
+	restore := log.ReplaceGlobals(zap.New(core), &log.ZapProperties{Level: zap.NewAtomicLevel()})
+	defer restore()
+	cleanOldData(ctx, etcd.Wrap(client, nil))
+
+	backupKey := etcd.MigrateBackupKey(0, key)
+	entries := logs.FilterMessage("renaming old etcd data").All()
+	require.Len(t, entries, 1)
+	require.Equal(t, map[string]any{"key": key, "newKey": backupKey}, entries[0].ContextMap())
+	for _, entry := range logs.All() {
+		require.NotContains(t, fmt.Sprint(entry.Message, entry.ContextMap()), secret)
 	}
-	data, err := json.Marshal(&info)
-	require.Nil(t, err)
-	masked := maskChangefeedInfo(data)
-	maskedInfo := model.ChangeFeedInfo{}
-	err = json.Unmarshal([]byte(masked), &maskedInfo)
-	require.Nil(t, err)
-	require.Equal(t, "mysql://username:password@***", maskedInfo.SinkURI)
-	maskedInfo.SinkURI = "mysql://root:root@127.0.0.1:3306"
-	require.Equal(t, info, maskedInfo)
+	resp, err := client.Get(ctx, backupKey)
+	require.NoError(t, err)
+	require.Len(t, resp.Kvs, 1)
+	require.Equal(t, value, string(resp.Kvs[0].Value))
+	resp, err = client.Get(ctx, key)
+	require.NoError(t, err)
+	require.Empty(t, resp.Kvs)
 }

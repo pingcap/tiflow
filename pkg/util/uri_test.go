@@ -81,6 +81,18 @@ func TestMaskSinkURI(t *testing.T) {
 			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-user=ticdc&sasl-password=verysecure",
 			"kafka://127.0.0.1:9093/cdc?sasl-mechanism=SCRAM-SHA-256&sasl-password=xxxxx&sasl-user=ticdc",
 		},
+		{
+			"s3://bucket/prefix?region=us-east-1&secret-access-key=verysecure&access-key=key",
+			"s3://bucket/prefix?access-key=xxxxx&region=us-east-1&secret-access-key=xxxxx",
+		},
+		{
+			"kafka://broker:9093/cdc?sasl-password=fixture%zz&kafka-client-id=producer",
+			"kafka://broker:9093/cdc?kafka-client-id=producer",
+		},
+		{
+			"kafka://broker:9093/cdc?sasl-oauth-client-secret=secret&kafka-client-id=producer",
+			"kafka://broker:9093/cdc?kafka-client-id=producer&sasl-oauth-client-secret=xxxxx",
+		},
 	}
 
 	for _, tt := range tests {
@@ -88,6 +100,9 @@ func TestMaskSinkURI(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, tt.masked, maskedURI)
 	}
+	_, err := MaskSinkURI("mysql:root:fixture-password@db:3306/app")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "fixture-password")
 }
 
 func TestMaskSensitiveDataInURI(t *testing.T) {
@@ -110,6 +125,10 @@ func TestMaskSensitiveDataInURI(t *testing.T) {
 		{
 			"mysql://root:123456@127.0.0.1:3306/?client_secret=c",
 			"mysql://root:xxxxx@127.0.0.1:3306/?client_secret=xxxxx",
+		},
+		{
+			"kafka://broker:9093/cdc?sasl-oauth-client-secret=secret&kafka-client-id=producer",
+			"kafka://broker:9093/cdc?kafka-client-id=producer&sasl-oauth-client-secret=xxxxx",
 		},
 		{
 			"",
@@ -148,6 +167,44 @@ func TestMaskSensitiveDataInURIForError(t *testing.T) {
 		MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1:3306/?sasl-password=rawsecret"))
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql://root:verysecure@127.0.0.1/%zz"))
 	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("kafka:alice:verysecure@broker:9092/topic"))
+	require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError("mysql:root:fixture-password@db:3306/app"))
+}
+
+func TestMaskURIMissingAuthority(t *testing.T) {
+	for _, uri := range []string{
+		"mysql:/root:fixture-password@db:3306/app",
+		"mysql:///root:fixture-password@db:3306/app",
+		"tidb+ssl:/root:fixture-password@db:4000/app",
+		"kafka+ssl:/fixture-password@broker:9093/topic",
+		"pulsar+https:/fixture-password@broker/topic",
+		"https:/user:fixture-password@registry.test",
+		"s3:/fixture-password@bucket/prefix",
+	} {
+		masked, err := MaskSinkURI(uri)
+		require.ErrorContains(t, err, "missing authority")
+		require.NotContains(t, err.Error(), "fixture-password")
+		require.Empty(t, masked)
+		require.Empty(t, MaskSensitiveDataInURI(uri))
+		require.Equal(t, "<invalid uri>", MaskSensitiveDataInURIForError(uri))
+	}
+
+	_, err := MaskSinkURI("mysql:/root:fixture-password%zz@db:3306/app")
+	require.EqualError(t, err, `parse "<invalid uri>": invalid URL escape`)
+
+	for _, tc := range []struct{ uri, masked string }{
+		{"mysql://root:fixture-password@db:3306/app", "mysql://root:xxxxx@db:3306/app"},
+		{"mysql://", "mysql:"},
+		{"mysql://?time-zone=UTC", "mysql:?time-zone=UTC"},
+		{"blackhole://", "blackhole:"},
+		{"file:///tmp/output", "file:///tmp/output"},
+		{"local:///tmp/output", "local:///tmp/output"},
+		{"noop://", "noop:"},
+	} {
+		masked, err := MaskSinkURI(tc.uri)
+		require.NoError(t, err)
+		require.Equal(t, tc.masked, masked)
+		require.Equal(t, tc.masked, MaskSensitiveDataInURI(tc.uri))
+	}
 }
 
 func TestHasMaskedSensitiveDataInURI(t *testing.T) {
@@ -156,6 +213,7 @@ func TestHasMaskedSensitiveDataInURI(t *testing.T) {
 	require.True(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=real-key&access-key=xxxxx"))
 	require.False(t, HasMaskedSensitiveDataInURI("s3://bucket/path?region=xxxxx"))
 	require.False(t, HasMaskedSensitiveDataInURI("s3://bucket/path?access-key=real-key"))
+	require.False(t, HasMaskedSensitiveDataInURI("kafka://broker:9093/cdc?kafka-client-id=xxxxx"))
 }
 
 func TestMaskSensitiveDataInURLError(t *testing.T) {
@@ -165,8 +223,7 @@ func TestMaskSensitiveDataInURLError(t *testing.T) {
 
 	maskedErr := MaskSensitiveDataInURLError(err)
 	require.NotContains(t, maskedErr.Error(), "verysecure")
-	require.Contains(t, maskedErr.Error(), `parse "<invalid uri>"`)
-	require.Equal(t, `parse "<invalid uri>": invalid URI`, maskedErr.Error())
+	require.EqualError(t, maskedErr, `parse "<invalid uri>": invalid URL escape`)
 
 	_, err = url.Parse("mysql://root:verysecure/more@host:3306/")
 	require.Error(t, err)

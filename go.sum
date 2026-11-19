@@ -110,8 +110,8 @@ github.com/andybalholm/brotli v1.3.0/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUS
 github.com/antihax/optional v1.0.0/go.mod h1:uupD/76wgC+ih3iEmQUL+0Ugr19nfwCT1kdvxnR2qWY=
 github.com/apache/pulsar-client-go v0.13.0 h1:XB8jbcVgBZlRkswtTFj6Xy3Hv0mtpvT8xn/ovT1c0I0=
 github.com/apache/pulsar-client-go v0.13.0/go.mod h1:btNzPWaKtG9geL6naJNYwXnqJJ/codYM41awyZxZLQ4=
-github.com/apache/thrift v0.23.0 h1:wKR6YnefQSEnxpEfmgTPuJibNG4bF0p2TK34tHLWi3s=
-github.com/apache/thrift v0.23.0/go.mod h1:zPt6WxgvTOM6hF92y8C+MkEM5LMxZuk4JcQOiU4Esvs=
+github.com/apache/thrift v0.24.0 h1:zy31L1a49QTNB2bG1BBfMXol3yJrTH975G3pPubQVLQ=
+github.com/apache/thrift v0.24.0/go.mod h1:zPt6WxgvTOM6hF92y8C+MkEM5LMxZuk4JcQOiU4Esvs=
 github.com/ardielle/ardielle-go v1.5.2 h1:TilHTpHIQJ27R1Tl/iITBzMwiUGSlVfiVhwDNGM3Zj4=
 github.com/ardielle/ardielle-go v1.5.2/go.mod h1:I4hy1n795cUhaVt/ojz83SNVCYIGsAFAONtv2Dr7HUI=
 github.com/ardielle/ardielle-tools v1.5.4/go.mod h1:oZN+JRMnqGiIhrzkRN9l26Cej9dEx4jeNG6A+AdkShk=
@@ -895,12 +895,12 @@ github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9 h1:qG9BSvlWFEE5otQGa
 github.com/pingcap/log v1.1.1-0.20250917021125-19901e015dc9/go.mod h1:ORfBOFp1eteu2odzsyaxI+b8TzJwgjwyQcGhI+9SfEA=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5 h1:T4pXRhBflzDeAhmOQHNPRRogMYxP13V7BkYw3ZsoSfE=
 github.com/pingcap/sysutil v1.0.1-0.20240311050922-ae81ee01f3a5/go.mod h1:rlimy0GcTvjiJqvD5mXTRr8O2eNZPBrcUgiWVYp9530=
-github.com/pingcap/tidb v1.1.0-beta.0.20261103190918-09ff01df1e0f h1:nTW6thrhwpqu8I0nQPSGksZolfpEQankQn2YbrQ3ogc=
-github.com/pingcap/tidb v1.1.0-beta.0.20261103190918-09ff01df1e0f/go.mod h1:XrBJheuPfWViF+U5uDSJcoK81J8piXn+pljqGmUavmE=
+github.com/pingcap/tidb v1.1.0-beta.0.20261113093556-507927a8e87b h1:AnVbJ3O1Gf+BJVuYyD6KBqrFBl/v0b/Efl5STTfe5Gk=
+github.com/pingcap/tidb v1.1.0-beta.0.20261113093556-507927a8e87b/go.mod h1:dmb8DRZ4aIBjiTluGCH881zf177l80HkFY6HFcxrFt0=
 github.com/pingcap/tidb-dashboard v0.0.0-20260603054940-9e92195886c3 h1:q7K62HENlnMTFi6ZfP1Xs3YD697J6agNGXYh42mMGlI=
 github.com/pingcap/tidb-dashboard v0.0.0-20260603054940-9e92195886c3/go.mod h1:dZXZ7smJd5ZkwDMHnPfrhnzUFNbL5kMU5MpFxRfKr0U=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20261103190918-09ff01df1e0f h1:R7p7m2bYqZXeoudzPUEHuurDxUtqY/qlONMSNa31D1Y=
-github.com/pingcap/tidb/pkg/parser v0.0.0-20261103190918-09ff01df1e0f/go.mod h1:j7nZLyIxjNqhBzinisqVOKpPz3C0XAJjuiaFRcvE0sw=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20261113093556-507927a8e87b h1:dEZw3hs54rsrhCFE1LVso0mdtwhBCCOSrwA/XGUaXNI=
+github.com/pingcap/tidb/pkg/parser v0.0.0-20261113093556-507927a8e87b/go.mod h1:uEcaw1qNm1YJ0aICD/M7Td48krrkHNVlfNoFC+X9ntI=
 github.com/pingcap/tipb v0.0.0-20260605083900-f9f651ef5fbc h1:wxolKysltFSu8gxWJBdUdWuTBoSuY3MjNIIZI5S9JLY=
 github.com/pingcap/tipb v0.0.0-20260605083900-f9f651ef5fbc/go.mod h1:A7mrd7WHBl1o63LE2bIBGEJMTNWXqhgmYiOvMLxozfs=
 github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c h1:+mdjkGKdHQG3305AYmdv1U2eRNDiU2ErMBj1gwrq8eQ=
