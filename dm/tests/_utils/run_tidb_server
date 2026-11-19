@@ -14,9 +14,9 @@ set -eu
 PORT=$1
 PASSWORD=$2
 STATUS_PORT=${4:-10080}
-TEST_DIR=${TEST_DIR:-/tmp/dm_test}
+TEST_DIR=/tmp/dm_test
 
-tmp_config="$TEST_DIR/tidb.toml"
+tmp_config="/tmp/dm_test/tidb.toml"
 rm -f $tmp_config
 
 # Next-gen TiDB rejects startup without a keyspace and requires a tikv-worker
