@@ -169,26 +169,27 @@ func (c *compactor) flushBuffer() {
 	}
 }
 
+// bufferJob caches a new job's causality keys and appends it to the buffer.
+// Keys are computed in the compactor goroutine because key generation uses
+// a TiDB session context shared with other buffered jobs.
 func (c *compactor) bufferJob(j *job) {
-	// Cache every DML's keys here so the causality stage does not evaluate
-	// keys concurrently with the compactor using the shared TiDB session context.
 	keys := j.dml.CausalityKeys()
+	// Reuse the backing array to collect deduplicated keys.
 	j.cachedCausalityKeys = &compactedCausality{keys: keys[:0]}
 	c.addCausalityKeys(j.cachedCausalityKeys, keys)
 	c.buffer = append(c.buffer, j)
 }
 
-// addCausalityKeys processes only the incoming row's keys. A group is only
-// extended while unblocked, so every key already in group.keys is still owned
-// by group in causalityKeyOwners (otherwise another group would have marked it
-// blocked and triggered a flush before merging). Checking previous == group
-// therefore deduplicates against the full history without rescanning it.
+// addCausalityKeys adds new keys to group and records their ownership.
+// If another group owns a key, block that group from further compaction
+// so its job cannot move past this dependent operation.
 func (c *compactor) addCausalityKeys(group *compactedCausality, keys []string) {
 	if c.causalityKeyOwners == nil {
 		c.causalityKeyOwners = make(map[string]*compactedCausality)
 	}
 	for _, key := range keys {
 		previous := c.causalityKeyOwners[key]
+		// An unblocked group still owns every key in its history.
 		if previous == group {
 			continue
 		}
