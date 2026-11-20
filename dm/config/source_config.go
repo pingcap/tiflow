@@ -58,6 +58,11 @@ var SampleSourceConfig string
 // PM's requirement, we always return obfuscated password to users.
 var ObfuscatedPasswordForFeedback string = "******"
 
+// ObfuscatedTLSContentForFeedback replaces inline TLS material in API responses.
+// It is not a valid PEM block: write paths restore the stored value when they
+// receive it, so it must never be persisted as-is.
+var ObfuscatedTLSContentForFeedback string = "REDACTED"
+
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
 	Interval    int64 `yaml:"interval" toml:"interval" json:"interval"`             // check whether need to purge at this @Interval (seconds)

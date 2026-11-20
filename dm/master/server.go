@@ -703,7 +703,10 @@ func (s *Server) GetSubTaskCfg(ctx context.Context, req *pb.GetSubTaskCfgRequest
 	cfgs := make([]string, 0, len(subCfgs))
 
 	for _, cfg := range subCfgs {
-		cfgBytes, err := cfg.Redacted().Toml()
+		// This API feeds sync_diff_inspector's dm-addr mode, which connects to
+		// the upstream and downstream itself, so database credentials must stay
+		// usable; only storage URLs are redacted.
+		cfgBytes, err := cfg.RedactedStorage().Toml()
 		if err != nil {
 			// nolint:nilerr
 			return &pb.GetSubTaskCfgResponse{
