@@ -715,3 +715,8 @@ func TestCheckChangefeedNormal(t *testing.T) {
 	stateTester.MustApplyPatches()
 	require.Equal(t, state.Status.CheckpointTs, uint64(2))
 }
+
+func TestWarmUpJSONCodecs(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, warmUpJSONCodecs())
+}
