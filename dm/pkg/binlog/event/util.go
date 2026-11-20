@@ -33,6 +33,7 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/charset"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	"github.com/pingcap/tiflow/dm/pkg/utils"
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/simplifiedchinese"
 )
@@ -453,6 +454,12 @@ func GetTimezoneByStatusVars(statusVars []byte, upstreamTZStr string) (string, e
 	if s == "SYSTEM" {
 		// replace it with the absolute upstream time zone
 		s = upstreamTZStr
+	}
+	// Reject values MySQL would not accept as a timezone. Besides validating
+	// the value, this prevents injecting quotes or comments into the
+	// SET SESSION TIME_ZONE statement built from it.
+	if _, tzErr := utils.ParseTimeZone(s); tzErr != nil {
+		return "", fmt.Errorf("invalid timezone %q in status_vars: %w", s, tzErr)
 	}
 	return s, err
 }
