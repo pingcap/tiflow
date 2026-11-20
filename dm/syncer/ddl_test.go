@@ -278,6 +278,27 @@ func (s *testDDLSuite) TestResolveDDLSQL(c *check.C) {
 	}
 }
 
+func (s *testDDLSuite) TestGenDDLInfoWithoutTable(c *check.C) {
+	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestGenDDLInfoWithoutTable")))
+	cfg := &config.SubTaskConfig{Flavor: mysql.MySQLFlavor}
+	syncer := NewSyncer(cfg, nil, nil)
+	syncer.tctx = tctx
+	c.Assert(syncer.genRouter(), check.IsNil)
+
+	ddlWorker := NewDDLWorker(&tctx.Logger, syncer)
+	// `UNLOCK TABLES` has no table, so genDDLInfo must return an error instead
+	// of letting callers index sourceTables[0].
+	qec := &queryEventContext{
+		eventContext: &eventContext{tctx: tctx},
+		ddlSchema:    "db",
+		originSQL:    "unlock tables",
+		p:            parser.New(),
+	}
+	_, err := ddlWorker.genDDLInfo(qec, "unlock tables")
+	c.Assert(err, check.NotNil)
+	c.Assert(err.Error(), check.Matches, ".*no table found in the DDL.*")
+}
+
 func (s *testDDLSuite) TestRejectForeignKeyDDL(c *check.C) {
 	tctx := tcontext.Background().WithLogger(log.With(zap.String("test", "TestRejectForeignKeyDDL")))
 	testEC := &eventContext{tctx: tctx}

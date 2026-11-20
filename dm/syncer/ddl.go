@@ -1335,6 +1335,11 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 	if err != nil {
 		return nil, err
 	}
+	if len(sourceTables) == 0 {
+		// e.g. `UNLOCK TABLES` is a DDL node without any table; callers index
+		// sourceTables[0], so reject it here instead of panicking.
+		return nil, terror.Annotatef(terror.ErrSyncerUnitParseStmt.New("no table found in the DDL"), "ddl %s", sql)
+	}
 
 	targetTables := make([]*filter.Table, 0, len(sourceTables))
 	for i := range sourceTables {
