@@ -101,6 +101,7 @@ type job struct {
 func (j *job) clone() *job {
 	newJob := &job{}
 	*newJob = *j
+	newJob.cachedCausalityKeys = nil
 	return newJob
 }
 

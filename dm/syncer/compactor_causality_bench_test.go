@@ -45,6 +45,7 @@ func BenchmarkCompactorCausality(b *testing.B) {
 		b.Fatal(err)
 	}
 	table := &cdcmodel.TableName{Schema: "bench", Table: "tb"}
+	whereHandle := sqlmodel.GetWhereHandle(ti, ti)
 	type change struct{ pre, post []interface{} }
 	for _, workload := range []string{"independent", "hot_stable", "hot_changing_uk", "interleaved_reuse"} {
 		sizes := []int{1000}
@@ -86,6 +87,7 @@ func BenchmarkCompactorCausality(b *testing.B) {
 				for range b.N {
 					for _, ch := range changes {
 						row := sqlmodel.NewRowChange(table, table, ch.pre, ch.post, ti, nil, nil)
+						row.SetWhereHandle(whereHandle)
 						c.compactJob(newDMLJob(row, ec))
 					}
 					c.flushBuffer()
@@ -102,4 +104,45 @@ func BenchmarkCompactorCausality(b *testing.B) {
 			})
 		}
 	}
+
+	b.Run("burst_then_single_flush/n1000", func(b *testing.B) {
+		const (
+			burstSize   = 4000
+			singleCount = 1000
+		)
+		c := &compactor{
+			logger: log.L(), keyMap: make(map[string]map[string]int),
+			buffer: make([]*job, 0, burstSize), outCh: make(chan *job, burstSize),
+			updateJobMetricsFn: func(bool, string, *job) {},
+		}
+		for i := range burstSize {
+			row := sqlmodel.NewRowChange(table, table, []interface{}{i, i, 0}, []interface{}{i, i, 1}, ti, nil, nil)
+			row.SetWhereHandle(whereHandle)
+			c.compactJob(newDMLJob(row, ec))
+		}
+		c.flushBuffer()
+		for len(c.outCh) > 0 {
+			<-c.outCh
+		}
+
+		emitted := 0
+		b.ReportAllocs()
+		b.ResetTimer()
+		start := time.Now()
+		for range b.N {
+			for i := range singleCount {
+				row := sqlmodel.NewRowChange(table, table, []interface{}{i, i, 0}, []interface{}{i, i, 1}, ti, nil, nil)
+				row.SetWhereHandle(whereHandle)
+				c.compactJob(newDMLJob(row, ec))
+				c.flushBuffer()
+				j := <-c.outCh
+				benchmarkCausalityKeyCount += len(j.causalityKeys())
+				emitted++
+			}
+		}
+		elapsed := time.Since(start)
+		b.StopTimer()
+		b.ReportMetric(float64(elapsed.Nanoseconds())/float64(b.N*singleCount), "ns/input")
+		b.ReportMetric(float64(emitted)/float64(b.N*singleCount), "output/input")
+	})
 }

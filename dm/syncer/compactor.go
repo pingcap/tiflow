@@ -25,6 +25,10 @@ import (
 	"go.uber.org/zap"
 )
 
+// maxRetainedCausalityKeyOwners bounds the map capacity retained across
+// flushes so a burst batch does not pin peak memory or slow down small flushes.
+const maxRetainedCausalityKeyOwners = 512
+
 // compactedCausality stays with a merged job as its buffer position changes.
 // A later job using one of its keys blocks further moves across that job.
 // Once flushed, it is read-only for the downstream causality stage.
@@ -156,24 +160,29 @@ func (c *compactor) flushBuffer() {
 		}
 	}
 	c.keyMap = make(map[string]map[string]int)
+	clear(c.buffer)
 	c.buffer = c.buffer[0:0]
-	clear(c.causalityKeyOwners)
+	if len(c.causalityKeyOwners) > maxRetainedCausalityKeyOwners {
+		c.causalityKeyOwners = nil
+	} else {
+		clear(c.causalityKeyOwners)
+	}
 }
 
 func (c *compactor) bufferJob(j *job) {
 	// Cache every DML's keys here so the causality stage does not evaluate
 	// keys concurrently with the compactor using the shared TiDB session context.
-	if j.cachedCausalityKeys == nil {
-		keys := j.dml.CausalityKeys()
-		j.cachedCausalityKeys = &compactedCausality{keys: keys[:0]}
-		c.addCausalityKeys(j.cachedCausalityKeys, keys)
-	}
+	keys := j.dml.CausalityKeys()
+	j.cachedCausalityKeys = &compactedCausality{keys: keys[:0]}
+	c.addCausalityKeys(j.cachedCausalityKeys, keys)
 	c.buffer = append(c.buffer, j)
 }
 
-// addCausalityKeys processes only the incoming row's keys. Ownership of older
-// keys stays with the group across merges, so neither deduplication nor conflict
-// detection needs to scan the accumulated history.
+// addCausalityKeys processes only the incoming row's keys. A group is only
+// extended while unblocked, so every key already in group.keys is still owned
+// by group in causalityKeyOwners (otherwise another group would have marked it
+// blocked and triggered a flush before merging). Checking previous == group
+// therefore deduplicates against the full history without rescanning it.
 func (c *compactor) addCausalityKeys(group *compactedCausality, keys []string) {
 	if c.causalityKeyOwners == nil {
 		c.causalityKeyOwners = make(map[string]*compactedCausality)
@@ -255,7 +264,7 @@ func (c *compactor) compactJob(j *job) {
 	// mark previous job as compacted(nil), add new job
 	c.buffer[prevPos] = nil
 	tableKeyMap[key] = len(c.buffer)
-	c.bufferJob(j)
+	c.buffer = append(c.buffer, j)
 	c.logger.Debug("finish to compact", zap.Stringer("dml", j.dml))
 	c.updateJobMetricsFn(true, adminQueueName, newCompactJob(prevJob.targetTable))
 }
