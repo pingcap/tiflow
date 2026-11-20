@@ -36,18 +36,25 @@ func (c *Cond) GetArgs() []interface{} {
 	return res
 }
 
+// quoteIdentifier quotes a MySQL identifier. Column names come from the
+// upstream schema and are attacker-controlled, so they must not be pasted into
+// the WHERE clause as SQL text.
+func quoteIdentifier(name string) string {
+	return "`" + strings.ReplaceAll(name, "`", "``") + "`"
+}
+
 func (c *Cond) GetWhere() string {
 	var b strings.Builder
 	isOneKey := len(c.PK.Columns) == 1
 	if isOneKey {
-		b.WriteString(c.PK.Columns[0].Name.O)
+		b.WriteString(quoteIdentifier(c.PK.Columns[0].Name.O))
 	} else {
 		b.WriteString("(")
 		for i := 0; i < len(c.PK.Columns); i++ {
 			if i != 0 {
 				b.WriteString(",")
 			}
-			b.WriteString(c.PK.Columns[i].Name.O)
+			b.WriteString(quoteIdentifier(c.PK.Columns[i].Name.O))
 		}
 		b.WriteString(")")
 	}
