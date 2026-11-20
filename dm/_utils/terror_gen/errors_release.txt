@@ -205,6 +205,7 @@ ErrConfigImportIntoShardingNotSupport,[code=20068:class=config:scope=internal:le
 ErrConfigImportIntoRequiresSharedStorage,[code=20069:class=config:scope=internal:level=high], "Message: import-into mode requires shared storage (s3, gcs, azure, etc.) for loader's dir, but got local path '%s', Workaround: Please use a shared storage URI like s3://bucket/path"
 ErrConfigUnsupportedForeignKeyChecksOption,[code=20070:class=config:scope=internal:level=medium], "Message: `%s` is not supported when foreign_key_checks=1, Workaround: Please disable `foreign_key_checks`, or disable this syncer option in task configuration file."
 ErrConfigInvalidMetricLabels,[code=20071:class=config:scope=internal:level=medium], "Message: invalid metric labels: %s, Workaround: Please check the `metric-labels` config in the task configuration."
+ErrConfigInvalidSessionVar,[code=20072:class=config:scope=internal:level=medium], "Message: invalid session variable name: %s, Workaround: Please check the `session` config in the configuration file, the name can only contain letters, digits, '_', '.' and '-'."
 ErrBinlogExtractPosition,[code=22001:class=binlog-op:scope=internal:level=high]
 ErrBinlogInvalidFilename,[code=22002:class=binlog-op:scope=internal:level=high], "Message: invalid binlog filename"
 ErrBinlogParsePosFromStr,[code=22003:class=binlog-op:scope=internal:level=high]
