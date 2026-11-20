@@ -25,6 +25,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// maxRetainedCausalityKeyOwners bounds the map capacity retained across
+// flushes so a burst batch does not pin peak memory or slow down small flushes.
+const maxRetainedCausalityKeyOwners = 512
+
+// compactedCausality stays with a merged job as its buffer position changes.
+// A later job using one of its keys blocks further moves across that job.
+// Once flushed, it is read-only for the downstream causality stage.
+type compactedCausality struct {
+	keys    []string
+	blocked bool
+}
+
 // compactor compacts multiple statements into one statement.
 type compactor struct {
 	inCh       chan *job
@@ -35,6 +47,8 @@ type compactor struct {
 
 	keyMap map[string]map[string]int // table -> key(pk or (uk + not null)) -> index in buffer
 	buffer []*job
+
+	causalityKeyOwners map[string]*compactedCausality // key -> last group using it
 
 	// for MetricsProxies
 	task               string
@@ -94,7 +108,7 @@ func (c *compactor) run() {
 			}
 			// if dml has no PK/NOT NULL UK, do not compact it.
 			if !j.dml.HasNotNullUniqueIdx() {
-				c.buffer = append(c.buffer, j)
+				c.bufferJob(j)
 				continue
 			}
 
@@ -146,7 +160,45 @@ func (c *compactor) flushBuffer() {
 		}
 	}
 	c.keyMap = make(map[string]map[string]int)
+	clear(c.buffer)
 	c.buffer = c.buffer[0:0]
+	if len(c.causalityKeyOwners) > maxRetainedCausalityKeyOwners {
+		c.causalityKeyOwners = nil
+	} else {
+		clear(c.causalityKeyOwners)
+	}
+}
+
+// bufferJob caches a new job's causality keys and appends it to the buffer.
+// Keys are computed in the compactor goroutine because key generation uses
+// a TiDB session context shared with other buffered jobs.
+func (c *compactor) bufferJob(j *job) {
+	keys := j.dml.CausalityKeys()
+	// Reuse the backing array to collect deduplicated keys.
+	j.cachedCausalityKeys = &compactedCausality{keys: keys[:0]}
+	c.addCausalityKeys(j.cachedCausalityKeys, keys)
+	c.buffer = append(c.buffer, j)
+}
+
+// addCausalityKeys adds new keys to group and records their ownership.
+// If another group owns a key, block that group from further compaction
+// so its job cannot move past this dependent operation.
+func (c *compactor) addCausalityKeys(group *compactedCausality, keys []string) {
+	if c.causalityKeyOwners == nil {
+		c.causalityKeyOwners = make(map[string]*compactedCausality)
+	}
+	for _, key := range keys {
+		previous := c.causalityKeyOwners[key]
+		// An unblocked group still owns every key in its history.
+		if previous == group {
+			continue
+		}
+		if previous != nil {
+			previous.blocked = true
+		}
+		c.causalityKeyOwners[key] = group
+		group.keys = append(group.keys, key)
+	}
 }
 
 // compactJob compact jobs.
@@ -184,12 +236,25 @@ func (c *compactor) compactJob(j *job) {
 	// if no such key in the buffer, add it
 	if !ok {
 		tableKeyMap[key] = len(c.buffer)
-		c.buffer = append(c.buffer, j)
+		c.bufferJob(j)
 		return
 	}
 
 	prevJob := c.buffer[prevPos]
+	if prevJob.cachedCausalityKeys.blocked {
+		// Moving the previous job here would cross a dependent row change.
+		// Flush it in its original position before merging any more jobs.
+		c.flushBuffer()
+		c.safeMode = j.safeMode
+		c.compactJob(j)
+		return
+	}
 	c.logger.Debug("start to compact", zap.Stringer("previous dml", prevJob.dml), zap.Stringer("current dml", j.dml))
+
+	// Snapshot dependencies before Reduce overwrites row images, including keys
+	// retained by earlier merges. DELETE + INSERT must still release the old UK.
+	j.cachedCausalityKeys = prevJob.cachedCausalityKeys
+	c.addCausalityKeys(j.cachedCausalityKeys, j.dml.CausalityKeys())
 
 	// adjust safemode
 	adjustSafeMode(j, prevJob)

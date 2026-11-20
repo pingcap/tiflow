@@ -93,12 +93,23 @@ type job struct {
 	flushWg     *sync.WaitGroup // wait group for sync, async and conflict job
 	timestamp   uint32
 	timezone    string
+
+	// Includes keys from row images removed by compaction.
+	cachedCausalityKeys *compactedCausality
 }
 
 func (j *job) clone() *job {
 	newJob := &job{}
 	*newJob = *j
+	newJob.cachedCausalityKeys = nil
 	return newJob
+}
+
+func (j *job) causalityKeys() []string {
+	if j.cachedCausalityKeys != nil {
+		return j.cachedCausalityKeys.keys
+	}
+	return j.dml.CausalityKeys()
 }
 
 func (j *job) String() string {
