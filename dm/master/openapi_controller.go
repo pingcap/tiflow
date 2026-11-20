@@ -146,6 +146,15 @@ func (s *Server) updateSource(ctx context.Context, sourceName string, req openap
 
 	// update's request will be no password when user doesn't input password and wants to use old password.
 	if req.Source.Password == nil {
+		// Reusing the stored password against a caller-chosen endpoint would
+		// hand the credential to whoever controls that endpoint (the config is
+		// checked by connecting to it), so require it explicitly then.
+		if newCfg.From.Host != oldCfg.From.Host ||
+			newCfg.From.Port != oldCfg.From.Port ||
+			newCfg.From.User != oldCfg.From.User {
+			return nil, terror.ErrOpenAPICommonError.Generatef(
+				"the password must be provided explicitly when changing the source host, port or user")
+		}
 		newCfg.From.Password = oldCfg.From.Password
 	}
 
