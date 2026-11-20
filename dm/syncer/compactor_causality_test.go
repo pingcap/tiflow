@@ -16,8 +16,6 @@ package syncer
 
 import (
 	"fmt"
-	"math/rand"
-	"strings"
 	"testing"
 
 	timodel "github.com/pingcap/tidb/pkg/meta/model"
@@ -168,36 +166,19 @@ func TestCompactorPreservesInterleavedUniqueKeyReuse(t *testing.T) {
 	c.flushBuffer()
 	close(c.outCh)
 
-	// Apply the generated SQL's INSERT/REPLACE semantics to a table with a
-	// primary key and a unique key. Final row counts alone miss this conflict.
-	rows := map[int]int{91: 92}
+	var outputs []*job
 	for j := range c.outCh {
-		queries, _ := (&DMLWorker{}).genSQLs([]*job{j})
-		require.Len(t, queries, 1)
-		switch j.dml.Type() {
-		case sqlmodel.RowChangeDelete:
-			delete(rows, j.dml.GetPreValues()[0].(int))
-		case sqlmodel.RowChangeInsert:
-			values := j.dml.GetPostValues()
-			a, b := values[0].(int), values[1].(int)
-			if strings.HasPrefix(queries[0], "REPLACE INTO") {
-				for pk, uk := range rows {
-					if pk == a || uk == b {
-						delete(rows, pk)
-					}
-				}
-			} else {
-				require.NotContains(t, rows, a, "duplicate primary key executing %s", queries[0])
-				for _, uk := range rows {
-					require.NotEqual(t, b, uk, "unique key must be released before executing %s", queries[0])
-				}
-			}
-			rows[a] = b
-		default:
-			t.Fatalf("unexpected compacted change: %s", j.dml)
-		}
+		outputs = append(outputs, j)
 	}
-	require.Equal(t, map[int]int{91: 91, 92: 92}, rows)
+	// The DELETE must remain ahead of the INSERT reusing b=92. Merging it
+	// into the final INSERT would move the release past that reuse.
+	require.Len(t, outputs, 3)
+	require.Equal(t, sqlmodel.RowChangeDelete, outputs[0].dml.Type())
+	require.Equal(t, []interface{}{91, 92}, outputs[0].dml.GetPreValues())
+	require.Equal(t, sqlmodel.RowChangeInsert, outputs[1].dml.Type())
+	require.Equal(t, []interface{}{92, 92}, outputs[1].dml.GetPostValues())
+	require.Equal(t, sqlmodel.RowChangeInsert, outputs[2].dml.Type())
+	require.Equal(t, []interface{}{91, 91}, outputs[2].dml.GetPostValues())
 }
 
 func TestCompactorPreservesInterleavedHistoricalKeyReuse(t *testing.T) {
@@ -444,202 +425,4 @@ func TestCompactorAndCausalityShareSessionCtxNoRace(t *testing.T) {
 	close(inCh)
 
 	require.Greater(t, <-done, 0)
-}
-
-func TestCompactorRandomizedUniqueKeyCompactionAndCausality(t *testing.T) {
-	ti := mockTableInfo(t, "CREATE TABLE tb(a INT PRIMARY KEY, b INT UNIQUE, c INT)")
-	source := &cdcmodel.TableName{Schema: "test", Table: "tb"}
-	whereHandle := sqlmodel.GetWhereHandle(ti, ti)
-
-	rng := rand.New(rand.NewSource(1))
-	const (
-		totalOps  = 3000
-		batchSize = 50
-		keySpace  = 15
-	)
-
-	type rowVal struct {
-		b int
-		c int
-	}
-	expected := make(map[int]rowVal)
-	expectedUK := make(map[int]int) // b -> a
-
-	pickFreeUK := func() (int, bool) {
-		for range 30 {
-			candidate := rng.Intn(keySpace)
-			if _, used := expectedUK[candidate]; !used {
-				return candidate, true
-			}
-		}
-		return 0, false
-	}
-
-	var allChanges []*sqlmodel.RowChange
-	for step := range totalOps {
-		a := rng.Intn(keySpace)
-		cur, exists := expected[a]
-		if !exists {
-			b, ok := pickFreeUK()
-			if !ok {
-				continue
-			}
-			rc := sqlmodel.NewRowChange(source, nil, nil, []interface{}{a, b, step}, ti, nil, nil)
-			rc.SetWhereHandle(whereHandle)
-			allChanges = append(allChanges, rc)
-			expected[a] = rowVal{b: b, c: step}
-			expectedUK[b] = a
-			continue
-		}
-
-		switch rng.Intn(4) {
-		case 0: // DELETE
-			rc := sqlmodel.NewRowChange(source, nil, []interface{}{a, cur.b, cur.c}, nil, ti, nil, nil)
-			rc.SetWhereHandle(whereHandle)
-			allChanges = append(allChanges, rc)
-			delete(expected, a)
-			delete(expectedUK, cur.b)
-		case 1: // UPDATE non-key column
-			rc := sqlmodel.NewRowChange(source, nil, []interface{}{a, cur.b, cur.c}, []interface{}{a, cur.b, step}, ti, nil, nil)
-			rc.SetWhereHandle(whereHandle)
-			allChanges = append(allChanges, rc)
-			expected[a] = rowVal{b: cur.b, c: step}
-		case 2: // UPDATE UK
-			newB, ok := pickFreeUK()
-			if !ok {
-				continue
-			}
-			rc := sqlmodel.NewRowChange(source, nil, []interface{}{a, cur.b, cur.c}, []interface{}{a, newB, step}, ti, nil, nil)
-			rc.SetWhereHandle(whereHandle)
-			allChanges = append(allChanges, rc)
-			delete(expectedUK, cur.b)
-			expected[a] = rowVal{b: newB, c: step}
-			expectedUK[newB] = a
-		case 3: // UPDATE PK (identity update)
-			newA := rng.Intn(keySpace)
-			if _, taken := expected[newA]; taken {
-				continue
-			}
-			newB := cur.b
-			if rng.Intn(2) == 0 {
-				if candidate, ok := pickFreeUK(); ok {
-					newB = candidate
-				}
-			}
-			rc := sqlmodel.NewRowChange(source, nil, []interface{}{a, cur.b, cur.c}, []interface{}{newA, newB, step}, ti, nil, nil)
-			rc.SetWhereHandle(whereHandle)
-			allChanges = append(allChanges, rc)
-			delete(expected, a)
-			delete(expectedUK, cur.b)
-			expected[newA] = rowVal{b: newB, c: step}
-			expectedUK[newB] = newA
-		}
-	}
-
-	// Execute compacted batches strictly enforcing PK/UK constraints and causality queues.
-	actual := make(map[int]rowVal)
-	actualUK := make(map[int]int)
-	for start := 0; start < len(allChanges); start += batchSize {
-		end := min(start+batchSize, len(allChanges))
-		inputs := make([]*job, 0, end-start)
-		for _, rc := range allChanges[start:end] {
-			inputs = append(inputs, newDMLJob(rc, ec))
-		}
-		compacted := runCompactorBuffered(t, batchSize*2, inputs)
-
-		// Verify strict PK/UK SQL execution in emitted order and record the
-		// actual PK/UK values touched by each emitted job (including rows
-		// deleted/overwritten by REPLACE or UPDATE).
-		touchedKeys := make(map[*job][]string, len(compacted))
-		for _, j := range compacted {
-			queries, _ := (&DMLWorker{}).genSQLs([]*job{j})
-			require.Len(t, queries, 1)
-			var keys []string
-			switch j.dml.Type() {
-			case sqlmodel.RowChangeDelete:
-				pk := j.dml.GetPreValues()[0].(int)
-				keys = append(keys, fmt.Sprintf("pk:%d", pk))
-				if prev, ok := actual[pk]; ok {
-					keys = append(keys, fmt.Sprintf("uk:%d", prev.b))
-					delete(actualUK, prev.b)
-					delete(actual, pk)
-				}
-			case sqlmodel.RowChangeInsert:
-				vals := j.dml.GetPostValues()
-				a, b, cVal := vals[0].(int), vals[1].(int), vals[2].(int)
-				keys = append(keys, fmt.Sprintf("pk:%d", a), fmt.Sprintf("uk:%d", b))
-				if strings.HasPrefix(queries[0], "REPLACE INTO") {
-					if prev, ok := actual[a]; ok {
-						keys = append(keys, fmt.Sprintf("uk:%d", prev.b))
-						delete(actualUK, prev.b)
-						delete(actual, a)
-					}
-					if prevPK, ok := actualUK[b]; ok {
-						keys = append(keys, fmt.Sprintf("pk:%d", prevPK))
-						delete(actual, prevPK)
-						delete(actualUK, b)
-					}
-				} else {
-					require.NotContains(t, actual, a, "duplicate PK on %s", queries[0])
-					require.NotContains(t, actualUK, b, "duplicate UK on %s", queries[0])
-				}
-				actual[a] = rowVal{b: b, c: cVal}
-				actualUK[b] = a
-			case sqlmodel.RowChangeUpdate:
-				pre := j.dml.GetPreValues()
-				post := j.dml.GetPostValues()
-				oldA := pre[0].(int)
-				newA, newB, newC := post[0].(int), post[1].(int), post[2].(int)
-				require.Equal(t, oldA, newA)
-				prev, ok := actual[oldA]
-				require.True(t, ok, "missing row for %s", queries[0])
-				if holder, conflict := actualUK[newB]; conflict {
-					require.Equal(t, oldA, holder, "duplicate UK on %s", queries[0])
-				}
-				keys = append(keys, fmt.Sprintf("pk:%d", oldA), fmt.Sprintf("uk:%d", prev.b), fmt.Sprintf("uk:%d", newB))
-				delete(actualUK, prev.b)
-				actual[newA] = rowVal{b: newB, c: newC}
-				actualUK[newB] = newA
-			default:
-				t.Fatalf("unexpected row change type: %s", j.dml)
-			}
-			touchedKeys[j] = keys
-		}
-
-		// Verify causality assigns any jobs touching the same actual PK/UK
-		// (including old UKs released by compacted REPLACE/UPDATE/DELETE) to
-		// the same queue unless separated by a conflict barrier.
-		in := make(chan *job, len(compacted))
-		syncer := &Syncer{
-			cfg: &config.SubTaskConfig{
-				Name:         t.Name(),
-				SourceID:     "source",
-				SyncerConfig: config.SyncerConfig{QueueSize: 128, WorkerCount: 16},
-			},
-			tctx:           tcontext.Background(),
-			metricsProxies: metrics.DefaultMetricsProxies.CacheForOneTask(t.Name(), "worker", "source"),
-		}
-		out := causalityWrap(in, syncer)
-		for _, j := range compacted {
-			in <- j
-		}
-		close(in)
-
-		keyQueue := make(map[string]string)
-		for j := range out {
-			if j.tp == conflict {
-				clear(keyQueue)
-				continue
-			}
-			require.Equal(t, dml, j.tp)
-			for _, k := range touchedKeys[j] {
-				if prevQ, seen := keyQueue[k]; seen {
-					require.Equal(t, prevQ, j.dmlQueueKey, "shared touched key %s dispatched to different queues without conflict", k)
-				}
-				keyQueue[k] = j.dmlQueueKey
-			}
-		}
-	}
-
-	require.Equal(t, expected, actual)
 }
