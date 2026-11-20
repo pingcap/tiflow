@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tcontext "github.com/pingcap/tiflow/dm/pkg/context"
-	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"go.uber.org/atomic"
 	"go.uber.org/zap"
 )
@@ -77,7 +76,7 @@ func (w *checkpointFlushWorker) Run(ctx *tcontext.Context) {
 		// optimistic shard info, DM-master may resolved the optimistic lock and let other worker execute DDL. So after this
 		// worker resume, it can not execute the DML/DDL in old binlog because of downstream table structure mismatching.
 		// We should find a way to (compensating) implement a transaction containing interaction with both etcd and SQL.
-		if err != nil && (terror.ErrDBExecuteFailed.Equal(err) || terror.ErrDBUnExpect.Equal(err)) {
+		if isDownstreamExecutionError(err) {
 			ctx.L().Warn(fmt.Sprintf("error detected when executing SQL job, skip %s checkpoint and shutdown checkpointFlushWorker", flushLogMsg),
 				zap.Stringer("globalPos", task.snapshotInfo.globalPos),
 				zap.Error(err))
