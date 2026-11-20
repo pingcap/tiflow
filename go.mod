@@ -51,7 +51,7 @@ require (
 	github.com/go-oauth2/oauth2/v4 v4.5.4
 	github.com/go-ozzo/ozzo-validation/v4 v4.3.0
 	github.com/go-sql-driver/mysql v1.8.1
-	github.com/goccy/go-json v0.11.0
+	github.com/goccy/go-json v0.12.0
 	github.com/gogo/gateway v1.1.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
