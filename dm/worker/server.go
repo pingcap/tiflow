@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tiflow/dm/common"
@@ -822,6 +823,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 	if sourceErr := w.getSourceStatusErr(); sourceErr != nil {
 		if resp.SourceStatus.Result == nil {
 			resp.SourceStatus.Result = &pb.ProcessResult{}
+		} else {
+			// Do not append the current error to the saved source result.
+			resp.SourceStatus.Result = proto.Clone(resp.SourceStatus.Result).(*pb.ProcessResult)
 		}
 		resp.SourceStatus.Result.Errors = append(resp.SourceStatus.Result.Errors, sourceErr)
 	}
