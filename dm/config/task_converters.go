@@ -657,11 +657,16 @@ func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Ta
 			}
 		}
 		if filterRuleList, ok := filterMap[sourceName]; ok {
-			ruleNameList := make([]string, len(filterRuleList))
-			for idx := range filterRuleList {
-				ruleNameList[idx] = genFilterRuleName(sourceName, idx)
+			var ruleNameList []string
+			for idx, rule := range filterRuleList {
+				// The forward conversion copies the migrate rule's patterns into each filter.
+				if rule.SchemaPattern == schemaPattern && rule.TablePattern == tablePattern {
+					ruleNameList = append(ruleNameList, genFilterRuleName(sourceName, idx))
+				}
 			}
-			tableMigrateRule.BinlogFilterRule = &ruleNameList
+			if len(ruleNameList) > 0 {
+				tableMigrateRule.BinlogFilterRule = &ruleNameList
+			}
 		}
 		ruleKey := strings.Join([]string{sourceName, schemaPattern, tablePattern}, "-")
 		if _, ok := ruleMap[ruleKey]; ok {
