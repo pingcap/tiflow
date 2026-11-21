@@ -73,10 +73,10 @@ download_community_binaries() {
 	local dist="${VERSION}-${OS}-${ARCH}"
 	local tidb_file_name="tidb-community-server-$dist"
 	local tidb_tar_name="${tidb_file_name}.tar.gz"
-	local tidb_url="https://download.pingcap.org/$tidb_tar_name"
+	local tidb_url="https://download.pingcap.com/$tidb_tar_name"
 	local toolkit_file_name="tidb-community-toolkit-$dist"
 	local toolkit_tar_name="${toolkit_file_name}.tar.gz"
-	local toolkit_url="https://download.pingcap.org/$toolkit_tar_name"
+	local toolkit_url="https://download.pingcap.com/$toolkit_tar_name"
 
 	log_green "Downloading community binaries..."
 	download_file "$tidb_url" "$tidb_tar_name" "${TMP_DIR}/$tidb_tar_name"
