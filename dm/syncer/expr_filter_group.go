@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 	"github.com/pingcap/tiflow/dm/pkg/utils"
+	"github.com/pingcap/tiflow/pkg/sqlmodel"
 	"go.uber.org/zap"
 )
 
@@ -193,13 +194,10 @@ func rowForExpressionFilter(
 
 	values := row
 	if len(row) != len(upstreamCols) {
-		visibleCols := visibleColumns(upstreamCols)
-		if len(row) != len(visibleCols) {
-			return chunk.Row{}, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(len(visibleCols), len(row))
-		}
-		fullValues := make([]interface{}, len(upstreamCols))
-		for i, col := range visibleCols {
-			fullValues[col.Offset] = row[i]
+		layout := sqlmodel.NewRowImageLayoutFromColumns(upstreamCols, nil)
+		fullValues, ok := layout.FullValues(row)
+		if !ok {
+			return chunk.Row{}, terror.ErrSyncerUnitDMLColumnNotMatch.Generate(layout.VisibleColumnCount(), len(row))
 		}
 		values = fullValues
 	}
