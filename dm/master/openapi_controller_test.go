@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/optimism"
 	"github.com/pingcap/tiflow/dm/pkg/shardddl/pessimism"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
+	bf "github.com/pingcap/tiflow/pkg/binlog-filter"
 	"github.com/stretchr/testify/suite"
 	"google.golang.org/grpc"
 )
@@ -487,6 +488,69 @@ func (s *OpenAPIControllerSuite) TestCreateTaskRejectsInvalidTimezone() {
 	res, err := server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
 	s.Nil(res)
 	s.True(terror.ErrConfigInvalidTimezone.Equal(err))
+}
+
+func (s *OpenAPIControllerSuite) TestTaskBinlogFilterPatterns() {
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, s.T())
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	workerName := "worker1"
+	s.Require().NoError(server.scheduler.AddWorker(workerName, "127.0.0.1:8262"))
+	server.scheduler.GetWorkerByName(workerName).ToFree()
+	_, err := server.createSource(ctx, openapi.CreateSourceRequest{Source: *s.testSource, WorkerName: &workerName})
+	s.Require().NoError(err)
+
+	task, err := fixtures.GenNoShardOpenAPITaskForTest()
+	s.Require().NoError(err)
+	task.BinlogFilterRule = &openapi.Task_BinlogFilterRule{AdditionalProperties: map[string]openapi.TaskBinLogFilterRule{
+		"delete": {IgnoreEvent: &[]string{"delete"}},
+		"update": {IgnoreEvent: &[]string{"update"}},
+		"merged": {IgnoreEvent: &[]string{"delete", "update"}},
+	}}
+	task.TableMigrateRule = []openapi.TaskTableMigrateRule{{
+		Source:           openapi.TaskTableMigrateRuleSource{SourceName: s.testSource.SourceName, Schema: "db", Table: "t"},
+		BinlogFilterRule: &[]string{"delete", "update"},
+	}}
+	res, err := server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
+	s.Nil(res)
+	s.True(terror.ErrConfigBinlogEventFilter.Equal(err))
+	s.ErrorContains(err, "duplicate schema-pattern")
+	s.Empty(server.scheduler.GetSubTaskCfgsByTask(task.Name))
+
+	// Multiple events in one rule remain supported and both are filtered.
+	task.TableMigrateRule[0].BinlogFilterRule = &[]string{"merged"}
+	_, err = server.createTask(ctx, openapi.CreateTaskRequest{Task: task})
+	s.Require().NoError(err)
+	cfg := server.scheduler.GetSubTaskCfgsByTask(task.Name)[s.testSource.SourceName]
+	s.Require().Len(cfg.FilterRules, 1)
+	f, err := bf.NewBinlogEvent(cfg.CaseSensitive, cfg.FilterRules)
+	s.Require().NoError(err)
+	for _, event := range []bf.EventType{bf.DeleteEvent, bf.UpdateEvent} {
+		action, filterErr := f.Filter("db", "t", event, "")
+		s.NoError(filterErr)
+		s.Equal(bf.Ignore, action)
+	}
+
+	// Invalid updates must leave the accepted configuration unchanged.
+	task.TableMigrateRule[0].BinlogFilterRule = &[]string{"update", "delete"}
+	res, err = server.updateTask(ctx, openapi.UpdateTaskRequest{Task: task})
+	s.Nil(res)
+	s.True(terror.ErrConfigBinlogEventFilter.Equal(err))
+	s.Equal(cfg.FilterRules, server.scheduler.GetSubTaskCfgsByTask(task.Name)[s.testSource.SourceName].FilterRules)
+
+	// Starting an already persisted legacy task does not submit a new config.
+	legacy, err := cfg.Clone()
+	s.Require().NoError(err)
+	legacy.Name += "-legacy"
+	legacy.FilterRules = append(legacy.FilterRules,
+		&bf.BinlogEventRule{SchemaPattern: "db", TablePattern: "t", Events: []bf.EventType{bf.InsertEvent}, Action: bf.Ignore},
+		&bf.BinlogEventRule{SchemaPattern: "legacy", Events: []bf.EventType{"truncate"}, Action: bf.Ignore})
+	s.Require().NoError(server.scheduler.AddSubTasks(false, pb.Stage_Stopped, *legacy))
+	s.NoError(server.startTask(ctx, legacy.Name, openapi.StartTaskRequest{}))
 }
 
 func (s *OpenAPIControllerSuite) TestTaskStatusSourceErrorFallback() {
