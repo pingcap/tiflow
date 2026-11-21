@@ -72,6 +72,125 @@ func TestIdentityUpdatedWithUniqueKeys(t *testing.T) {
 	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
 }
 
+// TestIdentityUpdatedWithBinaryKeys covers key columns that reach sqlmodel as
+// []byte. Applying != to an interface that holds a slice panics with
+// "comparing uncomparable type []uint8", so equality has to go through
+// bytes.Equal. Values with equal contents but distinct backing arrays must
+// compare equal, otherwise a safe-mode UPDATE reports a spurious key change and
+// writes a needless DELETE.
+//
+// Two column kinds reach here as []byte:
+//   - BINARY and binary CHAR, which adjustValues converts from string because
+//     the column is TypeString with the binary flag set;
+//   - BLOB and TEXT, which the binlog decoder already returns as []byte.
+//
+// A GBK column takes the same conversion, so it behaves like the first kind.
+func TestIdentityUpdatedWithBinaryKeys(t *testing.T) {
+	t.Parallel()
+
+	source := &cdcmodel.TableName{Schema: "db", Table: "tb1"}
+
+	// A single BINARY primary key. The first comparison hits the binary column.
+	singleColTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id BINARY(16) NOT NULL, val INT, PRIMARY KEY (id))")
+
+	change := NewRowChange(source, nil,
+		[]interface{}{[]byte("0123456789abcdef"), 7},
+		[]interface{}{[]byte("0123456789abcdef"), 9},
+		singleColTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]interface{}{[]byte("0123456789abcdef"), 7},
+		[]interface{}{[]byte("fedcba9876543210"), 7},
+		singleColTI, nil, nil)
+	require.True(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	// A multi-column primary key whose trailing columns are BINARY. All columns
+	// are NOT NULL, so the primary key becomes UniqueNotNullIdx and the fault
+	// would land on a later comparison rather than the first.
+	multiColTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"entity_id BIGINT NOT NULL, entity_type_id INT NOT NULL, "+
+		"principal BINARY(16) NOT NULL, reference BINARY(16) NOT NULL, "+
+		"val INT, "+
+		"PRIMARY KEY (entity_id, entity_type_id, principal, reference))")
+
+	change = NewRowChange(source, nil,
+		[]interface{}{1, 2, []byte("principal00000001"), []byte("reference00000001"), 7},
+		[]interface{}{1, 2, []byte("principal00000001"), []byte("reference00000001"), 9},
+		multiColTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]interface{}{1, 2, []byte("principal00000001"), []byte("reference00000001"), 7},
+		[]interface{}{1, 2, []byte("principal00000001"), []byte("reference00000002"), 7},
+		multiColTI, nil, nil)
+	require.True(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	// A secondary UNIQUE key over a BLOB prefix. The column is nullable, so the
+	// index lands in UniqueIdxs rather than UniqueNotNullIdx and only
+	// IsPrimaryOrUniqueKeyUpdated reads it.
+	blobUKTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, acl BLOB, val INT, UNIQUE KEY uk_acl (acl(255)))")
+
+	change = NewRowChange(source, nil,
+		[]interface{}{1, []byte("acl"), 7},
+		[]interface{}{1, []byte("acl"), 9},
+		blobUKTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	change = NewRowChange(source, nil,
+		[]interface{}{1, []byte("acl"), 7},
+		[]interface{}{1, []byte("acl2"), 7},
+		blobUKTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	// A NULL binary key value on one side only.
+	change = NewRowChange(source, nil,
+		[]interface{}{1, nil, 7},
+		[]interface{}{1, []byte("acl"), 7},
+		blobUKTI, nil, nil)
+	require.False(t, change.IsIdentityUpdated())
+	require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+	// VARBINARY reaches sqlmodel as string today, because adjustValues only
+	// converts TypeString columns and VARBINARY parses to TypeVarchar. Cover
+	// both representations so the comparison does not depend on that detail.
+	varbinaryTI := mockTableInfo(t, "CREATE TABLE tb1 ("+
+		"id INT PRIMARY KEY, acl VARBINARY(255) UNIQUE, val INT)")
+
+	for _, v := range []struct {
+		name       string
+		base, same interface{}
+		diff       interface{}
+	}{
+		{"string", "acl", "acl", "acl2"},
+		{"bytes", []byte("acl"), []byte("acl"), []byte("acl2")},
+	} {
+		t.Run(v.name, func(t *testing.T) {
+			change := NewRowChange(source, nil,
+				[]interface{}{1, v.base, 7},
+				[]interface{}{1, v.same, 9},
+				varbinaryTI, nil, nil)
+			require.False(t, change.IsIdentityUpdated())
+			require.False(t, change.IsPrimaryOrUniqueKeyUpdated())
+
+			change = NewRowChange(source, nil,
+				[]interface{}{1, v.base, 7},
+				[]interface{}{1, v.diff, 7},
+				varbinaryTI, nil, nil)
+			require.False(t, change.IsIdentityUpdated())
+			require.True(t, change.IsPrimaryOrUniqueKeyUpdated())
+		})
+	}
+}
+
 func TestPrimaryOrUniqueKeyUpdatedWithExpressionIndex(t *testing.T) {
 	t.Parallel()
 
