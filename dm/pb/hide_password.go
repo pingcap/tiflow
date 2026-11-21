@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/pingcap/tiflow/dm/pkg/log"
 	"github.com/pingcap/tiflow/dm/pkg/redact"
 	"github.com/pingcap/tiflow/pkg/logutil"
 	"go.uber.org/zap/zapcore"
@@ -103,4 +104,32 @@ func (m *QueryStatusResponse) Redacted() *QueryStatusResponse {
 		}
 	}
 	return result
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler using a log-only copy.
+func (m *HandleWorkerErrorRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Sqls = log.RedactSQLs(m.Sqls)
+	return addHiddenObject(enc, &clone)
+}
+
+// MarshalLogObject implements zapcore.ObjectMarshaler using a log-only copy.
+func (m *OperateWorkerSchemaRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Schema = log.RedactSQL(m.Schema)
+	return addHiddenObject(enc, &clone)
+}
+
+// MarshalLogObject protects SQL logged by the master's shared RPC handler.
+func (m *HandleErrorRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Sqls = log.RedactSQLs(m.Sqls)
+	return addHiddenObject(enc, &clone)
+}
+
+// MarshalLogObject protects schema SQL in master request logs, not API results.
+func (m *OperateSchemaRequest) MarshalLogObject(enc zapcore.ObjectEncoder) error {
+	clone := *m
+	clone.Schema = log.RedactSQL(m.Schema)
+	return addHiddenObject(enc, &clone)
 }

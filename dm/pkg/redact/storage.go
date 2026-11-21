@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/objstore"
+	dmlog "github.com/pingcap/tiflow/dm/pkg/log"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
@@ -143,7 +144,7 @@ func Error(err error) zap.Field {
 	if err == nil {
 		return zap.Skip()
 	}
-	return zap.String("error", Text(err.Error()))
+	return zap.String("error", Text(dmlog.RedactDBError(err)))
 }
 
 // ProxyURL hides the credentials of a proxy URL, which may omit the scheme.

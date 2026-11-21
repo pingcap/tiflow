@@ -808,6 +808,9 @@ func (s *Server) QueryStatus(ctx context.Context, req *pb.QueryStatusRequest) (*
 		Result:       true,
 		SourceStatus: &sourceStatus,
 	}
+	if log.IsRedactLogEnabled() {
+		defer func() { *resp = *resp.SQLDiagnosticCopy() }()
+	}
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -856,7 +859,7 @@ func (s *Server) PurgeRelay(ctx context.Context, req *pb.PurgeRelayRequest) (*pb
 
 // OperateSchema operates schema for an upstream table.
 func (s *Server) OperateSchema(ctx context.Context, req *pb.OperateWorkerSchemaRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("", zap.String("request", "OperateSchema"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "OperateSchema"), zap.Object("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {
@@ -922,7 +925,7 @@ func makeCommonWorkerResponse(reqErr error) *pb.CommonWorkerResponse {
 	}
 	if reqErr != nil {
 		resp.Result = false
-		resp.Msg = reqErr.Error()
+		resp.Msg = log.RedactDBError(reqErr)
 	}
 	return resp
 }
@@ -978,7 +981,7 @@ func getMinLocForSubTask(ctx context.Context, subTaskCfg config.SubTaskConfig) (
 
 // HandleError handle error.
 func (s *Server) HandleError(ctx context.Context, req *pb.HandleWorkerErrorRequest) (*pb.CommonWorkerResponse, error) {
-	log.L().Info("", zap.String("request", "HandleError"), zap.Stringer("payload", req))
+	log.L().Info("", zap.String("request", "HandleError"), zap.Object("payload", req))
 
 	w := s.getSourceWorker(true)
 	if w == nil {

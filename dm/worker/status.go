@@ -35,6 +35,9 @@ func (st *SubTask) Status() interface{} {
 // StatusJSON returns the status of the current sub task as json string.
 func (st *SubTask) StatusJSON() string {
 	status := st.Status()
+	if sync, ok := status.(*pb.SyncStatus); ok {
+		status = sync.SQLDiagnosticCopy()
+	}
 	sj, err := json.Marshal(status)
 	if err != nil {
 		st.l.Error("fail to marshal status", zap.Reflect("status", status), zap.Error(err))
@@ -116,7 +119,11 @@ func (w *SourceWorker) Status(stName string, sourceStatus *binlog.SourceStatus) 
 // GetUnitAndSourceStatusJSON returns the status of the worker and its unit as json string.
 // This function will also cause every unit to print its status to log.
 func (w *SourceWorker) GetUnitAndSourceStatusJSON(stName string, sourceStatus *binlog.SourceStatus) string {
-	sl := &pb.SubTaskStatusList{Status: w.Status(stName, sourceStatus)}
+	statuses := w.Status(stName, sourceStatus)
+	for i, status := range statuses {
+		statuses[i] = status.SQLDiagnosticCopy()
+	}
+	sl := &pb.SubTaskStatusList{Status: statuses}
 	mar := jsonpb.Marshaler{EmitDefaults: true, Indent: "    "}
 	s, err := mar.MarshalToString(sl)
 	if err != nil {
