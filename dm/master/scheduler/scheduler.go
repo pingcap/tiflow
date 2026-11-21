@@ -1062,6 +1062,12 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 		// only subtasks from one task supported now.
 		return terror.ErrSchedulerMultiTask.Generate(strMapToSlice(taskNamesM))
 	}
+	// the latch excludes concurrent operations that change the stages of this task.
+	release, err := s.subtaskLatch.tryAcquire(cfgs[0].Name)
+	if err != nil {
+		return terror.ErrSchedulerLatchInUse.Generate("UpdateSubTasks", cfgs[0].Name)
+	}
+	defer release()
 	// check whether exists.
 	cfg := cfgs[0]
 	v, ok := s.subTaskCfgs.Load(cfg.Name)
@@ -1075,10 +1081,17 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 			return terror.ErrSchedulerSubTaskNotExist.Generate(cfg.Name, cfg.SourceID)
 		}
 	}
-	// check whether in running stage
-	stage := s.GetExpectSubTaskStage(cfg.Name, cfg.SourceID)
-	if stage.Expect == pb.Stage_Running {
+	// check whether all subtasks are stopped
+	stages, ok := s.expectSubTaskStages.Load(cfg.Name)
+	if !ok {
 		return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
+	}
+	stageM := stages.(map[string]ha.Stage)
+	for _, cfg := range cfgs {
+		stage, ok := stageM[cfg.SourceID]
+		if !ok || (stage.Expect != pb.Stage_Paused && stage.Expect != pb.Stage_Stopped) {
+			return terror.ErrSchedulerSubTaskCfgUpdate.Generate(cfg.Name, cfg.SourceID)
+		}
 	}
 
 	// check by workers todo batch
@@ -1096,7 +1109,7 @@ func (s *Scheduler) UpdateSubTasks(ctx context.Context, cfgs ...config.SubTaskCo
 		}
 	}
 	// put the configs and stages into etcd.
-	_, err := ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
+	_, err = ha.PutSubTaskCfgStage(s.etcdCli, cfgs, []ha.Stage{}, []ha.Stage{})
 	if err != nil {
 		return err
 	}

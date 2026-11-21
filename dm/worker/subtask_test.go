@@ -46,6 +46,18 @@ type testSubTask struct{}
 
 var _ = check.Suite(&testSubTask{})
 
+func TestCheckUnitCfgCanUpdateRequiresPaused(t *testing.T) {
+	cfg := &config.SubTaskConfig{Name: "test-update-stage"}
+	st := NewSubTaskWithStage(cfg, pb.Stage_Paused, nil, "worker")
+	st.currUnit = NewMockUnit(pb.UnitType_Sync)
+	for _, stage := range []pb.Stage{pb.Stage_New, pb.Stage_Running, pb.Stage_Pausing, pb.Stage_Stopped, pb.Stage_Finished} {
+		st.setStage(stage)
+		require.True(t, terror.ErrWorkerUpdateTaskStage.Equal(st.CheckUnitCfgCanUpdate(cfg)), "stage: %s", stage)
+	}
+	st.setStage(pb.Stage_Paused)
+	require.NoError(t, st.CheckUnitCfgCanUpdate(cfg))
+}
+
 func (t *testSubTask) TestCreateUnits(c *check.C) {
 	cfg := &config.SubTaskConfig{
 		Mode:   "xxx",

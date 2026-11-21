@@ -756,6 +756,10 @@ func (st *SubTask) CheckUnitCfgCanUpdate(cfg *config.SubTaskConfig) error {
 	st.RLock()
 	defer st.RUnlock()
 
+	// the expected stage in etcd may be stopped before the subtask actually pauses.
+	if st.stage != pb.Stage_Paused {
+		return terror.ErrWorkerUpdateTaskStage.Generate(st.stage.String())
+	}
 	if st.currUnit == nil {
 		return terror.ErrWorkerUpdateSubTaskConfig.Generate(cfg.Name, pb.UnitType_InvalidUnit)
 	}
