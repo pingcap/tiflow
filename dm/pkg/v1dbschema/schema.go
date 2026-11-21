@@ -146,7 +146,7 @@ func updateSyncerOnlineDDLMeta(tctx *tcontext.Context, dbConn *conn.BaseConn, ta
 	queries := []string{
 		fmt.Sprintf(`UPDATE %s SET id=? WHERE id=?`, tableName), // for multiple columns.
 	}
-	args := []interface{}{sourceID, strconv.FormatUint(uint64(serverID), 10)}
+	args := []any{sourceID, strconv.FormatUint(uint64(serverID), 10)}
 	_, err := dbConn.ExecuteSQLWithIgnoreError(tctx, nil, taskName, ignoreErrorOnlineDDL, queries, args)
 	return terror.Annotatef(err, "update id column for online DDL meta table")
 }
@@ -154,7 +154,7 @@ func updateSyncerOnlineDDLMeta(tctx *tcontext.Context, dbConn *conn.BaseConn, ta
 // getGlobalPos tries to get the global checkpoint position.
 func getGlobalPos(tctx *tcontext.Context, dbConn *conn.BaseConn, tableName, sourceID string) (gmysql.Position, error) {
 	query := fmt.Sprintf(`SELECT binlog_name, binlog_pos FROM %s WHERE id=? AND is_global=? LIMIT 1`, tableName)
-	args := []interface{}{sourceID, true}
+	args := []any{sourceID, true}
 	rows, err := dbConn.QuerySQL(tctx, query, args...)
 	if err != nil {
 		return gmysql.Position{}, err
@@ -207,7 +207,7 @@ func setGlobalGTIDs(tctx *tcontext.Context, dbConn *conn.BaseConn, taskName, tab
 	queries := []string{
 		fmt.Sprintf(`UPDATE %s SET binlog_gtid=? WHERE id=? AND is_global=? LIMIT 1`, tableName),
 	}
-	args := []interface{}{gs, sourceID, true}
+	args := []any{gs, sourceID, true}
 	_, err := dbConn.ExecuteSQL(tctx, nil, taskName, queries, args)
 	return err
 }

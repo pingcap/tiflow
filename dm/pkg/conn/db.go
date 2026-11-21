@@ -88,7 +88,7 @@ func GetRandomServerID(ctx *tcontext.Context, db *BaseDB) (uint32, error) {
 		return 0, err
 	}
 
-	for i := 0; i < 99999; i++ {
+	for range 99999 {
 		randomValue := uint32(rand.Intn(100000))
 		randomServerID := uint32(defaultBaseServerID) + randomValue
 		if _, ok := serverIDs[randomServerID]; ok {

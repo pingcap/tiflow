@@ -136,11 +136,9 @@ func NewElection(ctx context.Context, cli *clientv3.Client, sessionTTL int, key,
 		return nil, terror.ErrElectionCampaignFail.Delegate(err, "create the initial session")
 	}
 
-	e.bgWg.Add(1)
-	go func() {
-		defer e.bgWg.Done()
+	e.bgWg.Go(func() {
 		e.campaignLoop(ctx2, session)
-	}()
+	})
 	return e, nil
 }
 
@@ -468,7 +466,7 @@ func (e *Election) newSession(ctx context.Context, retryCnt int) (*concurrency.S
 	)
 
 forLoop:
-	for i := 0; i < retryCnt; i++ {
+	for i := range retryCnt {
 		if i > 0 {
 			select {
 			case e.ech <- terror.ErrElectionCampaignFail.Delegate(err, "create a new session"):
