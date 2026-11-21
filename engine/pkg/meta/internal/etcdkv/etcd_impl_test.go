@@ -532,10 +532,8 @@ func testGenerator(t *testing.T, kvcli metaModel.KVClient) {
 	require.GreaterOrEqual(t, firstEpoch, int64(0))
 
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 100 {
+		wg.Go(func() {
 			epoch, err := kvcli.GenEpoch(ctx)
 			require.Nil(t, err)
 			require.GreaterOrEqual(t, epoch, int64(0))
@@ -544,7 +542,7 @@ func testGenerator(t *testing.T, kvcli metaModel.KVClient) {
 			epoch, err = kvcli.GenEpoch(ctx)
 			require.Nil(t, err)
 			require.Greater(t, epoch, oldEpoch)
-		}()
+		})
 	}
 
 	wg.Wait()

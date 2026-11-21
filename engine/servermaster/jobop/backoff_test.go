@@ -45,7 +45,7 @@ func TestJobBackoff(t *testing.T) {
 	require.True(t, bkf.Allow())
 
 	// simulate consecutive failures
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		bkf.Fail()
 	}
 	require.False(t, bkf.Allow())

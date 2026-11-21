@@ -46,7 +46,7 @@ func getPathPredByPersistedResources(
 ) pathPredFunc {
 	return func(path string) bool {
 		resPath := ""
-		for i := 0; i < prefixCnt; i++ {
+		for range prefixCnt {
 			prefix, newPath, ok := strings.Cut(path, "/")
 			if !ok {
 				return false

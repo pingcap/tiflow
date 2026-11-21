@@ -31,7 +31,7 @@ func matchPreDispatchArgs(args *DispatchTaskArgs) gomock.Matcher {
 	return &preDispatchArgsMatcher{args: args}
 }
 
-func (m *preDispatchArgsMatcher) Matches(x interface{}) bool {
+func (m *preDispatchArgsMatcher) Matches(x any) bool {
 	// TODO match ProjectInfo
 	req, ok := x.(*enginepb.PreDispatchTaskRequest)
 	if !ok {
@@ -77,7 +77,7 @@ func matchConfirmDispatch(requestID *string, workerID string) gomock.Matcher {
 	}
 }
 
-func (m *confirmDispatchMatcher) Matches(x interface{}) bool {
+func (m *confirmDispatchMatcher) Matches(x any) bool {
 	req, ok := x.(*enginepb.ConfirmDispatchTaskRequest)
 	if !ok {
 		return false

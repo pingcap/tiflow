@@ -41,12 +41,12 @@ const (
 )
 
 type tCase struct {
-	caseName string        // case name
-	fn       string        // function name
-	inputs   []interface{} // function args
+	caseName string // case name
+	fn       string // function name
+	inputs   []any  // function args
 
-	output interface{} // function output
-	err    error       // function error
+	output any   // function output
+	err    error // function error
 
 	mockExpectResFn func(mock sqlmock.Sqlmock) // sqlmock expectation
 }
@@ -100,7 +100,7 @@ func TestPut(t *testing.T) {
 	testCases := []tCase{
 		{
 			fn: "Put",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				"value0",
 			},
@@ -136,7 +136,7 @@ func TestGet(t *testing.T) {
 		{
 			caseName: "RecordNotFoundErrReturnEmptyResp",
 			fn:       "Get",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 			},
 			output: &metaModel.GetResponse{
@@ -153,7 +153,7 @@ func TestGet(t *testing.T) {
 		{
 			caseName: "NormalGet",
 			fn:       "Get",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 			},
 			output: &metaModel.GetResponse{
@@ -175,7 +175,7 @@ func TestGet(t *testing.T) {
 		{
 			caseName: "RangeGet",
 			fn:       "Get",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				metaModel.WithRange("key999"),
 			},
@@ -203,7 +203,7 @@ func TestGet(t *testing.T) {
 		{
 			caseName: "FromKeyGet",
 			fn:       "Get",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				metaModel.WithFromKey(),
 			},
@@ -226,7 +226,7 @@ func TestGet(t *testing.T) {
 		{
 			caseName: "PrefixGet",
 			fn:       "Get",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				metaModel.WithPrefix(),
 			},
@@ -266,7 +266,7 @@ func TestDelete(t *testing.T) {
 	testCases := []tCase{
 		{
 			fn: "Delete",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 			},
 			output: &metaModel.DeleteResponse{
@@ -280,7 +280,7 @@ func TestDelete(t *testing.T) {
 		},
 		{
 			fn: "Delete",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				metaModel.WithRange("key999"),
 			},
@@ -296,7 +296,7 @@ func TestDelete(t *testing.T) {
 		},
 		{
 			fn: "Delete",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				metaModel.WithFromKey(),
 			},
@@ -311,7 +311,7 @@ func TestDelete(t *testing.T) {
 		},
 		{
 			fn: "Delete",
-			inputs: []interface{}{
+			inputs: []any{
 				"key0",
 				metaModel.WithPrefix(),
 			},

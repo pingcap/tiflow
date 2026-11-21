@@ -68,15 +68,15 @@ func (l *ormLogger) LogMode(logger.LogLevel) logger.Interface {
 	return l
 }
 
-func (l *ormLogger) Info(ctx context.Context, format string, args ...interface{}) {
+func (l *ormLogger) Info(ctx context.Context, format string, args ...any) {
 	l.lg.Info(fmt.Sprintf(format, args...))
 }
 
-func (l *ormLogger) Warn(ctx context.Context, format string, args ...interface{}) {
+func (l *ormLogger) Warn(ctx context.Context, format string, args ...any) {
 	l.lg.Warn(fmt.Sprintf(format, args...))
 }
 
-func (l *ormLogger) Error(ctx context.Context, format string, args ...interface{}) {
+func (l *ormLogger) Error(ctx context.Context, format string, args ...any) {
 	l.lg.Error(fmt.Sprintf(format, args...))
 }
 

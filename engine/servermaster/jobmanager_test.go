@@ -68,8 +68,7 @@ func prepareMockJobManager(
 func TestJobManagerCreateJob(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterID := "create-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
@@ -109,7 +108,7 @@ func TestJobManagerCreateJob(t *testing.T) {
 
 	// delete a finished job, re-create job with the same id will meet error
 	err = mockMaster.GetFrameMetaClient().UpdateJob(ctx, job.Id,
-		map[string]interface{}{
+		map[string]any{
 			"state": frameModel.MasterStateFinished,
 		},
 	)
@@ -135,8 +134,7 @@ func (m *mockBaseMasterCreateWorkerFailed) CreateWorker(
 func TestCreateWorkerReturnError(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
 	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
@@ -166,8 +164,7 @@ func TestCreateWorkerReturnError(t *testing.T) {
 func TestJobManagerCancelJob(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterID := "cancel-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
@@ -195,7 +192,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, pb.Job_Canceling, job.State)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		err = mgr.jobOperator.Tick(ctx)
 		require.NoError(t, err)
 		require.Equal(t, i+1, mockWorkerHandle.SendMessageCount())
@@ -210,8 +207,7 @@ func TestJobManagerCancelJob(t *testing.T) {
 func TestJobManagerDeleteJob(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterID := "delete-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
@@ -238,8 +234,7 @@ func TestJobManagerDeleteJob(t *testing.T) {
 func TestJobManagerGetJob(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	testCases := []struct {
 		meta             *frameModel.MasterMeta
@@ -316,8 +311,7 @@ func TestJobManagerGetJob(t *testing.T) {
 func TestJobManagerOnlineJob(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "submit-job-test")
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
@@ -356,8 +350,7 @@ func TestJobManagerOnlineJob(t *testing.T) {
 func TestJobManagerRecover(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-recover-test")
 	framework.MockMasterPrepareMeta(ctx, t, mockMaster)
@@ -394,8 +387,7 @@ func TestJobManagerRecover(t *testing.T) {
 func TestJobManagerTickExceedQuota(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterImpl := framework.NewMockMasterImpl(t, "", "create-worker-with-error")
 	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
@@ -428,8 +420,7 @@ func TestJobManagerTickExceedQuota(t *testing.T) {
 func TestJobManagerWatchJobStatuses(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterID := "delete-job-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
@@ -544,8 +535,7 @@ func TestGetJobDetailFromJobMaster(t *testing.T) {
 func TestListJobsPagination(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-list-jobs-test")
 	masterMeta := mockMaster.DefaultBaseMaster.MasterMeta()
@@ -556,7 +546,7 @@ func TestListJobsPagination(t *testing.T) {
 	const totalJobCount = 2000
 
 	jobIDs := make([]string, 0, totalJobCount)
-	for i := 0; i < totalJobCount; i++ {
+	for i := range totalJobCount {
 		jobID := fmt.Sprintf("job-%04d", i)
 		jobIDs = append(jobIDs, jobID)
 		cli := metadata.NewMasterMetadataClient(jobID, mockMaster.GetFrameMetaClient())
@@ -580,7 +570,7 @@ func TestListJobsPagination(t *testing.T) {
 	resp, err := mgr.ListJobs(ctx, &pb.ListJobsRequest{})
 	require.NoError(t, err)
 	require.Len(t, resp.Jobs, defaultListPageSize)
-	for i := 0; i < defaultListPageSize; i++ {
+	for i := range defaultListPageSize {
 		require.Equal(t, jobIDs[i], resp.Jobs[i].Id)
 	}
 	require.Equal(t, jobIDs[defaultListPageSize-1], resp.NextPageToken)
@@ -613,8 +603,7 @@ func TestListJobsPagination(t *testing.T) {
 func TestListJobWithFilter(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	mockMaster := framework.NewMockMasterImpl(t, "", "job-manager-list-jobs-test")
 	masterMeta := mockMaster.DefaultBaseMaster.MasterMeta()
@@ -641,7 +630,7 @@ func TestListJobWithFilter(t *testing.T) {
 	const totalJobCount = maxListPageSize
 	countByType := make(map[frameModel.WorkerType]int)
 	countByState := make(map[frameModel.MasterState]int)
-	for i := 0; i < totalJobCount; i++ {
+	for i := range totalJobCount {
 		jobID := fmt.Sprintf("job-%04d", i)
 		cli := metadata.NewMasterMetadataClient("job-1", mockMaster.GetFrameMetaClient())
 		masterMeta := &frameModel.MasterMeta{
@@ -684,8 +673,7 @@ func TestListJobWithFilter(t *testing.T) {
 func TestOnWorkerDispatchedFastFail(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterID := "job-fast-fail-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
@@ -710,8 +698,7 @@ func TestOnWorkerDispatchedFastFail(t *testing.T) {
 func TestJobOperatorBgLoop(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterID := "job-operator-bg-loop-test"
 	mockMaster, mgr := prepareMockJobManager(ctx, t, masterID)
@@ -732,7 +719,7 @@ func TestJobOperatorBgLoop(t *testing.T) {
 			return nil
 		})
 	wg.Go(func() error {
-		for i := 0; i < 6; i++ {
+		for range 6 {
 			mgr.jobOperatorNotifier.Notify()
 			time.Sleep(time.Millisecond * 50)
 		}
@@ -763,8 +750,7 @@ func dispatchJobAndMeetError(
 func TestJobManagerIterPendingJobs(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	masterImpl := framework.NewMockMasterImpl(t, "", "iter-pending-jobs-test")
 	framework.MockMasterPrepareMeta(ctx, t, masterImpl)
@@ -832,8 +818,7 @@ func TestJobManagerIterPendingJobs(t *testing.T) {
 func TestFailoverWithCreateWorkerOpt(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	selectors := []*label.Selector{
 		{Key: "name", Target: "executor.*", Op: label.OpRegex},

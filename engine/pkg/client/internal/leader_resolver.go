@@ -75,11 +75,9 @@ func newLeaderResolverWithFollowerSorter(
 		doneCh:         make(chan struct{}),
 		FollowerSorter: followerSorter,
 	}
-	ret.wg.Add(1)
-	go func() {
-		defer ret.wg.Done()
+	ret.wg.Go(func() {
 		ret.bgUpdateServerList()
-	}()
+	})
 
 	return ret
 }

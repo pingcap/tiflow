@@ -113,7 +113,7 @@ type BaseWorker interface {
 	UpdateStatus(ctx context.Context, status frameModel.WorkerStatus) error
 
 	// SendMessage sends a message of specific topic to master in a blocking or nonblocking way
-	SendMessage(ctx context.Context, topic p2p.Topic, message interface{}, nonblocking bool) error
+	SendMessage(ctx context.Context, topic p2p.Topic, message any, nonblocking bool) error
 
 	// OpenStorage creates a resource and return the resource handle
 	OpenStorage(
@@ -299,14 +299,12 @@ func (w *DefaultBaseWorker) doPreInit(ctx context.Context) (retErr error) {
 	w.cancelPool = cancelPool
 	w.cancelMu.Unlock()
 
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		err := w.pool.Run(poolCtx)
 		w.Logger().Info("workerpool exited",
 			zap.String("worker-id", w.id),
 			zap.Error(err))
-	}()
+	})
 
 	initTime := w.clock.Mono()
 	rctx, ok := runtime.ToRuntimeCtx(ctx)
@@ -487,7 +485,7 @@ func (w *DefaultBaseWorker) UpdateStatus(ctx context.Context, status frameModel.
 func (w *DefaultBaseWorker) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
-	message interface{},
+	message any,
 	nonblocking bool,
 ) error {
 	var err error
@@ -553,21 +551,17 @@ func (w *DefaultBaseWorker) startBackgroundTasks() {
 	w.cancelBgTasks = cancel
 	w.cancelMu.Unlock()
 
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		if err := w.runHeartbeatWorker(ctx); err != nil {
 			w.onError(err)
 		}
-	}()
+	})
 
-	w.wg.Add(1)
-	go func() {
-		defer w.wg.Done()
+	w.wg.Go(func() {
 		if err := w.runWatchDog(ctx); err != nil {
 			w.onError(err)
 		}
-	}()
+	})
 }
 
 func (w *DefaultBaseWorker) runHeartbeatWorker(ctx context.Context) error {

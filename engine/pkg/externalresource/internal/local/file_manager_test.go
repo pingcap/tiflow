@@ -135,7 +135,7 @@ func TestFileManagerManyWorkers(t *testing.T) {
 	fm := NewLocalFileManager("", resModel.LocalFileConfig{BaseDir: dir})
 	ctx := context.Background()
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		// For each worker, first create a persisted resource
 		res, err := fm.CreateResource(ctx, newResourceIdentForTesting("",
 			fmt.Sprintf("worker-%d", i),
@@ -174,13 +174,13 @@ func TestFileManagerManyWorkers(t *testing.T) {
 	}
 
 	// Garbage collects about half the workers' temporary files.
-	for i := 0; i < numWorkers/2; i++ {
+	for i := range numWorkers / 2 {
 		workerID := fmt.Sprintf("worker-%d", i)
 		err := fm.RemoveTemporaryFiles(ctx, internal.ResourceScope{WorkerID: workerID})
 		require.NoError(t, err)
 	}
 
-	for i := 0; i < numWorkers; i++ {
+	for i := range numWorkers {
 		workerID := fmt.Sprintf("worker-%d", i)
 		resourceID1 := fmt.Sprintf("resource-%d-1", i)
 		require.DirExists(t, filepath.Join(dir, workerID, ResourceNameToFilePathName(resourceID1)))
