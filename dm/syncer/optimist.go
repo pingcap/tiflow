@@ -24,7 +24,7 @@ import (
 // initOptimisticShardDDL initializes the shard DDL support in the optimistic mode.
 func (s *Syncer) initOptimisticShardDDL(ctx context.Context) error {
 	// fetch tables from source and filter them
-	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.baList)
+	sourceTables, err := s.fromDB.FetchAllDoTables(ctx, s.getBAList())
 	if err != nil {
 		return err
 	}
