@@ -389,17 +389,26 @@ func TestCompactorAndCausalityShareSessionCtxNoRace(t *testing.T) {
 	compactCh := compactorWrap(inCh, syncer)
 	outCh := causalityWrap(compactCh, syncer)
 
-	done := make(chan int, 1)
+	type readResult struct {
+		count             int
+		missingCachedKeys int
+		emptyQueueKeys    int
+	}
+	done := make(chan readResult, 1)
 	go func() {
-		count := 0
+		var res readResult
 		for j := range outCh {
 			if j.tp == dml {
-				require.NotNil(t, j.cachedCausalityKeys)
-				require.NotEmpty(t, j.dmlQueueKey)
-				count++
+				if j.cachedCausalityKeys == nil {
+					res.missingCachedKeys++
+				}
+				if j.dmlQueueKey == "" {
+					res.emptyQueueKeys++
+				}
+				res.count++
 			}
 		}
-		done <- count
+		done <- res
 	}()
 
 	for i := range 200 {
@@ -424,5 +433,8 @@ func TestCompactorAndCausalityShareSessionCtxNoRace(t *testing.T) {
 	inCh <- newFlushJob(syncer.cfg.WorkerCount, 1)
 	close(inCh)
 
-	require.Greater(t, <-done, 0)
+	res := <-done
+	require.Greater(t, res.count, 0)
+	require.Zero(t, res.missingCachedKeys)
+	require.Zero(t, res.emptyQueueKeys)
 }
