@@ -170,22 +170,18 @@ func InitLogger(cfg *Config, opts ...LoggerOpt) error {
 
 // initOptionalComponent initializes some optional components
 func initOptionalComponent(op *loggerOp, cfg *Config) error {
-	var level zapcore.Level
-	if op.isInitGRPCLogger || op.isInitSaramaLogger {
-		err := level.UnmarshalText([]byte(cfg.Level))
-		if err != nil {
+	if op.isInitGRPCLogger {
+		var level zapcore.Level
+		if err := level.UnmarshalText([]byte(cfg.Level)); err != nil {
 			return errors.Trace(err)
 		}
-	}
-
-	if op.isInitGRPCLogger {
 		if err := initGRPCLogger(level); err != nil {
 			return err
 		}
 	}
 
 	if op.isInitSaramaLogger {
-		if err := initSaramaLogger(level); err != nil {
+		if err := initSaramaLogger(); err != nil {
 			return err
 		}
 	}
@@ -222,18 +218,14 @@ func initMySQLLogger() error {
 }
 
 // initSaramaLogger hacks logger used in sarama lib
-func initSaramaLogger(level zapcore.Level) error {
-	componentLogger := log.L().With(zap.String("component", "sarama"))
-	logger, err := zap.NewStdLogAt(componentLogger, level)
-	if err != nil {
-		return errors.Trace(err)
-	}
-	debugLogger, err := zap.NewStdLogAt(componentLogger, zapcore.DebugLevel)
+func initSaramaLogger() error {
+	// sarama has no log level, so all its messages are written at debug level
+	// and the log level decides whether they show up.
+	logger, err := zap.NewStdLogAt(log.L().With(zap.String("component", "sarama")), zapcore.DebugLevel)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	sarama.Logger = logger
-	sarama.DebugLogger = debugLogger
 	return nil
 }
 
