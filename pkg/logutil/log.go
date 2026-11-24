@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	stdlog "log"
 	"os"
 	"strconv"
 	"strings"
@@ -223,17 +224,17 @@ func initMySQLLogger() error {
 
 // initSaramaLogger hacks logger used in sarama lib
 func initSaramaLogger(level zapcore.Level) error {
-	componentLogger := log.L().With(zap.String("component", "sarama"))
-	logger, err := zap.NewStdLogAt(componentLogger, level)
-	if err != nil {
-		return errors.Trace(err)
+	// Only log sarama messages at debug level.
+	if zapcore.InfoLevel.Enabled(level) {
+		sarama.Logger = stdlog.New(io.Discard, "[Sarama] ", stdlog.LstdFlags)
+		return nil
 	}
-	debugLogger, err := zap.NewStdLogAt(componentLogger, zapcore.DebugLevel)
+
+	logger, err := zap.NewStdLogAt(log.L().With(zap.String("component", "sarama")), level)
 	if err != nil {
 		return errors.Trace(err)
 	}
 	sarama.Logger = logger
-	sarama.DebugLogger = debugLogger
 	return nil
 }
 
