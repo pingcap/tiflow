@@ -2815,7 +2815,9 @@ func (s *Server) sharedLogic(ctx context.Context, req interface{}, respPointer i
 	fullMethodName := runtime.FuncForPC(pc).Name()
 	methodName := fullMethodName[strings.LastIndexByte(fullMethodName, '.')+1:]
 
-	log.L().Info("", zap.Any("payload", req), zap.String("request", methodName))
+	// The request may carry credentials (task/source configs, the Encrypt RPC
+	// plaintext), so do not log the payload itself.
+	log.L().Info("", zap.String("request", methodName))
 
 	// origin code:
 	//  isLeader, needForward := s.isLeaderAndNeedForward()
