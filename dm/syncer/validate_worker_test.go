@@ -555,7 +555,7 @@ func TestValidatorWorkerUsesVisibleColumns(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
-	mock.ExpectQuery("SELECT .*`a`, `id`, `b`.* FROM `test`.`tbl` WHERE id in \\(\\?\\)").
+	mock.ExpectQuery("SELECT .*`a`, `id`, `b`.* FROM `test`.`tbl` WHERE `id` in \\(\\?\\)").
 		WithArgs("42").
 		WillReturnRows(sqlmock.NewRows([]string{"a", "id", "b"}).AddRow("7", "42", "9"))
 
