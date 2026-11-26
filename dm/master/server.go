@@ -703,7 +703,10 @@ func (s *Server) GetSubTaskCfg(ctx context.Context, req *pb.GetSubTaskCfgRequest
 	cfgs := make([]string, 0, len(subCfgs))
 
 	for _, cfg := range subCfgs {
-		cfgBytes, err := cfg.Redacted().Toml()
+		// This API feeds sync_diff_inspector's dm-addr mode, which connects to
+		// the upstream and downstream itself, so database credentials must stay
+		// usable; only storage URLs are redacted.
+		cfgBytes, err := cfg.RedactedStorage().Toml()
 		if err != nil {
 			// nolint:nilerr
 			return &pb.GetSubTaskCfgResponse{
@@ -2524,6 +2527,9 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 		// For the get-config command, we want to filter out fields that are not easily readable by humans,
 		// such as SSLXXBytes field in `Security` struct
 		taskCfg := config.SubTaskConfigsToTaskConfig(subCfgList...)
+		// ClearSSLBytesData mutates the receiver, and TargetDB aliases the
+		// subtask config's Security, so redact a deep copy only.
+		taskCfg.TargetDB = taskCfg.TargetDB.Clone()
 		taskCfg.TargetDB.Password = config.ObfuscatedPasswordForFeedback
 		if taskCfg.TargetDB.Security != nil {
 			taskCfg.TargetDB.Security.ClearSSLBytesData()
@@ -2628,6 +2634,10 @@ func (s *Server) GetCfg(ctx context.Context, req *pb.GetCfgRequest) (*pb.GetCfgR
 
 			return resp2, nil
 		}
+		// ClearSSLBytesData mutates the receiver, and GetSourceCfgByID returns a
+		// shallow copy that shares Security with the live config, so redact a
+		// deep copy only.
+		sourceCfg.From = *sourceCfg.From.Clone()
 		sourceCfg.From.Password = config.ObfuscatedPasswordForFeedback
 		if sourceCfg.From.Security != nil {
 			sourceCfg.From.Security.ClearSSLBytesData()

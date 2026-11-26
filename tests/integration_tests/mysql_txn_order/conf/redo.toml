@@ -1,0 +1,12 @@
+case-sensitive = false
+
+[sink]
+transaction-atomicity = "none"
+
+[sink.mysql-config]
+worker-count = 4
+max-txn-row = 64
+enable-batch-dml = false
+enable-multi-statement = false
+enable-cache-prepared-statement = false
+txn-order-tables = ["MYSQL_TXN_ORDER_REDO.T"]

@@ -65,6 +65,7 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 		logger:             log.L(),
 		keyMap:             make(map[string]map[string]int),
 		buffer:             make([]*job, 0, 10000),
+		outCh:              make(chan *job, 10000),
 		updateJobMetricsFn: func(bool, string, *job) {},
 	}
 
@@ -154,17 +155,15 @@ func (s *testSyncerSuite) TestCompactJob(c *check.C) {
 		for _, dml := range dmls[i:end] {
 			c.Logf("before compact, dml: %s", dml.String())
 		}
-		for _, j := range compactor.buffer {
-			if j != nil {
-				compactKV = mockExecute(compactKV, []*sqlmodel.RowChange{j.dml})
-				compactNumber++
-				c.Logf("after compact, dml: %s", j.dml.String())
-			}
+		compactor.flushBuffer()
+		for len(compactor.outCh) > 0 {
+			j := <-compactor.outCh
+			compactKV = mockExecute(compactKV, []*sqlmodel.RowChange{j.dml})
+			compactNumber++
+			c.Logf("after compact, dml: %s", j.dml.String())
 		}
 		c.Logf("before compact: %d, after compact: %d", noCompactNumber, compactNumber)
 		c.Assert(compactKV, check.DeepEquals, kv)
-		compactor.keyMap = make(map[string]map[string]int)
-		compactor.buffer = compactor.buffer[0:0]
 	}
 }
 

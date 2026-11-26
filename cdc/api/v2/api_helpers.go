@@ -370,7 +370,7 @@ func (h APIV2HelpersImpl) verifyUpdateChangefeedConfig(
 		})
 		protocol, _ := config.ParseSinkProtocolFromString(util.GetOrZero(newInfo.Config.Sink.Protocol))
 
-		// use checkpointTs get snapshot from kv storage
+		// Validate the same schema snapshot that the owner will use on restart.
 		ineligibleTables, _, err := h.getVerifiedTables(ctx, newInfo.Config, kvStorage, checkpointTs, scheme, topic, protocol)
 		if err != nil {
 			return nil, nil, cerror.ErrChangefeedUpdateRefused.GenWithStackByCause(err)
@@ -553,18 +553,19 @@ func (h APIV2HelpersImpl) createTiStore(
 	return res, nil
 }
 
+// getVerifiedTables validates table settings and returns eligibility categories.
 func (h APIV2HelpersImpl) getVerifiedTables(
 	ctx context.Context,
 	replicaConfig *config.ReplicaConfig,
 	storage tidbkv.Storage, startTs uint64,
 	scheme string, topic string, protocol config.Protocol,
 ) ([]model.TableName, []model.TableName, error) {
-	f, err := filter.NewFilter(replicaConfig, "")
+	f, err := filter.NewFilter(replicaConfig, "", sink.IsMySQLCompatibleScheme(scheme))
 	if err != nil {
 		return nil, nil, err
 	}
 	tableInfos, ineligibleTables, eligibleTables, err := entry.
-		VerifyTables(f, storage, startTs)
+		VerifyTables(f, storage, startTs, replicaConfig.ForceReplicate)
 	if err != nil {
 		return nil, nil, err
 	}

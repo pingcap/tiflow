@@ -16,6 +16,7 @@ package config
 import (
 	"fmt"
 	"maps"
+	"sort"
 	"strings"
 
 	"github.com/pingcap/tidb/pkg/util/filter"
@@ -536,6 +537,12 @@ func SubTaskConfigsToOpenAPITaskList(subTaskConfigMap map[string]map[string]*Sub
 
 // SubTaskConfigsToOpenAPITask gets openapi task from sub task configs.
 func SubTaskConfigsToOpenAPITask(subTaskConfigList []*SubTaskConfig) *openapi.Task {
+	// Target/loader settings are taken from the first source, so order the
+	// sources deterministically: task list and task update must agree on which
+	// source that is, otherwise the restored credentials do not match.
+	sort.Slice(subTaskConfigList, func(i, j int) bool {
+		return subTaskConfigList[i].SourceID < subTaskConfigList[j].SourceID
+	})
 	oneSubtaskConfig := subTaskConfigList[0] // need this to get target db config
 	taskSourceConfig := openapi.TaskSourceConfig{}
 	sourceConfList := []openapi.TaskSourceConf{}

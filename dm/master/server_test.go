@@ -2922,3 +2922,62 @@ func (t *testMasterSuite) TestGetLatestMeta() {
 	require.Equal(t.T(), meta.BinLogPos, uint32(11232))
 	require.Equal(t.T(), meta.BinLogGTID, "1-2-100")
 }
+
+// TestSubTaskCfgForAPI covers the serialization used by GetSubTaskCfg. The
+// endpoint feeds sync_diff_inspector's dm-addr mode, so database credentials
+// must reach it while storage credentials stay hidden.
+func TestSubTaskCfgForAPI(t *testing.T) {
+	cfg := config.NewSubTaskConfig()
+	cfg.Name = "task-one"
+	cfg.LoaderConfig.Dir = "s3://bucket/path?access-key=private-ak&secret-access-key=private-sk"
+	cfg.From.Password = "upstream-secret"
+	cfg.To.Password = "downstream-secret"
+	cfg.To.Security = &security.Security{SSLKeyBytes: []byte("key")}
+
+	out, err := cfg.RedactedStorage().Toml()
+	require.NoError(t, err)
+	require.Contains(t, out, "upstream-secret")
+	require.Contains(t, out, "downstream-secret")
+	require.Contains(t, out, "key")
+	require.NotContains(t, out, "private-sk")
+
+	redacted, err := cfg.Redacted().Toml()
+	require.NoError(t, err)
+	require.NotEqual(t, redacted, out)
+}
+
+func TestGetCfgDoesNotWipeSourceTLS(t *testing.T) {
+	require.NoError(t, log.InitLogger(&log.Config{}))
+	ctx, cancel := context.WithCancel(context.Background())
+	server := setupTestServer(ctx, t)
+	defer func() {
+		cancel()
+		server.Close()
+	}()
+
+	cfg := config.NewSourceConfig()
+	cfg.SourceID = "tls-source"
+	cfg.From = dbconfig.DBConfig{
+		Host:     "127.0.0.1",
+		Port:     3306,
+		User:     "root",
+		Password: "secret",
+		Security: &security.Security{
+			SSLCABytes:   []byte("ca"),
+			SSLCertBytes: []byte("cert"),
+			SSLKeyBytes:  []byte("key"),
+		},
+	}
+	require.NoError(t, server.scheduler.AddSourceCfg(cfg))
+
+	resp, err := server.GetCfg(ctx, &pb.GetCfgRequest{Name: cfg.SourceID, Type: pb.CfgType_SourceType})
+	require.NoError(t, err)
+	require.True(t, resp.Result, resp.Msg)
+
+	// GetCfg must only redact the response copy, not the live source config.
+	live := server.scheduler.GetSourceCfgByID(cfg.SourceID)
+	require.NotNil(t, live.From.Security)
+	require.Equal(t, []byte("ca"), live.From.Security.SSLCABytes)
+	require.Equal(t, []byte("cert"), live.From.Security.SSLCertBytes)
+	require.Equal(t, []byte("key"), live.From.Security.SSLKeyBytes)
+}

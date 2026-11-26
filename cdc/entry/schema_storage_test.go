@@ -488,6 +488,7 @@ func testDoDDLAndCheck(t *testing.T, snap *schema.Snapshot, job *timodel.Job, is
 	require.Equal(t, err != nil, isErr)
 }
 
+// TestMultiVersionStorage checks schema snapshots and garbage collection across versions.
 func TestMultiVersionStorage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	dbName := pmodel.NewCIStr("Test")
@@ -549,7 +550,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	}
 
 	jobs = append(jobs, job)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	storage, err := NewSchemaStorage(nil, 0, false, model.DefaultChangeFeedID("dummy"), util.RoleTester, f)
 	require.Nil(t, err)
@@ -673,6 +674,7 @@ func TestMultiVersionStorage(t *testing.T) {
 	require.Equal(t, errors.Cause(err), context.Canceled)
 }
 
+// TestCreateSnapFromMeta checks initialization of schema snapshots from TiDB metadata.
 func TestCreateSnapFromMeta(t *testing.T) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -694,7 +696,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	meta := kv.GetSnapshotMeta(store, ver.Ver)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
 	require.Nil(t, err)
@@ -708,6 +710,7 @@ func TestCreateSnapFromMeta(t *testing.T) {
 	require.Equal(t, dbInfo.Name.O, "test2")
 }
 
+// TestExplicitTables checks force-replication eligibility for tables without usable keys.
 func TestExplicitTables(t *testing.T) {
 	store, err := mockstore.NewMockStore()
 	require.Nil(t, err)
@@ -731,7 +734,7 @@ func TestExplicitTables(t *testing.T) {
 	ver2, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	meta1 := kv.GetSnapshotMeta(store, ver1.Ver)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	snap1, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta1, ver1.Ver, true /* forceReplicate */, f)
 	require.Nil(t, err)
@@ -876,7 +879,7 @@ func TestSchemaStorage(t *testing.T) {
 			tk.MustExec(ddlSQL)
 		}
 
-		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+		f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 		require.Nil(t, err)
 
 		jobs, err := getAllHistoryDDLJob(store, f)
@@ -970,7 +973,7 @@ func TestHandleKey(t *testing.T) {
 	ver, err := store.CurrentVersion(oracle.GlobalTxnScope)
 	require.Nil(t, err)
 	meta := kv.GetSnapshotMeta(store, ver.Ver)
-	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "")
+	f, err := filter.NewFilter(config.GetDefaultReplicaConfig(), "", false)
 	require.Nil(t, err)
 	snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("test"), meta, ver.Ver, false, f)
 	require.Nil(t, err)
@@ -1026,4 +1029,87 @@ func TestGetPrimaryKey(t *testing.T) {
 	event = helper.DDL2Event(sql)
 	names = event.TableInfo.GetPrimaryKeyColumnNames()
 	require.Equal(t, names, []string{"a"})
+}
+
+// TestTxnOrderTablesPartitionOnStartup checks ordering constraints only for replicated tables.
+func TestTxnOrderTablesPartitionOnStartup(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("create table test.ordered_no_key (id int) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_nullable_uk (id int unique) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_pk (id int primary key) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.ordered_uk (id int not null unique) partition by hash(id) partitions 2")
+	for _, tc := range []struct {
+		name           string
+		table          string
+		forceReplicate bool
+		excluded       bool
+		wantErr        bool
+	}{
+		{name: "no key", table: "ordered_no_key"},
+		{name: "nullable unique key", table: "ordered_nullable_uk"},
+		{name: "primary key", table: "ordered_pk", wantErr: true},
+		{name: "unique key", table: "ordered_uk", wantErr: true},
+		{name: "force replicate no key", table: "ordered_no_key", forceReplicate: true, wantErr: true},
+		{name: "force replicate nullable unique key", table: "ordered_nullable_uk", forceReplicate: true, wantErr: true},
+		{name: "excluded primary key", table: "ordered_pk", excluded: true},
+		{name: "excluded force replicate", table: "ordered_no_key", forceReplicate: true, excluded: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := config.GetDefaultReplicaConfig()
+			cfg.ForceReplicate = tc.forceReplicate
+			cfg.Filter.Rules = []string{"test." + tc.table}
+			if tc.excluded {
+				cfg.Filter.Rules = append(cfg.Filter.Rules, "!test."+tc.table)
+			}
+			cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
+			f, err := filter.NewFilter(cfg, "", true)
+			require.NoError(t, err)
+			snap, err := schema.NewSnapshotFromMeta(model.DefaultChangeFeedID("ordered"), helper.GetCurrentMeta(), 1, tc.forceReplicate, f)
+			if tc.wantErr {
+				require.ErrorContains(t, err, "does not support partitioned table")
+				return
+			}
+			require.NoError(t, err)
+			ti, ok := snap.TableByName("test", tc.table)
+			require.Equal(t, !tc.excluded, ok)
+			if ok {
+				require.True(t, snap.IsIneligibleTableID(ti.ID))
+				for _, partition := range ti.GetPartitionInfo().Definitions {
+					require.True(t, snap.IsIneligibleTableID(partition.ID))
+				}
+			}
+		})
+	}
+}
+
+// TestTxnOrderTablesVerifyTablesClassification keeps table classification independent of force-replicate.
+func TestTxnOrderTablesVerifyTablesClassification(t *testing.T) {
+	helper := NewSchemaTestHelper(t)
+	defer helper.Close()
+	helper.Tk().MustExec("create table test.ordered_no_key (id int) partition by hash(id) partitions 2")
+	helper.Tk().MustExec("create table test.regular (id int primary key)")
+	version, err := helper.Storage().CurrentVersion(tidbkv.GlobalTxnScope)
+	require.NoError(t, err)
+	cfg := config.GetDefaultReplicaConfig()
+	cfg.Filter.Rules = []string{"test.*"}
+	f, err := filter.NewFilter(cfg, "", true)
+	require.NoError(t, err)
+	for _, forceReplicate := range []bool{false, true} {
+		tableInfos, ineligible, eligible, err := VerifyTables(f, helper.Storage(), version.Ver, forceReplicate)
+		require.NoError(t, err)
+		require.Len(t, tableInfos, 2)
+		require.Len(t, ineligible, 1)
+		require.Equal(t, "ordered_no_key", ineligible[0].Table)
+		require.Len(t, eligible, 1)
+		require.Equal(t, "regular", eligible[0].Table)
+	}
+
+	cfg.Sink.MySQLConfig = &config.MySQLConfig{TxnOrderTables: []string{"test.ordered_*"}}
+	f, err = filter.NewFilter(cfg, "", true)
+	require.NoError(t, err)
+	_, _, _, err = VerifyTables(f, helper.Storage(), version.Ver, false)
+	require.NoError(t, err)
+	_, _, _, err = VerifyTables(f, helper.Storage(), version.Ver, true)
+	require.ErrorContains(t, err, "does not support partitioned table")
 }
