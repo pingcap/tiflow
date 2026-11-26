@@ -33,3 +33,7 @@ insert into t_extract(j)values ('"string"');
 insert into t_extract(j)values ('1');
 insert into t_extract(j)values ('3.14');
 insert into t_extract(j)values ('{"a":1, "b": {"a":1}, "c": "string"}');
+
+-- whole-number JSON doubles must keep their DOUBLE type downstream
+create table t_json_double (id int primary key, doc json);
+insert into t_json_double values (1, '{"amount": 2500.0, "qty": 3}');
