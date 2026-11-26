@@ -20,19 +20,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRedactConfigYAML(t *testing.T) {
+func TestRedactedTaskYAML(t *testing.T) {
 	in := `name: task
-target-db:
+target-database:
   host: 127.0.0.1
+  port: 4000
+  user: root
   password: top-secret
   security:
-    ssl-ca-bytes: ca-material
+    ssl-ca-base64: ca-material
     ssl-key-base64: key-material
 loaders:
   loader-1:
     dir: s3://bucket/path?access-key=ak-secret&secret-access-key=sk-secret
 `
-	out := redactConfigYAML(in)
+	out := redactedTaskYAML(in)
 	require.NotContains(t, out, "top-secret")
 	require.NotContains(t, out, "ca-material")
 	require.NotContains(t, out, "key-material")
@@ -41,13 +43,31 @@ loaders:
 	require.Contains(t, out, "127.0.0.1")
 	require.Contains(t, out, "task")
 
-	require.Equal(t, "(invalid config; redacted)", redactConfigYAML("not: [valid"))
-	require.Equal(t, "  ", redactConfigYAML("  "))
+	require.Equal(t, invalidConfigForLog, redactedTaskYAML("not: [valid"))
+	require.Equal(t, "  ", redactedTaskYAML("  "))
+}
+
+func TestRedactedSourceYAML(t *testing.T) {
+	in := `source-id: mysql-01
+enable-gtid: true
+from:
+  host: 127.0.0.1
+  port: 3306
+  user: root
+  password: top-secret
+  security:
+    ssl-ca-base64: ca-material
+`
+	out := redactedSourceYAML(in)
+	require.NotContains(t, out, "top-secret")
+	require.NotContains(t, out, "ca-material")
+	require.Contains(t, out, "127.0.0.1")
+	require.Contains(t, out, "mysql-01")
 }
 
 func TestRedactedPayload(t *testing.T) {
 	req := &pb.StartTaskRequest{
-		Task:    "name: task\ntarget-db:\n  password: secret\n",
+		Task:    "name: task\ntarget-database:\n  password: secret\n",
 		Sources: []string{"mysql-01"},
 	}
 	out := redactedPayload(req)

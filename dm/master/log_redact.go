@@ -23,90 +23,53 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const redactedTLSContent = "REDACTED"
+const invalidConfigForLog = "(invalid config; redacted)"
 
-// sensitiveConfigKeys are the config fields whose values must never be logged.
-var sensitiveConfigKeys = map[string]struct{}{
-	"password":          {},
-	"plaintext":         {},
-	"secret-key":        {},
-	"ssl-ca-bytes":      {},
-	"ssl-cert-bytes":    {},
-	"ssl-key-bytes":     {},
-	"ssl-ca-base64":     {},
-	"ssl-cert-base64":   {},
-	"ssl-key-base64":    {},
-	"access-key":        {},
-	"secret-access-key": {},
-	"session-token":     {},
-}
-
-// redactConfigYAML parses a YAML config and replaces the values of the sensitive
-// fields, so the payload can still be logged for diagnostics.
-func redactConfigYAML(content string) string {
+// redactedTaskYAML decodes a task config and renders its redacted form, so the
+// payload can be logged without the target DB password and inline TLS material.
+func redactedTaskYAML(content string) string {
 	if strings.TrimSpace(content) == "" {
 		return content
 	}
-	var parsed any
-	if err := yaml.Unmarshal([]byte(content), &parsed); err != nil {
-		return "(invalid config; redacted)"
+	cfg := &config.TaskConfig{}
+	if err := yaml.UnmarshalStrict([]byte(content), cfg); err != nil {
+		return invalidConfigForLog
 	}
-	redactConfigValue(parsed)
-	data, err := yaml.Marshal(parsed)
+	data, err := yaml.Marshal(cfg.Redacted())
 	if err != nil {
-		return "(invalid config; redacted)"
+		return invalidConfigForLog
 	}
 	return redact.Text(string(data))
 }
 
-func redactConfigValue(value any) {
-	switch v := value.(type) {
-	case map[any]any:
-		for key, child := range v {
-			name, _ := key.(string)
-			if _, ok := sensitiveConfigKeys[strings.ToLower(name)]; ok {
-				v[key] = redactedConfigValue(name, child)
-				continue
-			}
-			redactConfigValue(child)
-		}
-	case map[string]any:
-		for key, child := range v {
-			if _, ok := sensitiveConfigKeys[strings.ToLower(key)]; ok {
-				v[key] = redactedConfigValue(key, child)
-				continue
-			}
-			redactConfigValue(child)
-		}
-	case []any:
-		for _, child := range v {
-			redactConfigValue(child)
-		}
+// redactedSourceYAML decodes a source config and renders its redacted form.
+func redactedSourceYAML(content string) string {
+	if strings.TrimSpace(content) == "" {
+		return content
 	}
-}
-
-func redactedConfigValue(key string, value any) string {
-	switch strings.ToLower(key) {
-	case "ssl-ca-bytes", "ssl-cert-bytes", "ssl-key-bytes",
-		"ssl-ca-base64", "ssl-cert-base64", "ssl-key-base64":
-		return redactedTLSContent
-	default:
-		return config.ObfuscatedPasswordForFeedback
+	cfg := &config.SourceConfig{}
+	if err := yaml.UnmarshalStrict([]byte(content), cfg); err != nil {
+		return invalidConfigForLog
 	}
+	data, err := yaml.Marshal(cfg.Redacted())
+	if err != nil {
+		return invalidConfigForLog
+	}
+	return redact.Text(string(data))
 }
 
 // redactedPayload renders an RPC request for logging: configuration strings are
-// redacted, while the non-sensitive fields stay visible.
+// replaced with their redacted form, the rest of the request stays visible.
 func redactedPayload(req interface{}) string {
 	switch r := req.(type) {
 	case *pb.StartTaskRequest:
-		return fmt.Sprintf("task: %s, sources: %v", redactConfigYAML(r.Task), r.Sources)
+		return fmt.Sprintf("task: %s, sources: %v", redactedTaskYAML(r.Task), r.Sources)
 	case *pb.UpdateTaskRequest:
-		return fmt.Sprintf("task: %s", redactConfigYAML(r.Task))
+		return fmt.Sprintf("task: %s", redactedTaskYAML(r.Task))
 	case *pb.OperateSourceRequest:
 		configs := make([]string, 0, len(r.Config))
 		for _, cfg := range r.Config {
-			configs = append(configs, redactConfigYAML(cfg))
+			configs = append(configs, redactedSourceYAML(cfg))
 		}
 		return fmt.Sprintf("op: %v, source id: %v, worker: %s, config: %v",
 			r.Op, r.SourceID, r.WorkerName, configs)

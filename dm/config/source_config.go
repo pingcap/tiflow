@@ -63,6 +63,13 @@ var ObfuscatedPasswordForFeedback string = "******"
 // receive it, so it must never be persisted as-is.
 var ObfuscatedTLSContentForFeedback string = "REDACTED"
 
+// Redacted returns a copy for diagnostics with the source credentials hidden.
+func (c *SourceConfig) Redacted() *SourceConfig {
+	result := *c
+	result.From = *redactedDBConfig(&c.From)
+	return &result
+}
+
 // PurgeConfig is the configuration for Purger.
 type PurgeConfig struct {
 	Interval    int64 `yaml:"interval" toml:"interval" json:"interval"`             // check whether need to purge at this @Interval (seconds)
