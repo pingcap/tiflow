@@ -1246,6 +1246,12 @@ description = ""
 workaround = "Please check the `metric-labels` config in the task configuration."
 tags = ["internal", "medium"]
 
+[error.DM-config-20072]
+message = "invalid session variable name: %s"
+description = ""
+workaround = "Please check the `session` config in the configuration file, the name can only contain letters, digits, '_', '.' and '-'."
+tags = ["internal", "medium"]
+
 [error.DM-binlog-op-22001]
 message = ""
 description = ""

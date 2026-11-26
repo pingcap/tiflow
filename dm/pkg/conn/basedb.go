@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -43,6 +44,12 @@ import (
 var customID int64
 
 var netTimeout = DefaultDBTimeout
+
+// validSessionVarName restricts the session variable names that are allowed to
+// be interpolated into the DSN. Session variables are passed to the driver as
+// DSN parameters, so a name containing '&' or '=' would allow injecting
+// arbitrary driver parameters, e.g. `tls=skip-verify&x`.
+var validSessionVarName = regexp.MustCompile(`\A[A-Za-z0-9._-]+\z`)
 
 // DBProvider providers BaseDB instance.
 type DBProvider interface {
@@ -162,6 +169,10 @@ func (d *DefaultDBProviderImpl) ApplyWithPingTimeout(config ScopedDBConfig, ping
 
 	var setFK bool
 	for key, val := range config.Session {
+		if !validSessionVarName.MatchString(key) {
+			doFuncInClose()
+			return nil, terror.ErrConfigInvalidSessionVar.Generate(key)
+		}
 		// for num such as 1/"1", format as key='1'
 		// for string, format as key='string'
 		// both are valid for mysql and tidb
