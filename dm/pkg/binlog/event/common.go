@@ -19,6 +19,7 @@ import (
 
 	gmysql "github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
+	"github.com/google/uuid"
 	"github.com/pingcap/tiflow/dm/pkg/gtid"
 	"github.com/pingcap/tiflow/dm/pkg/terror"
 )
@@ -118,12 +119,19 @@ func GenCommonGTIDEvent(flavor string, serverID uint32, latestPos uint32, gSet g
 
 	switch flavor {
 	case gmysql.MySQLFlavor:
-		uuidSet := singleGTID.(*gmysql.UUIDSet)
-		interval := uuidSet.Intervals[0]
+		mSet := singleGTID.(*gmysql.MysqlGTIDSet)
+		var sid uuid.UUID
+		var interval gmysql.Interval
+		for u, tags := range *mSet {
+			sid = u
+			for _, intervals := range tags {
+				interval = intervals[0]
+			}
+		}
 		if anonymous {
 			gtidEv, err = GenAnonymousGTIDEvent(header, latestPos, defaultGTIDFlags, defaultLastCommitted, defaultSequenceNumber)
 		} else {
-			gtidEv, err = GenGTIDEvent(header, latestPos, defaultGTIDFlags, uuidSet.SID.String(), interval.Start, defaultLastCommitted, defaultSequenceNumber)
+			gtidEv, err = GenGTIDEvent(header, latestPos, defaultGTIDFlags, sid.String(), interval.Start, defaultLastCommitted, defaultSequenceNumber)
 		}
 	case gmysql.MariaDBFlavor:
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
@@ -153,20 +161,21 @@ func GTIDIncrease(flavor string, gSet gmysql.GTIDSet) (gmysql.GTIDSet, error) {
 
 	switch flavor {
 	case gmysql.MySQLFlavor:
-		uuidSet := singleGTID.(*gmysql.UUIDSet)
-		uuidSet.Intervals[0].Start++
-		uuidSet.Intervals[0].Stop++
-		gtidSet := new(gmysql.MysqlGTIDSet)
-		gtidSet.Sets = map[string]*gmysql.UUIDSet{uuidSet.SID.String(): uuidSet}
-		clone = gtidSet
+		mSet := clone.(*gmysql.MysqlGTIDSet)
+		for u, tags := range *mSet {
+			for tag, intervals := range tags {
+				intervals[0].Start++
+				intervals[0].Stop++
+				(*mSet)[u][tag] = intervals
+			}
+		}
+		clone = mSet
 	case gmysql.MariaDBFlavor:
 		mariaGTID := singleGTID.(*gmysql.MariadbGTID)
 		mariaGTID.SequenceNumber++
 		gtidSet := new(gmysql.MariadbGTIDSet)
-		gtidSet.Sets = map[uint32]map[uint32]*gmysql.MariadbGTID{
-			mariaGTID.DomainID: {
-				mariaGTID.ServerID: mariaGTID,
-			},
+		gtidSet.Sets = map[uint32]*gmysql.MariadbGTID{
+			mariaGTID.DomainID: mariaGTID,
 		}
 		clone = gtidSet
 	default:
@@ -187,35 +196,39 @@ func verifySingleGTID(flavor string, gSet gmysql.GTIDSet) (interface{}, error) {
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMySQLNotValid.Generate(gSet)
 		}
-		if len(mysqlGTIDs.Sets) != 1 {
-			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(mysqlGTIDs.Sets), gSet)
+		if len(*mysqlGTIDs) != 1 {
+			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(*mysqlGTIDs), gSet)
 		}
-		var uuidSet *gmysql.UUIDSet
-		for _, uuidSet = range mysqlGTIDs.Sets {
+		var sid uuid.UUID
+		var tags map[gmysql.Tag]gmysql.IntervalSlice
+		for sid, tags = range *mysqlGTIDs {
 		}
-		intervals := uuidSet.Intervals
-		if intervals.Len() != 1 {
-			return nil, terror.ErrBinlogOnlyOneIntervalInUUID.Generate(intervals.Len(), gSet)
+		_ = sid
+		if len(tags) != 1 {
+			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(len(tags), gSet)
+		}
+		var intervals gmysql.IntervalSlice
+		for _, intervals = range tags {
+		}
+		if len(intervals) != 1 {
+			return nil, terror.ErrBinlogOnlyOneIntervalInUUID.Generate(len(intervals), gSet)
 		}
 		interval := intervals[0]
 		if interval.Stop != interval.Start+1 {
 			return nil, terror.ErrBinlogIntervalValueNotValid.Generate(interval, gSet)
 		}
-		return uuidSet, nil
+		return mysqlGTIDs, nil
 	case gmysql.MariaDBFlavor:
 		mariaGTIDs, ok := gSet.(*gmysql.MariadbGTIDSet)
 		if !ok {
 			return nil, terror.ErrBinlogGTIDMariaDBNotValid.Generate(gSet)
 		}
-		gtidCount := 0
-		var mariaGTID *gmysql.MariadbGTID
-		for _, set := range mariaGTIDs.Sets {
-			gtidCount += len(set)
-			for _, mariaGTID = range set {
-			}
-		}
+		gtidCount := len(mariaGTIDs.Sets)
 		if gtidCount != 1 {
 			return nil, terror.ErrBinlogOnlyOneGTIDSupport.Generate(gtidCount, gSet)
+		}
+		var mariaGTID *gmysql.MariadbGTID
+		for _, mariaGTID = range mariaGTIDs.Sets {
 		}
 		return mariaGTID, nil
 	default:
