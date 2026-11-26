@@ -122,6 +122,25 @@ func (s *OpenAPIControllerSuite) TestSourceController() {
 		s.EqualValues(s.testSource, sourceAfterUpdated)
 	}
 
+	// changing the endpoint without resubmitting the password must be rejected:
+	// otherwise the stored password would be used against a caller-chosen host.
+	{
+		for _, change := range []func(*openapi.Source){
+			func(source *openapi.Source) { source.Host = "another-host" },
+			func(source *openapi.Source) { source.Port++ },
+			func(source *openapi.Source) { source.User = "another-user" },
+		} {
+			source := *s.testSource
+			source.Password = nil
+			change(&source)
+			_, err := server.updateSource(ctx, source.SourceName, openapi.UpdateSourceRequest{Source: source})
+			s.Error(err)
+			s.Contains(err.Error(), "password must be provided explicitly")
+		}
+		// the stored source is untouched
+		s.EqualValues(s.testSource.Host, server.scheduler.GetSourceCfgByID(s.testSource.SourceName).From.Host)
+	}
+
 	// get and with status
 	{
 		withStatus := false
