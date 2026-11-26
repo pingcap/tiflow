@@ -96,7 +96,7 @@ func (c *causality) run() {
 			c.relation.gc(j.flushSeq)
 			continue
 		default:
-			keys := j.dml.CausalityKeys()
+			keys := j.causalityKeys()
 
 			// detectConflict before add
 			if c.detectConflict(keys) {
