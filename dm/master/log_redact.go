@@ -32,7 +32,7 @@ func redactedTaskYAML(content string) string {
 		return content
 	}
 	cfg := &config.TaskConfig{}
-	if err := yaml.UnmarshalStrict([]byte(content), cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(content), cfg); err != nil {
 		return invalidConfigForLog
 	}
 	data, err := yaml.Marshal(cfg.Redacted())
@@ -48,7 +48,7 @@ func redactedSourceYAML(content string) string {
 		return content
 	}
 	cfg := &config.SourceConfig{}
-	if err := yaml.UnmarshalStrict([]byte(content), cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(content), cfg); err != nil {
 		return invalidConfigForLog
 	}
 	data, err := yaml.Marshal(cfg.Redacted())
