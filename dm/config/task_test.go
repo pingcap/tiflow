@@ -1268,3 +1268,17 @@ func TestTaskConfigRedacted(t *testing.T) {
 	require.Equal(t, before, cfg.String())
 	require.Equal(t, raw, cfg.MySQLInstances[0].Loader.Dir)
 }
+
+func TestValidateLoaderDir(t *testing.T) {
+	for _, dir := range []string{"/", "/etc", "/root", ".", "..", "../dump", "dump/../../etc"} {
+		require.Error(t, validateLoaderDir(dir), dir)
+	}
+	for _, dir := range []string{"", "./dumped_data", "dumped_data", "/tmp/dump", "/data/dump/task", "s3://bucket/path"} {
+		require.NoError(t, validateLoaderDir(dir), dir)
+	}
+
+	cfg := &LoaderConfig{Dir: "/"}
+	require.Error(t, cfg.adjust())
+	cfg = &LoaderConfig{Dir: "s3://bucket/path"}
+	require.NoError(t, cfg.adjust())
+}

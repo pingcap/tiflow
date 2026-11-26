@@ -137,9 +137,35 @@ func CollectDirFiles(ctx context.Context, dir string, storage storeapi.Storage) 
 	return files, err
 }
 
+// validateLocalRemoveDir refuses to treat the filesystem root or a top-level
+// directory as a recursive deletion root.
+func validateLocalRemoveDir(dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	clean := filepath.Clean(dir)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return perrors.Errorf("refuse to remove %q: it points to the current or a parent directory", dir)
+	}
+	if filepath.IsAbs(clean) {
+		if clean == string(filepath.Separator) {
+			return perrors.Errorf("refuse to remove %q: it is the filesystem root", dir)
+		}
+		if filepath.Dir(clean) == string(filepath.Separator) {
+			return perrors.Errorf("refuse to remove %q: use a dedicated subdirectory instead of a top-level directory", dir)
+		}
+	}
+	return nil
+}
+
 // RemoveAll remove files in dir.
 func RemoveAll(ctx context.Context, dir string, storage storeapi.Storage) error {
 	var err error
+	if storage == nil && IsLocalDiskPath(dir) {
+		if err = validateLocalRemoveDir(dir); err != nil {
+			return err
+		}
+	}
 	var backend *backuppb.StorageBackend
 	if storage == nil {
 		storage, err = CreateStorage(ctx, dir)

@@ -29,6 +29,7 @@ import (
 	"github.com/coreos/go-semver/semver"
 	"github.com/docker/go-units"
 	"github.com/dustin/go-humanize"
+	"github.com/pingcap/errors"
 	"github.com/pingcap/tidb/pkg/lightning/config"
 	"github.com/pingcap/tidb/pkg/objstore"
 	"github.com/pingcap/tidb/pkg/parser"
@@ -44,6 +45,7 @@ import (
 	"github.com/pingcap/tiflow/pkg/column-mapping"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
+	"path/filepath"
 )
 
 // Online DDL Scheme.
@@ -335,7 +337,33 @@ func (m *LoaderConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return nil
 }
 
+// validateLoaderDir rejects a loader.dir that must not become a recursive
+// deletion root. The dir comes from the task config, which can be submitted by
+// any caller that can reach dm-master, and the dump/loader cleanup removes the
+// directory recursively on the dm-worker host.
+func validateLoaderDir(dir string) error {
+	if strings.TrimSpace(dir) == "" || strings.Contains(dir, "://") {
+		return nil
+	}
+	clean := filepath.Clean(dir)
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return errors.Errorf("invalid loader.dir %q: must not point to the current or a parent directory", dir)
+	}
+	if filepath.IsAbs(clean) {
+		if clean == string(filepath.Separator) {
+			return errors.Errorf("invalid loader.dir %q: must not be the filesystem root", dir)
+		}
+		if filepath.Dir(clean) == string(filepath.Separator) {
+			return errors.Errorf("invalid loader.dir %q: use a dedicated subdirectory instead of a top-level directory", dir)
+		}
+	}
+	return nil
+}
+
 func (m *LoaderConfig) adjust() error {
+	if err := validateLoaderDir(m.Dir); err != nil {
+		return err
+	}
 	if m.ImportMode == "" {
 		m.ImportMode = LoadModeLogical
 	}

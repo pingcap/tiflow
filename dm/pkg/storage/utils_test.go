@@ -401,3 +401,12 @@ func TestIsNotExistError(t *testing.T) {
 	res = IsNotExistError(err)
 	require.False(t, res)
 }
+
+func TestValidateLocalRemoveDir(t *testing.T) {
+	for _, dir := range []string{"/", "/etc", "/root", ".", "..", "../dump", "dump/../../etc"} {
+		require.Error(t, validateLocalRemoveDir(dir), dir)
+	}
+	for _, dir := range []string{"", "./dumped_data", "dumped_data", "/tmp/dump", "/data/dump/task"} {
+		require.NoError(t, validateLocalRemoveDir(dir), dir)
+	}
+}
