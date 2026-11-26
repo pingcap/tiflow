@@ -525,6 +525,57 @@ func TestValidatorWorkerGetSourceRowsForCompare(t *testing.T) {
 	require.Equal(t, "2", rows["b"][1].String)
 }
 
+<<<<<<< HEAD
+=======
+func TestValidatorWorkerUsesVisibleColumns(t *testing.T) {
+	tbl := filter.Table{Schema: "test", Name: "tbl"}
+	tableInfo := genValidateTableInfo(t, "create table tbl(a int, id int primary key, b int)")
+	hidden := addHiddenColumn(t, tableInfo, "_V$_hidden")
+	testutil.ReorderColumnsByName(t, tableInfo, "a", hidden, "id", "b")
+
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	mock.ExpectQuery("SELECT .*`a`, `id`, `b`.* FROM `test`.`tbl` WHERE `id` in \\(\\?\\)").
+		WithArgs("42").
+		WillReturnRows(sqlmock.NewRows([]string{"a", "id", "b"}).AddRow("7", "42", "9"))
+
+	cfg := genSubtaskConfig(t)
+	cfg.ValidatorCfg.Mode = config.ValidationFull
+	worker := &validateWorker{
+		cfg: cfg.ValidatorCfg,
+		ctx: context.Background(),
+		db:  conn.NewBaseDBForTest(db, func() {}),
+		L:   log.L(),
+	}
+	failedRows, err := worker.batchValidateRowChanges(
+		[]*rowValidationJob{genRowChangeJob(tbl, tableInfo, "42", rowInsert, []interface{}{7, 42, 9})},
+		false,
+	)
+	require.NoError(t, err)
+	require.Empty(t, failedRows)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestTableInfoForVisibleColumnCount(t *testing.T) {
+	tableInfo := genValidateTableInfo(t, "create table tbl(id int primary key, a int, b int)")
+	hidden := addHiddenColumn(t, tableInfo, "_V$_hidden")
+	testutil.ReorderColumnsByName(t, tableInfo, "id", "a", hidden, "b")
+
+	eventTableInfo, ok := tableInfoForVisibleColumnCount(tableInfo, 2)
+	require.True(t, ok)
+	require.NotSame(t, tableInfo, eventTableInfo)
+	require.Equal(t, []string{"id", "a", hidden}, columnNames(eventTableInfo.Columns))
+
+	eventTableInfo, ok = tableInfoForVisibleColumnCount(tableInfo, 3)
+	require.True(t, ok)
+	require.Same(t, tableInfo, eventTableInfo)
+
+	_, ok = tableInfoForVisibleColumnCount(tableInfo, 4)
+	require.False(t, ok)
+}
+
+>>>>>>> 67c51469bf (syncer(dm): quote the validator WHERE identifiers (#13008))
 func TestValidatorIsRetryableDBError(t *testing.T) {
 	require.True(t, isRetryableDBError(&gmysql.MySQLError{Number: errno.ErrPDServerTimeout}))
 	require.True(t, isRetryableDBError(gmysql.ErrInvalidConn))

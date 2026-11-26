@@ -75,7 +75,7 @@ func TestValidatorCondSelectMultiKey(t *testing.T) {
 	// format query string
 	rowsQuery := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s;", "`test_cond`.`test1`", cond.GetWhere())
 	mock.ExpectQuery(
-		"SELECT COUNT\\(\\*\\) FROM `test_cond`.`test1` WHERE \\(a,b\\) in \\(\\(\\?,\\?\\),\\(\\?,\\?\\),\\(\\?,\\?\\)\\);",
+		"SELECT COUNT\\(\\*\\) FROM `test_cond`.`test1` WHERE \\(`a`,`b`\\) in \\(\\(\\?,\\?\\),\\(\\?,\\?\\),\\(\\?,\\?\\)\\);",
 	).WithArgs(
 		"1", "2", "2", "3", "3", "4",
 	).WillReturnRows(mock.NewRows([]string{"COUNT(*)"}).AddRow("3"))
@@ -117,7 +117,7 @@ func TestValidatorCondGetWhereArgs(t *testing.T) {
 			},
 			tblName:    "test2",
 			schemaName: "test_cond",
-			where:      "a in (?,?,?)",
+			where:      "`a` in (?,?,?)",
 			args: []string{
 				"10a0", "200", "abc",
 			},
@@ -135,7 +135,7 @@ func TestValidatorCondGetWhereArgs(t *testing.T) {
 			},
 			tblName:    "test3",
 			schemaName: "test_cond",
-			where:      "(a,b,c) in ((?,?,?),(?,?,?))",
+			where:      "(`a`,`b`,`c`) in ((?,?,?),(?,?,?))",
 			args: []string{
 				"10", "abc", "ef", "9897", "afdkiefkjg", "acdee",
 			},
@@ -150,4 +150,15 @@ func TestValidatorCondGetWhereArgs(t *testing.T) {
 			require.Equal(t, cases[i].args[j], curData)
 		}
 	}
+}
+
+func TestValidatorCondQuotesInjection(t *testing.T) {
+	// Column names are attacker-controlled: quoting must neutralise the SQL
+	// fragments they may contain (a backtick is escaped by doubling it).
+	creatTbl := "create table if not exists `test_cond`.`test4`(\n" +
+		" `a``b` int,\n" +
+		" primary key(`a``b`)\n" +
+		");"
+	cond := genValidationCond(t, "test_cond", "test4", creatTbl, [][]string{{"1"}})
+	require.Equal(t, "`a``b` in (?)", cond.GetWhere())
 }
