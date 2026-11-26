@@ -54,6 +54,12 @@ func TestHandleError(t *testing.T) {
 				errMsg: ".*without schema name not valid.*",
 			},
 			{
+				// UNLOCK TABLES is an ast.DDLNode without any TableName, so
+				// FetchDDLTables returns an empty slice and tables[0] used to panic.
+				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"unlock tables"}},
+				errMsg: ".*injected DDL has no table.*",
+			},
+			{
 				req:    &pb.HandleWorkerErrorRequest{Op: pb.ErrorOp_Replace, Task: task, BinlogPos: "mysql-bin.000001:2345", Sqls: []string{"insert into db.tb values(1,2);"}},
 				errMsg: ".*only support replace or inject with DDL currently.*",
 			},
