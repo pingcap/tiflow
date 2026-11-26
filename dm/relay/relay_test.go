@@ -961,3 +961,23 @@ func (t *testRelaySuite) TestRecoverMySQLNone(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Assert(result.Truncated, check.IsFalse)
 }
+
+func (t *testRelaySuite) TestCheckRelayDirPurgeable(c *check.C) {
+	c.Assert(checkRelayDirPurgeable(""), check.NotNil)
+	c.Assert(checkRelayDirPurgeable("/"), check.NotNil)
+	c.Assert(checkRelayDirPurgeable("/etc"), check.NotNil)
+
+	// a dedicated sub directory is fine
+	dir := c.MkDir()
+	c.Assert(checkRelayDirPurgeable(dir), check.IsNil)
+
+	// symlinks are refused
+	link := filepath.Join(c.MkDir(), "relay-link")
+	c.Assert(os.Symlink(dir, link), check.IsNil)
+	c.Assert(checkRelayDirPurgeable(link), check.NotNil)
+
+	// a regular file is not a relay dir
+	file := filepath.Join(c.MkDir(), "relay.meta")
+	c.Assert(os.WriteFile(file, []byte("{}"), 0o600), check.IsNil)
+	c.Assert(checkRelayDirPurgeable(file), check.NotNil)
+}

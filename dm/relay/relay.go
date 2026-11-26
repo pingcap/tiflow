@@ -334,9 +334,51 @@ func (r *Relay) process(ctx context.Context) error {
 	}
 }
 
+// checkRelayDirPurgeable refuses to purge a directory that must not become a
+// recursive deletion root. The relay dir comes from the source config, which is
+// supplied by whoever can reach dm-master, and PurgeRelayDir removes everything
+// inside it.
+func checkRelayDirPurgeable(dir string) error {
+	if strings.TrimSpace(dir) == "" {
+		return errors.New("relay dir is empty")
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return err
+	}
+	clean := filepath.Clean(abs)
+	if clean == string(filepath.Separator) {
+		return errors.Errorf("refuse to purge relay dir %q: it is the filesystem root", clean)
+	}
+	if filepath.Dir(clean) == string(filepath.Separator) {
+		return errors.Errorf("refuse to purge relay dir %q: use a dedicated subdirectory instead of a top-level directory", clean)
+	}
+	if strings.Contains(dir, ".."+string(filepath.Separator)) {
+		return errors.Errorf("refuse to purge relay dir %q: it contains a parent directory reference", dir)
+	}
+	fi, err := os.Lstat(clean)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if fi.Mode()&os.ModeSymlink != 0 {
+		return errors.Errorf("refuse to purge relay dir %q: it is a symlink", clean)
+	}
+	if !fi.IsDir() {
+		return errors.Errorf("refuse to purge relay dir %q: it is not a directory", clean)
+	}
+	return nil
+}
+
 // PurgeRelayDir implements the dm.Unit interface.
 func (r *Relay) PurgeRelayDir() error {
 	dir := r.cfg.RelayDir
+	if err := checkRelayDirPurgeable(dir); err != nil {
+		r.logger.Error("refuse to purge relay dir", zap.String("relayDir", dir), zap.Error(err))
+		return err
+	}
 	d, err := os.Open(dir)
 	r.logger.Info("will try purge whole relay dir for new relay log", zap.String("relayDir", dir))
 	// fail to open dir, return directly
