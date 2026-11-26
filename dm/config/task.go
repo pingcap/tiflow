@@ -650,6 +650,7 @@ func (c *TaskConfig) Redacted() *TaskConfig {
 		}
 		copyLoader := *loader
 		copyLoader.Dir = objstore.RedactURL(loader.Dir)
+		copyLoader.Security = redactedSecurityConfig(loader.Security)
 		return &copyLoader
 	}
 	if c.Loaders != nil {
@@ -669,6 +670,7 @@ func (c *TaskConfig) Redacted() *TaskConfig {
 			result.MySQLInstances[i] = &copyInstance
 		}
 	}
+	result.TargetDB = redactedDBConfig(c.TargetDB)
 	return &result
 }
 
