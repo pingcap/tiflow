@@ -31,7 +31,6 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	tidbmock "github.com/pingcap/tidb/pkg/util/mock"
-	regexprrouter "github.com/pingcap/tidb/pkg/util/regexpr-router"
 	"github.com/pingcap/tiflow/dm/config"
 	"github.com/pingcap/tiflow/dm/pkg/binlog"
 	"github.com/pingcap/tiflow/dm/pkg/binlog/event"
@@ -64,7 +63,9 @@ type DDLWorker struct {
 
 	strategy shardDDLStrategy
 
-	binlogFilter               *bf.BinlogEvent
+	// syncer provides the block-allow list, the route rules and the binlog
+	// filter, which Update can replace while the task is paused.
+	syncer                     *Syncer
 	metricsProxies             *metrics.Proxies
 	name                       string
 	workerName                 string
@@ -74,12 +75,10 @@ type DDLWorker struct {
 	upstreamTZStr              string
 	onlineDDL                  onlineddl.OnlinePlugin
 	checkpoint                 CheckPoint
-	tableRouter                *regexprrouter.RouteTable
 	sourceTableNamesFlavor     conn.LowerCaseTableNamesFlavor
 	collationCompatible        string
 	charsetAndDefaultCollation map[string]string
 	idAndCollationMap          map[int]string
-	baList                     *filter.Filter
 	foreignKeyChecksEnabled    bool
 
 	getTableInfo            func(tctx *tcontext.Context, sourceTable, targetTable *filter.Table) (*model.TableInfo, error)
@@ -94,7 +93,7 @@ type DDLWorker struct {
 func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 	ddlWorker := &DDLWorker{
 		logger:                     pLogger.WithFields(zap.String("component", "ddl")),
-		binlogFilter:               syncer.binlogFilter,
+		syncer:                     syncer,
 		metricsProxies:             syncer.metricsProxies,
 		name:                       syncer.cfg.Name,
 		workerName:                 syncer.cfg.WorkerName,
@@ -104,12 +103,10 @@ func NewDDLWorker(pLogger *log.Logger, syncer *Syncer) *DDLWorker {
 		upstreamTZStr:              syncer.upstreamTZStr,
 		onlineDDL:                  syncer.onlineDDL,
 		checkpoint:                 syncer.checkpoint,
-		tableRouter:                syncer.tableRouter,
 		sourceTableNamesFlavor:     syncer.SourceTableNamesFlavor,
 		collationCompatible:        syncer.cfg.CollationCompatible,
 		charsetAndDefaultCollation: syncer.charsetAndDefaultCollation,
 		idAndCollationMap:          syncer.idAndCollationMap,
-		baList:                     syncer.baList,
 		foreignKeyChecksEnabled:    config.IsForeignKeyChecksEnabled(syncer.cfg.To.Session),
 		recordSkipSQLsLocation:     syncer.recordSkipSQLsLocation,
 		trackDDL:                   syncer.trackDDL,
@@ -254,7 +251,7 @@ func (ddl *DDLWorker) HandleQueryEvent(ev *replication.QueryEvent, ec eventConte
 		// why not `skipSQLByPattern` at beginning, but at defer?
 		// it is in order to track every ddl except for the one that will cause error.
 		// if `skipSQLByPattern` at beginning, some ddl should be tracked may be skipped.
-		needSkip, err2 := skipSQLByPattern(ddl.binlogFilter, qec.originSQL)
+		needSkip, err2 := skipSQLByPattern(ddl.syncer.binlogFilter, qec.originSQL)
 		if err2 != nil {
 			err = err2
 			return
@@ -1239,11 +1236,11 @@ func (ddl *DDLWorker) skipQueryEvent(qec *queryEventContext, ddlInfo *ddlInfo) (
 	}
 	for _, table := range realTables {
 		ddl.logger.Debug("query event info", zap.String("event", "query"), zap.String("origin sql", qec.originSQL), zap.Stringer("table", table), zap.Stringer("ddl info", ddlInfo))
-		if skipByTable(ddl.baList, table) {
+		if skipByTable(ddl.syncer.getBAList(), table) {
 			ddl.logger.Debug("skip event by balist")
 			return true, nil
 		}
-		needSkip, err := skipByFilter(ddl.binlogFilter, table, et, qec.originSQL)
+		needSkip, err := skipByFilter(ddl.syncer.binlogFilter, table, et, qec.originSQL)
 		if err != nil {
 			return needSkip, err
 		}
@@ -1338,7 +1335,7 @@ func (ddl *DDLWorker) genDDLInfo(qec *queryEventContext, sql string) (*ddlInfo, 
 
 	targetTables := make([]*filter.Table, 0, len(sourceTables))
 	for i := range sourceTables {
-		renamedTable := route(ddl.tableRouter, sourceTables[i])
+		renamedTable := route(ddl.syncer.tableRouter, sourceTables[i])
 		targetTables = append(targetTables, renamedTable)
 	}
 

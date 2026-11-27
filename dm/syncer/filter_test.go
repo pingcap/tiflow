@@ -66,7 +66,8 @@ func (s *testFilterSuite) TestSkipQueryEvent(c *check.C) {
 	syncer := NewSyncer(cfg, nil, nil)
 	c.Assert(syncer.genRouter(), check.IsNil)
 	var err error
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	c.Assert(err, check.IsNil)
 
 	syncer.ddlDBConn = dbconn.NewDBConn(syncer.cfg, s.baseConn)
@@ -210,7 +211,8 @@ func (s *testFilterSuite) TestSkipByFilter(c *check.C) {
 	}
 	syncer := NewSyncer(cfg, nil, nil)
 	var err error
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	c.Assert(err, check.IsNil)
 	// test binlog filter
 	filterRules := []*bf.BinlogEventRule{
@@ -281,7 +283,8 @@ func (s *testFilterSuite) TestSkipByTable(c *check.C) {
 	}
 	syncer := NewSyncer(cfg, nil, nil)
 	var err error
-	syncer.baList, err = filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	baList, err := filter.New(syncer.cfg.CaseSensitive, syncer.cfg.BAList)
+	syncer.setBAList(baList)
 	c.Assert(err, check.IsNil)
 
 	cases := []struct {
