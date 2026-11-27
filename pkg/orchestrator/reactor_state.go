@@ -29,6 +29,36 @@ import (
 
 const defaultCaptureRemoveTTL = 5
 
+func init() {
+	if err := warmUpJSONCodecs(); err != nil {
+		log.Warn("failed to warm up json codecs", zap.Error(err))
+	}
+}
+
+// warmUpJSONCodecs compiles the go-json decoders and encoders of every type
+// this file decodes or encodes with go-json. go-json caches compiled codecs in
+// a global array without synchronization in non-race builds, so when the owner
+// and processor etcd workers decode a type for the first time concurrently,
+// one of them can read a partially written cache entry and panic with a nil
+// pointer dereference. A cache entry is written only when it is missing, so
+// compiling the codecs once in init, before any goroutine uses them, removes
+// the race. See https://github.com/pingcap/tiflow/issues/12271.
+func warmUpJSONCodecs() error {
+	for _, v := range []any{
+		new(model.ChangeFeedInfo),
+		new(model.ChangeFeedStatus),
+		new(model.TaskPosition),
+	} {
+		if err := json.Unmarshal([]byte("{}"), v); err != nil {
+			return errors.Annotatef(err, "decode %T", v)
+		}
+		if _, err := json.Marshal(v); err != nil {
+			return errors.Annotatef(err, "encode %T", v)
+		}
+	}
+	return nil
+}
+
 // GlobalReactorState represents a global state which stores all key-value pairs in ETCD
 type GlobalReactorState struct {
 	ClusterID      string
