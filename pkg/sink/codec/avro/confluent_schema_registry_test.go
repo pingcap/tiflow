@@ -232,7 +232,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 	}
 	topic := "cdctest"
 
-	codec, header, err := manager.GetCachedOrRegister(ctx, topic, 1, schemaGen)
+	codec, header, err := manager.GetCachedOrRegister(ctx, topic, 1, insertOperation, schemaGen)
 	require.NoError(t, err)
 	cID, err := getConfluentSchemaIDFromHeader(header)
 	require.NoError(t, err)
@@ -240,12 +240,12 @@ func TestGetCachedOrRegister(t *testing.T) {
 	require.NotNil(t, codec)
 	require.Equal(t, 1, called)
 
-	codec1, _, err := manager.GetCachedOrRegister(ctx, topic, 1, schemaGen)
+	codec1, _, err := manager.GetCachedOrRegister(ctx, topic, 1, insertOperation, schemaGen)
 	require.NoError(t, err)
 	require.True(t, codec == codec1) // check identity
 	require.Equal(t, 1, called)
 
-	codec2, _, err := manager.GetCachedOrRegister(ctx, topic, 2, schemaGen)
+	codec2, _, err := manager.GetCachedOrRegister(ctx, topic, 2, insertOperation, schemaGen)
 	require.NoError(t, err)
 	require.NotEqual(t, codec, codec2)
 	require.Equal(t, 2, called)
@@ -283,6 +283,7 @@ func TestGetCachedOrRegister(t *testing.T) {
 					ctx,
 					topic,
 					uint64(finalI),
+					insertOperation,
 					schemaGen,
 				)
 				require.NoError(t, err)

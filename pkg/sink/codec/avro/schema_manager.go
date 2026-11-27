@@ -24,7 +24,7 @@ type SchemaManager interface {
 	Register(ctx context.Context, schemaName string, schemaDefinition string) (schemaID, error)
 	Lookup(ctx context.Context, schemaName string, schemaID schemaID) (*goavro.Codec, error)
 	GetCachedOrRegister(ctx context.Context, topicName string,
-		tableVersion uint64, schemaGen SchemaGenerator) (*goavro.Codec, []byte, error)
+		tableVersion uint64, operation string, schemaGen SchemaGenerator) (*goavro.Codec, []byte, error)
 	RegistryType() string
 	ClearRegistry(ctx context.Context, schemaName string) error
 }
@@ -46,6 +46,8 @@ type schemaCacheEntry struct {
 	// tableVersion is the table's version which the message associated with.
 	// encoder use it as the cache key.
 	tableVersion uint64
+
+	operation string
 	// schemaID is the unique identifier of a schema in schema registry.
 	// for each message should carry this id to allow the decoder fetch the corresponding schema
 	// decoder use it as the cache key.
