@@ -741,7 +741,20 @@ func (w *SourceWorker) OperateSubTask(name string, op pb.TaskOp) error {
 
 // QueryStatus query worker's sub tasks' status. If relay enabled, also return source status.
 func (w *SourceWorker) QueryStatus(ctx context.Context, name string) ([]*pb.SubTaskStatus, *pb.RelayStatus, error) {
-	w.RLock()
+	// A subtask lifecycle operation can hold the worker lock while it waits for
+	// the current unit to exit. Do not queue status requests behind that wait:
+	// subTaskHolder and SubTask synchronize their own state, so we can still
+	// return a snapshot of the latest subtask stage and result safely. Detailed
+	// unit, source, and relay status is omitted in this fallback because it can
+	// race with the lifecycle operation or is protected by the worker lock.
+	if !w.TryRLock() {
+		if w.closed.Load() {
+			w.l.Warn("querying status from a closed worker")
+			return nil, nil, nil
+		}
+
+		return w.subTaskStatusSnapshot(name), nil, nil
+	}
 	defer w.RUnlock()
 
 	if w.closed.Load() {
@@ -1195,10 +1208,14 @@ func (w *SourceWorker) getAllSubTaskStatus() map[string]*pb.SubTaskStatus {
 	result := make(map[string]*pb.SubTaskStatus, len(sts))
 	for name, st := range sts {
 		st.RLock()
+		var processResult *pb.ProcessResult
+		if st.result != nil {
+			processResult = proto.Clone(st.result).(*pb.ProcessResult)
+		}
 		result[name] = &pb.SubTaskStatus{
 			Name:   name,
 			Stage:  st.stage,
-			Result: proto.Clone(st.result).(*pb.ProcessResult),
+			Result: processResult,
 		}
 		st.RUnlock()
 	}
