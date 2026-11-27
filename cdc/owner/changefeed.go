@@ -816,7 +816,7 @@ func (c *changefeed) releaseResources(ctx context.Context) {
 	}
 
 	if c.scheduler != nil {
-		c.scheduler.Close(ctx)
+		c.scheduler.Close()
 		c.scheduler = nil
 	}
 	if c.downstreamObserver != nil {
