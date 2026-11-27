@@ -85,11 +85,9 @@ func newTaskCommitterWithClock(
 		requestTTL: requestTTL,
 	}
 
-	committer.wg.Add(1)
-	go func() {
-		defer committer.wg.Done()
+	committer.wg.Go(func() {
 		committer.runTTLChecker()
-	}()
+	})
 
 	return committer
 }

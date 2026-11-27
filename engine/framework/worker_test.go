@@ -138,7 +138,7 @@ func TestWorkerHeartbeatPingPong(t *testing.T) {
 
 	worker.On("Tick", mock.Anything).Return(nil)
 	var lastHeartbeatSendTime clock.MonotonicTime
-	for i := 0; i < heartbeatPingPongTestRepeatTimes; i++ {
+	for range heartbeatPingPongTestRepeatTimes {
 		err := worker.Poll(ctx)
 		require.NoError(t, err)
 
@@ -394,11 +394,9 @@ func TestWorkerGracefulExit(t *testing.T) {
 	require.Regexp(t, ".*fake error.*", err)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		require.NoError(t, worker.NotifyExit(ctx, err))
-	}()
+	})
 
 	for {
 		// Make the heartbeat worker tick.
@@ -465,14 +463,12 @@ func TestWorkerGracefulExitWhileTimeout(t *testing.T) {
 		wg   sync.WaitGroup
 	)
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		defer done.Store(true)
 		err := worker.NotifyExit(ctx, err)
 		require.Error(t, err)
 		require.Regexp(t, "context deadline exceeded", err)
-	}()
+	})
 
 	for {
 		// Make the heartbeat worker tick.

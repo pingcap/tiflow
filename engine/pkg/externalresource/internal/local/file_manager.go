@@ -320,7 +320,7 @@ func PreCheckConfig(config resModel.LocalFileConfig) error {
 	return nil
 }
 
-func (m *FileManager) validateExecutor(creator model.ExecutorID, res interface{}) {
+func (m *FileManager) validateExecutor(creator model.ExecutorID, res any) {
 	// Defensive verification to ensure that local resources are not accessible across nodes.
 	if creator != m.executorID {
 		log.Panic("inconsistent executor ID of local file",

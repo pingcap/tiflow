@@ -131,7 +131,7 @@ func (tm *TaskManager) UpdateTaskStatus(taskStatus runtime.TaskStatus) {
 // TaskStatus return the task status.
 func (tm *TaskManager) TaskStatus() map[string]runtime.TaskStatus {
 	result := make(map[string]runtime.TaskStatus)
-	tm.tasks.Range(func(key, value interface{}) bool {
+	tm.tasks.Range(func(key, value any) bool {
 		result[key.(string)] = value.(runtime.TaskStatus)
 		return true
 	})
@@ -204,7 +204,7 @@ func (tm *TaskManager) checkAndOperateTasks(ctx context.Context, job *metadata.J
 // remove all tasks, usually happened when delete jobs.
 func (tm *TaskManager) onJobDel() {
 	tm.logger.Info("clear all task status")
-	tm.tasks.Range(func(key, value interface{}) bool {
+	tm.tasks.Range(func(key, value any) bool {
 		tm.tasks.Delete(key)
 		tm.gaugeVec.DeleteLabelValues(tm.jobID, key.(string))
 		return true
@@ -213,7 +213,7 @@ func (tm *TaskManager) onJobDel() {
 
 // remove deleted task status, usually happened when update-job delete some tasks.
 func (tm *TaskManager) removeTaskStatus(job *metadata.Job) {
-	tm.tasks.Range(func(key, value interface{}) bool {
+	tm.tasks.Range(func(key, value any) bool {
 		taskID := key.(string)
 		if _, ok := job.Tasks[taskID]; !ok {
 			tm.logger.Info("remove task status", zap.String("task_id", taskID))

@@ -45,7 +45,7 @@ type RunningHandle interface {
 	SendMessage(
 		ctx context.Context,
 		topic p2p.Topic,
-		message interface{},
+		message any,
 		nonblocking bool,
 	) error
 }
@@ -94,7 +94,7 @@ func (h *runningHandleImpl) Unwrap() RunningHandle {
 func (h *runningHandleImpl) SendMessage(
 	ctx context.Context,
 	topic p2p.Topic,
-	message interface{},
+	message any,
 	nonblocking bool,
 ) error {
 	var err error
