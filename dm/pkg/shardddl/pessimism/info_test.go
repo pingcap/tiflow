@@ -119,13 +119,11 @@ func (t *testForEtcd) TestInfoEtcd(c *check.C) {
 	ech := make(chan error, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		WatchInfoPut(ctx, etcdTestCli, rev4+1, wch, ech) // revision+1
 		close(wch)                                       // close the chan
 		close(ech)
-	}()
+	})
 
 	// put another key for a different task.
 	_, err = PutInfo(etcdTestCli, i21)

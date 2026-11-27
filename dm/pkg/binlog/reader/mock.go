@@ -67,7 +67,7 @@ func (r *MockReader) GetEvent(ctx context.Context) (*replication.BinlogEvent, er
 }
 
 // Status implements Reader.Status.
-func (r *MockReader) Status() interface{} {
+func (r *MockReader) Status() any {
 	return nil
 }
 

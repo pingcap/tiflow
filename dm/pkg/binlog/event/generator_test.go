@@ -165,8 +165,8 @@ func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysq
 		tableID    uint64 = 8
 		columnType        = []byte{gmysql.MYSQL_TYPE_LONG, gmysql.MYSQL_TYPE_STRING}
 	)
-	insertRows := make([][]interface{}, 0, 1)
-	insertRows = append(insertRows, []interface{}{int32(1), "string 1"})
+	insertRows := make([][]any, 0, 1)
+	insertRows = append(insertRows, []any{int32(1), "string 1"})
 	dmlData := []*DMLData{
 		{
 			TableID:    tableID,
@@ -186,10 +186,10 @@ func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysq
 
 	// INSERT INTO `db`.`tbl` VALUES (11, "string 11"), (12, "string 12")
 	// INSERT INTO `db`.`tbl` VALUES (13, "string 13"),
-	insertRows1 := make([][]interface{}, 0, 2)
-	insertRows1 = append(insertRows1, []interface{}{int32(11), "string 11"}, []interface{}{int32(12), "string 12"})
-	insertRows2 := make([][]interface{}, 0, 1)
-	insertRows2 = append(insertRows2, []interface{}{int32(13), "string 13"})
+	insertRows1 := make([][]any, 0, 2)
+	insertRows1 = append(insertRows1, []any{int32(11), "string 11"}, []any{int32(12), "string 12"})
+	insertRows2 := make([][]any, 0, 1)
+	insertRows2 = append(insertRows2, []any{int32(13), "string 13"})
 	dmlData = []*DMLData{
 		{
 			TableID:    tableID,
@@ -215,10 +215,10 @@ func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysq
 
 	// UPDATE `db`.`tbl` SET c2="another string 11" WHERE c1=11
 	// UPDATE `db`.`tbl` SET c1=120, c2="another string 120" WHERE C1=12
-	updateRows1 := make([][]interface{}, 0, 2)
-	updateRows1 = append(updateRows1, []interface{}{int32(11), "string 11"}, []interface{}{int32(11), "another string 11"})
-	updateRows2 := make([][]interface{}, 0, 2)
-	updateRows2 = append(updateRows2, []interface{}{int32(12), "string 12"}, []interface{}{int32(120), "another string 120"})
+	updateRows1 := make([][]any, 0, 2)
+	updateRows1 = append(updateRows1, []any{int32(11), "string 11"}, []any{int32(11), "another string 11"})
+	updateRows2 := make([][]any, 0, 2)
+	updateRows2 = append(updateRows2, []any{int32(12), "string 12"}, []any{int32(120), "another string 120"})
 	dmlData = []*DMLData{
 		{
 			TableID:    tableID,
@@ -244,8 +244,8 @@ func testGenerate(t *testing.T, flavor string, serverID uint32, latestGTID gmysq
 	allEventTypes = append(allEventTypes, gtidEventType(t, flavor), replication.QUERY_EVENT, replication.TABLE_MAP_EVENT, eventType, replication.TABLE_MAP_EVENT, eventType, replication.XID_EVENT)
 
 	// DELETE FROM `db`.`tbl` WHERE c1=13
-	deleteRows := make([][]interface{}, 0, 1)
-	deleteRows = append(deleteRows, []interface{}{int32(13), "string 13"})
+	deleteRows := make([][]any, 0, 1)
+	deleteRows = append(deleteRows, []any{int32(13), "string 13"})
 	dmlData = []*DMLData{
 		{
 			TableID:    tableID,

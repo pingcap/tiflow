@@ -30,7 +30,7 @@ func TestTrimCtrlChars(t *testing.T) {
 	ddl := "create table if not exists foo.bar(id int)"
 	controlChars := make([]byte, 0, 33)
 	nul := byte(0x00)
-	for i := 0; i < 32; i++ {
+	for range 32 {
 		controlChars = append(controlChars, nul)
 		nul++
 	}
